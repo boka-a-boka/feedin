@@ -1,0 +1,86 @@
+{# --- CARD DE MEMÓRIA (Universal para Locais e Perfis) --- #}
+<div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-start border-5 border-info" id="memoria-{{ atividade.id }}">
+
+    {# CABEÇALHO: AUTOR #}
+    <div class="p-3 d-flex align-items-center">
+        {# Usando o ID do autor para garantir a rota da foto #}
+        <img src="{{ url_for('servir_foto_perfil', usuario_id=atividade.autor.id if atividade.autor else atividade.id_usuario) }}"
+             width="45" height="45"
+             class="rounded-circle me-3 border"
+             style="object-fit: cover;"
+             onerror="this.src='{{ url_for('static', filename='imagens/default.jpg') }}';">
+
+        <div class="flex-grow-1">
+            <a href="{{ url_for('ver_perfil', usuario_id=atividade.autor.id if atividade.autor else atividade.id_usuario) }}" class="text-decoration-none text-dark">
+                <strong class="d-block">
+                    {# Checagem robusta de existência do perfil/autor #}
+                    {{ atividade.autor.perfil.nome_completo if (atividade.autor and atividade.autor.perfil and atividade.autor.perfil.nome_completo) else (atividade.autor.username if atividade.autor else 'Usuário FeedIn') }}
+                </strong>
+            </a>
+            <span class="text-muted small">
+                {{ atividade.data_criacao.strftime('%d/%m/%Y às %H:%M') if atividade.data_criacao else 'Data não registrada' }}
+            </span>
+        </div>
+
+        <span class="badge rounded-pill bg-light text-info border border-info fw-normal" style="font-size: 0.7rem;">
+            <i class="bi bi-geo-alt-fill"></i> Resgate
+        </span>
+    </div>
+
+    {# IMAGEM DA PUBLICAÇÃO #}
+    {% if atividade.imagem_url %}
+        <div class="img-container-memoria">
+            <img src="{{ url_for('static', filename='uploads/posts/' ~ atividade.imagem_url) }}"
+                 class="w-100 h-auto" alt="Memória Local">
+        </div>
+    {% endif %}
+
+    {# CORPO DA MEMÓRIA #}
+    <div class="px-3 py-3">
+        {% if atividade.conteudo %}
+            <p class="text-dark mb-2 fst-italic" style="font-size: 1rem; line-height: 1.5; color: #444 !important;">
+                "{{ atividade.conteudo }}"
+            </p>
+        {% endif %}
+
+        {# MARCAÇÕES DE PESSOAS #}
+        {% if atividade.pessoas_marcadas %}
+        <div class="mb-1">
+            <small class="text-muted" style="font-size: 0.85rem;">
+                <i class="bi bi-person-plus-fill me-1"></i> com
+                {% for marcado in atividade.pessoas_marcadas %}
+                    <a href="{{ url_for('ver_perfil', usuario_id=marcado.id) }}" class="text-decoration-none fw-bold text-info">
+                        @{{ marcado.username }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </small>
+        </div>
+        {% endif %}
+    </div>
+
+    {# RODAPÉ: REAÇÕES #}
+    <div class="p-3 pt-2 border-top bg-light-subtle">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex gap-3">
+                <button onclick="registrarReacaoSocial('{{ atividade.id }}', 'curti')"
+                        class="btn btn-sm rounded-pill px-3 border shadow-sm d-flex align-items-center gap-2
+                        {{ 'btn-info text-white' if (current_user.is_authenticated and atividade.usuario_ja_curtiu(current_user.id)) else 'btn-light text-muted' }}">
+                    <i class="bi {{ 'bi-heart-fill' if (current_user.is_authenticated and atividade.usuario_ja_curtiu(current_user.id)) else 'bi-heart' }}"></i>
+                    <span class="fw-bold">{{ atividade.total_curtidas or 0 }}</span>
+                </button>
+
+                <button onclick="registrarReacaoSocial('{{ atividade.id }}', 'nao_curti')"
+                        class="btn btn-sm rounded-pill px-3 border shadow-sm d-flex align-items-center gap-2
+                        {{ 'btn-danger text-white' if (current_user.is_authenticated and atividade.usuario_ja_deu_nao_curti(current_user.id)) else 'btn-light text-muted' }}">
+                    <i class="bi {{ 'bi-hand-thumbs-down-fill' if (current_user.is_authenticated and atividade.usuario_ja_deu_nao_curti(current_user.id)) else 'bi-hand-thumbs-down' }}"></i>
+                    <span class="fw-bold">{{ atividade.total_nao_curtidas or 0 }}</span>
+                </button>
+
+                <button onclick="abrirComentarios('{{ atividade.id }}')"
+                        class="btn btn-sm rounded-pill px-3 border shadow-sm d-flex align-items-center gap-2 btn-light text-muted">
+                    <i class="bi bi-chat-dots"></i>
+                    <span class="fw-bold">{{ atividade.total_comentarios or 0 }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

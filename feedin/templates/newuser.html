@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block titulo %}
+    FeedIn! - Novo Usuário
+{% endblock titulo %}
+
+{% block content %}
+    <div class="text-center mb-4">
+        <h2>Criação de Usuário</h2>
+        <p class="text-muted">Preencha os campos abaixo para criar sua conta.</p>
+    </div>
+
+    {% if request.args.get('indicado_por') %}
+        <div class="alert alert-info py-2 text-center mx-auto" style="max-width: 700px; font-size: 0.9rem;">
+            ✨ Você está entrando no FeedIn! através de um convite especial.
+        </div>
+    {% endif %}
+
+    <div class="container p-4 my-container-color shadow-sm rounded mx-auto mt-5 mb-5" style="max-width: 700px;">
+        <form method="POST">
+            {{ form.csrf_token }}
+
+            <input type="hidden" name="indicado_por" value="{{ request.args.get('indicado_por', '') }}">
+
+            {# 1. E-MAIL PRIMEIRO AGORA #}
+            <div class="row mb-3 align-items-center">
+                {{ form.email.label(class="col-sm-4 col-form-label text-end") }}
+                <div class="col-sm-7">
+                    {{ form.email(class="form-control") }}
+                    {% if form.email.errors %}
+                        {% for error in form.email.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# 2. USUÁRIO (NICKNAME) EM SEGUNDO #}
+            <div class="row mb-3 align-items-center">
+                {{ form.usuario.label(class="col-sm-4 col-form-label text-end") }}
+                <div class="col-sm-7">
+                    {{ form.usuario(class="form-control") }}
+                    {% if form.usuario.errors %}
+                        {% for error in form.usuario.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# 3. SENHA #}
+            <div class="row mb-3 align-items-center">
+                {{ form.senha.label(class="col-sm-4 col-form-label text-end") }}
+                <div class="col-sm-5">
+                    {{ form.senha(class="form-control") }}
+                    {% if form.senha.errors %}
+                        {% for error in form.senha.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            {# 4. CONFIRMAR SENHA #}
+            <div class="row mb-4 align-items-center">
+                {{ form.confirmar_senha.label(class="col-sm-4 col-form-label text-end") }}
+                <div class="col-sm-5">
+                    {{ form.confirmar_senha(class="form-control") }}
+                    {% if form.confirmar_senha.errors %}
+                        {% for error in form.confirmar_senha.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-sm-7 offset-sm-4">
+                    {{ form.botao_confirmacao(class="btn btn-primary px-4") }}
+                    <a href="{{ url_for('login') }}" class="btn btn-link btn-sm">Já tenho conta</a>
+                </div>
+            </div>
+        </form>
+    </div>
+{% endblock content %}

@@ -1,0 +1,97 @@
+<style>
+    .bloco-config {
+        background-color: #f8f9fa;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    .bloco-config:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+</style>
+
+<form action="{{ url_for('editar_perfil') }}" method="POST" enctype="multipart/form-data">
+    {{ form.csrf_token if form else '' }}
+
+    <div class="text-center py-4">
+        <label class="form-label d-block fw-bold text-muted small text-uppercase mb-3">Sua Foto de Identidade</label>
+        <div class="position-relative d-inline-block" style="width: 140px; height: 140px;">
+            <img src="{{ url_for('servir_foto_perfil', usuario_id=current_user.id) }}?t={{ range(1, 9999)|random }}"
+                 id="previewFoto"
+                 class="rounded-circle border border-4 border-white shadow"
+                 style="width: 140px; height: 140px; object-fit: cover; display: block;">
+
+            <label for="inputFoto"
+                   class="position-absolute btn btn-primary btn-sm rounded-circle shadow d-flex align-items-center justify-content-center"
+                   style="bottom: 8px; right: 8px; width: 38px; height: 38px; padding: 0; border: 3px solid white;">
+                <i class="bi bi-camera-fill fs-6"></i>
+            </label>
+        </div>
+        <input type="file" name="foto_perfil" id="inputFoto" class="d-none" accept="image/*">
+    </div>
+
+    <div class="bloco-config">
+        <label class="form-label fw-bold"><i class="bi bi-person me-2"></i>Nome Completo</label>
+        <input type="text" name="nome_completo" class="form-control form-control-lg border-0 shadow-sm"
+               value="{{ current_user.perfil.nome_completo or '' }}" placeholder="Como você quer ser chamado?">
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="bloco-config">
+                <label class="form-label fw-bold"><i class="bi bi-calendar-event me-2"></i>Nascimento</label>
+                <input type="date" name="data_nascimento" class="form-control border-0 shadow-sm"
+                       value="{{ current_user.perfil.data_nascimento or '' }}">
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="bloco-config">
+                <label class="form-label fw-bold"><i class="bi bi-geo-alt me-2"></i>Cidade Natal</label>
+                <input type="text" name="cidade_natal" class="form-control border-0 shadow-sm"
+                       value="{{ current_user.perfil.cidade_natal or '' }}" placeholder="Onde sua história começou?">
+            </div>
+        </div>
+    </div>
+
+    <div class="bloco-config">
+        <label class="form-label fw-bold"><i class="bi bi-chat-quote me-2"></i>Sua História (Bio)</label>
+        <textarea
+            name="biografia"
+            id="bio_textarea"
+            class="form-control border-0 shadow-sm lh-base"
+            rows="5"
+            placeholder="Conte um pouco sobre suas paixões por Piracicaba, fotografia e o que te move..."
+        >{{ current_user.perfil.biografia or '' }}</textarea>
+        <div class="form-text text-end mt-1 small">Essa descrição aparecerá na sua vitrine pública.</div>
+    </div>
+
+    <div class="mt-4 sticky-bottom py-3 bg-white border-top">
+        <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-lg">
+            ATUALIZAR MEU PERFIL <i class="bi bi-check-circle ms-2"></i>
+        </button>
+    </div>
+</form>
+
+<script>
+    // Preview da foto em tempo real
+    document.getElementById('inputFoto')?.addEventListener('change', function(evt) {
+        const [file] = this.files;
+        if (file) {
+            document.getElementById('previewFoto').src = URL.createObjectURL(file);
+        }
+    });
+
+    // Auto-ajuste do textarea
+    const bioArea = document.getElementById("bio_textarea");
+    if(bioArea) {
+        bioArea.addEventListener("input", function() {
+            this.style.height = "auto";
+            this.style.height = (this.scrollHeight) + "px";
+        });
+        // Ajusta no carregamento inicial
+        bioArea.style.height = (bioArea.scrollHeight) + "px";
+    }
+</script>

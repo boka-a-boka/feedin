@@ -1,0 +1,48 @@
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10">
+
+        {% if current_user.nivel_acesso >= 10 %}
+            {# USUÁRIO VALIDADO / ADMINISTRADOR #}
+            {% include "partials/_perfil_dashboard.html" %}
+
+        {# TRAVA: Se não tem foto OU se o nome está vazio, fica no Onboarding #}
+        {% elif not current_user.foto_perfil or current_user.foto_perfil == 'default.jpg' or not current_user.perfil.nome_completo %}
+            {# FASE 1 e 2: Foto e Dados #}
+            {% include "partials/_perfil_onboarding.html" %}
+
+        {% else %}
+            {# FASE 3: Memórias e Apelidos (Só entra aqui se tiver Foto e Nome) #}
+            <section class="card border-0 shadow-lg rounded-4 p-4 animate__animated animate__fadeIn">
+                <h4 class="fw-bold text-primary mb-4">Sua Jornada em Piracicaba 📍</h4>
+
+                {# FORMULÁRIO DE LOCAIS #}
+                <div class="mb-5">
+                    {% include "partials/_form_grupo_social.html" %}
+                </div>
+
+                <hr class="my-4">
+
+                {# FORMULÁRIO DE APELIDOS #}
+                {% include "partials/_secao_apelidos.html" %}
+
+                {# BOTÃO DE CONCLUSÃO CONDICIONAL #}
+                {% if current_user.vinculos|length >= 1 %}
+                    <div class="d-grid gap-2 mt-5 pt-3 border-top text-center">
+                       <a href="{{ url_for('dashboard', aba='preferencias') }}"
+                            class="btn btn-success btn-lg rounded-pill shadow animate__animated animate__pulse animate__infinite">
+                            Seguir para Interesses <i class="bi bi-arrow-right-short"></i>
+                        </a>
+                        <small class="text-muted mt-2">Você registrou {{ current_user.vinculos|length }} local(is).</small>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info border-0 rounded-4 mt-4 small">
+                        <i class="bi bi-info-circle me-2"></i> Registre pelo menos um local para prosseguir e liberar sua rede.
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        </div>
+    </div>
+</div>

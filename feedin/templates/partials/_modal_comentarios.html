@@ -1,0 +1,30 @@
+<div class="modal fade" id="modalComentarios" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 25px;">
+            <div class="modal-header border-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold text-secondary">Comentários e Respostas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-4 pb-4">
+                <!-- Área onde os comentários serão carregados (Opcional se for carregar via AJAX) -->
+                <div id="lista-comentarios" class="mb-4" style="max-height: 300px; overflow-y: auto;">
+                    <p class="text-muted small italic">Seja o primeiro a comentar esta memória...</p>
+                </div>
+
+                <!-- Formulário de Resposta -->
+                <form id="formComentario">
+                    <div class="input-group">
+                        <textarea class="form-control rounded-4 border-light bg-light"
+                                  placeholder="Escreva sua resposta..."
+                                  rows="2" id="textoComentario"></textarea>
+                    </div>
+                    <div class="text-end mt-3">
+                        <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                            Enviar Resposta
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

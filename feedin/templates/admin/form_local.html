@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block styles%}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<style>
+    .select2-container--default .select2-selection--single {
+        background-color: #6c757d !important; /* Cor bg-secondary do Bootstrap */
+        border: none !important;
+        height: 38px !important;
+        color: white !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+        color: white !important;
+        line-height: 35px !important;
+    }
+    .select2-dropdown {
+        background-color: #343a40 !important;
+        color: white !important;
+    }
+    .select2-search__field {
+        background-color: #6c757d !important;
+        color: white !important;
+    }
+</style>
+{% endblock styles%}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card bg-dark text-white border-secondary">
+                <div class="card-header border-secondary">
+                    <h4>Cadastrar Novo Local (Modo Admin)</h4>
+                </div>
+                <div class="card-body">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Nome do Local</label>
+                        <input type="text" name="nome" class="form-control bg-secondary text-white border-0" required>
+                    </div>
+
+                    <!-- Linha de Endereço Detalhada -->
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Logradouro (Rua, Av.)</label>
+                            <input type="text" name="logradouro" class="form-control bg-secondary text-white border-0">
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <label class="form-label">Nº</label>
+                            <input type="text" name="numero" class="form-control bg-secondary text-white border-0">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Bairro</label>
+                            <input type="text" name="bairro" class="form-control bg-secondary text-white border-0">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Cidade</label>
+                            <input type="text" name="cidade" class="form-control bg-secondary text-white border-0" value="Piracicaba">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Estado</label>
+                            <input type="text" name="estado" class="form-control bg-secondary text-white border-0" value="SP" maxlength="2">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Categoria Principal</label>
+                        <select name="categoria_id" id="busca-taxonomia" class="form-select">
+                            <option value="">Selecione uma categoria...</option>
+                            {% for c in categorias %}
+                                <option value="{{ c.id }}">{{ c.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Google Place ID (Opcional)</label>
+                        <input type="text" name="place_id" class="form-control bg-secondary text-white border-0">
+                    </div>
+
+                    <div class="mb-3 p-3 border border-secondary rounded bg-dark">
+                        <label class="form-label d-block text-white"><strong>Status do Local</strong></label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="esta_ativo" id="status_ativo" value="1" checked>
+                            <label class="form-check-label text-white" for="status_ativo">Em Atividade</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="esta_ativo" id="status_desativado" value="0">
+                            <label class="form-check-label text-white" for="status_desativado">Desativado (Memória)</label>
+                        </div>
+                    </div>
+
+                    <hr class="border-secondary">
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-grow-1">Salvar na Base Oficial</button>
+                        <a href="{{ url_for('admin_sistema') }}" class="btn btn-outline-light">Cancelar</a>
+                    </div>
+                </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        $('#busca-taxonomia').select2({
+            placeholder: "Digite para buscar entre os 1056 termos...",
+            allowClear: true,
+            width: '100%',
+            dropdownParent: $('.card-body') // Garante que o dropdown renderize no lugar certo
+        });
+    });
+</script>
+{% endblock scripts %}

@@ -1,0 +1,40 @@
+<div class="d-flex align-items-center gap-3">
+    {# Verificamos se o objeto tem o novo método, se não, usamos o antigo #}
+
+    {% if atividade is mapping %}
+        {# Se for um dicionário (perfil_local), buscamos o método no objeto_original #}
+        {% set ja_curtiu = atividade['objeto_original'].usuario_ja_reagiu_tipo(current_user.id, 'curti') if atividade['objeto_original'].usuario_ja_reagiu_tipo is defined else atividade['objeto_original'].usuario_ja_curtiu(current_user.id) %}
+    {% else %}
+        {# Se for o objeto direto (perfil_publico), mantém a lógica original #}
+        {% set ja_curtiu = atividade.usuario_ja_reagiu_tipo(current_user.id, 'curti') if atividade.usuario_ja_reagiu_tipo is defined else atividade.usuario_ja_curtiu(current_user.id) %}
+    {% endif %}
+
+    {# BOTÃO: CURTI #}
+    <span class="btn-interacao cursor-pointer group-reaction" onclick="registrarReacaoSocial('{{ atividade.id }}', 'curti')">
+        <i id="icon-curti-{{ atividade.id }}" class="bi {{ 'bi-hand-thumbs-up-fill text-primary' if ja_curtiu else 'bi-hand-thumbs-up text-muted' }}"></i>
+        <small id="cont-curti-{{ atividade.id }}" class="ms-1 text-muted fw-bold">{{ atividade.total_curtidas }}</small>
+    </span>
+
+    {# BOTÃO: NÃO CURTI #}
+    {% set ja_nao_curtiu = atividade.usuario_ja_reagiu_tipo(current_user.id, 'nao_curti') if atividade.usuario_ja_reagiu_tipo is defined else False %}
+    <span class="btn-interacao cursor-pointer group-reaction" onclick="registrarReacaoSocial('{{ atividade.id }}', 'nao_curti')">
+        <i id="icon-nao_curti-{{ atividade.id }}" class="bi {{ 'bi-hand-thumbs-down-fill text-danger' if ja_nao_curtiu else 'bi-hand-thumbs-down text-muted' }}"></i>
+        <small id="cont-nao_curti-{{ atividade.id }}" class="ms-1 text-muted fw-bold">{{ atividade.total_nao_curtidas if atividade.total_nao_curtidas is defined else 0 }}</small>
+    </span>
+
+    {# BOTÃO: RESPONDER #}
+    <span class="btn-interacao cursor-pointer" onclick="abrirComentarios('{{ atividade.id }}')">
+        <i class="bi bi-chat-left-text text-muted"></i>
+        <small class="ms-1 text-muted fw-bold">{{ atividade.total_comentarios }}</small>
+    </span>
+</div>
+
+<style>
+    /* Pequeno efeito visual ao passar o mouse para dar vida ao Beta */
+    .group-reaction:hover i {
+        transform: scale(1.2);
+    }
+    .group-reaction:active i {
+        transform: scale(0.9);
+    }
+</style>

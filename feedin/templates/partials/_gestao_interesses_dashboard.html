@@ -1,0 +1,69 @@
+<div class="gestao-taxonomia-independente">
+    <div class="p-3 border rounded-4 bg-light mb-4">
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 rounded-start-pill"><i class="bi bi-search text-primary"></i></span>
+            <input type="text" id="busca-taxo-indep" class="form-control border-start-0 rounded-end-pill" placeholder="Buscar em Piracicaba...">
+        </div>
+        <!-- Ajuste na largura e z-index das sugestões -->
+        <div id="sugestoes-taxo" class="list-group shadow-lg d-none mt-1 position-absolute" style="z-index: 2000; width: 90%; max-height: 300px; overflow-y: auto;"></div>
+    </div>
+
+    <div id="nuvem-estrelas" class="d-flex flex-wrap gap-2" style="min-height: 100px;">
+        <!-- Populado dinamicamente -->
+    </div>
+</div>
+
+<script>
+(function() {
+    const estrelas = new Map();
+
+    function renderizar() {
+        const nuvem = document.getElementById('nuvem-estrelas');
+        if (!nuvem) return;
+        nuvem.innerHTML = '';
+
+        if (estrelas.size === 0) {
+            nuvem.innerHTML = '<p class="text-muted small italic p-3">Selecione ao menos 5 interesses para personalizar sua rede.</p>';
+            return;
+        }
+
+        estrelas.forEach((item, id) => {
+            const el = document.createElement('span');
+            const classeCor = item.visivel_negocio ? 'bg-warning text-dark' : 'bg-primary text-white';
+            el.className = `badge rounded-pill p-2 px-3 shadow-sm border-0 ${classeCor} animate__animated animate__fadeIn`;
+            el.style.cursor = 'pointer';
+            el.innerHTML = `${item.nome} <i class="bi bi-x-circle ms-2 opacity-50"></i>`;
+            el.onclick = () => remover(id);
+            nuvem.appendChild(el);
+        });
+    }
+
+    function carregarDados() {
+        console.log("Tentando carregar interesses...");
+        const container = document.getElementById('data-prefs-dashboard');
+        if (container && container.dataset.json) {
+            try {
+                const lista = JSON.parse(container.dataset.json);
+                estrelas.clear();
+                lista.forEach(i => { if (i.id) estrelas.set(i.id.toString(), i); });
+                renderizar();
+            } catch (e) { console.error("Erro no JSON:", e); }
+        }
+    }
+
+    // A MUDANÇA ESTÁ AQUI: Observador de Clique Global para a Aba
+    document.addEventListener('click', function (e) {
+        // Verifica se o clique foi no botão de interesses ou em qualquer elemento dentro dele
+        if (e.target.closest('#btn-interesses')) {
+            console.log("Aba de Interesses detectada via clique!");
+            // Pequeno delay para garantir que o Bootstrap já mostrou a tab
+            setTimeout(carregarDados, 150);
+        }
+    });
+
+    // Execução imediata caso a página já carregue na aba de interesses
+    if (document.getElementById('v-pills-interesses')?.classList.contains('active')) {
+        carregarDados();
+    }
+})();
+</script>

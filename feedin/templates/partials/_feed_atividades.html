@@ -1,0 +1,13 @@
+{# _feed_atividades.html - O MAESTRO #}
+
+{% if aba == 'feed' %}
+    {# Se estamos no Início, usamos o card limpo para TUDO #}
+    {% include "partials/cards/_card_postagem.html" %}
+{% else %}
+    {# Se for Locais ou Perfil, mantemos a lógica de diferenciação #}
+    {% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
+        {% include "partials/cards/card_postagem_universal.html" %}
+    {% else %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endif %}
+{% endif %}

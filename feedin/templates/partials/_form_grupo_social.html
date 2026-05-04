@@ -1,0 +1,320 @@
+{# Forçamos a verificação: Se o usuário é nível 10, SEMPRE será edição livre #}
+{% if current_user.nivel_acesso >= 10 %}
+    {% set edicao_livre = True %}
+{% endif %}
+
+{# 1. CABEÇALHO E BADGES DE STATUS #}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <label class="form-label fw-bold small text-muted mb-0">ONDE VOCÊ CIRCULOU?</label>
+
+    {% if edicao_livre %}
+        <span class="badge bg-success rounded-pill shadow-sm px-3 py-2">
+            <i class="bi bi-geo-fill me-1"></i> {{ current_user.vinculos|length }} Lugares no Mapa
+        </span>
+    {% else %}
+        <span class="badge bg-primary rounded-pill px-3 py-2">
+            {{ current_user.vinculos|length }}/5 Lugares para Liberar o Perfil
+        </span>
+    {% endif %}
+</div>
+
+{# 2. LÓGICA DO FORMULÁRIO #}
+{% if edicao_livre or current_user.vinculos|length < 5 %}
+
+    <form action="{{ url_for('salvar_grupo_social') }}" method="POST" id="formGrupoSocial">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" id="hiddenLocalId" name="local_id">
+
+        {# Busca de Local #}
+        <div class="mb-4 position-relative">
+            <label class="form-label fw-bold small text-muted">NOME DO ESTABELECIMENTO OU LUGAR</label>
+            <input type="text" id="inputNomeLocal" name="nome" class="form-control form-control-lg border-2 shadow-none"
+                   placeholder="Ex: Clube de Campo, Rua do Porto..." required autocomplete="off">
+            <div id="listaSugestoes" class="list-group shadow-lg position-absolute w-100 d-none" style="z-index: 1050;"></div>
+        </div>
+
+        {# Campos de Endereço - Obrigatórios para Homologação #}
+        <div id="camposEnderecoExtra" class="d-none p-3 bg-light rounded-4 mb-4 border border-primary-subtle animate__animated animate__fadeIn">
+            <p class="small fw-bold mb-3 text-primary">
+                <i class="bi bi-geo-alt-fill me-1"></i> Detalhes do Novo Local
+            </p>
+
+            <div class="row g-2">
+                {# CAMPO: NOME REAL / OFICIAL #}
+                <div class="col-12 mb-2">
+                    <label class="form-label small fw-bold text-dark">Nome Real/Oficial do Local</label>
+                    <input type="text" name="nome_oficial" id="inputNomeOficial" class="form-control border-primary"
+                           placeholder="Como o local é formalmente conhecido?">
+                    <div class="form-text mt-0" style="font-size: 0.75rem;">Importante para garantir a identificação correta no mapa.</div>
+                </div>
+
+                {# CAMPO: LOGRADOURO #}
+                <div class="col-12 mb-2">
+                    <label class="form-label small fw-bold">Rua / Avenida</label>
+                    <input type="text" name="logradouro" class="form-control border-primary" placeholder="Ex: Rua do Porto">
+                </div>
+
+                {# CAMPO: BAIRRO #}
+                <div class="col-12 mb-2">
+                    <label class="form-label small fw-bold">Bairro</label>
+                    <input type="text" name="bairro" class="form-control border-primary" placeholder="Ex: Vila Rezende">
+                </div>
+
+                {# CAMPOS: CIDADE E UF (NA MESMA LINHA) #}
+                <div class="col-md-9 mb-2">
+                    <label class="form-label small fw-bold">Cidade</label>
+                    <input type="text" id="inputCidade" name="cidade" class="form-control border-primary" value="Piracicaba">
+                </div>
+                <div class="col-md-3 mb-2">
+                    <label class="form-label small fw-bold">UF</label>
+                    <input type="text" name="estado" id="inputEstado" class="form-control border-primary text-center"
+                           maxlength="2" value="SP" placeholder="SP">
+                </div>
+
+                <div class="col-12 mt-2">
+                    <label class="form-label fw-bold small text-muted">ESTE LOCAL AINDA FUNCIONA?</label>
+                    <select name="esta_ativo" id="selectStatusAtivo" class="form-select border-primary">
+                        <option value="1" selected>Sim, está funcionando</option>
+                        <option value="0">Não, já fechou (Memória Histórica)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        {# Seção de Época e Curtidas - CORRIGIDA (SEM DUPLICIDADE) #}
+        <div id="secao-curtidas" class="d-none border-top pt-4">
+            <div class="mb-4">
+                <label class="form-label fw-bold text-dark">Em qual época você frequentava?</label>
+
+                <select name="periodo_referencia" id="inputPeriodo" class="form-select form-select-lg border-primary">
+                    <option value="" disabled selected>Escolha a década ou período...</option>
+                    <option value="Anos 60">Anos 60</option>
+                    <option value="Anos 70">Anos 70</option>
+                    <option value="Anos 80">Anos 80</option>
+                    <option value="Anos 90">Anos 90</option>
+                    <option value="Anos 2000">Anos 2000</option>
+                    <option value="Anos 2010">Anos 2010</option>
+                    <option value="Atualmente">Atualmente</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label fw-bold text-dark">O que você mais curtia lá?</label>
+                <textarea name="experiencia_usuario" id="inputDescricao" class="form-control border-primary" rows="3"></textarea>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" id="btnSubmitPrincipal" class="btn btn-primary btn-lg rounded-pill shadow">
+                    Registrar Memória <i class="bi bi-save ms-2"></i>
+                </button>
+
+                <button type="button" class="btn btn-link text-muted btn-sm" onclick="window.location.reload();">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </form>
+
+{% else %}
+    <div class="alert alert-success rounded-4 text-center py-4">
+        <i class="bi bi-check-circle-fill fs-1"></i>
+        <h5 class="fw-bold mt-2">Objetivo Alcançado!</h5>
+    </div>
+{% endif %}
+
+{# 4. LISTAGEM DOS REGISTROS (Sempre visível) #}
+<div class="mt-5">
+    {% if current_user.vinculos %}
+        <h6 class="fw-bold text-muted small mb-3 text-uppercase">Meus Lugares Registrados:</h6>
+        <div class="row g-3">
+{% for vinculo in current_user.vinculos %}
+    {# 1. Lógica de tratamento da Descrição (Relato) #}
+    {% set atividade = current_user.atividades | selectattr("local_id", "equalto", vinculo.local_id) | first %}
+
+    {% if atividade %}
+        {% set desc_final = atividade.descricao | replace("'", "") | replace('"', "") | replace("\n", " ") | e %}
+    {% else %}
+        {% set desc_final = "" %}
+    {% endif %}
+
+    <div class="card border border-light-subtle shadow-sm rounded-4 mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center p-3">
+            <div>
+                {# EXIBE O NOME DO LOCAL NA TELA #}
+                <h6 class="fw-bold mb-0">{{ vinculo.local.nome }}</h6>
+
+                {# EXIBE A ÉPOCA E O RELATO NA TELA #}
+                <small class="text-muted">
+                    <i class="bi bi-calendar3 me-1"></i> {{ vinculo.periodo }}
+                    {% if atividade %}
+                        • <span class="fst-italic">"{{ atividade.descricao }}"</span>
+                    {% endif %}
+                </small>
+            </div>
+
+            <div class="btn-group">
+                {# O BOTÃO COM OS DADOS PARA O JAVASCRIPT #}
+<button type="button"
+        class="btn btn-sm btn-light text-primary rounded-pill me-2 btn-editar-memoria"
+        data-id="{{ vinculo.id }}"
+        data-nome="{{ vinculo.local.nome | e }}"
+        data-periodo="{{ vinculo.periodo | e }}"
+        data-descricao="{{ desc_final }}"
+        data-logradouro="{{ (vinculo.local.logradouro or '') | e }}"
+        data-bairro="{{ (vinculo.local.bairro or '') | e }}"
+        data-cidade="{{ (vinculo.local.cidade or 'Piracicaba') | e }}"
+        data-ativo="{{ '1' if vinculo.local.esta_ativo else '0' }}">
+    <i class="bi bi-pencil-square"></i>
+</button>
+
+                <a href="{{ url_for('excluir_memoria', id_vinculo=vinculo.id) }}"
+                   class="btn btn-sm btn-light text-danger rounded-pill"
+                   onclick="return confirm('Excluir esta memória?')">
+                    <i class="bi bi-trash3"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<script>
+/**
+ * 1. FUNÇÕES DE ESTADO (Ações de UI)
+ */
+
+// Abre o formulário para EDITAR uma memória existente
+function executarEdicao(dados) {
+    const form = document.getElementById('formGrupoSocial');
+    const btnSubmit = document.getElementById('btnSubmitPrincipal');
+
+    // Exibir as seções
+    document.getElementById('camposEnderecoExtra').classList.remove('d-none');
+    document.getElementById('secao-curtidas').classList.remove('d-none');
+
+    // Preenchimento
+    document.getElementById('inputNomeLocal').value = dados.nome || "";
+    document.getElementById('hiddenLocalId').value = dados.id || "";
+    document.getElementById('inputCidade').value = (dados.cidade && dados.cidade !== "undefined") ? dados.cidade : "Piracicaba";
+    document.getElementById('selectStatusAtivo').value = dados.ativo || "1";
+
+    const setField = (name, val) => {
+        const el = document.getElementsByName(name)[0];
+        if (el) el.value = (val && val !== "undefined") ? val : "";
+    };
+
+    setField('logradouro', dados.logradouro);
+    setField('bairro', dados.bairro);
+    setField('periodo_referencia', dados.periodo);
+    setField('experiencia_usuario', dados.descricao);
+
+    // Altera a rota para EDITAR
+    form.action = "/editar_memoria/" + dados.id;
+
+    if (btnSubmit) {
+        btnSubmit.innerHTML = `Atualizar Memória <i class="bi bi-check-all ms-2"></i>`;
+        btnSubmit.className = "btn btn-success btn-lg rounded-pill shadow w-100";
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Abre o formulário para CADASTRAR um novo local
+function abrirCamposNovoLocal(nomeDigitado) {
+    const listaSugestoes = document.getElementById('listaSugestoes');
+    const btnSubmit = document.getElementById('btnSubmitPrincipal');
+
+    document.getElementById('inputNomeLocal').value = nomeDigitado;
+    document.getElementById('hiddenLocalId').value = ""; // Importante: ID vazio = Novo
+
+    if(listaSugestoes) listaSugestoes.classList.add('d-none');
+
+    document.getElementById('camposEnderecoExtra').classList.remove('d-none');
+    document.getElementById('secao-curtidas').classList.remove('d-none');
+
+    // Altera a rota para SALVAR (Novo)
+    document.getElementById('formGrupoSocial').action = "{{ url_for('salvar_grupo_social') }}";
+
+    if (btnSubmit) {
+        btnSubmit.innerHTML = `Registrar Memória <i class="bi bi-save ms-2"></i>`;
+        btnSubmit.className = "btn btn-primary btn-lg rounded-pill shadow w-100";
+    }
+}
+
+
+/**
+ * 2. ESCUTA DE EVENTOS (DOM)
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const inputNome = document.getElementById('inputNomeLocal');
+    const listaSugestoes = document.getElementById('listaSugestoes');
+
+    // Evento de Edição (Clique nos botões da lista)
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-editar-memoria');
+        if (btn) {
+            executarEdicao(btn.dataset);
+        }
+    });
+
+    // Evento de Autocomplete
+    if (inputNome) {
+        inputNome.addEventListener('input', function() {
+            const busca = this.value;
+
+            if (busca.length < 2) {
+                if(listaSugestoes) listaSugestoes.classList.add('d-none');
+                return;
+            }
+
+            fetch(`/buscar_locais_onboarding?q=${encodeURIComponent(busca)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error('Erro na busca global');
+                    return res.json();
+                })
+                .then(data => {
+                    if(!listaSugestoes) return;
+                    listaSugestoes.innerHTML = '';
+                    listaSugestoes.classList.remove('d-none');
+
+                    if (data.length > 0) {
+                        data.forEach(local => {
+                            const item = document.createElement('button');
+                            item.type = 'button';
+                            item.className = 'list-group-item list-group-item-action border-0';
+                            item.innerHTML = `<strong>${local.nome}</strong><br><small>${local.bairro}</small>`;
+                            item.onclick = () => {
+                                inputNome.value = local.nome;
+                                document.getElementById('hiddenLocalId').value = local.id;
+                                listaSugestoes.classList.add('d-none');
+                                document.getElementById('secao-curtidas').classList.remove('d-none');
+                                document.getElementById('camposEnderecoExtra').classList.add('d-none');
+                                document.getElementById('formGrupoSocial').action = "{{ url_for('salvar_grupo_social') }}";
+                            };
+                            listaSugestoes.appendChild(item);
+                        });
+
+                        // Opção final na lista para forçar novo cadastro
+                        const opNovo = document.createElement('button');
+                        opNovo.type = 'button';
+                        opNovo.className = 'list-group-item list-group-item-action border-0 bg-primary-subtle fw-bold text-primary';
+                        opNovo.innerHTML = `<i class="bi bi-plus-circle-fill me-2"></i>Não encontrei, cadastrar "${busca}"`;
+                        opNovo.onclick = () => abrirCamposNovoLocal(busca);
+                        listaSugestoes.appendChild(opNovo);
+
+                    } else {
+                        // Se nada for encontrado, sugere o cadastro direto
+                        const itemVazio = document.createElement('button');
+                        itemVazio.type = 'button';
+                        itemVazio.className = 'list-group-item list-group-item-action border-0 fw-bold';
+                        itemVazio.innerHTML = `<i class="bi bi-geo-alt me-2 text-primary"></i>"${busca}" não encontrado. Cadastrar?`;
+                        itemVazio.onclick = () => abrirCamposNovoLocal(busca);
+                        listaSugestoes.appendChild(itemVazio);
+                    }
+                });
+        });
+    }
+});
+</script>

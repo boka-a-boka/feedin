@@ -1,0 +1,133 @@
+<div id="data-prefs-dashboard" data-json='{{ minhas_prefs_json | safe }}'></div>
+
+<div class="gestao-taxonomia-independente">
+    <div class="p-3 border rounded-4 bg-light mb-4">
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 rounded-start-pill"><i class="bi bi-search text-primary"></i></span>
+            <input type="text" id="busca-taxo-indep" class="form-control border-start-0 rounded-end-pill" placeholder="Buscar em Piracicaba...">
+        </div>
+        <!-- Ajuste na largura e z-index das sugestões -->
+        <div id="sugestoes-taxo" class="list-group shadow-lg d-none mt-1 position-absolute" style="z-index: 2000; width: 90%; max-height: 300px; overflow-y: auto;"></div>
+    </div>
+
+    <div id="nuvem-estrelas" class="d-flex flex-wrap gap-2" style="min-height: 100px;">
+        <!-- Populado dinamicamente -->
+    </div>
+</div>
+
+<script>
+(function() {
+    const estrelas = new Map();
+    const nuvem = document.getElementById('nuvem-estrelas');
+    const input = document.getElementById('busca-taxo-indep');
+    const sugestoes = document.getElementById('sugestoes-taxo');
+
+    function renderizar() {
+        if (!nuvem) return;
+        nuvem.innerHTML = '';
+        if (estrelas.size === 0) {
+            nuvem.innerHTML = '<p class="text-muted small italic">Nenhum interesse selecionado.</p>';
+            return;
+        }
+        estrelas.forEach((item, id) => {
+            const el = document.createElement('span');
+            // Diferencia visualmente interesses de negócios vs interesses pessoais
+            const classeCor = item.visivel_negocio ? 'bg-warning text-dark' : 'bg-primary text-white';
+            el.className = `badge rounded-pill p-2 px-3 shadow-sm border-0 ${classeCor} animate__animated animate__fadeIn`;
+            el.style.cursor = 'pointer';
+            el.innerHTML = `${item.nome} <i class="bi bi-x-circle ms-2 opacity-50"></i>`;
+            el.onclick = () => remover(id);
+            nuvem.appendChild(el);
+        });
+    }
+
+    function carregarDados() {
+        // Busca o container de dados na Dashboard principal
+        const container = document.getElementById('data-prefs-dashboard');
+        if (container && container.dataset.json) {
+            try {
+                const lista = JSON.parse(container.dataset.json);
+                estrelas.clear();
+                lista.forEach(i => {
+                    if (i.id) estrelas.set(i.id.toString(), i);
+                });
+                renderizar();
+            } catch (e) {
+                console.error("Erro ao processar JSON de interesses:", e);
+            }
+        }
+    }
+
+    function remover(id) {
+        // Regra de negócio: manter ao menos 5
+        if (estrelas.size <= 5) {
+            alert("Para uma melhor experiência, mantenha pelo menos 5 interesses.");
+            return;
+        }
+
+        fetch(`/api/dashboard/taxonomia/remover/${id}`, { method: 'DELETE' })
+            .then(res => {
+                if (res.ok) {
+                    estrelas.delete(id.toString());
+                    renderizar();
+                }
+            });
+    }
+
+    input.oninput = (e) => {
+        const q = e.target.value;
+        if (q.length < 2) {
+            sugestoes.classList.add('d-none');
+            return;
+        }
+
+        fetch(`/api/buscar-interesses?q=${encodeURIComponent(q)}`)
+            .then(res => res.json())
+            .then(data => {
+                sugestoes.innerHTML = '';
+                if (data.length === 0) {
+                    sugestoes.classList.add('d-none');
+                    return;
+                }
+                data.forEach(item => {
+                    const btn = document.createElement('button');
+                    btn.className = 'list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center';
+                    btn.innerHTML = `${item.nome} <small class="text-muted">${item.tipo || ''}</small>`;
+                    btn.onclick = () => {
+                        fetch('/api/dashboard/taxonomia/adicionar', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(item)
+                        }).then(res => {
+                            if (res.ok) {
+                                estrelas.set(item.id.toString(), item);
+                                renderizar();
+                                input.value = '';
+                                sugestoes.classList.add('d-none');
+                            }
+                        });
+                    };
+                    sugestoes.appendChild(btn);
+                });
+                sugestoes.classList.remove('d-none');
+            });
+    };
+
+    // Fechar sugestões ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !sugestoes.contains(e.target)) {
+            sugestoes.classList.add('d-none');
+        }
+    });
+
+    // EXECUÇÃO INICIAL
+    // Aguarda um pequeno delay para garantir que o DOM da Dashboard principal esteja pronto
+    setTimeout(carregarDados, 100);
+
+    // Escuta a troca de aba especificamente pelo ID do botão na Dashboard
+    const btnTab = document.getElementById('btn-interesses');
+    if (btnTab) {
+        btnTab.addEventListener('shown.bs.tab', carregarDados);
+    }
+})();
+</script>

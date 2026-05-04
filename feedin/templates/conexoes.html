@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<style>
+    .row-striped:nth-of-type(odd) { background-color: #f8f9fa; }
+    .row-striped:nth-of-type(even) { background-color: #ffffff; }
+
+    /* Estilo para a Foto Quadrada e Nítida */
+    .img-identificacao {
+        width: 140px;
+        height: 140px;
+        object-fit: cover;
+        object-position: top;
+        border-radius: 12px;
+        transition: transform 0.3s ease;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .img-identificacao:hover {
+        transform: scale(1.03);
+    }
+
+    .card-sugestao {
+        transition: all 0.3s ease;
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .badge-fiador {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        font-size: 0.75rem;
+        border: 1px solid #bae6fd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid bg-light min-vh-100 py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10">
+
+            <div class="mb-4">
+                <h2 class="fw-bold text-dark"><i class="bi bi-people-fill text-primary me-2"></i>Conexões</h2>
+                <p class="text-muted">Reviva memórias e gerencie quem compartilha a sua história em Piracicaba.</p>
+            </div>
+
+            <ul class="nav nav-pills nav-fill bg-white p-2 shadow-sm rounded-4 mb-4 border" id="pills-tab" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active fw-bold" id="sugestoes-tab" data-bs-toggle="pill" data-bs-target="#tab-sugestoes" type="button">
+                        <i class="bi bi-person-plus me-1"></i> Sugestões
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-bold" id="amigos-tab" data-bs-toggle="pill" data-bs-target="#tab-amigos" type="button">
+                        <i class="bi bi-person-check me-1"></i> Conexões Reais
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="pills-tabContent">
+
+                {# --- ABA SUGESTÕES --- #}
+                <div class="tab-pane fade show active" id="tab-sugestoes" role="tabpanel">
+                    <div class="row g-3">
+
+                        {# 1. CONVITES AGUARDANDO RESPOSTA #}
+                        {% if convites_pendentes %}
+                        <div class="col-12 mb-4">
+                            <h6 class="fw-bold text-primary text-uppercase small mb-3" style="letter-spacing: 1px;">
+                                <i class="bi bi-bell-fill me-2"></i>Reconhecimentos Pendentes
+                            </h6>
+                            <div class="row g-3">
+                                {% for convite in convites_pendentes %}
+                                <div class="col-12 col-md-6">
+                                    <div class="card border-0 shadow-sm rounded-4 p-3 border-start border-primary border-4 bg-white">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="d-flex align-items-center">
+                                                {% set foto_c = convite.remetente.perfil.foto_perfil if convite.remetente.perfil and convite.remetente.perfil.foto_perfil else 'default.webp' %}
+                                                <img src="{{ url_for('static', filename='fotos_perfil/' + foto_c) }}"
+                                                     class="rounded-3 me-3 border shadow-sm" width="60" height="60" style="object-fit: cover;">
+                                                <div>
+                                                    <h6 class="fw-bold mb-0 text-dark">{{ convite.remetente.username }}</h6>
+                                                    <small class="text-muted">Te viu no <strong>{{ convite.local_origem.nome if convite.local_origem else 'FeedIn' }}</strong></small>
+                                                </div>
+                                            </div>
+                                            <form action="{{ url_for('aceitar_conexao', id_conexao=convite.id) }}" method="POST">
+
+                                                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">Conectar</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <hr class="my-4 opacity-10">
+                        </div>
+                        {% endif %}
+
+                        {# 2. MOTOR DE AFINIDADE (SUGESTÕES) #}
+                        {% if sugestoes %}
+                            {% for sug in sugestoes %}
+                            <div class="col-12 col-md-6 col-xl-4" id="card-sugestao-{{ sug.usuario.id }}">
+                                <div class="card card-sugestao border-0 shadow-sm rounded-4 h-100">
+                                    <div class="card-body p-4 text-center">
+
+                                        {% if sug.amigo_ponte %}
+                                        <div class="badge rounded-pill badge-fiador mb-3 px-3 py-2">
+                                            <i class="bi bi-shield-check me-1"></i>
+                                            Fiador: <strong>{{ sug.amigo_ponte.username }}</strong>
+                                        </div>
+                                        {% endif %}
+
+                                        <div class="position-relative mb-3 d-inline-block">
+                                            {# Usando o filtro default do Jinja para garantir que algo sempre seja passado #}
+                                            <img src="{{ url_for('static', filename='fotos_perfil/' + (sug.usuario.perfil.foto_perfil or 'default.webp')) }}"
+                                                 class="img-identificacao border border-3 border-primary shadow-sm"
+                                                 alt="Identificação"
+                                                 style="width: 140px; height: 140px; object-fit: cover;">
+
+                                            {# Se isso aqui não mostrar o nome do arquivo, o Python não está enviando o dado #}
+                                            <p class="text-danger small">DEBUG: {{ sug.usuario.perfil.foto_perfil }}</p>
+                                        </div>
+
+                                        <h5 class="fw-bold mb-1 text-dark">{{ sug.usuario.username }}</h5>
+
+                                        <div class="bg-light p-3 rounded-4 my-3 text-start">
+                                            <small class="text-primary fw-bold d-block mb-1 text-uppercase" style="font-size: 0.7rem;">Ponto de Memória:</small>
+                                            <span class="d-block fw-semibold text-truncate" title="{{ sug.locais[0] if sug.locais else 'FeedIn' }}">
+                                                <i class="bi bi-geo-alt-fill text-danger me-1"></i>
+                                                {{ sug.locais[0] if sug.locais else 'Pioneiro FeedIn' }}
+                                            </span>
+                                            {% if sug.total_locais > 1 %}
+                                                <small class="text-muted">+{{ sug.total_locais - 1 }} outros locais em comum</small>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="d-grid gap-2">
+                                            <button hx-post="{{ url_for('conectar_pioneiro', id_destinatario=sug.usuario.id) }}"
+                                                    hx-target="#card-sugestao-{{ sug.usuario.id }}"
+                                                    hx-swap="outerHTML"
+                                                    class="btn btn-primary fw-bold rounded-pill">
+                                                Reconhecer
+                                            </button>
+                                            <button hx-post="{{ url_for('declinar_sugestao', id_alvo=sug.usuario.id) }}"
+                                                    hx-target="#card-sugestao-{{ sug.usuario.id }}"
+                                                    hx-swap="delete"
+                                                    class="btn btn-link btn-sm text-muted text-decoration-none">
+                                                Não conheço
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="col-12 text-center py-5">
+                                <i class="bi bi-person-x text-muted opacity-25 display-1"></i>
+                                <h5 class="mt-4 fw-bold">Sem sugestões no radar</h5>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# --- ABA AMIGOS --- #}
+                <div class="tab-pane fade" id="tab-amigos" role="tabpanel">
+                    <div class="row g-3">
+                        {% if meus_amigos %}
+                            {% for amigo in meus_amigos %}
+                            <div class="col-12 col-md-6 col-lg-4">
+                                <div class="card border-0 shadow-sm rounded-4 p-3">
+                                    <div class="d-flex align-items-center">
+                                        {% set foto_a = amigo.perfil.foto_perfil if amigo.perfil and amigo.perfil.foto_perfil else 'default.webp' %}
+                                        <img src="{{ url_for('static', filename='fotos_perfil/' + foto_a) }}"
+                                             class="rounded-3 border border-2 border-primary" width="60" height="60" style="object-fit: cover;">
+                                        <div class="ms-3 flex-grow-1">
+                                            <h6 class="fw-bold mb-0">{{ amigo.username }}</h6>
+                                            <small class="text-muted">Conexão Real</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+<style>
+    .hover-opacity:hover {
+        opacity: 0.7;
+    }
+    .bg-danger-soft { background-color: rgba(220, 53, 69, 0.1); }
+    .bg-warning-soft { background-color: rgba(255, 193, 7, 0.1); }
+</style>
+
+<div class="bloco-info shadow-sm mt-4">
+    <label class="form-label fw-bold d-block mb-3">
+        <i class="bi bi-tags-fill text-primary me-2"></i>Como seus amigos te chamam?
+    </label>
+
+    {# Formulário de Adição #}
+    <form method="POST" action="{{ url_for('adicionar_apelido') }}" class="mb-4">
+        {{ form_apelido.csrf_token }}
+        <div class="input-group shadow-sm rounded-pill overflow-hidden border">
+            <span class="input-group-text bg-white border-0 ps-3">
+                <i class="bi bi-chat-quote text-muted"></i>
+            </span>
+            {{ form_apelido.apelido(class="form-control border-0 py-2", placeholder="Novo apelido...") }}
+            <button class="btn btn-primary px-4 fw-bold" type="submit">
+                <i class="bi bi-plus-lg"></i>
+            </button>
+        </div>
+    </form>
+
+    {# Lista de Apelidos com Opção de Edição Rápida #}
+    <div id="lista-apelidos" class="d-flex flex-wrap gap-2">
+        {% if perfil and perfil.apelidos %}
+            {% for apelido in perfil.apelidos %}
+                <div class="btn-group shadow-sm animate__animated animate__fadeIn">
+                    <span class="badge rounded-start-pill bg-white text-dark border border-end-0 d-flex align-items-center px-3 py-2">
+                        {{ apelido.apelido }}
+                    </span>
+
+                    <button type="button" class="btn btn-sm btn-light border border-start-0 border-end-0 text-muted px-2"
+                            onclick="editarNomeApelido('{{ apelido.id }}', '{{ apelido.apelido }}')">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
+
+                    <a href="{{ url_for('excluir_apelido', id_apelido=apelido.id) }}"
+                       class="btn btn-sm btn-light border border-start-0 rounded-end-pill text-danger px-2">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted small italic">Nenhum apelido cadastrado.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# JavaScript para Edição Rápida sem complicação #}
+<script>
+function editarNomeApelido(id, atual) {
+    const novo = prompt("Alterar apelido:", atual);
+    if (novo && novo !== atual) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/editar_apelido/${id}`;
+
+        // 1. Pega o CSRF Token que já está no formulário de adição
+        const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+        // 2. Injeta o CSRF no formulário dinâmico
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
+
+        // 3. Injeta o novo valor do apelido
+        const inputApelido = document.createElement('input');
+        inputApelido.type = 'hidden';
+        inputApelido.name = 'novo_apelido';
+        inputApelido.value = novo;
+        form.appendChild(inputApelido);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>

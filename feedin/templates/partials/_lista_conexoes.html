@@ -1,0 +1,58 @@
+{# feedin/templates/partials/_lista_conexoes.html #}
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for conexao in conexoes_confirmadas %}
+        <div class="col">
+            <div class="card h-100 border-0 shadow-sm rounded-4 text-center p-3">
+                <div class="mb-3">
+                    {% set amigo = conexao.destinatario if conexao.id_remetente == user_alvo.id else conexao.remetente %}
+
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=amigo.id) }}"
+                         class="rounded-circle border border-3 border-white shadow-sm"
+                         style="width: 85px; height: 85px; object-fit: cover;"
+                         onerror="this.onerror=null;this.src='{{ url_for('static', filename='imagens/default.jpg') }}';">
+                </div>
+
+                {# NOME COMPLETO #}
+                <h6 class="fw-bold mb-0 text-dark">
+                    {{ amigo.perfil.nome_completo if amigo.perfil and amigo.perfil.nome_completo else amigo.username }}
+                </h6>
+
+                {# Verifique se esta parte está exatamente assim #}
+                {% if amigo.perfil and amigo.perfil.apelido %}
+                    <p class="text-primary mb-1" style="font-size: 0.85rem; font-weight: 600;">
+                        "{{ amigo.perfil.apelido }}"
+                    </p>
+                {% endif %}
+
+                {# EXIBIÇÃO DO APELIDO (O "vulgo" social) #}
+                {# Dentro do card de cada amigo #}
+                {% if amigo.perfil and amigo.perfil.apelidos %}
+                    <p class="text-primary mb-1" style="font-size: 0.85rem; font-weight: 600;">
+                        "{{ amigo.perfil.apelidos[0].apelido }}"
+                    </p>
+                {% endif %}
+
+                {# O Fiador/Referência #}
+                {% if conexao.referencia %}
+                    <div class="mt-2 pt-2 border-top">
+                        <p class="mb-0 text-muted" style="font-size: 0.75rem;">
+                            <i class="bi bi-shield-check text-success"></i>
+                            Afiançado por: <span class="fw-bold">{{ conexao.referencia.username }}</span>
+                        </p>
+                    </div>
+                {% endif %}
+
+                <div class="mt-auto pt-3">
+                    <small class="text-muted d-block" style="font-size: 0.65rem; opacity: 0.8;">
+                        <i class="bi bi-calendar3 me-1"></i>
+                        Rede desde {{ conexao.data_aceite.strftime('%d/%m/%Y') if conexao.data_aceite else '---' }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div class="col-12 text-center py-4">
+            <p class="text-muted fst-italic">Ainda não há conexões estabelecidas neste perfil.</p>
+        </div>
+    {% endfor %}
+</div>

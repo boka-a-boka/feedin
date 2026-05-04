@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="text-center mb-5 animate__animated animate__fadeIn">
+        <h1 class="fw-bold text-primary">Memórias da Cidade 📍</h1>
+        <p class="text-muted fs-5">Explore os locais que marcaram época em Piracicaba.</p>
+
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-6">
+                <form action="{{ url_for('lista_locais') }}" method="GET" class="d-flex shadow-sm rounded-pill overflow-hidden border">
+                    <input type="text" name="busca" class="form-control border-0 px-4 py-3"
+                           placeholder="Procure por um local (ex: Bar do Zé, Escola X...)"
+                           value="{{ termo_busca }}">
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </form>
+                {% if termo_busca %}
+                    <div class="mt-2">
+                        <a href="{{ url_for('lista_locais') }}" class="text-decoration-none small text-muted">
+                            <i class="bi bi-x-circle"></i> Limpar busca
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        {% for local, total in locais %}
+        <div class="col-md-6 col-lg-4 animate__animated animate__fadeInUp">
+            <div class="card h-100 border-0 shadow-sm rounded-4 hover-shadow transition">
+                <div class="card-body p-4 d-flex flex-column">
+                    <div class="d-flex align-items-start justify-content-between mb-3">
+                        <div class="icon-shape bg-light-primary rounded-3 p-3">
+                            <i class="bi bi-geo-fill text-primary fs-4"></i>
+                        </div>
+                        <span class="badge rounded-pill bg-success">
+                            {{ total }} {{ 'Memória' if total == 1 else 'Memórias' }}
+                        </span>
+                    </div>
+                    <h5 class="fw-bold mb-1">{{ local.nome }}</h5>
+                    <p class="text-muted small flex-grow-1">{{ local.endereco }}</p>
+                    <div class="mt-auto pt-3 border-top">
+                        <a href="{{ url_for('perfil_local', local_id=local.id) }}" class="btn btn-outline-primary w-100 rounded-pill fw-bold">
+                            Ver Histórias
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12 text-center py-5">
+            <div class="alert alert-light border-0 shadow-sm rounded-4 p-5">
+                <i class="bi bi-search text-muted mb-3" style="font-size: 3rem;"></i>
+                <h4 class="text-dark">Nenhum local encontrado com memórias</h4>
+                <p class="text-muted">Ainda não temos registros para "{{ termo_busca }}" ou ainda não há locais cadastrados.</p>
+                <a href="{{ url_for('dashboard', aba='memorias') }}" class="btn btn-primary rounded-pill px-4 mt-2">
+                    Seja o primeiro a registrar uma memória!
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

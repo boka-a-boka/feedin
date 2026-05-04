@@ -1,0 +1,15 @@
+/* Efeito de Borda para Pioneiros */
+.border-pioneiro {
+    border-left: 5px solid #D4AF37 !important; /* Dourado */
+    background-color: #fdfaf2 !important; /* Fundo levemente creme */
+}
+
+/* Badge de Pioneiro no nome */
+.pioneiro-theme .text-primary {
+    color: #a87f32 !important;
+}
+
+.pioneiro-theme .btn-primary {
+    background-color: #a87f32 !important;
+    border-color: #8a6828 !important;
+}

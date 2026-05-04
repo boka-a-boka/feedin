@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="card border-0 shadow-lg rounded-4 p-4">
+                <div class="text-center mb-4">
+                    <div class="icon-box bg-danger-subtle text-danger rounded-circle d-inline-block p-3 mb-3">
+                        <i class="bi bi-shield-lock fs-2"></i>
+                    </div>
+                    <h3 class="fw-bold">Alterar Senha</h3>
+                    <p class="text-muted small">Mantenha sua conta do FeedIn protegida.</p>
+                </div>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Senha Atual</label>
+                        <input type="password" name="senha_atual" class="form-control rounded-pill border-0 bg-light px-3" required>
+                    </div>
+
+                    <hr class="my-4 opacity-25">
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Nova Senha</label>
+                        <input type="password" name="nova_senha" class="form-control rounded-pill border-0 bg-light px-3" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold">Confirme a Nova Senha</label>
+                        <input type="password" name="confirmacao_senha" class="form-control rounded-pill border-0 bg-light px-3" required>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger rounded-pill fw-bold">
+                            Atualizar Senha
+                        </button>
+                        <a href="javascript:history.back()" class="btn btn-link text-muted btn-sm">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+<div class="modal fade" id="modalNovaPostagem" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="fw-bold">Nova Memória em Piracicaba</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form action="{{ url_for('criar_postagem') }}" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="modal-body">
+                    <div class="mb-4 text-center">
+                        <div class="upload-placeholder border rounded-4 p-2 bg-light shadow-sm"
+                             onclick="document.getElementById('imagem').click();"
+                             style="cursor: pointer; border-style: dashed !important; border-color: #dee2e6 !important; min-height: 150px; display: flex; align-items: center; justify-content: center;">
+
+                            <div id="previewContainer" class="d-none w-100">
+                                <img id="imgPreview" src="#" alt="Sua Memória"
+                                     class="img-fluid rounded-4"
+                                     style="max-height: 450px; width: 100%; object-fit: contain;">
+                                <p class="small text-primary mt-2 mb-0"><i class="bi bi-arrow-repeat"></i> Trocar fotografia</p>
+                            </div>
+
+                            <div id="placeholderContent">
+                                <i class="bi bi-camera-fill display-5 text-secondary"></i>
+                                <p class="mt-2 mb-0 fw-bold text-muted">Qual a sua memória?</p>
+                                <small class="text-muted">Clique para anexar uma foto (Opcional para locais antigos)</small>
+                            </div>
+
+                            <input type="file" name="imagem" id="imagem" class="d-none" accept="image/*" onchange="previewImagem(this)">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold text-muted text-uppercase">O que este momento representa?</label>
+                        <textarea name="conteudo" class="form-control border-0 bg-light rounded-4 p-3" rows="4"
+                                  placeholder="Conte a história por trás desta memória..." required></textarea>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-12 position-relative">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-0"><i class="bi bi-geo-alt-fill text-danger"></i></span>
+                                <input type="text" id="buscaLocalPost" class="form-control border-0 bg-light" placeholder="Onde foi isso?">
+                                <input type="hidden" name="id_local" id="idLocalHidden">
+                            </div>
+                            <div id="sugestoesLocais" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1070;"></div>
+                        </div>
+
+                        <div class="col-md-6 position-relative">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-0"><i class="bi bi-person-plus-fill text-success"></i></span>
+                                <input type="text" id="buscaPessoasPost" class="form-control border-0 bg-light" placeholder="Marcar amigos (@...)">
+                            </div>
+                            <input type="hidden" name="pessoas_ids" id="pessoasIdsHidden">
+                            <div id="sugestoesPessoas" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1060;"></div>
+                        </div>
+
+                        <div class="col-md-6 position-relative">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light border-0"><i class="bi bi-tag-fill text-primary"></i></span>
+                                <input type="text" id="buscaTagsPost" class="form-control border-0 bg-light" placeholder="Tags de afinidade">
+                            </div>
+                            <input type="hidden" name="tags_ids" id="tagsIdsHidden">
+                            <div id="sugestoesTags" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1065;"></div>
+                        </div>
+                    </div>
+
+                    <div id="containerBadges" class="d-flex flex-wrap gap-1 mt-3">
+                        <div id="pessoasSelecionadas" class="d-flex flex-wrap gap-1"></div>
+                        <div id="tagsSelecionadas" class="d-flex flex-wrap gap-1"></div>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-5 fw-bold shadow">
+                        Publicar Memória
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// 1. Preview da Imagem com proporção original (Object-fit)
+function previewImagem(input) {
+    const container = document.getElementById('previewContainer');
+    const preview = document.getElementById('imgPreview');
+    const placeholder = document.getElementById('placeholderContent');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+            container.classList.remove('d-none');
+            placeholder.classList.add('d-none');
+        }
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+// 2. Estado Global do Modal
+const PostState = {
+    tags: new Set(),
+    pessoas: new Set()
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('modalNovaPostagem');
+
+    modalEl.addEventListener('shown.bs.modal', function () {
+
+        const configurarBusca = (inputId, listaId, rota, callbackItem) => {
+            const input = document.getElementById(inputId);
+            const lista = document.getElementById(listaId);
+
+            input.oninput = function(e) {
+                let termo = e.target.value.replace('@', '');
+                if (termo.length < 2) { lista.classList.add('d-none'); return; }
+
+                fetch(`${rota}?q=${encodeURIComponent(termo)}`)
+                    .then(res => res.json())
+                    .then(dados => {
+                        lista.innerHTML = '';
+                        if (!dados.length) { lista.classList.add('d-none'); return; }
+
+                        dados.forEach(item => {
+                            let btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action border-0 py-2';
+                            btn.innerHTML = callbackItem(item);
+
+                            btn.onclick = () => {
+                                if (inputId === 'buscaLocalPost') {
+                                    input.value = item.nome || item.name;
+                                    document.getElementById('idLocalHidden').value = item.id;
+                                }
+                                else if (inputId === 'buscaTagsPost') {
+                                    adicionarBadge(item.id, `#${item.nome}`, 'tagsSelecionadas', PostState.tags, 'tagsIdsHidden', 'bg-primary-subtle text-primary');
+                                    input.value = '';
+                                }
+                                else if (inputId === 'buscaPessoasPost') {
+                                    adicionarBadge(item.id, `@${item.username}`, 'pessoasSelecionadas', PostState.pessoas, 'pessoasIdsHidden', 'bg-success-subtle text-success');
+                                    input.value = '';
+                                }
+                                lista.classList.add('d-none');
+                            };
+                            lista.appendChild(btn);
+                        });
+                        lista.classList.remove('d-none');
+                    });
+            };
+        };
+
+        // Ativação das Buscas
+        configurarBusca('buscaLocalPost', 'sugestoesLocais', '/buscar_locais', item => `<i class="bi bi-geo-alt-fill me-2 text-danger"></i>${item.nome || item.name}`);
+        configurarBusca('buscaTagsPost', 'sugestoesTags', '/api/buscar-interesses', item => `<i class="bi bi-hash me-2"></i>${item.nome}`);
+        configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => `<i class="bi bi-person-circle me-2"></i>${item.username}`);
+    });
+
+    // Fechar listas ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.position-relative')) {
+            document.querySelectorAll('.list-group').forEach(el => el.classList.add('d-none'));
+        }
+    });
+});
+
+// 3. Gerenciador de Badges (Tags e Pessoas)
+function adicionarBadge(id, nome, containerId, setObj, inputHiddenId, extraClass) {
+    if (setObj.has(id)) return;
+    setObj.add(id);
+
+    const container = document.getElementById(containerId);
+    const badge = document.createElement('span');
+    badge.className = `badge border-0 p-2 rounded-pill mb-1 me-1 animate__animated animate__fadeIn ${extraClass}`;
+    badge.style.fontSize = '0.8rem';
+    badge.innerHTML = `${nome} <i class="bi bi-x-circle ms-1" style="cursor:pointer"></i>`;
+
+    badge.querySelector('i').onclick = () => {
+        setObj.delete(id);
+        badge.remove();
+        document.getElementById(inputHiddenId).value = Array.from(setObj).join(',');
+    };
+
+    container.appendChild(badge);
+    document.getElementById(inputHiddenId).value = Array.from(setObj).join(',');
+}
+</script>

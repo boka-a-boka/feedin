@@ -1,0 +1,21 @@
+{# O objeto 'atividade' aqui é uma Memoria que contém dados_conexao #}
+{% set c = atividade.dados_conexao %}
+<div class="card border-0 shadow-sm rounded-4 mb-4" style="background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%); border-left: 6px solid #0d6efd !important;">
+    <div class="card-body p-4 text-center">
+        <div class="d-flex justify-content-center align-items-center mb-3">
+            <div class="rounded-circle border border-3 border-white shadow overflow-hidden" style="width: 60px; height: 60px;">
+                <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_remetente) }}" width="60" height="60" style="object-fit: cover;">
+            </div>
+            <div class="mx-n2 bg-white rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 35px; height: 35px; z-index: 10;">
+                <i class="bi bi-link-45deg text-primary fs-5"></i>
+            </div>
+            <div class="rounded-circle border border-3 border-white shadow overflow-hidden" style="width: 60px; height: 60px;">
+                <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_destinatario) }}" width="60" height="60" style="object-fit: cover;">
+            </div>
+        </div>
+        <h6 class="fw-bold text-dark mb-1">Rede Fortalecida!</h6>
+        <p class="text-muted mb-0" style="font-size: 0.85rem;">
+            {{ c.remetente.username }} e {{ c.destinatario.username }} agora estão conectados.
+        </p>
+    </div>
+</div>

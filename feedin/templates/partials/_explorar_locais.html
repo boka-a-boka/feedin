@@ -1,0 +1,101 @@
+<style>
+    .transition-hover { transition: transform 0.2s, box-shadow 0.2s; }
+    .transition-hover:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.1) !important;
+    }
+
+</style>
+
+<div class="animate__animated animate__fadeIn">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h3 class="fw-bold mb-0"><i class="bi bi-geo-alt-fill text-primary me-2"></i>Memórias da Cidade</h3>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-3">
+            <form action="{{ url_for('dashboard') }}" method="GET" class="d-flex gap-2">
+                <input type="hidden" name="aba" value="locais">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-0"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="busca_local" id="busca_local"
+                           class="form-control border-0 bg-light"
+                           placeholder="Procurar um local histórico..."
+                           value="{{ request.args.get('busca_local', '') }}"
+                           list="lista-locais-autocomplete" autocomplete="off">
+
+                    <!-- Esta lista será preenchida dinamicamente pelo JavaScript -->
+                    <datalist id="lista-locais-autocomplete"></datalist>
+                </div>
+                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Buscar</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        {% if locais %}
+            {% for local, total in locais %}
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm rounded-4 h-100 transition-hover">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="badge bg-primary-subtle text-primary rounded-pill px-3">
+                                {{ total }} {{ 'pessoa' if total == 1 else 'pessoas' }}
+                            </span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">{{ local.nome }}</h5>
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-geo-alt-fill text-danger me-1"></i>
+                            {# CORRIGIDO: Usando 'local' em vez de 'item[0]' #}
+                            {{ local.logradouro }}{% if local.numero %}, {{ local.numero }}{% endif %}
+                            <br>
+                            <small class="text-uppercase fw-semibold" style="font-size: 0.75rem; margin-left: 1.2rem;">
+                                <i class="bi bi-geo"></i> {{ local.bairro if local.bairro else 'Piracicaba' }}
+                            </small>
+                        </p>
+
+                        <a href="{{ url_for('perfil_local', local_id=local.id) }}"
+                           class="btn btn-outline-primary btn-sm rounded-pill w-100 fw-bold">
+                            Ver Histórias <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12 text-center py-5">
+                <div class="p-5 bg-white rounded-4 shadow-sm">
+                    <i class="bi bi-geo-fill text-muted mb-3" style="font-size: 3rem;"></i>
+                    <h5 class="text-dark fw-bold">Nenhum local encontrado</h5>
+                    <p class="text-muted">Que tal ser o primeiro a registrar uma memória de um lugar especial?</p>
+                    <a href="{{ url_for('dashboard', aba='memorias') }}" class="btn btn-primary rounded-pill px-4">
+                        Adicionar Memória
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+
+<script>
+document.getElementById('busca_local').addEventListener('input', function(e) {
+    const termo = e.target.value;
+    if (termo.length < 2) return; // Só busca com 2 ou mais letras
+
+    fetch(`/buscar_locais?q=${encodeURIComponent(termo)}`)
+        .then(response => response.json())
+        .then(data => {
+            const datalist = document.getElementById('lista-locais-autocomplete');
+            datalist.innerHTML = ''; // Limpa a lista anterior
+
+            data.forEach(local => {
+                const option = document.createElement('option');
+                option.value = local.nome;
+                // Opcional: mostrar o bairro para ajudar o usuário
+                option.textContent = `${local.nome} - ${local.bairro}`;
+                datalist.appendChild(option);
+            });
+        });
+});
+</script>

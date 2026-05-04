@@ -1,0 +1,27 @@
+<div class="accordion" id="accordionTaxonomia">
+  {% for pai in raizes %}
+  <div class="accordion-item bg-dark text-white border-secondary">
+    <h2 class="accordion-header">
+      <button class="accordion-button collapsed bg-dark text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ pai.id }}">
+        <strong>{{ pai.nome }}</strong>
+        <span class="badge bg-primary ms-2">{{ pai.filhos|length }} filhos</span>
+      </button>
+    </h2>
+    <div id="collapse{{ pai.id }}" class="accordion-collapse collapse">
+      <div class="accordion-body">
+        <ul class="list-group list-group-flush">
+          {% for filho in pai.filhos %}
+            <li class="list-group-item bg-dark text-muted d-flex justify-content-between align-items-center border-secondary">
+              {{ filho.nome }}
+              <div>
+                  <a href="#" class="btn btn-sm btn-outline-info">Editar</a>
+                  <a href="#" class="btn btn-sm btn-outline-warning">Mover</a>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

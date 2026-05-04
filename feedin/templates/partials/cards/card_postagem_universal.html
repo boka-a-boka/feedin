@@ -1,0 +1,190 @@
+{#
+    CARD UNIVERSAL - VERSÃO "PIRACICABA MEMÓRIA VIVA"
+    Foco: Estabilidade e Resgate de Memória.
+#}
+
+{# 1. Definição das Variáveis de Controle - Simplificada e Segura #}
+{% set atividade_id = atividade.id if atividade.id is defined else atividade['id'] %}
+
+{% if atividade is mapping %}
+    {# Se for Dicionário #}
+    {% set autor_final = atividade.get('autor_objeto') or atividade.get('autor') %}
+    {% set imagem_final = atividade.get('imagem_url') or (atividade['objeto_original'].imagem_url if atividade.get('objeto_original') else None) %}
+    {% set conteudo_final = atividade.get('conteudo_exibicao') or atividade.get('conteudo') %}
+    {% set post_obj = atividade.get('objeto_original') %}
+{% else %}
+    {# Se for Objeto SQLAlchemy (Atividade ou Postagem) #}
+    {% if atividade.__class__.__name__ == 'Postagem' %}
+        {# Se clicou no perfil, o objeto é a Postagem direta #}
+        {% set autor_final = atividade.autor %}
+        {% set imagem_final = atividade.imagem_url %}
+        {% set conteudo_final = atividade.conteudo %}
+        {% set post_obj = atividade %}
+    {% else %}
+        {# Se for o objeto Atividade (Feed/Local) #}
+        {% set autor_final = atividade.autor_objeto if atividade.autor_objeto else atividade.autor %}
+        {% set imagem_final = atividade.imagem_url if atividade.imagem_url else (atividade.objeto_original.imagem_url if atividade.objeto_original else None) %}
+        {% set conteudo_final = atividade.conteudo_exibicao if atividade.conteudo_exibicao else atividade.conteudo %}
+        {% set post_obj = atividade.objeto_original %}
+    {% endif %}
+{% endif %}
+
+{# Lógica de Visibilidade Seletiva #}
+{% set exibir_card = true %}
+{% if context_origem == 'perfil_local' and eh_conexao_rede %}
+    {% set exibir_card = false %}
+{% endif %}
+
+{% if exibir_card %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 universal-card overflow-hidden
+                {{ 'border-pioneiro shadow-lg' if eh_memoria_local or eh_conexao_rede }}"
+         id="post-{{ atividade_id }}">
+
+        {# Caso 1: O Lado Festivo (Vínculos e Pioneiros) #}
+        {% if eh_memoria_local or eh_conexao_rede %}
+            <div class="card-body p-4 bg-white">
+                <div class="mb-4 p-3 rounded-4 text-center"
+                     style="background: linear-gradient(45deg, #4e73df10, #1cc88a10); border: 1px dashed #4e73df40 !important;">
+                    <span class="text-primary fw-bold small text-uppercase" style="letter-spacing: 1px;">
+                        <i class="bi bi-stars me-2"></i>
+                        {% if eh_memoria_local %}
+                            Agora faz parte da sua rede de confiança!
+                        {% else %}
+                            Nova Conexão na Rede de Confiança
+                        {% endif %}
+                        <i class="bi bi-stars ms-2"></i>
+                    </span>
+                </div>
+
+                <div class="d-flex align-items-center mb-3">
+                     {# Ajustado para autor_final #}
+                     <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_final.id) }}"
+                          class="rounded-circle border border-3 border-white shadow" width="55" height="55" style="object-fit: cover;">
+                     <div class="ms-3">
+                         <h6 class="fw-bold text-dark mb-0">
+                             {{ autor_final.perfil.nome_completo if (autor_final.perfil and autor_final.perfil.nome_completo) else autor_final.username }}
+                         </h6>
+                         <small class="text-primary fw-bold">@{{ autor_final.username }}</small>
+                     </div>
+                </div>
+
+                <div class="p-3 rounded-4 border-start border-5 shadow-sm"
+                     style="background-color: #fdfdfd; border-color: #4e73df !important;">
+                    {% if atividade.periodo_estimado %}
+                        <p class="text-muted mb-2 small fw-bold">
+                            <i class="bi bi-clock-history me-1"></i> {{ atividade.periodo_estimado }}
+                        </p>
+                    {% endif %}
+                    <p class="texto-acontecimento mb-0">
+                        "{{ conteudo_final or 'Revivendo bons momentos.' }}"
+                    </p>
+                </div>
+            </div>
+
+        {# Caso 2: Postagem Padrão #}
+        {% else %}
+            <div class="p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_final.id) }}" width="42" height="42" class="rounded-circle me-2 border object-fit-cover">
+                    <div>
+                        <span class="text-dark fw-bold small">
+                            {{ autor_final.perfil.nome_completo if (autor_final.perfil and autor_final.perfil.nome_completo) else autor_final.username }}
+                        </span>
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">
+                            {{ post_obj.data_criacao.strftime('%d/%m/%Y') if (post_obj and post_obj.data_criacao) else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao else '') }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            {# BLOCO DA FOTO COM OVERLAY DE MARCAÇÕES #}
+            {% if imagem_final %}
+                <div class="position-relative bg-light overflow-hidden rounded-4 mx-3 mb-2 shadow-sm">
+                    <img src="{{ url_for('static', filename='uploads/posts/' ~ imagem_final) }}"
+                         class="img-fluid w-100 object-fit-cover"
+                         style="max-height: 500px;"
+                         alt="Memória Viva">
+
+{# Overlay de Pessoas Marcadas - Versão Final de Piracicaba #}
+{% if post_obj and post_obj.pessoas_marcadas %}
+    <div class="position-absolute bottom-0 start-0 w-100 p-3" style="background: linear-gradient(transparent, rgba(0,0,0,0.85));">
+        <div class="d-flex flex-wrap gap-2">
+            <span class="small text-white me-2"><i class="bi bi-person-plus-fill me-1"></i> Com:</span>
+
+            {# Ordenação forçada no Jinja #}
+            {% set lista_ordenada = post_obj.pessoas_marcadas|sort(attribute='username', case_sensitive=False) %}
+
+            {% for pessoa in lista_ordenada %}
+                <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}"
+                   class="badge rounded-pill bg-white text-dark text-decoration-none shadow-sm py-1 px-2"
+                   style="font-weight: 800 !important; font-size: 0.75rem;">
+                   @{{ pessoa.username.lower() }}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+                </div>
+            {% endif %}
+
+            <div class="p-3">
+                <p class="card-text text-dark" style="font-size: 0.95rem; line-height: 1.5;">
+                    {{ conteudo_final }}
+                </p>
+            </div>
+        {% endif %}
+
+        {# Rodapé Estratégico - COM TRAVA DE SEGURANÇA #}
+        <div class="px-3 pb-3">
+            <div class="pt-2 d-flex justify-content-between align-items-center">
+                <div>
+                    {# Oculta o local se já estivermos no Perfil Local ou se id_local for nulo #}
+                    {% if (eh_memoria_local or atividade.id_local) and context_origem != 'perfil_local' %}
+                        <a href="{{ url_for('perfil_local', local_id=atividade.id_local) }}" class="text-decoration-none">
+                            <span class="badge rounded-pill bg-light text-primary border-0 py-2 px-3 shadow-xs" style="font-size: 0.75rem;">
+                                <i class="bi bi-geo-alt-fill me-1"></i> {{ nome_local }}
+                            </span>
+                        </a>
+                    {% endif %}
+                </div>
+
+                {# AQUI ESTAVA O ERRO: Adicionamos o 'if atividade.id_local' #}
+                {% if context_origem != 'perfil_local' and context_origem != 'perfil_publico' and atividade.id_local %}
+                    <div class="text-end" onclick="window.location.href='{{ url_for('perfil_local', local_id=atividade.id_local) }}'" style="cursor:pointer;">
+                        <span class="text-primary small fw-bold">
+                             Explorar Memória <i class="bi bi-arrow-right-circle-fill ms-1"></i>
+                        </span>
+                    </div>
+                {% else %}
+                    {# Se não tem local ou já estamos no perfil, mostra só as reações #}
+                    {% include "partials/cards/_footer_reacoes.html" %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+<style>
+/* Tipografia diferenciada para o resgate de memórias */
+.texto-acontecimento {
+    font-size: 1.15rem;
+    font-weight: 500;
+    line-height: 1.5;
+    letter-spacing: -0.01em; /* Mantém o toque elegante */
+    color: #2c3e50;
+    font-style: italic;
+}
+
+/* Identidade visual dos Pioneiros e Conexões */
+.border-pioneiro {
+    border-left: 6px solid #4e73df !important; /* Cor firme da rede de confiança */
+    background: linear-gradient(to right, #ffffff, #f9faff);
+    transition: all 0.3s ease;
+}
+
+/* Feedback visual ao interagir no Feed */
+.border-pioneiro:hover {
+    transform: scale(1.01);
+    box-shadow: 0 10px 25px rgba(78, 115, 223, 0.15) !important;
+}
+</style>

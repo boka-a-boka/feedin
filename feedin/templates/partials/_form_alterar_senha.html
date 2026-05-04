@@ -1,0 +1,54 @@
+<form action="{{ url_for('alterar_senha') }}" method="POST" class="needs-validation" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+    <div class="mb-3 text-start">
+        <label for="senha_atual" class="form-label small fw-bold">Senha Atual</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0"><i class="bi bi-shield-lock text-muted"></i></span>
+            <input type="password" name="senha_atual" id="senha_atual" class="form-control border-start-0 bg-light"
+                   placeholder="Digite sua senha atual" required>
+        </div>
+    </div>
+
+    <div class="mb-3 text-start">
+        <label for="nova_senha" class="form-label small fw-bold">Nova Senha</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0"><i class="bi bi-key text-muted"></i></span>
+            <input type="password" name="nova_senha" id="nova_senha" class="form-control border-start-0"
+                   placeholder="Mínimo 6 caracteres" required minlength="6">
+        </div>
+    </div>
+
+    <div class="mb-4 text-start">
+        <label for="confirma_senha" class="form-label small fw-bold">Confirmar Nova Senha</label>
+        <div class="input-group">
+            <span class="input-group-text bg-light border-end-0"><i class="bi bi-check-all text-muted"></i></span>
+            <input type="password" name="confirma_senha" id="confirma_senha" class="form-control border-start-0"
+                   placeholder="Repita a nova senha" required>
+        </div>
+    </div>
+
+    <div class="d-grid gap-2 mt-4">
+        <!-- Botão de Ação Principal -->
+        <button type="submit" class="btn btn-primary btn-lg rounded-pill fw-bold">
+            Salvar Alterações
+        </button>
+
+        <!-- Botão Voltar Estrutural (O "Matador de Loop") -->
+        <a href="{{ url_for('configuracoes') }}" class="btn btn-outline-secondary btn-lg rounded-pill fw-bold">
+            <i class="bi bi-arrow-left me-2"></i>Voltar para Gestão
+        </a>
+    </div>
+</form>
+
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    const nova = document.getElementById('nova_senha').value;
+    const confirma = document.getElementById('confirma_senha').value;
+
+    if (nova !== confirma) {
+        e.preventDefault();
+        alert("As novas senhas não coincidem!");
+    }
+});
+</script>

@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Lógica de Cores Dinâmicas e Hero */
+    {% set cores = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69'] %}
+    {% set cor_fundo = cores[local.id % cores|length] %}
+
+    .local-hero {
+        background: linear-gradient(135deg, {{ cor_fundo }} 0%, #212529 100%);
+        min-height: 250px;
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        padding: 40px;
+        border-radius: 0 0 35px 35px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    }
+
+    .local-info-overlay { color: white; z-index: 2; width: 100%; }
+    .local-info-overlay h1 { font-weight: 800; text-shadow: 2px 2px 8px rgba(0,0,0,0.4); }
+
+    .btn-voltar-flutuante {
+        position: absolute; top: 30px; left: 30px; z-index: 10;
+        background: rgba(255,255,255,0.2); backdrop-filter: blur(8px);
+        color: white; width: 45px; height: 45px; display: flex;
+        align-items: center; justify-content: center; border-radius: 50%; transition: all 0.3s;
+    }
+    .btn-voltar-flutuante:hover { background: white; color: {{ cor_fundo }}; transform: translateX(-5px); }
+
+    .rating-badge {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 8px 20px;
+        border-radius: 50px;
+        display: inline-block;
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .stars-gold i { cursor: pointer; transition: transform 0.2s; }
+    .stars-gold i:hover { transform: scale(1.2); }
+
+    .col-feed { max-width: 850px; margin: 0 auto; }
+
+/* Media query para telas menores (smartphones) */
+@media (max-width: 768px) {
+    .local-hero {
+        /* Centraliza o conteúdo verticalmente dentro do hero */
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 20px;
+        min-height: 350px; /* Um pouco mais alto para acomodar os itens empilhados */
+    }
+
+    .local-info-overlay .d-flex {
+        /* Faz com que os blocos de texto e botão fiquem um embaixo do outro */
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 25px !important;
+    }
+
+    .local-info-overlay .text-end {
+        /* Corrige o alinhamento do bloco da direita (estrelas e botão) */
+        text-align: center !important;
+    }
+
+    .local-hero h1 {
+        font-size: 2rem; /* Reduz um pouco o título em telas pequenas */
+    }
+
+    .rating-badge {
+        margin: 0 auto; /* Centraliza o badge de avaliação */
+    }
+
+    .d-flex.gap-2 {
+        justify-content: center; /* Centraliza as badges de "Em Atividade" / "Seguidores" */
+        flex-wrap: wrap;
+    }
+
+    .btn-voltar-feedin {
+        /* Ajusta o botão de voltar para não ficar perdido no topo */
+        top: 15px;
+        left: 15px;
+    }
+}
+</style>
+
+{# HERO SECTION #}
+<section class="local-hero shadow">
+    <a href="javascript:history.back()" class="btn-voltar-feedin shadow-sm" title="Voltar">
+        <i class="bi bi-arrow-left fs-5"></i>
+    </a>
+
+    <div class="local-info-overlay">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
+            <div>
+                <h1 class="display-5 mb-1">{{ local.nome }}</h1>
+                <p class="lead mb-2" style="font-size: 1rem; opacity: 0.9;">
+                    <i class="fas fa-map-marker-alt me-2 text-warning"></i>
+                    {{ local.logradouro }}{% if local.numero %}, {{ local.numero }}{% endif %} — {{ local.bairro }}
+                </p>
+
+                <div class="d-flex gap-2">
+                    {% if local.esta_ativo %}
+                        <span class="badge bg-success rounded-pill px-3"><i class="bi bi-check-circle me-1"></i>Em Atividade</span>
+                    {% else %}
+                        <span class="badge bg-secondary rounded-pill px-3"><i class="bi bi-archive me-1"></i>Memória Histórica</span>
+                    {% endif %}
+
+                    <span class="badge bg-light text-dark border rounded-pill px-3">
+                        <i class="bi bi-people-fill me-1"></i> {{ local.atividades|length }} Seguidores
+                    </span>
+                </div>
+            </div>
+
+            <div class="text-end">
+                <div class="rating-badge mb-3">
+                    <span class="stars-gold text-warning" id="rating-container" data-pode-avaliar="{{ 'true' if usuario_segue else 'false' }}">
+                        {% for i in range(1, 6) %}
+                            <i class="{% if rating_data.media >= i %}fas{% elif rating_data.media >= i - 0.5 %}fas fa-star-half-alt{% else %}far{% endif %} fa-star" data-value="{{ i }}"></i>
+                        {% endfor %}
+                    </span>
+                    <span class="ms-2 small text-white fw-bold">{{ rating_data.media }} ({{ rating_data.total }})</span>
+                </div>
+
+                <!-- Container de Feedback Oculto -->
+                <div id="feedback-container" class="mt-3 d-none" style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 15px; backdrop-filter: blur(10px);">
+                    <p class="small text-white mb-2 fw-bold">Conte-nos mais sobre sua experiência:</p>
+                    <textarea id="feedback-texto" class="form-control form-control-sm mb-2" rows="2" placeholder="O que faz este lugar ser especial?"></textarea>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" onclick="cancelarAvaliacao()" class="btn btn-sm btn-outline-light">Cancelar</button>
+                        <button type="button" onclick="enviarAvaliacaoCompleta()" class="btn btn-sm btn-warning fw-bold">Salvar Memória</button>
+                    </div>
+                </div>
+
+                <div>
+                    {% if not usuario_segue %}
+                        <button type="button"
+                                onclick="prepararSeguirDireto('{{ local.id }}', '{{ local.nome }}')"
+                                class="btn btn-light btn-lg rounded-pill px-4 shadow fw-bold text-primary">
+                            <i class="fas fa-plus me-2"></i>Seguir Local
+                        </button>
+                    {% else %}
+                        <button class="btn btn-outline-light btn-lg rounded-pill px-4 disabled opacity-75">
+                            <i class="fas fa-check me-2"></i>Seguindo
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# CONTEÚDO PRINCIPAL #}
+<div class="container mt-4">
+    <div class="row">
+
+        {# COLUNA ESQUERDA: MURAL UNIFICADO #}
+        <div class="col-lg-8">
+            <h4 class="fw-bold text-secondary mb-4">Linha do Tempo</h4>
+
+            {% for item in atividades %}
+                {# FILTRO DE OURO: Só exibe se NÃO for uma simples conexão/seguidor #}
+                {% if item.tipo_card != 'conexao' %}
+                    {% with atividade = item, context_origem = 'perfil_local' %}
+                        {% include "partials/cards/card_postagem_universal.html" %}
+                    {% endwith %}
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5 bg-light rounded-4 border-dashed">
+                    <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
+                    <p class="text-muted mt-3">Nenhuma história ou atividade registrada ainda.</p>
+                </div>
+            {% endfor %}
+        </div>
+
+        {# COLUNA DIREITA: QUEM FREQUENTA #}
+        <div class="col-lg-4">
+            <div class="sticky-top" style="top: 20px;">
+                <div class="card border-0 shadow-sm rounded-4 p-4">
+                    <h6 class="text-uppercase fw-bold text-muted small mb-4">Quem frequenta</h6>
+                    {% for atividade in local.atividades %}
+                        <div class="row align-items-center mb-3">
+                            <div class="col-auto pe-0">
+                                <a href="{{ url_for('ver_perfil', usuario_id=atividade.id_criador) }}">
+                                    <img src="{{ url_for('servir_foto_perfil', usuario_id=atividade.id_criador) }}"
+                                         class="rounded-circle border" width="45" height="45" style="object-fit: cover;">
+                                </a>
+                            </div>
+                            <div class="col ps-3">
+                                <a href="{{ url_for('ver_perfil', usuario_id=atividade.id_criador) }}" class="text-decoration-none">
+                                    <h6 class="mb-0 small fw-bold text-truncate text-dark">
+                                        {{ atividade.criador.perfil.nome_completo if atividade.criador and atividade.criador.perfil else atividade.criador.username }}
+                                    </h6>
+                                    <p class="text-primary mb-0 small">@{{ atividade.criador.username }}</p>
+                                </a>
+                                <small class="text-muted" style="font-size: 0.6rem;">Desde {{ atividade.data_criacao.strftime('%m/%y') }}</small>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div> {# Fechamento da Row principal #}
+</div> {# Fechamento do Container principal #}
+
+{# MODAL DE VÍNCULO RÁPIDO #}
+<div class="modal fade" id="modalVinculoRapido" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 25px; border: none;">
+            <div class="modal-header border-0 pt-4 px-4">
+                <h5 class="modal-title fw-bold">Minha história no {{ local.nome }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                {# Ajustamos o form para apontar para a ROTA DINÂMICA #}
+                <form action="{{ url_for('criar_postagem') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="id_local" value="{{ local.id }}">
+                    <input type="hidden" name="tipo_postagem" value="vinculo">
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Qual época você frequentava?</label>
+                        <input type="text" name="periodo_estimado" class="form-control rounded-pill" placeholder="Ex: Anos 90, Infância...">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">O que você mais curte aqui?</label>
+                        <textarea name="descricao" class="form-control rounded-4" rows="3" placeholder="Conte uma breve lembrança..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 rounded-pill py-2 fw-bold">
+                        Eternizar Minha História
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include "partials/_modal_comentarios.html" %}
+
+<!-- Forçando o JS a carregar sem depender de blocos externos -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+let notaSelecionada = 0;
+
+$(document).ready(function() {
+    $(document).on('click', '#rating-container i', function() {
+        const container = document.getElementById('rating-container');
+        const podeAvaliar = container.getAttribute('data-pode-avaliar') === 'true';
+
+        if (!podeAvaliar) {
+            alert("Você precisa seguir este local para poder avaliar!");
+            return;
+        }
+
+        notaSelecionada = $(this).data('value');
+
+        // 1. Pinta as estrelas visualmente para dar feedback ao usuário
+        $('#rating-container i').each(function(index) {
+            if (index < notaSelecionada) {
+                $(this).removeClass('far').addClass('fas');
+            } else {
+                $(this).removeClass('fas').addClass('far');
+            }
+        });
+
+        // 2. Mostra o campo de feedback
+        $('#feedback-container').removeClass('d-none').hide().fadeIn();
+        $('#feedback-texto').focus();
+    });
+});
+
+function cancelarAvaliacao() {
+    $('#feedback-container').fadeOut(() => {
+        location.reload(); // Reseta para a média original
+    });
+}
+
+function enviarAvaliacaoCompleta() {
+    const texto = $('#feedback-texto').val().trim();
+    const localId = "{{ local.id }}";
+
+    if (texto.length < 5) {
+        alert("Por favor, escreva um comentário um pouco maior (mínimo 5 caracteres).");
+        return;
+    }
+
+    fetch(`/local/avaliar/${localId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': $('input[name="csrf_token"]').val()
+        },
+        body: JSON.stringify({
+            nota: notaSelecionada,
+            feedback: texto
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            location.reload();
+        } else {
+            alert(data.mensagem);
+        }
+    })
+    .catch(error => console.error('Erro:', error));
+}
+
+</script>
+
+{% endblock %}

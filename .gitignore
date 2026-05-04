@@ -1,0 +1,22 @@
+# Ambiente Virtual e IDE
+venv/
+.idea/
+
+# Temporários e Logs
+__pycache__/
+feedin/__pycache__/
+logs/
+*.py[cod]
+
+# Banco de Dados e Segredos
+instance/
+*.db
+feedin/.env
+
+# Uploads (Mantendo a estrutura, ignorando o conteúdo)
+feedin/static/fotos_perfil/*
+feedin/static/uploads/capas/*
+feedin/static/uploads/posts/*
+!feedin/static/fotos_perfil/.gitkeep
+!feedin/static/uploads/capas/.gitkeep
+!feedin/static/uploads/posts/.gitkeep

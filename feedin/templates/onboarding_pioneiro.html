@@ -1,0 +1,139 @@
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+    // === 1. LÓGICA DE LOCAIS (ETAPA 1) ===
+    // Agora o foco é garantir que o local seja adicionado antes da conclusão final
+    const inputLocal = document.getElementById('inputNomeLocal');
+    const listaSugestoesLocal = document.getElementById('listaSugestoes');
+
+    if (inputLocal) {
+        inputLocal.addEventListener('input', async () => {
+            const termo = inputLocal.value;
+            if (termo.length < 2) {
+                listaSugestoesLocal.classList.add('d-none');
+                return;
+            }
+
+            try {
+                // Mantemos a busca dinâmica de locais em Piracicaba
+                const response = await fetch(`/sugerir_locais?q=${termo}`);
+                const dados = await response.json();
+
+                listaSugestoesLocal.innerHTML = '';
+                if (dados.length > 0) {
+                    dados.forEach(local => {
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'list-group-item list-group-item-action border-0 py-2';
+                        item.innerHTML = `<i class="bi bi-geo-alt me-2 text-primary"></i>${local.nome}`;
+                        item.onclick = () => {
+                            inputLocal.value = local.nome;
+                            listaSugestoesLocal.classList.add('d-none');
+                        };
+                        listaSugestoesLocal.appendChild(item);
+                    });
+                    listaSugestoesLocal.classList.remove('d-none');
+                } else {
+                    listaSugestoesLocal.classList.add('d-none');
+                }
+            } catch (err) {
+                console.error("Erro ao buscar locais:", err);
+            }
+        });
+    }
+
+    // === 2. LÓGICA DE PREFERÊNCIAS (ETAPA 2) ===
+    const inputPref = document.getElementById('busca-preferencias');
+    const sugestoesPref = document.getElementById('sugestoes-preferencias');
+    const tagsContainer = document.getElementById('tags-selecionadas');
+    const btnConcluir = document.getElementById('btn-concluir');
+    const inputHidden = document.getElementById('preferencias-hidden');
+    const progressBar = document.getElementById('barra-preferencias');
+    const textoContador = document.getElementById('texto-contador-preferencias');
+
+    // Variável que armazena as preferências vindas do banco (caso existam) ou vazia
+    let selecionados = [];
+
+    if (inputPref) {
+        inputPref.addEventListener('input', async (e) => {
+            const termo = e.target.value;
+            if (termo.length < 2) { sugestoesPref.classList.add('d-none'); return; }
+
+            const response = await fetch(`/sugerir_preferencias?q=${termo}`);
+            const data = await response.json();
+
+            sugestoesPref.innerHTML = '';
+            data.sugestoes.forEach(item => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'list-group-item list-group-item-action text-start';
+                btn.innerHTML = `<i class="bi bi-tag me-2 text-success"></i> ${item.nome}`;
+                btn.onclick = () => adicionarTag(item.id, item.nome);
+                sugestoesPref.appendChild(btn);
+            });
+
+            // Opção de sugerir nova preferência (Gosto)
+            if (!data.sugestoes.find(i => i.nome.toLowerCase() === termo.toLowerCase())) {
+                const btnNovo = document.createElement('button');
+                btnNovo.type = 'button';
+                btnNovo.className = 'list-group-item list-group-item-action list-group-item-success text-start';
+                btnNovo.innerHTML = `<i class="bi bi-plus-circle me-2"></i> Sugerir: "${termo}"`;
+                btnNovo.onclick = () => adicionarTag('novo:' + termo, termo);
+                sugestoesPref.appendChild(btnNovo);
+            }
+            sugestoesPref.classList.remove('d-none');
+        });
+    }
+
+    window.adicionarTag = function(id, nome) {
+        if (selecionados.find(s => s.id === id)) return;
+        selecionados.push({ id, nome });
+        atualizarInterface();
+        inputPref.value = '';
+        sugestoesPref.classList.add('d-none');
+    };
+
+    window.removerTag = function(id) {
+        selecionados = selecionados.filter(s => s.id !== id);
+        atualizarInterface();
+    };
+
+    function atualizarInterface() {
+        tagsContainer.innerHTML = selecionados.map(s => `
+            <span class="badge rounded-pill bg-white text-dark border border-success-subtle p-2 px-3 shadow-sm mb-2 d-inline-block">
+                ${s.nome} <i class="bi bi-x-circle ms-2 text-danger" style="cursor:pointer" onclick="removerTag('${s.id}')"></i>
+            </span>
+        `).join('');
+
+        const qtd = selecionados.length;
+        // Lógica de progresso baseada na meta de 10
+        const porc = Math.min((qtd / 10) * 100, 100);
+
+        if (progressBar) progressBar.style.width = porc + '%';
+        if (textoContador) {
+            textoContador.textContent = qtd >= 10
+                ? "Meta atingida! Você já pode concluir."
+                : `${qtd} de 10 preferências selecionadas`;
+        }
+
+        // Destrava o botão apenas se a meta de 10 for batida
+        if (btnConcluir) {
+            btnConcluir.disabled = qtd < 10;
+        }
+
+        // Atualiza o input hidden para o envio do form via POST
+        if (inputHidden) {
+            inputHidden.value = JSON.stringify(selecionados);
+        }
+    }
+
+    // Fechar listas ao clicar fora (UX)
+    document.addEventListener('click', (e) => {
+        if (listaSugestoesLocal && !inputLocal?.contains(e.target)) listaSugestoesLocal.classList.add('d-none');
+        if (sugestoesPref && !inputPref?.contains(e.target)) sugestoesPref.classList.add('d-none');
+    });
+});
+</script>
+{% endblock scripts %}

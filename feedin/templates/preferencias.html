@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .pref-tag {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 1px solid #dee2e6;
+        background-color: #f8f9fa;
+        color: #333;
+    }
+    .pref-tag:hover { border-color: #0d6efd; background-color: #e9ecef; }
+
+    /* COR DE SELEÇÃO: Verde com Fonte Branca */
+    .pref-tag.active {
+        background-color: #198754 !important;
+        color: white !important;
+        border-color: #198754;
+        box-shadow: 0 4px 8px rgba(25, 135, 84, 0.3);
+    }
+
+    .categoria-card { border-radius: 20px; border: none; }
+    .progress-sticky { position: sticky; top: 10px; z-index: 1000; }
+</style>
+
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold">Gostos e Afinidades</h2>
+        <p class="text-muted">Como pioneiro, ajude-nos a mapear Piracicaba selecionando <strong>10 interesses</strong>.</p>
+    </div>
+
+    <div class="progress-sticky mb-4">
+        <div class="card shadow-sm border-0 rounded-pill p-2 px-4 bg-white">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-muted small">Progresso:</span>
+                <span id="contador-label" class="badge bg-primary rounded-pill">0 / 10</span>
+            </div>
+            <div class="progress mt-1" style="height: 6px;">
+                <div id="barra-progresso" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <form action="{{ url_for('salvar_preferencias') }}" method="POST" id="form-preferencias">
+        <input type="hidden" name="preferencias_ids" id="preferencias_ids">
+
+        <div class="row">
+            {% for cat in categorias %}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="card h-100 shadow-sm categoria-card">
+                    <div class="card-body">
+                        <h5 class="fw-bold text-primary mb-3">
+                            <i class="bi bi-star-fill me-2"></i>{{ cat.nome }}
+                        </h5>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            {# ORDENAÇÃO ALFABÉTICA NO FRONT (Garantia extra) #}
+                            {% for sub in cat.subcategorias|sort(attribute='nome') %}
+                            <div class="badge rounded-pill p-2 px-3 pref-tag {% if sub.id in minhas_prefs_ids %}active{% endif %}"
+                                 data-id="{{ sub.id }}">
+                                {{ sub.nome }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="text-center mt-5 mb-5">
+            <button type="submit" id="btn-finalizar" class="btn btn-secondary btn-lg px-5 rounded-pill shadow disabled">
+                Finalizar e Entrar no Feed <i class="bi bi-door-open ms-2"></i>
+            </button>
+            <p id="aviso-minimo" class="text-danger small mt-2">Selecione mais itens para liberar o acesso.</p>
+        </div>
+    </form>
+</div>
+
+<script>
+    const selecionados = new Set({{ minhas_prefs_ids | tojson or [] }});
+    const hiddenInput = document.getElementById('preferencias_ids');
+    const btnFinalizar = document.getElementById('btn-finalizar');
+    const barra = document.getElementById('barra-progresso');
+    const contadorLabel = document.getElementById('contador-label');
+    const aviso = document.getElementById('aviso-minimo');
+
+    function atualizarInterface() {
+        const total = selecionados.size;
+        contadorLabel.textContent = `${total} / 10`;
+
+        // Atualiza Barra
+        const percentual = Math.min((total / 10) * 100, 100);
+        barra.style.width = `${percentual}%`;
+
+        // Libera Botão
+        if (total >= 10) {
+            btnFinalizar.classList.remove('btn-secondary', 'disabled');
+            btnFinalizar.classList.add('btn-success');
+            aviso.classList.add('d-none');
+        } else {
+            btnFinalizar.classList.add('btn-secondary', 'disabled');
+            btnFinalizar.classList.remove('btn-success');
+            aviso.classList.remove('d-none');
+        }
+
+        hiddenInput.value = Array.from(selecionados).join(',');
+    }
+
+    document.querySelectorAll('.pref-tag').forEach(tag => {
+        tag.addEventListener('click', () => {
+            const id = parseInt(tag.dataset.id);
+            if (selecionados.has(id)) {
+                selecionados.delete(id);
+                tag.classList.remove('active');
+            } else {
+                selecionados.add(id);
+                tag.classList.add('active');
+            }
+            atualizarInterface();
+        });
+    });
+
+    // Inicializa a tela caso o usuário já tenha itens salvos
+    atualizarInterface();
+</script>
+{% endblock %}

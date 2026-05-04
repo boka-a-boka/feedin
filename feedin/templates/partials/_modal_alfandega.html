@@ -1,0 +1,126 @@
+<!-- CSS Específico para o Overlay -->
+<style>
+    .alfandega-overlay {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.78);
+        backdrop-filter: blur(8px);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px; /* Margem de segurança para não encostar nas bordas da tela */
+    }
+
+    .card-alfandega {
+        width: 100%;
+        max-width: 480px; /* Levemente mais estreito */
+        max-height: 90vh; /* O card nunca ocupará mais de 90% da altura da tela */
+        border-radius: 20px;
+        border: none;
+        display: flex;
+        flex-direction: column; /* Permite separar header de body no scroll */
+        background-color: white;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+    }
+
+    .header-seguranca {
+        background-color: #041E42;
+        color: white;
+        padding: 20px; /* Reduzi um pouco o padding */
+        text-align: center;
+        flex-shrink: 0; /* Impede o header de "encolher" */
+    }
+
+    .card-body {
+        overflow-y: auto; /* ATENÇÃO: Isso cria o scroll interno se necessário */
+        padding: 25px !important;
+    }
+
+    /* Estilização básica para a barra de rolagem interna (opcional, para ficar elegante) */
+    .card-body::-webkit-scrollbar {
+        width: 6px;
+    }
+    .card-body::-webkit-scrollbar-thumb {
+        background-color: #041E42;
+        border-radius: 10px;
+    }
+
+    .icon-shield {
+        font-size: 2.2rem; /* Diminuído para ganhar espaço vertical */
+        margin-bottom: 10px;
+        color: #0d6efd;
+    }
+</style>
+
+{% if not current_user.aceite_lgpd %}
+<div class="alfandega-overlay">
+    <div class="card card-alfandega shadow-lg animate__animated animate__fadeInUp">
+        <div class="header-seguranca">
+            <div class="icon-shield">
+                <i class="bi bi-shield-lock-fill"></i>
+            </div>
+            <h4 class="fw-bold">Segurança e Privacidade</h4>
+            <p class="mb-0 small opacity-75">Ambiente Protegido por Criptografia de Ponta</p>
+        </div>
+        
+        <div class="card-body p-4">
+            <p class="text-muted small text-center mb-4">
+                Olá, <strong>{{ current_user.username }}</strong>! Para garantir o atendimento à <strong>LGPD</strong> e a integridade da nossa comunidade em Piracicaba, precisamos validar sua identidade oficial.
+            </p>
+
+            <form action="{{ url_for('processar_identidade') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Número do CPF</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0"><i class="bi bi-person-badge"></i></span>
+                        <input type="text" name="cpf" id="cpf_modal" class="form-control border-start-0" 
+                               placeholder="000.000.000-00" required>
+                    </div>
+                </div>
+
+                <!-- Nome Real (Necessário para a rota processar_identidade) -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Nome Completo (como no documento)</label>
+                    <input type="text" name="nome_real" class="form-control" required>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Data de Nascimento</label>
+                        <input type="date" name="data_nascimento" class="form-control" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Gênero</label>
+                        <select name="genero" class="form-select" required>
+                            <option value="">Selecione...</option>
+                            {% for g in generos %}<option value="{{ g.id }}">{{ g.genero }}</option>{% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-check mb-4 bg-light p-3 rounded">
+                    <input class="form-check-input ms-0 me-2" type="checkbox" id="checkLGPD" required>
+                    <label class="form-check-label small" for="checkLGPD">
+                        Compreendo que meus dados são encriptados e usados apenas para fins de segurança.
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-dark w-100 py-3 fw-bold rounded-pill shadow-sm btn-validar">
+                    <i class="bi bi-check-circle me-2"></i>FINALIZAR E ENTRAR NO SISTEMA
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Máscara CPF no Modal
+    document.getElementById('cpf_modal')?.addEventListener('input', function (e) {
+        var x = e.target.value.replace(/\D/g, '').match(/(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})/);
+        e.target.value = !x[2] ? x[1] : x[1] + '.' + x[2] + (x[3] ? '.' + x[3] : '') + (x[4] ? '-' + x[4] : '');
+    });
+</script>
+{% endif %}

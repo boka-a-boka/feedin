@@ -1,0 +1,411 @@
+/* Sobrescrevendo uma cor do Bootstrap ou criando estilo próprio */
+
+body {
+    display: flex;
+    flex-direction: column;
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.my-container-color {
+  background-color: #f2ac1c; /* set the background color */
+  /* other styles like max-width, padding, etc. */
+}
+
+/* posiciona imagem de fundo da tela */
+.bg-imagem-fundo {
+  width: 100%;
+  position: fixed;
+  top: 50vh;
+}
+
+.main-content {
+  flex: 1 0 auto;
+}
+
+.navbar {
+    background-color: #0066ff;
+    overflow: hidden;
+}
+
+.navbar a {
+    float: left;
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+.navbar a:hover {
+    background-color: #ddd;
+    color: black;
+}
+
+.minha-classe-customizada {
+    color: #2c3e50;
+    font-family: 'Arial', sans-serif;
+}
+
+/* CSS para manter o footer no final da página */
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+main {
+    flex: 1; /* Faz o conteúdo principal crescer e empurrar o footer */
+}
+h1 {
+    text-align: center;
+}
+.justificado {
+    text-align: justify;}
+
+/* Estilo para posicionar a notificação no topo */
+.flash-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    width: 300px;
+}
+
+/* Seleciona as divs com a classe row-striped que são ímpares (odd) */
+.row-striped:nth-of-type(odd) {
+    background-color: #fcfcfc !important;
+}
+
+/* Seleciona as divs com a classe row-striped que são pares (even) */
+.row-striped:nth-of-type(even) {
+    background-color: #f4f7f9 !important; /* Um cinza levemente azulado e mais escuro */
+}
+
+/* Uma borda sutil para ajudar na separação visual */
+.row-striped {
+    border-bottom: 1px solid #dee2e6;
+    transition: background-color 0.2s;
+}
+
+/* Efeito de destaque ao passar o mouse (Hover) */
+.row-striped:hover {
+    background-color: #e2e8f0 !important;
+    transition: background-color 0.2s ease;
+}
+
+.row-striped {
+    border-bottom: 2px solid #e2e8f0;
+}
+
+/* CSS DA BASE.HTML - para funcionamento da landing page /*
+/* Animações e ajustes para a landing page */
+.hero-section {
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    animation: rotate 30s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.min-vh-75 {
+    min-height: 75vh;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9fa;
+    color: inherit;
+}
+
+/* Ajustes responsivos */
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2.5rem;
+    }
+    .display-5 {
+        font-size: 2rem;
+    }
+}
+
+/* Botão "Entrar" Personalizado */
+.btn-entrar {
+    background-color: #28a745; /* Verde firme */
+    color: white;
+    border: 2px solid #28a745;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.btn-entrar:hover {
+    background-color: #218838; /* Verde um pouco mais escuro no hover */
+    border-color: #1e7e34;
+    color: white;
+    transform: translateY(-1px); /* Leve efeito de elevação */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+
+.badge-pioneiro {
+    background: linear-gradient(135deg, #000000 0%, #4b0082 100%);
+    color: #ffffff;
+    font-size: 0.6rem; /* Menor para ficar sofisticado */
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-left: 3px solid #ffd700;
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+}
+
+
+/* Nas sugestões de locais */
+/* Para que a lista de sugestões flutue sobre o formulário sem empurrar os outros campos para baixo */
+
+#listaSugestoes {
+    z-index: 1050; /* Garante que fique acima de tudo */
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 12px 12px;
+    max-height: 250px;
+    overflow-y: auto;
+    /* Efeito de sombra suave */
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+#listaSugestoes .list-group-item:hover {
+    background-color: #f0f7ff; /* Azul bem clarinho ao passar o mouse */
+    cursor: pointer;
+}
+
+/* Estilos Globais do FeedIn! */
+
+/* Seção de Experiência Social */
+.secao-memoria-social {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background-color: #f8f9fa; /* bg-light */
+    border-radius: 1rem;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 .125rem .25rem rgba(0,0,0,.075);
+}
+
+/* Destaque para o nome do local na pergunta */
+.nome-local-pergunta {
+    color: #0d6efd;
+    font-weight: 800;
+    text-decoration: underline;
+}
+
+/* Sugestões de Autocomplete */
+.lista-sugestoes-custom {
+    z-index: 1050;
+    border-radius: 0 0 10px 10px;
+    border: 1px solid #ddd;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+/* Ajuste para inputs minimalistas dentro de cards */
+.input-clean {
+    border: none !important;
+    background-color: #ffffff !important;
+    box-shadow: none !important;
+    padding: 0.75rem !important;
+}
+
+.row-striped:nth-of-type(odd) { background-color: #f8f9fa; }
+.row-striped:nth-of-type(even) { background-color: #ffffff; }
+
+#foto-preview {
+    border: 3px solid #0d6efd;
+    padding: 3px;
+    transition: all 0.3s ease-in-out;
+    object-fit: cover;
+    width: 150px; /* Aumentei um pouco para facilitar a visualização no editor */
+    height: 150px;
+    border-radius: 15px; /* Em vez de rounded-circle, usamos um arredondado suave */
+}
+
+.form-control.border-0:focus, .form-select.border-0:focus {
+    box-shadow: none;
+    background-color: #f0f7ff;
+    border: 1px solid #0d6efd !important;
+}
+
+/* No seu style.css */
+.trabalho-wrapper {
+    display: flex;
+    transition: all 0.3s ease;
+}
+
+.area-menu {
+    width: 240px; /* Largura normal */
+    flex-shrink: 0;
+    transition: width 0.3s ease;
+    overflow: hidden;
+}
+
+/* Classe que será ativada via clique */
+.area-menu.recolhida {
+    width: 70px; /* Largura apenas para o ícone */
+}
+
+/* Esconde o texto quando estiver recolhida */
+.area-menu.recolhida span,
+.area-menu.recolhida .text-uppercase,
+.area-menu.recolhida h6 {
+    display: none;
+}
+
+.area-conteudo {
+    flex-grow: 1;
+    min-width: 0;
+    transition: all 0.3s ease;
+}
+
+/* Espaçamento entre os blocos do formulário */
+.bloco-info {
+    border-radius: 12px;
+    padding: 25px; /* Aumentei o preenchimento interno */
+    margin-bottom: 30px; /* Aumentei o espaço entre um bloco e outro */
+    border: 1px solid rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+/* Efeito Zebrado nos Blocos */
+/* Blocos ímpares (1, 3, 5...) */
+.bloco-info:nth-child(odd) {
+    background-color: #ffffff; /* Branco puro */
+}
+
+/* Blocos pares (2, 4, 6...) */
+.bloco-info:nth-child(even) {
+    background-color: #f8fbff; /* Um azulzinho bem sutil para o 'zebra' */
+    border-left: 4px solid #0d6efd; /* Um detalhe na lateral para destacar */
+}
+
+/* Efeito de Destaque para Cards de Vínculo/Pioneiro */
+.universal-card.border-pioneiro {
+    border-left: 6px solid #4e73df !important; /* Azul marcante */
+    background: linear-gradient(to right, #ffffff, #f8f9fc);
+    transition: transform 0.3s ease;
+}
+
+.universal-card.border-pioneiro:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(78, 115, 223, 0.15) !important;
+}
+
+/* Badge de Celebração animada */
+.badge-celebracao {
+    animation: sparkle 2s infinite;
+    background: #4e73df;
+    color: white;
+    padding: 5px 15px;
+    border-radius: 50px;
+    font-size: 0.75rem;
+}
+
+@keyframes sparkle {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; transform: scale(1.05); }
+    100% { opacity: 0.8; }
+}
+
+/* Estilos Oficiais do FeedIn - Mova para o styles.css externo */
+
+.card-postagem {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* Transição mais suave */
+    cursor: pointer;
+}
+
+.card-postagem:hover {
+    transform: translateY(-5px); /* O movimento que você gosta */
+    box-shadow: 0 12px 24px rgba(0,0,0,0.12) !important;
+}
+
+.badge-conquista {
+    background: #0d6efd;
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 50px;
+    font-weight: bold;
+    text-transform: uppercase;
+    display: inline-block;
+}
+
+.badge-pioneiro-card {
+    background: linear-gradient(45deg, #FFD700, #FFA500);
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 4px 10px;
+    border-radius: 50px;
+    font-weight: 800;
+}
+
+.card-postagem-final {
+        transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) !important;
+        position: relative;
+    }
+
+    .card-postagem-final:hover {
+        transform: translateY(-10px) !important;
+        box-shadow: 0 20px 40px rgba(13, 110, 253, 0.15) !important; /* Sombra levemente azulada */
+        z-index: 5;
+    }
+
+    .bg-festivo-pioneiro {
+        background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%) !important;
+        border-left: 6px solid #0d6efd !important;
+    }
+
+/* Reduzindo o espaçamento do título da aba */
+.tab-pane .mb-4 {
+    margin-bottom: 1.5rem !important; /* Aproxima o título do formulário */
+}
+
+/* Padronização do Botão Voltar */
+.btn-voltar-feedin {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 1050;
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(5px);
+    color: #6c757d;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.btn-voltar-feedin:hover {
+    background: white;
+    color: #0d6efd;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
