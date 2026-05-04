@@ -47,7 +47,15 @@ from .utils import tempo_atras_filter
 app.template_filter('tempo_atras')(tempo_atras_filter)
 
 # --- CONFIGURAÇÕES DE BANCO E SEGURANÇA ---
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///feedin-db.db"
+database_uri = os.environ.get('DATABASE_URL')
+
+if database_uri:
+    # Pequeno ajuste técnico: O SQLAlchemy exige "postgresql://" mas o Render às vezes entrega "postgres://"
+    if database_uri.startswith("postgres://"):
+        database_uri = database_uri.replace("postgres://", "postgresql://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_uri
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///feedin-db.db"
 
 # Agora buscamos as chaves reais do seu .env
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '$2a$20$DefaultFallbackKeySeOEnvFalhar')
