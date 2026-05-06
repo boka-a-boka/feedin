@@ -5,52 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
     <title>FeedIn! - {% block titulo %}{% endblock %}</title>
 
+    <!-- CSS: Bootstrap, Bi-Icons, FontAwesome -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% block styles %}
+
     <style>
-        :root { --primary-color: #1e3c72; --secondary-color: #2a5298; --accent-color: #0d6efd;}
+        :root {
+            --primary-color: #1e3c72;
+            --secondary-color: #2a5298;
+            --feedin-blue: #1e3c72;
+        }
         body { background-color: #f8f9fa; transition: all 0.3s ease; }
+
         /* Ajuste para não colidir com o menu inferior no mobile */
         @media (max-width: 768px) { body { padding-bottom: 60px; } }
+
         .navbar-brand img { object-fit: cover; border-radius: 8px; }
+        .text-primary { color: var(--feedin-blue) !important; }
+        .btn-primary { background-color: var(--feedin-blue); border-color: var(--feedin-blue); }
+
+        /* Altura da Navbar conforme solicitado anteriormente */
+        .navbar { min-height: 100px; }
     </style>
-    {% endblock styles%}
+    {% block styles %}{% endblock %}
 </head>
 <body class="d-flex flex-column h-100">
 
-    {# NAVBAR PARA VISITANTES OU PÁGINAS FORA DA DASHBOARD #}
+    {# A NAVBAR SÓ APARECE SE NÃO ESTIVERMOS NA HOMEPAGE E SE NÃO ESTIVER AUTENTICADO (Para visitantes) #}
     {% if request.endpoint != 'homepage' %}
-        <nav class="navbar navbar-light bg-white border-bottom sticky-top shadow-sm w-100">
-            <div class="container d-flex align-items-center justify-content-between py-2">
+        {% if not current_user.is_authenticated %}
+        <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-3 d-flex align-items-center">
+            <div class="container-fluid d-flex align-items-center justify-content-between">
                 <a class="navbar-brand d-flex align-items-center" href="/">
-                    <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" alt="Logo" width="35" height="35" class="me-2">
-                    <span class="fw-bold text-primary" style="letter-spacing: -1px;">FEEDIN!</span>
+                    <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" alt="Logo" width="45" height="45" class="me-2">
+                    <span class="fw-bold text-primary" style="letter-spacing: -1px; font-size: 1.5rem;">FEEDIN!</span>
                 </a>
 
-                <div class="d-flex gap-2">
-                    {% if not current_user.is_authenticated %}
-                        {% if request.endpoint != 'login' %}
-                            <a href="{{ url_for('login') }}" class="btn btn-sm btn-success px-3 rounded-pill">Entrar</a>
-                        {% endif %}
-                        {% if request.endpoint != 'newuser' %}
-                            <a href="{{ url_for('newuser') }}" class="btn btn-sm btn-primary px-3 rounded-pill">Criar conta</a>
-                        {% endif %}
-                    {% else %}
-                        {# Se estiver logado mas caiu numa página externa, mostra botão para voltar ao Dashboard #}
-                        <a href="{{ url_for('dashboard', aba='feed') }}" class="btn btn-sm btn-outline-primary px-3 rounded-pill">Ir para o Feed</a>
+                <div class="d-flex align-items-center gap-2">
+                    {% if request.endpoint not in ['login'] %}
+                        <a href="{{ url_for('login') }}" class="btn btn-entrar me-1 px-4 rounded-pill fw-bold shadow-sm">
+                            Entrar
+                        </a>
+                    {% endif %}
+
+                    {% if request.endpoint not in ['newuser', 'registro'] %}
+                        <a href="{{ url_for('newuser') }}" class="btn btn-primary px-4 rounded-pill fw-bold shadow-sm">
+                            Criar conta
+                        </a>
                     {% endif %}
                 </div>
+
             </div>
         </nav>
+        {% endif %}
     {% endif %}
 
     {# MENSAGENS FLASH (Alertas) #}
@@ -58,7 +67,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm border-0" role="alert">
+              <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show shadow-sm border-0" role="alert">
                 <i class="bi bi-info-circle me-2"></i> {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
               </div>
@@ -72,20 +81,20 @@
         {% block content %} {% endblock %}
     </main>
 
-{# FOOTER SÓ APARECE NA LANDING PAGE OU LOGIN (Endpoint '/' ou 'login') #}
-    {% if request.endpoint in ['index', 'login', 'newuser'] %}
+    {# FOOTER ESTRUTURADO #}
+    {% if request.endpoint in ['index', 'login', 'newuser', 'homepage'] %}
         <footer class="footer mt-auto py-4 bg-dark text-white">
             <div class="container text-center text-md-start">
                 <div class="row">
                     <div class="col-md-6 mb-3 mb-md-0">
                         <h5 class="text-primary fw-bold">FeedIn!</h5>
-                        <p class="small text-white-50 text-decoration-none">Construindo conexões mais humanas e baseadas em contexto real.</p>
-                        <p class="mb-0 x-small text-white-50" style="font-size: 0.75rem;">
-                            Desenvolvido com ❤️ em Piracicaba & Co-criado com a Inteligência Artificial Gemini.
+                        <p class="small text-white-50">Construindo conexões mais humanas e baseadas em contexto real.</p>
+                        <p class="mb-0 text-white-50" style="font-size: 0.75rem;">
+                            Desenvolvido com ❤️ em Piracicaba & Co-criado com Gemini.
                         </p>
                     </div>
                     <div class="col-md-6 text-md-end">
-                        <p class="small text-white-50 text-decoration-none mb-0">&copy; 2026 FeedIn! - Todos os direitos reservados.</p>
+                        <p class="small text-white-50 mb-0">&copy; 2026 FeedIn! - Todos os direitos reservados.</p>
                         <div class="mt-1">
                             <a href="mailto:feedin.adms@outlook.com" class="text-white-50 small text-decoration-none">Suporte: feedin.adms@outlook.com</a>
                         </div>
@@ -95,55 +104,17 @@
         </footer>
     {% endif %}
 
-{% block scripts %}
-<script>
-    // Auto-close para alertas após 5 segundos
-    setTimeout(() => {
-        document.querySelectorAll('.alert').forEach(a => {
-            const alert = bootstrap.Alert.getOrCreateInstance(a);
-            if (alert) alert.close();
-        });
-    }, 5000);
-
-    function enviarReacao(postId, tipo) {
-        // Usamos a rota que você já validou
-        const url = `/reagir_post/${postId}/${tipo}`;
-        const btn = document.getElementById(`btn-reacao-${postId}`);
-        const contagem = document.getElementById(`contagem-${postId}`);
-        const icone = btn.querySelector('i');
-
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': "{{ csrf_token() }}", // Essencial para o Flask não bloquear
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === "success") {
-                // Se a reação foi adicionada ou removida, trocamos o visual
-                if (btn.classList.contains('btn-primary')) {
-                    // Descurtindo
-                    btn.classList.replace('btn-primary', 'btn-light');
-                    btn.classList.add('text-muted');
-                    icone.classList.replace('bi-heart-fill', 'bi-heart');
-                    contagem.innerText = parseInt(contagem.innerText) - 1;
-                } else {
-                    // Curtindo
-                    btn.classList.replace('btn-light', 'btn-primary');
-                    btn.classList.remove('text-muted');
-                    icone.classList.replace('bi-heart', 'bi-heart-fill');
-                    contagem.innerText = parseInt(contagem.innerText) + 1;
-                }
-            } else {
-                console.error("Erro no servidor:", data.message);
-            }
-        })
-        .catch(error => console.error('Erro na requisição:', error));
-    }
-    </script>
-{% endblock scripts %}
-
+    {% block scripts %}
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            // Auto-close para alertas após 5 segundos
+            setTimeout(() => {
+                document.querySelectorAll('.alert').forEach(a => {
+                    const alert = bootstrap.Alert.getOrCreateInstance(a);
+                    if (alert) alert.close();
+                });
+            }, 5000);
+        </script>
+    {% endblock scripts %}
 </body>
 </html>
