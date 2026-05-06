@@ -31,7 +31,7 @@ file_handler.setLevel(logging.INFO)
 app.logger.addHandler(file_handler)
 
 app.logger.setLevel(logging.INFO)
-app.logger.info('FeedIn Startup - Iniciando Pré-Beta')
+app.logger.info("FeedIn Startup - Iniciando Beta Oficial")
 
 # --- CONFIGURAÇÕES DE CRIPTOGRAFIA DO CPF ---
 # Buscamos a chave do .env. Se não existir, o sistema avisa.
@@ -54,7 +54,8 @@ if database_uri:
         database_uri = database_uri.replace("postgres://", "postgresql://", 1)
 
     # Adicione os argumentos de SSL para o motor do SQLAlchemy
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_uri
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///instance/feedin-db.db')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "connect_args": {
             "sslmode": "require"
@@ -67,7 +68,7 @@ app.config['SECURITY_PASSWORD_SALT'] = os.environ.get('SECURITY_PASSWORD_SALT', 
 
 # --- CONFIGURAÇÃO DE COMPORTAMENTO DO FEED ---
 app.config['MODO_PRODUCAO'] = False
-app.config['DATA_FIM_BETA'] = datetime(2026, 7, 19, tzinfo=timezone.utc)
+app.config['DATA_FIM_BETA'] = datetime(2026, 8, 5, tzinfo=timezone.utc)
 
 # --- CONFIGURAÇÕES DE E-MAIL ---
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'

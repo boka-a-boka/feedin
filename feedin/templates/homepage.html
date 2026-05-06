@@ -7,7 +7,8 @@
         <div class="container-fluid d-flex justify-content-between align-items-center">
 
             <div class="d-flex align-items-center">
-                <a class="navbar-brand fw-bold text-primary fs-3 me-4" href="{{ url_for('dashboard', aba='feed') }}">
+                <!-- Esquerda: Logo/Brand -->
+                <a class="navbar-brand fw-bold text-primary fs-4" href="{{ url_for('dashboard', aba='feed') }}">
                     FeedIn
                 </a>
 
@@ -45,22 +46,24 @@
 
                 </div>
             </div>
-    {# --- AQUI ENTRA A TRAVA DA ALFÂNDEGA --- #}
-    {% if not current_user.aceite_lgpd %}
-        {% include "/partials/_modal_alfandega.html" %}
-    {% endif %}
+
+            {# --- AQUI ENTRA A TRAVA DA ALFÂNDEGA --- #}
+            {% if not current_user.aceite_lgpd %}
+                {% include "/partials/_modal_alfandega.html" %}
+            {% endif %}
+            
             <div class="d-flex align-items-center gap-3">
-                <div class="d-flex flex-column align-items-start">
-                    <h4 class="fw-bold text-dark mb-0" style="letter-spacing: -0.5px;">
-                        {{ current_user.username }}
-                    </h4>
-                    {% if usuario.is_pioneiro %}
-                        <div class="mt-1">
-                            <span class="badge-pioneiro">
-                                <i class="bi bi-star-fill"></i> PIONEIRO
-                            </span>
-                        </div>
-                    {% endif %}
+                 <!-- Direita: Perfil e Notificações -->
+                <div class="d-flex align-items-center gap-2">
+                     <div class="text-end d-none d-sm-block">
+                        <small class="fw-bold d-block text-dark">{{ current_user.username }}</small>
+                        {% if usuario.is_pioneiro %}
+                            <span class="badge bg-warning text-dark" style="font-size: 0.6rem;">PIONEIRO</span>
+                        {% endif %}
+                    </div>
+                    <img src="{{ url_for('static', filename='fotos_perfil/' + (usuario.foto_perfil or 'default.jpg')) }}"
+                         class="rounded-circle border border-2 border-primary shadow-sm"
+                         style="width: 45px; height: 45px; object-fit: cover;">
                 </div>
                 <div class="position-relative">
                     <img src="{{ url_for('static', filename='fotos_perfil/' + (usuario.foto_perfil or 'default.jpg')) }}"
