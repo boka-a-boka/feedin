@@ -152,12 +152,14 @@ def notify(message, type):
     # Você pode adicionar lógica extra aqui, como logs ou traduções
     flash(message, type)
 
+
 @app.route("/logout")
 @login_required
 def realizar_logout():
-    logout_user()
+    logout_user()  # Remove o usuário do Flask-Login
+    session.clear() # Limpa completamente a sessão do navegador (Garante o logout)
     flash("Sessão encerrada com sucesso. Até logo!", "info")
-    return redirect(url_for('index')) # Ou 'index', se quiser mandar para a Landing Page
+    return redirect(url_for('index'))
 
 
 @app.route("/login", methods=["GET", "POST"])

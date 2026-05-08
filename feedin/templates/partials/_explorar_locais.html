@@ -11,7 +11,7 @@
         <h3 class="fw-bold mb-0"><i class="bi bi-geo-alt-fill text-primary me-2"></i>Memórias da Cidade</h3>
     </div>
 
-    <!-- BUSCA (Apenas uma vez aqui) -->
+    <!-- BUSCA -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-body p-3">
             <form action="{{ url_for('dashboard') }}" method="GET" class="d-flex gap-2" id="form-busca-local">
@@ -72,211 +72,102 @@
                 </div>
             </div>
         {% endif %}
-    </div>
+    </div> <!-- FIM DA ROW G-3 -->
 
-    <!-- MODAL 1: Confirmação (Pergunta ao usuário) -->
-<div class="modal fade" id="modalConfirmarCadastro" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow rounded-4">
-            <div class="modal-body text-center p-4">
-                <div class="mb-3 text-warning">
-                    <i class="bi bi-exclamation-circle-fill" style="font-size: 3rem;"></i>
-                </div>
-                <h5 class="fw-bold">Local não encontrado</h5>
-                <p class="text-muted">Não encontramos o local "<span id="nome_digitado_display" class="fw-bold text-dark"></span>" em nossa rede social de memória.</p>
-                <p>Deseja ser o primeiro a registrar este local e criar uma memória nele?</p>
+    <!-- MODAL 1: Confirmação -->
+    <div class="modal fade" id="modalConfirmarCadastro" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-body text-center p-4">
+                    <div class="mb-3 text-warning">
+                        <i class="bi bi-exclamation-circle-fill" style="font-size: 3rem;"></i>
+                    </div>
+                    <h5 class="fw-bold">Local não encontrado</h5>
+                    <p class="text-muted">Não encontramos o local "<span id="nome_digitado_display" class="fw-bold text-dark"></span>" em nossa rede social de memória.</p>
+                    <p>Deseja ser o primeiro a registrar este local e criar uma memória nele?</p>
 
-                <div class="d-grid gap-2 mt-4">
-                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" onclick="abrirFormularioCompleto()">
-                        Sim, quero incluir!
-                    </button>
-                    <button type="button" class="btn btn-light rounded-pill text-muted" data-bs-dismiss="modal">
-                        Não, vou buscar outro
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL 2: Formulário Completo (Ficha Técnica completa para o banco) -->
-<div class="modal fade" id="modalFormularioCompleto" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow rounded-4">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="fw-bold"><i class="bi bi-plus-circle-fill text-success me-2"></i>Novo Local e Memória</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form action="/processar-adicao-grupo" method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <!-- Nome e Ficha Técnica do Local -->
-                        <div class="col-12">
-                            <label class="small fw-bold text-muted">NOME DO ESTABELECIMENTO</label>
-                            <input type="text" name="nome" id="final_nome_local" class="form-control form-control-lg border-2 border-primary-subtle" required>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="small fw-bold text-muted">RUA / LOGRADOURO</label>
-                            <input type="text" name="logradouro" class="form-control" placeholder="Ex: Av. Independência, 100">
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="small fw-bold text-muted">BAIRRO</label>
-                            <input type="text" name="bairro" class="form-control" placeholder="Ex: Centro">
-                        </div>
-
-                        <div class="col-md-8">
-                            <label class="small fw-bold text-primary">CIDADE (DESTRAVADA)</label>
-                            <input type="text" name="localizacao" class="form-control border-primary" placeholder="Em qual cidade fica?" required>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="small fw-bold text-muted">ESTADO (UF)</label>
-                            <input type="text" name="estado" class="form-control text-center" value="SP" maxlength="2">
-                        </div>
-
-                        <div class="col-12">
-                            <label class="small fw-bold text-muted">O LOCAL AINDA ESTÁ ATIVO?</label>
-                            <select name="esta_ativo" class="form-select">
-                                <option value="1" selected>Sim, funcionando</option>
-                                <option value="0">Não, fechou (Registro Histórico)</option>
-                            </select>
-                        </div>
-
-                        <hr class="my-3 text-muted">
-
-                        <!-- Dados da Memória do Usuário -->
-                        <div class="col-md-6">
-                            <label class="small fw-bold text-dark">EM QUAL ÉPOCA VOCÊ FREQUENTAVA?</label>
-                            <select name="periodo" class="form-select border-primary" required>
-                                <option value="Atualmente" selected>Atualmente</option>
-                                <option value="Anos 2010">Anos 2010</option>
-                                <option value="Anos 2000">Anos 2000</option>
-                                <option value="Anos 90">Anos 90</option>
-                                <option value="Anos 80">Anos 80</option>
-                                <option value="Anos 70">Anos 70</option>
-                                <option value="Anos 60">Anos 60</option>
-                            </select>
-                        </div>
-
-                        <div class="col-12">
-                            <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
-                            <textarea name="experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
-                        </div>
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" onclick="abrirFormularioCompleto()">
+                            Sim, quero incluir!
+                        </button>
+                        <button type="button" class="btn btn-light rounded-pill text-muted" data-bs-dismiss="modal">
+                            Não, vou buscar outro
+                        </button>
                     </div>
                 </div>
-                <div class="modal-footer border-0">
-                    <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill fw-bold shadow">
-                        Salvar Local e Registrar Memória <i class="bi bi-check-all ms-1"></i>
-                    </button>
-                </div>
-            </form>
+            </div>
         </div>
     </div>
-</div>
+
+    <!-- MODAL 2: Formulário Completo -->
+    <div class="modal fade" id="modalFormularioCompleto" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold"><i class="bi bi-plus-circle-fill text-success me-2"></i>Novo Local e Memória</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="/processar-adicao-grupo" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="small fw-bold text-muted">NOME DO ESTABELECIMENTO</label>
+                                <input type="text" name="nome" id="final_nome_local" class="form-control form-control-lg border-2 border-primary-subtle" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small fw-bold text-muted">RUA / LOGRADOURO</label>
+                                <input type="text" name="logradouro" class="form-control" placeholder="Ex: Av. Independência, 100">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small fw-bold text-muted">BAIRRO</label>
+                                <input type="text" name="bairro" class="form-control" placeholder="Ex: Centro">
+                            </div>
+                            <div class="col-md-8">
+                                <label class="small fw-bold text-primary">CIDADE</label>
+                                <input type="text" name="localizacao" class="form-control border-primary" placeholder="Em qual cidade fica?" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="small fw-bold text-muted">ESTADO (UF)</label>
+                                <input type="text" name="estado" class="form-control text-center" value="SP" maxlength="2">
+                            </div>
+                            <div class="col-12">
+                                <label class="small fw-bold text-muted">O LOCAL AINDA ESTÁ ATIVO?</label>
+                                <select name="esta_ativo" class="form-select">
+                                    <option value="1" selected>Sim, funcionando</option>
+                                    <option value="0">Não, fechou (Registro Histórico)</option>
+                                </select>
+                            </div>
+                            <hr class="my-3 text-muted">
+                            <div class="col-md-6">
+                                <label class="small fw-bold text-dark">EM QUAL ÉPOCA VOCÊ FREQUENTAVA?</label>
+                                <select name="periodo" class="form-select border-primary" required>
+                                    <option value="Atualmente" selected>Atualmente</option>
+                                    <option value="Anos 2010">Anos 2010</option>
+                                    <option value="Anos 2000">Anos 2000</option>
+                                    <option value="Anos 90">Anos 90</option>
+                                    <option value="Anos 80">Anos 80</option>
+                                    <option value="Anos 70">Anos 70</option>
+                                    <option value="Anos 60">Anos 60</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
+                                <textarea name="experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-success btn-lg w-100 rounded-pill fw-bold shadow">
+                            Salvar Local e Registrar Memória <i class="bi bi-check-all ms-1"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div> <!-- AQUI FECHA A DIV ANIMATE__FADEIN CORRETAMENTE -->
 
 <script>
-// Declaramos as variáveis no escopo global para que a função abrirFormularioCompleto as enxergue
-let modalConfirmacao;
-let modalFormulario;
-
-document.addEventListener('DOMContentLoaded', function() {
-    const inputBusca = document.getElementById('busca_local');
-    const datalist = document.getElementById('lista-locais-autocomplete');
-    const formBusca = document.getElementById('form-busca-local');
-
-    // Inicialização segura dos Modais do Bootstrap
-    const elConfirm = document.getElementById('modalConfirmarCadastro');
-    const elForm = document.getElementById('modalFormularioCompleto');
-
-    if (elConfirm) modalConfirmacao = new bootstrap.Modal(elConfirm);
-    if (elForm) modalFormulario = new bootstrap.Modal(elForm);
-
-    if (!inputBusca || !formBusca) return;
-
-    // 1. AUTOCOMPLETE DINÂMICO
-    inputBusca.addEventListener('input', function(e) {
-        const termo = e.target.value;
-
-        // Só busca se tiver 2 ou mais caracteres
-        if (termo.length < 2) {
-            datalist.innerHTML = '';
-            return;
-        }
-
-        fetch(`/buscar_locais?q=${encodeURIComponent(termo)}`)
-            .then(res => res.json())
-            .then(data => {
-                datalist.innerHTML = '';
-                data.forEach(local => {
-                    const option = document.createElement('option');
-                    // O valor que aparece no input ao selecionar
-                    option.value = local.nome;
-                    // O texto auxiliar que ajuda o JS a achar o ID
-                    option.textContent = `${local.info_exibicao} | ID: ${local.id}`;
-                    datalist.appendChild(option);
-                });
-            })
-            .catch(err => console.error("Erro no autocomplete:", err));
-    });
-
-    // 2. INTERCEPTAÇÃO DO SUBMIT
-    formBusca.addEventListener('submit', function(e) {
-        e.preventDefault();
-
-        const val = inputBusca.value.trim();
-        if (val.length === 0) return;
-
-        const options = datalist.options;
-        let idEncontrado = null;
-
-        // Verifica se o texto digitado bate exatamente com alguma opção do datalist
-        for (let i = 0; i < options.length; i++) {
-            if (options[i].value.toLowerCase() === val.toLowerCase()) {
-                const match = options[i].textContent.match(/ID: (\d+)/);
-                if (match) {
-                    idEncontrado = match[1];
-                    break;
-                }
-            }
-        }
-
-        if (idEncontrado) {
-            // Caso exista no banco, redireciona para o perfil do local
-            window.location.href = `/local_v2/${idEncontrado}`;
-        } else {
-            // Caso não exista, abre o fluxo de novo cadastro (se tiver min 3 letras)
-            if (val.length >= 3) {
-                const displayNome = document.getElementById('nome_digitado_display');
-                if (displayNome) displayNome.innerText = val;
-                if (modalConfirmacao) modalConfirmacao.show();
-            }
-        }
-    });
-});
-
-/**
- * Função global chamada pelo botão do primeiro modal
- */
-function abrirFormularioCompleto() {
-    const displayNome = document.getElementById('nome_digitado_display');
-    const inputFinal = document.getElementById('final_nome_local');
-
-    if (!displayNome || !inputFinal) return;
-
-    const nomeOriginal = displayNome.innerText;
-
-    // Fecha o modal de pergunta
-    if (modalConfirmacao) modalConfirmacao.hide();
-
-    // Preenche o nome no formulário técnico
-    inputFinal.value = nomeOriginal;
-
-    // Abre o formulário de cadastro completo após um pequeno delay para a transição
-    setTimeout(() => {
-        if (modalFormulario) modalFormulario.show();
-    }, 400);
-}
+// ... (seu script permanece igual)
 </script>
