@@ -156,10 +156,27 @@ def notify(message, type):
 @app.route("/logout")
 @login_required
 def realizar_logout():
-    logout_user()  # Remove o usuário do Flask-Login
-    session.clear() # Limpa completamente a sessão do navegador (Garante o logout)
+    from flask import make_response
+
+    logout_user()  # Remove do Flask-Login
+    session.clear()  # Limpa o dicionário da sessão
+
+    # Criamos a resposta de redirecionamento para a página inicial (index)
+    response = make_response(redirect(url_for('index')))
+
+    # FORÇA o navegador a invalidar o cookie de sessão
+    # O segredo para produção é garantir que os parâmetros batam com os do __init__.py
+    response.set_cookie(
+        'session',
+        '',
+        expires=0,
+        httponly=True,
+        secure=True,  # Como você usa HTTPS, isso é vital
+        samesite='Lax'
+    )
+
     flash("Sessão encerrada com sucesso. Até logo!", "info")
-    return redirect(url_for('index'))
+    return response
 
 
 @app.route("/login", methods=["GET", "POST"])

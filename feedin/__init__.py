@@ -72,9 +72,11 @@ app.config["PASTA_FOTOS"] = "fotos_perfil"
 
 # Lógica de Segurança de Cookies (SSL)
 if os.name != 'nt' or os.environ.get('FLASK_ENV') == 'production':
-    app.config['SESSION_COOKIE_SECURE'] = True
-    app.config['REMEMBER_COOKIE_SECURE'] = True
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config.update(
+        SESSION_COOKIE_SECURE=True,  # Apenas se usar HTTPS
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',  # Essencial para redirecionamentos
+    )
 else:
     app.config['SESSION_COOKIE_SECURE'] = False
     app.config['REMEMBER_COOKIE_SECURE'] = False
