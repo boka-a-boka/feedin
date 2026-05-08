@@ -197,16 +197,20 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        fetch(`/buscar_locais?q=${encodeURIComponent(termo)}`)
+fetch(`/buscar_locais?q=${encodeURIComponent(termo)}`)
             .then(res => res.json())
             .then(data => {
                 datalist.innerHTML = '';
                 data.forEach(local => {
                     const option = document.createElement('option');
-                    // O valor que aparece no input ao selecionar
+                    // IMPORTANTE: Mantemos o valor limpo para o input
                     option.value = local.nome;
-                    // O texto auxiliar que ajuda o JS a achar o ID
-                    option.textContent = `${local.info_exibicao} | ID: ${local.id}`;
+
+                    // Guardamos o ID num atributo de dados para não depender de Regex
+                    option.dataset.id = local.id;
+
+                    // Mostramos a info extra (ex: bairro ou memória histórica)
+                    option.textContent = `${local.info_exibicao}`;
                     datalist.appendChild(option);
                 });
             })
