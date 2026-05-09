@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container d-flex align-items-center justify-content-center" style="min-height: 80vh;">
+    <div class="row justify-content-center w-100">
+        <div class="col-md-5">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="p-4 bg-primary text-white text-center">
+                    <i class="bi bi-shield-lock fs-1"></i>
+                    <h3 class="fw-bold mt-2">Recuperar Senha</h3>
+                    <p class="small mb-0 opacity-75">Enviaremos as instruções para o seu e-mail</p>
+                </div>
+
+                <div class="card-body p-4 p-md-5 bg-white">
+                    <form method="POST" action="{{ url_for('esqueci_senha') }}">
+                        <div class="mb-4">
+                            <label for="email" class="form-label fw-bold text-dark">E-mail Cadastrado</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-primary"></i></span>
+                                <input type="email" name="email" id="email" class="form-control bg-light border-start-0"
+                                       placeholder="exemplo@email.com" required>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg rounded-pill fw-bold shadow-sm">
+                                Enviar Link de Recuperação
+                            </button>
+                            <a href="{{ url_for('login') }}" class="btn btn-link text-decoration-none text-muted small">
+                                Voltar para o Login
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <p class="text-muted small">© 2026 FeedIn - Piracicaba Memória Viva</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

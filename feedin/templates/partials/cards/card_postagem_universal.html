@@ -70,42 +70,45 @@
                 </div>
             </div>
 
-        {# --- CASO 2: POSTAGEM PADRÃO --- #}
+{# --- CASO 2: POSTAGEM PADRÃO --- #}
         {% else %}
-            <div class="p-3 d-flex align-items-center justify-content-between">
+            <div class="p-3 d-flex align-items-center justify-content-between border-bottom bg-light-subtle">
                 <div class="d-flex align-items-center">
-                    <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_final.id) }}" width="42" height="42" class="rounded-circle me-2 border object-fit-cover">
+                    {# Foto do Autor (Circular) #}
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_final.id) }}"
+                         class="rounded-circle border shadow-sm me-3" width="42" height="42" style="object-fit: cover;">
                     <div>
-                        <span class="text-dark fw-bold small">
+                        <span class="text-dark fw-bold d-block">
                             {{ autor_final.perfil.nome_completo or autor_final.username }}
                         </span>
-                        <small class="text-muted d-block" style="font-size: 0.7rem;">
+                        <small class="text-muted" style="font-size: 0.7rem;">
                             {{ post_obj.data_criacao.strftime('%d/%m/%Y') if (post_obj and post_obj.data_criacao) else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao else '') }}
                         </small>
                     </div>
                 </div>
             </div>
 
-            {% if imagem_final %}
-                <div class="position-relative bg-light overflow-hidden rounded-4 mx-3 mb-2 shadow-sm">
-                    <img src="{{ url_for('static', filename='uploads/posts/' ~ imagem_final) }}"
-                         class="img-fluid w-100 object-fit-cover"
-                         style="max-height: 500px;" alt="Memória Viva">
-
-                </div>
-            {% endif %}
-
             <div class="p-3">
-                <p class="card-text text-dark mb-3" style="font-size: 0.95rem; line-height: 1.5;">
-                    {{ conteudo_final }}
+                {# IMAGEM FLUTUANDO À ESQUERDA DENTRO DO TEXTO #}
+                {% if imagem_final -%}
+                    <a href="{{ url_for('ver_perfil', usuario_id=autor_final.id) }}#post-{{ atividade_id }}">
+                        <img src="{{ url_for('static', filename='uploads/posts/' + imagem_final) }}"
+                             class="img-wrap-text shadow-sm" alt="Memória Viva">
+                    </a>
+                {%- endif %}
+
+                {# TEXTO DA POSTAGEM #}
+                <p class="card-text text-dark mb-3 texto-postagem" style="white-space: pre-line; font-size: 1.1rem; line-height: 1.4; font-weight: 500;">
+                    {{- conteudo_final.strip() | safe -}}
                 </p>
+
+                <div style="clear: both;"></div>
 
                 {# LINHA 1: PESSOAS MARCADAS #}
                 {% if atividade and atividade.pessoas_marcadas %}
-                <div class="mb-2">
+                <div class="mb-2 mt-2">
                     <div class="d-flex flex-wrap gap-1 align-items-center">
                         <i class="bi bi-people text-muted small me-1"></i>
-                        <span class="text-muted small me-1" style="font-size: 0.75rem;"></span>
                         {% for pessoa in atividade.pessoas_marcadas %}
                             <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none">
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-normal" style="font-size: 0.7rem;">

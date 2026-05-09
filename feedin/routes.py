@@ -217,6 +217,20 @@ def login():
 
     return render_template("login.html", form=form_login)
 
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        user = User.query.filter_by(email=email).first()
+        if user:
+            # Aqui no futuro entra o disparo de e-mail real.
+            # Por ora, você pode redirecionar para uma página de sucesso
+            # ou validar o fluxo.
+            flash('Se o e-mail existir em nossa base, as instruções foram enviadas.', 'info')
+            return redirect(url_for('login'))
+        flash('E-mail não encontrado.', 'danger')
+    return render_template('esqueci_senha.html')
+
 
 @app.route("/newuser", methods=["GET", "POST"])
 def newuser():
@@ -373,15 +387,16 @@ def editar_perfil():
 
         database.session.commit()
 
-        # 3. A LÓGICA DE DIRECIONAMENTO (O "Pulo do Gato")
+        # 3. A NOVA LÓGICA DE DIRECIONAMENTO
         if current_user.nivel_acesso < 10:
-            # Se é novato e acabou de preencher os dados, manda para os INTERESSES
+            # Mantém para novatos preencherem preferências
             flash("Dados salvos! Agora, escolha seus interesses.", "success")
             return redirect(url_for('configuracoes', aba='preferencias'))
         else:
-            # Se é veterano, mantém na mesma página de edição
+            # PARA VETERANOS: Quebra o loop enviando para o perfil público
             flash("Perfil atualizado com sucesso!", "success")
-            return redirect(url_for('configuracoes', aba='perfil'))
+            # Aqui forçamos a volta para a página que todo mundo vê
+            return redirect(url_for('ver_perfil', usuario_id=current_user.id))
 
     except Exception as e:
         database.session.rollback()

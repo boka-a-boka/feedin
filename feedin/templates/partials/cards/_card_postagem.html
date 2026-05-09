@@ -1,5 +1,27 @@
 {# partials/cards/_card_postagem.html #}
 
+<style>
+.img-wrap-text {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 12px;
+    float: left;
+    margin-right: 15px;
+    margin-bottom: 5px;
+    margin-top: 5px; /* Ajuste fino para alinhar com a primeira linha do texto */
+    border: 2px solid #fff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+/* Remove a margem superior do texto para ele "subir" e alinhar com a imagem */
+.texto-postagem {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    display: inline; /* Ajuda a eliminar blocos de parágrafo que criam quebras */
+}
+</style>
+
 {# 1. LÓGICA DE DADOS #}
 {% set id_post = atividade.id or atividade['id'] %}
 {% set c = atividade.dados_conexao %}
@@ -59,49 +81,38 @@
 
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final" id="post-{{ id_post }}">
 
-        {# CABEÇALHO #}
-        <div class="p-3 d-flex align-items-center">
-            {% if autor %}
-                <img src="{{ url_for('static', filename='fotos_perfil/' + (autor.foto_perfil or 'default.jpg')) }}"
-                     width="42" height="42" class="rounded-circle me-3 border shadow-sm" style="object-fit: cover;">
-                <div>
-                    <span class="text-dark fw-bold d-block">{{ autor.username or autor['username'] }}</span>
-                    <small class="text-muted" style="font-size: 0.75rem;">
-                        {{ atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao is defined else "Recente" }}
-                    </small>
-                </div>
-            {% endif %}
+{# CABEÇALHO COM MINIATURA #}
+        <div class="p-3 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                {% if autor %}
+                    <img src="{{ url_for('static', filename='fotos_perfil/' + (autor.foto_perfil or 'default.jpg')) }}"
+                         width="42" height="42" class="rounded-circle me-3 border shadow-sm" style="object-fit: cover;">
+                    <div>
+                        <span class="text-dark fw-bold d-block">{{ autor.username or autor['username'] }}</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">
+                            {{ atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao is defined else "Recente" }}
+                        </small>
+                    </div>
+                {% endif %}
+            </div>
         </div>
 
-        {# IMAGEM DA POSTAGEM #}
-        {% if imagem %}
-            <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}" class="d-block">
-                <div class="bg-light d-flex align-items-center justify-content-center" style="max-height: 450px; overflow: hidden;">
-                    <img src="{{ url_for('static', filename='uploads/posts/' ~ imagem) }}" class="w-100 h-auto" alt="Memória" title="Clique para ver no perfil">
-                </div>
-            </a>
-        {% endif %}
+        {# REMOVEMOS O BLOCO DE IMAGEM GRANDE DAQUI PARA LIMPAR O FEED #}
+        {# A imagem agora só aparece se o usuário clicar na miniatura ou no link do rodapé #}
 
         {# CORPO DO TEXTO (Lógica festiva interna de posts manuais) #}
-        <div class="p-4 pt-2">
-            {% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] %}
-                <div class="d-flex align-items-start gap-3 p-3 rounded-4 bg-festivo-pioneiro">
-                    <div class="fs-1 animate__animated animate__bounceIn">
-                        {% if atividade.tipo == 'pioneiro' %} 🏆 {% elif atividade.tipo == 'vinculo' %} 🤝 {% else %} ✨ {% endif %}
-                    </div>
-                    <div>
-                        <p class="text-dark mb-1 fw-bold" style="font-size: 1.3rem; line-height: 1.3;">
-                            {{ texto | safe }}
-                        </p>
-                        <span class="badge-conquista">Conquista FeedIn</span>
-                    </div>
-                </div>
-            {% else %}
-                <p class="text-dark mb-0" style="white-space: pre-wrap; font-size: 1.2rem; line-height: 1.5; font-weight: 500;">
-                    {{ texto | safe }}
-                </p>
-            {% endif %}
-        </div>
+<div class="p-4 pt-2" style="display: block; overflow: hidden;">
+    {% if imagem -%}
+        <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}">
+            <img src="{{ url_for('static', filename='uploads/posts/' ~ imagem) }}" class="img-wrap-text">
+        </a>
+    {%- endif -%}
+
+    {# O segredo aqui é o .strip() e garantir que não haja NADA entre a imagem e o texto no código #}
+    <p class="text-dark mb-0 texto-postagem" style="white-space: pre-line; font-size: 1.1rem; line-height: 1.4; font-weight: 500; margin: 0; padding: 0;">{{- texto.strip() | safe -}}</p>
+
+    <div style="clear: both;"></div>
+</div>
 
         {# RODAPÉ #}
         <div class="px-4 pb-3 border-top pt-2 text-end">
