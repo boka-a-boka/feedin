@@ -3029,6 +3029,20 @@ def criar_postagem():
     arquivo = request.files.get('imagem')
     local = Local.query.get(id_local) if id_local and id_local.isdigit() else None
 
+    # --- NOVA TRAVA DE SEGURANÇA: VALIDAÇÃO DE VÍNCULO/SEGUIDOR ---
+    if local:
+        # Verifica se o usuário já tem um vínculo (segue/atividade) com este local
+        # Ajuste 'AtividadeLocal' para a tabela onde você grava quem segue quem
+        segue_local = AtividadeLocal.query.filter_by(
+            id_criador=current_user.id,
+            id_local=local.id
+        ).first()
+
+        if not segue_local:
+            flash(f"Para postar no mural do {local.nome}, você precisa primeiro segui-lo!", "warning")
+            return redirect(url_for('perfil_local', local_id=local.id))
+    # --- FIM DA TRAVA -
+
     # 2. Lógica de Construção de Narrativa (O "Cérebro" da Rota)
     # Se for um vínculo inicial, montamos o texto base caso o usuário não tenha escrito nada
     if tipo_postagem == 'vinculo':
