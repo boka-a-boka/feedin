@@ -1,121 +1,200 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    .admin-title { color: #000000 !important; font-weight: bold; }
+
+    /* Ajustes do Accordion para não perder cores */
+    .accordion-button:not(.collapsed) {
+        background-color: #2c3034 !important;
+        color: #ffc107 !important;
+        box-shadow: none !important;
+    }
+    .accordion-button {
+        background-color: #212529 !important;
+        color: #ffc107 !important;
+    }
+    .accordion-button::after {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+    .user-row:hover { background-color: #323539 !important; }
+</style>
+
 <div class="container py-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="text-white">Central do Administrador</h2>
+            <h2 class="admin-title">Central do Administrador</h2>
             <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Voltar para o FeedIn
             </a>
         </div>
+
+        <div class="ms-auto me-3">
+            <input type="text" id="userSearch" class="form-control" placeholder="🔍 Buscar usuário..." style="min-width: 250px;">
+        </div>
+
         <div class="btn-group">
             <a href="{{ url_for('admin_novo_local') }}" class="btn btn-success">
                 <i class="fas fa-plus"></i> Novo Local
             </a>
-            <a href="{{ url_for('admin_exportar_locais') }}" class="btn btn-outline-light">
+            <a href="{{ url_for('admin_exportar_locais') }}" class="btn btn-outline-dark">
                 <i class="fas fa-file-csv"></i> Exportar CSV
             </a>
         </div>
     </div>
 
     <div class="row mb-5">
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card bg-dark text-white border-primary p-3">
-                <small class="text-primary">USUÁRIOS</small>
+                <small class="text-white-50">USUÁRIOS TOTAIS</small>
                 <h3>{{ stats.usuarios }}</h3>
             </div>
         </div>
-
-        <div class="col-md-3">
-            <div class="card bg-dark text-white border-warning p-3 h-100 position-relative">
-                <small class="text-warning text-uppercase fw-bold" style="letter-spacing: 1px;">Pioneiros</small>
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-warning p-3 h-100">
+                <small class="text-warning text-uppercase fw-bold">Pioneiros</small>
                 <div class="d-flex align-items-baseline">
                     <h3 class="mb-0">{{ stats.pioneiros }}</h3>
                     <span class="ms-2 small text-muted">/ 100</span>
                 </div>
-
                 <hr class="my-2 opacity-25">
-
-                {% if stats.pioneiros < 100 %}
-                    <span class="badge bg-warning text-dark w-100 py-2">
-                        <i class="fas fa-vial me-1"></i> MODO BETA ATIVO
-                    </span>
-                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">Faltam {{ 100 - stats.pioneiros }} para o Rigor Social</small>
-                {% else %}
-                    <span class="badge bg-primary w-100 py-2">
-                        <i class="fas fa-check-circle me-1"></i> MODO PRODUÇÃO
-                    </span>
-                    <small class="text-info d-block mt-1" style="font-size: 0.7rem;">Rigor do Fiador Ativado</small>
-                {% endif %}
+                <span class="badge {% if stats.pioneiros < 100 %}bg-warning text-dark{% else %}bg-primary{% endif %} w-100 py-2">
+                    {% if stats.pioneiros < 100 %}MODO BETA ATIVO{% else %}MODO PRODUÇÃO{% endif %}
+                </span>
             </div>
         </div>
-
-        <div class="col-md-3">
+        <div class="col-md-4">
             <div class="card bg-dark text-white border-info p-3">
                 <small class="text-info">TAXONOMIA</small>
                 <h3>{{ stats.taxonomia }}</h3>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-dark text-white border-warning p-3">
-                <small class="text-warning">PIONEIROS</small>
-                <h3>{{ stats.empreendedores }}</h3>
-            </div>
-        </div>
     </div>
 
     <div class="row">
-        <div class="col-lg-8">
+        <div class="col-lg-12">
             <div class="card bg-dark text-white border-secondary">
-                <div class="card-header border-secondary">Gestão de Níveis de Acesso</div>
-                <div class="card-body p-0">
-                    <table class="table table-dark table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>Usuário</th>
-                                <th>Nível</th>
-                                <th>Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for u in usuarios %}
-                            <tr>
-                                <td>{{ u.username }}<br><small class="text-muted">{{ u.email }}</small></td>
-                                <td><span class="badge bg-info">{{ u.nivel_acesso }}</span></td>
-                                <td>
-                                    <div class="btn-group">
-                                        <button type="button" class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
-                                            Mudar Nível
-                                        </button>
-                                        <ul class="dropdown-menu dropdown-menu-dark shadow">
-                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=9999) }}">Admin (9999)</a></li>
-                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=999) }}">Empreendedor (999)</a></li>
-                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=100) }}">Cliente (100)</a></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li><a class="dropdown-item small text-success" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=10) }}">Usuário (10)</a></li>
-                                            <li><a class="dropdown-item small text-danger" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=0) }}">Banir (0)</a></li>
-                                        </ul>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div class="card-header border-secondary py-3">
+                    <span class="fw-bold text-uppercase" style="letter-spacing: 1px;">Gestão de Níveis e Pioneirismo</span>
                 </div>
-            </div>
-        </div>
+                <div class="card-body p-0">
+                    <div class="accordion accordion-flush" id="accordionUsuarios">
+                        {% for letra, lista_usuarios in usuarios_agrupados.items() %}
+                        <div class="accordion-item bg-dark text-white border-secondary">
+                            <h2 class="accordion-header" id="heading-{{ letra }}">
+                                <button class="accordion-button collapsed fw-bold"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#collapse-{{ letra }}"
+                                        aria-expanded="false"
+                                        aria-controls="collapse-{{ letra }}"
+                                        style="color: #ffc107; background-color: #212529;">
+                                    <span style="font-size: 1.2rem;">{{ letra }}</span>
+                                    <span class="badge rounded-pill bg-secondary ms-2">{{ lista_usuarios|length }}</span>
+                                </button>
+                            </h2>
 
-        <div class="col-lg-4">
-            <div class="card bg-dark text-white border-secondary">
-                <div class="card-header border-secondary">Manutenção de Taxonomia</div>
-                <div class="card-body text-center">
-                    <p class="small text-muted">Atualmente com {{ stats.taxonomia }} termos.</p>
-                    <a href="#" class="btn btn-outline-info btn-sm w-100 mb-2">Gerenciar Termos</a>
-                    <a href="#" class="btn btn-outline-secondary btn-sm w-100">Auditar Categorias</a>
+                            <div id="collapse-{{ letra }}"
+                                 class="accordion-collapse collapse"
+                                 aria-labelledby="heading-{{ letra }}"
+                                 data-bs-parent="#accordionUsuarios">
+
+                                <div class="accordion-body p-0">
+                                    <table class="table table-dark table-hover mb-0">
+                                        <thead>
+                                            <tr class="small text-muted border-secondary">
+                                                <th class="ps-3">Usuário</th>
+                                                <th>Nível</th>
+                                                <th>Status</th>
+                                                <th class="text-end pe-3">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for u in lista_usuarios %}
+                                            <tr class="user-row align-middle border-secondary">
+                                                <td class="ps-3">
+                                                    <strong>{{ u.username }}</strong><br>
+                                                    <small class="text-muted">{{ u.email }}</small>
+                                                </td>
+                                                <td><span class="badge bg-info">{{ u.nivel_acesso }}</span></td>
+                                                <td>
+                                                    {% if u.is_pioneiro %}
+                                                        <span class="badge bg-success text-white"><i class="fas fa-star"></i> Pioneiro</span>
+                                                    {% else %}
+                                                        <span class="badge border border-secondary text-muted">Comum</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <div class="btn-group">
+                                                        {% if not u.is_pioneiro %}
+                                                        <a href="{{ url_for('promover_pioneiro', usuario_id=u.id) }}" class="btn btn-sm btn-warning text-dark me-2 fw-bold">
+                                                            <i class="fas fa-medal"></i>
+                                                        </a>
+                                                        {% endif %}
+
+                                                        <button type="button" class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                                                            Nível
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-dark shadow">
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=9999) }}">Admin (9999)</a></li>
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=999) }}">Empreendedor (999)</a></li>
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=100) }}">Cliente (100)</a></li>
+                                                            <li><hr class="dropdown-divider border-secondary"></li>
+                                                            <li><a class="dropdown-item small text-success" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=10) }}">Usuário (10)</a></li>
+                                                            <li><a class="dropdown-item small text-danger" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=0) }}">Banir (0)</a></li>
+                                                        </ul>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('userSearch').addEventListener('input', function() {
+    let filter = this.value.toLowerCase();
+    let groups = document.querySelectorAll('.user-group-container');
+
+    groups.forEach(group => {
+        let rows = group.querySelectorAll('.user-row');
+        let hasVisibleRow = false;
+
+        rows.forEach(row => {
+            let name = row.querySelector('.user-name').innerText.toLowerCase();
+            let email = row.querySelector('.user-email').innerText.toLowerCase();
+
+            if (name.includes(filter) || email.includes(filter)) {
+                row.style.display = '';
+                hasVisibleRow = true;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Se houver alguém visível, mostra a letra (grupo), se não, esconde a letra
+        if (hasVisibleRow) {
+            group.style.display = '';
+            // Opcional: Abre o accordion automaticamente se estiver buscando
+            if (filter.length > 0) {
+                let collapseElement = group.querySelector('.accordion-collapse');
+                if (!collapseElement.classList.contains('show')) {
+                    new bootstrap.Collapse(collapseElement, { show: true });
+                }
+            }
+        } else {
+            group.style.display = 'none';
+        }
+    });
+});
+</script>
 
 {% endblock %}

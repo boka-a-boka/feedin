@@ -115,7 +115,7 @@
                     <div class="modal-body">
                         <div class="row g-3">
                             <div class="col-12">
-                                <label class="small fw-bold text-muted">NOME DO ESTABELECIMENTO</label>
+                                <label class="small fw-bold text-muted">NOME COMPLETO DO LOCAL</label>
                                 <input type="text" name="nome" id="final_nome_local" class="form-control form-control-lg border-2 border-primary-subtle" required>
                             </div>
                             <div class="col-md-6">
@@ -177,9 +177,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const datalist = document.getElementById('lista-locais-autocomplete');
     const formBusca = document.getElementById('form-busca-local');
 
-    // Inicializa modais apenas se existirem na página
+    // Inicializa os modais
     const elConfirm = document.getElementById('modalConfirmarCadastro');
+    const elForm = document.getElementById('modalFormularioCompleto');
+
     const modalConfirmacao = elConfirm ? new bootstrap.Modal(elConfirm) : null;
+    const modalFormulario = elForm ? new bootstrap.Modal(elForm) : null;
 
     if (!inputBusca || !formBusca) return;
 
@@ -195,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 data.forEach(local => {
                     const option = document.createElement('option');
                     option.value = local.nome;
-                    option.dataset.id = local.id; // Guarda o ID real aqui
+                    option.dataset.id = local.id;
                     option.textContent = local.info_exibicao;
                     datalist.appendChild(option);
                 });
@@ -211,7 +214,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const options = datalist.options;
         let idEncontrado = null;
 
-        // Procura o ID na lista de sugestões
         for (let i = 0; i < options.length; i++) {
             if (options[i].value.toLowerCase() === textoDigitado.toLowerCase()) {
                 idEncontrado = options[i].dataset.id;
@@ -220,13 +222,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (idEncontrado) {
-            // Redireciona para a rota correta que você definiu no Flask
             window.location.href = "/local/" + idEncontrado;
         } else if (textoDigitado.length >= 3 && modalConfirmacao) {
-            // Se não encontrou nada, sugere cadastro
             document.getElementById('nome_digitado_display').innerText = textoDigitado;
             modalConfirmacao.show();
         }
     });
+
+    // 3. FUNÇÃO QUE ESTAVA FALTANDO: Transição entre modais
+    window.abrirFormularioCompleto = function() {
+        const textoDigitado = inputBusca.value.trim();
+
+        // Fecha o modal de confirmação
+        if (modalConfirmacao) modalConfirmacao.hide();
+
+        // Preenche o campo de nome no segundo modal
+        const campoNomeFinal = document.getElementById('final_nome_local');
+        if (campoNomeFinal) campoNomeFinal.value = textoDigitado;
+
+        // Abre o modal do formulário completo
+        if (modalFormulario) {
+            // Um pequeno delay garante que o efeito de "fade" do primeiro não conflite com o segundo
+            setTimeout(() => {
+                modalFormulario.show();
+            }, 400);
+        }
+    };
 });
 </script>

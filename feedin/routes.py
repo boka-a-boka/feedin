@@ -633,6 +633,37 @@ def dashboard():
                            locais_populares=locais_populares,
                            minhas_prefs_json=json.dumps(prefs_atuais_data))
 
+
+@app.route('/promover_pioneiro/<int:usuario_id>')
+@login_required
+def promover_pioneiro(usuario_id):
+    # Verifica se o usuário atual é um administrador (Nível 9999)
+    if current_user.nivel_acesso < 9999:
+        flash('Acesso negado. Você não tem permissão para esta ação.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Busca o usuário no banco de dados
+    usuario_alvo = Usuario.query.get_or_404(usuario_id)
+
+    try:
+        usuario_alvo.is_pioneiro = True
+        database.session.commit()
+        flash(f'Usuário {usuario_alvo.username} agora é um Pioneiro!', 'success')
+    except Exception as e:
+        database.session.rollback()
+        flash('Erro ao promover usuário. Tente novamente.', 'danger')
+        print(f"Erro: {e}")
+
+    # Retorna para a página de administração (ajuste o nome da rota se necessário)
+    return redirect(url_for('admin_sistema'))  # Ou o nome da sua função de dashboard admin
+
+
+from itertools import groupby
+
+
+
+
+
 def apenas_pioneiros(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -1583,11 +1614,21 @@ def admin_sistema():
         'empreendedores': Usuario.query.filter_by(nivel_acesso=999).count()
     }
 
-    # 2. Buscamos a lista de usuários
-    usuarios_lista = Usuario.query.order_by(Usuario.id.desc()).limit(10).all()
+    # 2. Buscamos os usuários ordenados por nome
+    usuarios_ordenados = Usuario.query.order_by(Usuario.username.asc()).all()
 
-    # 3. O return agora enxerga tanto o 'stats' quanto o 'usuarios_lista'
-    return render_template("admin/dashboard.html", stats=stats, usuarios=usuarios_lista)
+    # 3. Criamos o agrupamento por letra inicial
+    # IMPORTANTE: A variável precisa ter este nome para o HTML funcionar
+    usuarios_agrupados = {}
+    for letra, grupo in groupby(usuarios_ordenados, key=lambda x: x.username[0].upper() if x.username else "?"):
+        usuarios_agrupados[letra] = list(grupo)
+
+    usuarios_agrupados = dict(sorted(usuarios_agrupados.items()))
+
+    # 4. Enviamos para o template
+    return render_template("admin/dashboard.html",
+                           stats=stats,
+                           usuarios_agrupados=usuarios_agrupados)  # Enviando a variável correta
 
 
 # Rota para deletar ou editar taxonomia (Exemplo de manutenção)
@@ -1611,10 +1652,10 @@ def admin_exportar_locais():
     output = io.StringIO()
     escritor = csv.writer(output)
 
-    escritor.writerow(['id', 'nome', 'categoria', 'logradouro', 'bairro', 'google_place_id'])
+    escritor.writerow(['id', 'nome', 'logradouro', 'bairro', 'google_place_id'])
 
     for l in locais:
-        escritor.writerow([l.id, l.nome, l.categoria, l.logradouro, l.bairro, l.google_place_id])
+        escritor.writerow([l.id, l.nome, l.logradouro, l.bairro, l.google_place_id])
 
     csv_output = output.getvalue()
     output.close()
