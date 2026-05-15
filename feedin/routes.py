@@ -13,7 +13,7 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
                            AvaliacaoLocal, Notificacao)
 
-from feedin.utils import salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura
+from feedin.utils import salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa, salvar_imagem_postagem
 from werkzeug.utils import secure_filename
 from urllib.parse import quote
 from functools import wraps
@@ -469,18 +469,21 @@ def upload_foto_perfil():
 @login_required
 def upload_capa():
     arquivo = request.files.get('foto_capa')
+
     if arquivo:
-        # 1. Gera nome seguro
-        nome_arquivo = f"capa_{current_user.id}_{int(datetime.now().timestamp())}.jpg"
-        caminho = os.path.join(app.config['UPLOAD_FOLDER_CAPAS'], nome_arquivo)
+        # Usamos a nova função de tratamento
+        nome_processado = salvar_imagem_capa(arquivo, current_user.id)
 
-        # 2. Salva e atualiza banco
-        arquivo.save(caminho)
-        current_user.perfil.url_capa = nome_arquivo
-        database.session.commit()
+        if nome_processado:
+            # Se já existia uma capa antiga, você pode deletar o arquivo aqui (opcional)
 
-        flash("Capa atualizada!", "success")
-    return redirect(url_for('configuracoes'))
+            # Atualiza o banco de dados com o novo nome (extensão .webp agora)
+            current_user.perfil.url_capa = nome_processado
+            database.session.commit()
+
+            return jsonify({"status": "success", "url": nome_processado}), 200
+
+    return jsonify({"status": "error", "message": "Falha ao processar imagem"}), 400
 
 
 @app.route("/dashboard")
@@ -2170,7 +2173,7 @@ def conectar_pioneiro(id_destinatario):
         ''' # <--- AS ASPAS QUE FALTAVAM AQUI
 
     # Retorno padrão para requisições normais
-    return redirect(request.referrer or url_for('dashboard'))
+    return redirect(url_for('dashboard', aba='conexoes', tab='sugestoes'))
 
 
 @app.route("/boas-vindas-pioneiros")
@@ -2602,50 +2605,43 @@ def incrementar_uso_taxonomia(termo_id):
 @app.route('/gerar-convite', methods=['POST'])
 @login_required
 def gerar_convite():
-    # --- NOVO BLOCO DE SEGURANÇA ---
-    if current_user.nivel_acesso < 10:
-        flash("Para convidar amigos e garantir o selo de Pioneiro, você precisa completar seu perfil (Nível 10).", "warning")
-        return redirect(url_for('get_perfil', id_usuario=current_user.id))
-    # ------------------------------
-
     form = FormConvite()
+
     if form.validate_on_submit():
         # 1. Captura e Limpeza de Dados
+        # Remove qualquer caractere que não seja número
         numero_destino = re.sub(r'\D', '', form.whatsapp.data)
         nome_amigo = form.nome_convidado.data or "Amigo(a)"
 
-        # Captura o contexto selecionado (Ex: "local_12" ou "gosto_5")
+        # Captura o contexto selecionado
         contexto_raw = request.form.get('contexto_convite')
         tipo_vinculo = None
         id_referencia = None
-        nome_contexto = "nossa rede"  # Fallback caso algo falhe
+        nome_contexto = "nossa rede"
 
         if contexto_raw and "_" in contexto_raw:
-            tipo_vinculo, id_referencia = contexto_raw.split('_')
-
-            # Busca o nome amigável para a mensagem do WhatsApp
-            if tipo_vinculo == 'local':
-                obj = Local.query.get(id_referencia)
-                if obj: nome_contexto = obj.nome
-            elif tipo_vinculo == 'gosto':
-                # Aqui você pode buscar na sua tabela de Taxonomia ou AtividadeLocal
-                obj = AtividadeLocal.query.get(id_referencia)
-                if obj: nome_contexto = obj.nome
-
-        # Ajuste do prefixo 55 para o Deep Link
-        numero_completo = numero_destino if numero_destino.startswith('55') else "55" + numero_destino
+            try:
+                tipo_vinculo, id_referencia = contexto_raw.split('_')
+                if tipo_vinculo == 'local':
+                    obj = Local.query.get(id_referencia)
+                    if obj: nome_contexto = obj.nome
+                elif tipo_vinculo == 'gosto':
+                    obj = AtividadeLocal.query.get(id_referencia)
+                    if obj: nome_contexto = obj.nome
+            except Exception as e:
+                app.logger.error(f"Erro ao processar contexto do convite: {e}")
 
         # 2. Verificação de Exclusividade
         convite_existente = Convite.query.filter_by(whatsapp_destino=numero_destino).first()
 
         if convite_existente:
             if convite_existente.id_remetente == current_user.id:
-                flash("Você já enviou um convite para este número!", "info")
+                flash(f"Você já enviou um convite para {nome_amigo}!", "info")
             else:
-                flash("Este número já recebeu um convite de outro usuário.", "warning")
-            return redirect(url_for('get_perfil', id_usuario=current_user.id))
+                flash("Este número já recebeu um convite de outro membro do FeedIn.", "warning")
+            return redirect(url_for('dashboard', aba='configuracoes'))  # Ou onde o form estiver
 
-        # 3. Criação do Registro com Contexto
+        # 3. Criação do Registro
         novo_convite = Convite(
             id_remetente=current_user.id,
             whatsapp_destino=numero_destino,
@@ -2658,36 +2654,41 @@ def gerar_convite():
             database.session.add(novo_convite)
             database.session.commit()
 
-            # 4. Preparação do Link e Mensagem Contextualizada
-            # Passamos o contexto na URL para a rota de registro capturar
+            # 4. Preparação do Link e Mensagem
             link_registro = url_for('registrar',
                                     indicado_por=current_user.id,
                                     contexto=contexto_raw,
                                     _external=True)
 
-            # A "mágica" da mensagem:
+            # Mensagem otimizada para conversão
             if tipo_vinculo:
                 texto_base = (
-                    f"Olá {nome_amigo}! Estou te convidando para o FeedIn! para resgatarmos "
-                    f"nossa conexão através de **{nome_contexto}**. "
-                    f"Crie seu perfil e torne-se um Pioneiro: {link_registro}"
+                    f"Olá {nome_amigo}! Aqui é o {current_user.username}. "
+                    f"Estou te convidando para o FeedIn para resgatarmos nossas memórias "
+                    f"em comum sobre: {nome_contexto}. 📸\n\n"
+                    f"Crie seu perfil e torne-se um Pioneiro aqui: {link_registro}"
                 )
             else:
                 texto_base = (
-                    f"Olá {nome_amigo}! Estou te convidando para conhecer o FeedIn, "
-                    f"nosso resgate de memória social de Piracicaba. "
-                    f"Crie seu perfil pelo link: {link_registro}"
+                    f"Olá {nome_amigo}! Estou no FeedIn resgatando memórias de Piracicaba "
+                    f"e lembrei de você. 🕸️\n\n"
+                    f"Crie seu perfil pelo link e me ajude a crescer a nossa rede: {link_registro}"
                 )
 
+            # Ajuste do prefixo internacional (WhatsApp API exige 55 para BR)
+            numero_completo = numero_destino if numero_destino.startswith('55') else "55" + numero_destino
+
+            # Encode da mensagem para URL
             whatsapp_url = f"https://api.whatsapp.com/send?phone={numero_completo}&text={quote(texto_base)}"
 
             return redirect(whatsapp_url)
 
         except Exception as e:
             database.session.rollback()
-            flash("Erro ao gerar convite. Tente novamente.", "danger")
+            app.logger.error(f"Erro ao salvar convite: {e}")
+            flash("Ops! Tivemos um problema técnico ao gerar o link. Tente novamente.", "danger")
 
-    return redirect(url_for('get_perfil', id_usuario=current_user.id))
+    return redirect(url_for('dashboard', aba='configuracoes'))  # Fallback
 
 
 @app.route('/servir-foto-perfil/<int:usuario_id>')
@@ -3340,34 +3341,6 @@ def criar_postagem():
         flash("Houve um erro técnico ao salvar.", "danger")
 
     return redirect(request.referrer)
-
-def salvar_imagem_postagem(foto, usuario_id):
-    """
-    Processa a foto mantendo a proporção original.
-    Converte para WEBP e garante largura máxima de 1200px para qualidade.
-    """
-    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
-        return None
-
-    nome_arquivo = f"post_{usuario_id}_{int(datetime.now().timestamp())}.webp"
-    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
-
-    if not os.path.exists(pasta_destino):
-        os.makedirs(pasta_destino)
-
-    try:
-        img = Image.open(foto)
-
-        # Manter proporção original (Aspect Ratio)
-        # Redimensionamos apenas se for muito grande para economizar banda
-        max_size = (1200, 1200)
-        img.thumbnail(max_size, Image.Resampling.LANCZOS)
-
-        img.save(os.path.join(pasta_destino, nome_arquivo), "WEBP", quality=85)
-        return nome_arquivo
-    except Exception as e:
-        print(f"Erro ao processar imagem: {e}")
-        return None
 
 
 @app.route('/editar_post/<int:post_id>', methods=['POST'])

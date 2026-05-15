@@ -104,7 +104,6 @@ def processar_mudanca_nivel(usuario_alvo, novo_nivel, executor=None):
     # 2. APLICAÇÃO DO NÍVEL (A mudança física no banco)
     nivel_anterior = usuario_alvo.nivel_acesso
     usuario_alvo.nivel_acesso = novo_nivel
-
     # 3. GATILHO DE MÉRITO: O momento da "Condecoração"
     # Se o usuário ACABOU de atingir o Nível 10 (ou superior)
     if novo_nivel >= 10 and nivel_anterior < 10:
@@ -192,4 +191,44 @@ def salvar_imagem_postagem(foto, usuario_id):
         return nome_arquivo
     except Exception as e:
         print(f"Erro ao processar imagem: {e}")
+        return None
+
+
+def salvar_imagem_capa(foto, usuario_id):
+    """
+    Processa a foto da capa: converte para WEBP, redimensiona para 1200px de largura
+    e otimiza o peso do arquivo.
+    """
+    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
+        return None
+
+    nome_arquivo = f"capa_{usuario_id}_{int(datetime.now().timestamp())}.webp"
+    # Certifique-se que o caminho condiz com o seu app.config['UPLOAD_FOLDER_CAPAS']
+    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'capas')
+
+    if not os.path.exists(pasta_destino):
+        os.makedirs(pasta_destino)
+
+    try:
+        img = Image.open(foto)
+
+        # Converter para RGB (evita erro se a imagem for PNG com transparência)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        # Configuração para Capas: Largura de 1200px é o "sweet spot" para web
+        largura_alvo = 1200
+        proporcao = largura_alvo / float(img.size[0])
+        altura_alvo = int((float(img.size[1]) * float(proporcao)))
+
+        # Redimensiona mantendo a proporção
+        img = img.resize((largura_alvo, altura_alvo), Image.Resampling.LANCZOS)
+
+        # Salva em WEBP (Muito mais leve que JPG)
+        caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+        img.save(caminho_completo, "WEBP", quality=80)
+
+        return nome_arquivo
+    except Exception as e:
+        print(f"Erro ao processar capa: {e}")
         return None

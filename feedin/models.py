@@ -122,6 +122,18 @@ class Usuario(database.Model, UserMixin):
 
     identidade = database.relationship('IdentidadeCivil', back_populates='usuario', uselist=False)
 
+    convites_enviados_whats = database.relationship(
+        'Convite',
+        backref='remetente',
+        lazy=True,
+        foreign_keys='Convite.id_remetente'  # Aponta explicitamente para quem envia
+    )
+
+    @property
+    def convites_aceitos(self):
+        # Conta quantos convites enviados via whats resultaram em cadastro
+        return sum(1 for c in self.convites_enviados_whats if c.status_onboarding)
+
     # Atualize no Model Usuario
     interesses = database.relationship('Taxonomia',
                                        secondary=usuarios_interesses,
@@ -563,16 +575,23 @@ class VinculoUsuarioLocal(database.Model):
 
 
 # Convites via WhatsApp
+# Convites via WhatsApp
 class Convite(database.Model):
     __tablename__ = 'convites'
     __table_args__ = {'extend_existing': True}
     id = database.Column(database.Integer, primary_key=True)
+
+    # Chaves Estrangeiras
     id_remetente = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=True)
-    id_destinatario = database.Column(database.Integer, database.ForeignKey('usuario.id'),
-                                      nullable=True)  # Fica nulo até ele registrar
+    id_destinatario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=True)
+
+    # Relacionamentos Explícitos
+    # Isso ajuda o Flask-SQLAlchemy a não se perder ao acessar convite.usuario_remetente
+    usuario_remetente = database.relationship('Usuario', foreign_keys=[id_remetente])
+    usuario_confirmado = database.relationship('Usuario', foreign_keys=[id_destinatario])
     tipo_vinculo = database.Column(database.String(20))  # 'gosto', 'local' ou 'grupo'
     id_referencia = database.Column(database.Integer)  # ID da Taxonomia ou do Local
-    
+
     mensagem_personalizada = database.Column(database.Text)  # O "motivo" que o Pai escreveu
     # O "RG" do convite para consistência
     whatsapp_destino = database.Column(database.String(20), nullable=False)

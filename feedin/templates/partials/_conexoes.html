@@ -49,6 +49,11 @@
             <i class="bi bi-person-check"></i> <span class="d-none d-md-inline">Minha Rede</span>
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link rounded-4 py-2" id="pioneiro-tab" data-bs-toggle="tab" data-bs-target="#pioneiro" type="button" role="tab">
+            <i class="bi bi-patch-check"></i> <span class="d-none d-md-inline">Seja Pioneiro</span>
+        </button>
+    </li>
 </ul>
 
 <div class="tab-content" id="conexaoTabsContent">
@@ -95,6 +100,128 @@
             </div>
         </div>
     </div>
+
+{# --- TAB: SEJA PIONEIRO (CONVITES WHATSAPP) --- #}
+    <div class="tab-pane fade" id="pioneiro" role="tabpanel">
+
+        {# 1. Card de Progresso e Meta #}
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+            <div class="card-body p-4 text-center">
+                <div class="mb-3">
+                    <i class="bi bi-patch-check-fill text-primary" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="fw-bold text-dark">Campanha Beta: Seja um Pioneiro</h5>
+                <p class="text-muted small mx-auto" style="max-width: 450px;">
+                    Ajude-nos a resgatar a memória de Piracicaba. Convide 10 amigos reais para a rede e ganhe o selo de **Pioneiro Vitalício** no seu perfil.
+                </p>
+
+                {# Barra de Progresso #}
+                {% set total_aceitos = current_user.convites_enviados_whats | selectattr('status_onboarding', 'equalto', True) | list | length %}
+                {% set percentual = (total_aceitos / 10 * 100) | round | int %}
+                {% if percentual > 100 %}{% set percentual = 100 %}{% endif %}
+
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold">{{ total_aceitos }} de 10 amigos</span>
+                        <span class="small text-muted">{{ percentual }}%</span>
+                    </div>
+                    <div class="progress rounded-pill shadow-sm" style="height: 12px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                             role="progressbar" style="width: {{ percentual }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# 2. Formulário de Disparo #}
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-whatsapp text-success me-2"></i>Novo Convite via WhatsApp</h6>
+                <form action="{{ url_for('gerar_convite') }}" method="POST">
+                    {{ form_convite.csrf_token }}
+                    <div class="row g-2">
+                        <div class="col-12 col-md-5">
+                            <input type="text" name="nome_convidado" class="form-control rounded-3" placeholder="Nome do amigo(a)" required>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <input type="tel" name="whatsapp" class="form-control rounded-3" placeholder="DDD + Número (só números)" required>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button type="submit" class="btn btn-success w-100 rounded-3 fw-bold">
+                                Convidar
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-muted mt-2 mb-0" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i> Abriremos seu WhatsApp com uma mensagem personalizada.
+                    </p>
+                </form>
+            </div>
+        </div>
+
+        {# 3. Gestão de Convites Enviados #}
+        <div class="px-1">
+            <h6 class="text-uppercase text-muted fw-bold mb-3" style="font-size: 0.7rem; letter-spacing: 1px;">
+                <i class="bi bi-list-check me-1"></i> Gerenciar Convites Enviados
+            </h6>
+
+            <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="border-0 px-3 py-3">Convidado</th>
+                                <th class="border-0 py-3 text-center">Status</th>
+                                <th class="border-0 py-3 text-end px-3">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for conv in current_user.convites_enviados_whats %}
+                            <tr>
+                                <td class="px-3">
+                                    <span class="fw-bold text-dark">{{ conv.whatsapp_destino }}</span>
+                                    <div class="text-muted" style="font-size: 0.7rem;">Enviado há {{ conv.data_criacao | tempo_atras }}</div>
+                                </td>
+                                <td class="text-center">
+                                    {% if conv.status_onboarding %}
+                                        <span class="badge bg-success-subtle text-success rounded-pill px-3">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Aceito
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning-subtle text-warning rounded-pill px-3">
+                                            <i class="bi bi-clock-history me-1"></i>Pendente
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end px-3">
+                                    {% if not conv.status_onboarding %}
+                                        {# Botão para reenviar (dispara a mesma rota) #}
+                                        <form action="{{ url_for('gerar_convite') }}" method="POST" class="d-inline">
+                                            {{ form_convite.csrf_token }}
+                                            <input type="hidden" name="whatsapp" value="{{ conv.whatsapp_destino }}">
+                                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-circle" title="Reenviar Mensagem">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <i class="bi bi-person-check-fill text-success fs-5"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center py-5 text-muted fst-italic">
+                                    Você ainda não enviou convites via WhatsApp.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     {# --- TAB: SUGESTÕES (CORRIGIDA) --- #}
     <div class="tab-pane fade" id="sugestoes" role="tabpanel">
@@ -305,3 +432,26 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. Pega os parâmetros da URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const activeTab = urlParams.get('tab');
+
+    // 2. Se existir o parâmetro 'tab', procura o botão correspondente e clica nele
+    if (activeTab) {
+        const tabButton = document.querySelector(`#${activeTab}-tab`);
+        if (tabButton) {
+            // Remove o 'active' da aba padrão (pendentes)
+            document.querySelectorAll('#conexaoTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+
+            // Ativa a aba solicitada
+            const targetPane = document.querySelector(`#${activeTab}`);
+            tabButton.classList.add('active');
+            targetPane.classList.add('show', 'active');
+        }
+    }
+});
+</script>

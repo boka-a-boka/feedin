@@ -47,7 +47,7 @@
 
 <div class="card border-0 shadow-sm rounded-4 bg-light mx-auto" style="max-width: 1000px; width: 100%;">
     <div class="card-body p-4 p-md-5">
-        <form action="{{ url_for('gerar_convite') }}" method="POST">
+        <form action="{{ url_for('gerar_convite') }}" method="POST" target="_blank">
             {{ form_convite.csrf_token }}
 
             <div class="row">
