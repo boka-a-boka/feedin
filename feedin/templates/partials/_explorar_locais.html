@@ -115,25 +115,33 @@
                     <div class="modal-body">
                         <div class="row g-3">
                             <div class="col-12">
-                                <label class="small fw-bold text-muted">NOME COMPLETO DO LOCAL</label>
+                                <label class="small fw-bold text-muted">NOME COMPLETO DO LOCAL <span class="text-danger">*</span></label>
                                 <input type="text" name="nome" id="final_nome_local" class="form-control form-control-lg border-2 border-primary-subtle" required>
                             </div>
+
+                            <!-- Alterado para Obrigatório -->
                             <div class="col-md-6">
-                                <label class="small fw-bold text-muted">RUA / LOGRADOURO</label>
-                                <input type="text" name="logradouro" class="form-control" placeholder="Ex: Av. Independência, 100">
+                                <label class="small fw-bold text-muted">RUA / LOGRADOURO <span class="text-danger">*</span></label>
+                                <input type="text" name="logradouro" class="form-control" placeholder="Ex: Av. Independência, 100" required>
                             </div>
+
+                            <!-- Alterado para Obrigatório -->
                             <div class="col-md-6">
-                                <label class="small fw-bold text-muted">BAIRRO</label>
-                                <input type="text" name="bairro" class="form-control" placeholder="Ex: Centro">
+                                <label class="small fw-bold text-muted">BAIRRO <span class="text-danger">*</span></label>
+                                <input type="text" name="bairro" class="form-control" placeholder="Ex: Centro" required>
                             </div>
+
                             <div class="col-md-8">
-                                <label class="small fw-bold text-primary">CIDADE</label>
+                                <label class="small fw-bold text-primary">CIDADE <span class="text-danger">*</span></label>
                                 <input type="text" name="localizacao" class="form-control border-primary" placeholder="Em qual cidade fica?" required>
                             </div>
+
+                            <!-- Alterado para Obrigatório -->
                             <div class="col-md-4">
-                                <label class="small fw-bold text-muted">ESTADO (UF)</label>
-                                <input type="text" name="estado" class="form-control text-center" value="SP" maxlength="2">
+                                <label class="small fw-bold text-muted">ESTADO (UF) <span class="text-danger">*</span></label>
+                                <input type="text" name="estado" class="form-control text-center" value="SP" maxlength="2" required>
                             </div>
+
                             <div class="col-12">
                                 <label class="small fw-bold text-muted">O LOCAL AINDA ESTÁ ATIVO?</label>
                                 <select name="esta_ativo" class="form-select">

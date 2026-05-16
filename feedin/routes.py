@@ -2678,15 +2678,13 @@ def incrementar_uso_taxonomia(termo_id):
 @app.route('/gerar-convite', methods=['POST'])
 @login_required
 def gerar_convite():
-    form = FormConvite()
+    form = FormConvite() # Garanta que a classe FormConvite está importada
 
     if form.validate_on_submit():
         # 1. Captura e Limpeza de Dados
-        # Remove qualquer caractere que não seja número
         numero_destino = re.sub(r'\D', '', form.whatsapp.data)
         nome_amigo = form.nome_convidado.data or "Amigo(a)"
 
-        # Captura o contexto selecionado
         contexto_raw = request.form.get('contexto_convite')
         tipo_vinculo = None
         id_referencia = None
@@ -2712,7 +2710,7 @@ def gerar_convite():
                 flash(f"Você já enviou um convite para {nome_amigo}!", "info")
             else:
                 flash("Este número já recebeu um convite de outro membro do FeedIn.", "warning")
-            return redirect(url_for('dashboard', aba='configuracoes'))  # Ou onde o form estiver
+            return redirect(url_for('dashboard', aba='configuracoes'))
 
         # 3. Criação do Registro
         novo_convite = Convite(
@@ -2733,7 +2731,6 @@ def gerar_convite():
                                     contexto=contexto_raw,
                                     _external=True)
 
-            # Mensagem otimizada para conversão
             if tipo_vinculo:
                 texto_base = (
                     f"Olá {nome_amigo}! Aqui é o {current_user.username}. "
@@ -2748,10 +2745,10 @@ def gerar_convite():
                     f"Crie seu perfil pelo link e me ajude a crescer a nossa rede: {link_registro}"
                 )
 
-            # Ajuste do prefixo internacional (WhatsApp API exige 55 para BR)
+            # Ajuste do prefixo internacional
             numero_completo = numero_destino if numero_destino.startswith('55') else "55" + numero_destino
 
-            # Encode da mensagem para URL
+            # Encode seguro da mensagem para URL usando urllib.parse.quote
             whatsapp_url = f"https://api.whatsapp.com/send?phone={numero_completo}&text={quote(texto_base)}"
 
             return redirect(whatsapp_url)
@@ -2761,7 +2758,8 @@ def gerar_convite():
             app.logger.error(f"Erro ao salvar convite: {e}")
             flash("Ops! Tivemos um problema técnico ao gerar o link. Tente novamente.", "danger")
 
-    return redirect(url_for('dashboard', aba='configuracoes'))  # Fallback
+    # Se a validação do form falhar, retorna para a página de configurações
+    return redirect(url_for('dashboard', aba='configuracoes'))
 
 
 @app.route('/servir-foto-perfil/<int:usuario_id>')
