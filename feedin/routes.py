@@ -3425,7 +3425,6 @@ def criar_postagem():
     # --- NOVA TRAVA DE SEGURANÇA: VALIDAÇÃO DE VÍNCULO/SEGUIDOR ---
     if local:
         # Verifica se o usuário já tem um vínculo (segue/atividade) com este local
-        # Ajuste 'AtividadeLocal' para a tabela onde você grava quem segue quem
         segue_local = AtividadeLocal.query.filter_by(
             id_criador=current_user.id,
             id_local=local.id
@@ -3434,16 +3433,16 @@ def criar_postagem():
         if not segue_local:
             flash(f"Para postar no mural do {local.nome}, você precisa primeiro segui-lo!", "warning")
             return redirect(url_for('perfil_local', local_id=local.id))
-    # --- FIM DA TRAVA -
+    # --- FIM DA TRAVA ---
 
     # 2. Lógica de Construção de Narrativa (O "Cérebro" da Rota)
-    # Se for um vínculo inicial, montamos o texto base caso o usuário não tenha escrito nada
     if tipo_postagem == 'vinculo':
         texto_gerado = f"Resgatou uma memória"
-        if epoca: texto_gerado += f" da época de {epoca}"
-        if relato_extra: texto_gerado += f": {relato_extra}"
+        if epoca:
+            texto_gerado += f" da época de {epoca}"
+        if relato_extra:
+            texto_gerado += f": {relato_extra}"
 
-        # Se o usuário escreveu algo a mais no campo conteúdo, concatenamos
         conteudo = f"{texto_gerado}. {conteudo}" if conteudo else texto_gerado
 
     # 3. Validação de Regras de Negócio
@@ -3451,8 +3450,6 @@ def criar_postagem():
         flash("Sua memória precisa de um texto ou uma imagem!", "warning")
         return redirect(request.referrer)
 
-    # Definição de quando a imagem é obrigatória
-    # Não é obrigatória em: locais históricos, postagens de vínculo ou tipos específicos sem foto
     imagem_obrigatoria = True
     if (local and not local.esta_ativo) or tipo_postagem in ['vinculo', 'obito']:
         imagem_obrigatoria = False
@@ -3483,6 +3480,10 @@ def criar_postagem():
             ativo=True
         )
 
+        # Prepara o ID da postagem na sessão antes de criar os vínculos e marcações
+        database.session.add(nova_postagem)
+        database.session.flush()
+
         # 2. Lógica de Vínculo (Só cria se for 'vinculo' e se ainda não existir)
         if tipo_postagem == 'vinculo' and local:
             vinculo_existente = AtividadeLocal.query.filter_by(
@@ -3506,11 +3507,31 @@ def criar_postagem():
             ids_t = [int(i) for i in tags_ids.split(',') if i.strip().isdigit()]
             nova_postagem.tags_afinidade.extend(Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all())
 
-        # 4. Salva tudo
-        database.session.add(nova_postagem)
-        database.session.commit()
+        # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS ---
+        pessoas_ids = request.form.get('pessoas_ids', '')
+        if pessoas_ids:
+            ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
 
+            for id_marcado in ids_p:
+                if id_marcado == current_user.id:
+                    continue
+
+                nova_notificacao = Memoria(
+                    id_usuario=id_marcado,
+                    id_local=local.id if local else None,
+                    titulo="Você foi marcado!",
+                    descricao="marcou você em uma publicação.",
+                    id_conexao=None,
+                    privacidade="privado",
+                    data_criacao=datetime.now(timezone.utc)
+                )
+                database.session.add(nova_notificacao)
+        # --- FIM DA LÓGICA DE MARCAÇÃO ---
+
+        # 4. Salva tudo definitivamente no banco
+        database.session.commit()
         flash("Memória compartilhada com sucesso!", "success")
+
     except Exception as e:
         database.session.rollback()
         print(f"--- ERRO CRÍTICO NA POSTAGEM: {e} ---")

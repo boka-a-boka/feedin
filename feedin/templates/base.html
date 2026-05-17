@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <style>''
+    <style>
         :root {
             --primary-color: #1e3c72;
             --secondary-color: #2a5298;
@@ -57,8 +57,8 @@
 
                     {% if request.endpoint not in ['newuser', 'registro'] %}
                         <a href="{{ url_for('newuser') }}"
-                           class="btn btn-sm btn-primary rounded-pill px-3 fw-bold shadow-sm"
-                           style="font-size: 0.85rem;">
+                           class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                           style="background-color: #1e3c72; color: #ffffff; border: 1px solid #1e3c72; font-size: 0.85rem;">
                             Criar conta
                         </a>
                     {% endif %}
