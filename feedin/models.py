@@ -48,6 +48,50 @@ taxonomia_conexoes = database.Table('taxonomia_conexoes',
     extend_existing=True)
 # Tabela de ligação para a Hierarquia Multifacetada
 
+
+class Desconexoes(database.Model):
+    __tablename__ = 'desconexoes'
+    id = database.Column(database.Integer, primary_key=True)
+
+    # Referência à conexão original que foi quebrada (para manter o histórico do contexto)
+    id_conexao_original = database.Column(database.Integer, nullable=False)
+
+    # Quem tomou a iniciativa de se afastar (fundamental para sabermos quem "esqueceu")
+    id_solicitante = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_ex_parceiro = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+
+    # O contexto original da conexão que está sendo desfeita (dados preservados da tabela Conexoes)
+    categoria_original = database.Column(database.String(20))
+    id_local_contexto = database.Column(database.Integer, nullable=True)
+    data_original_aceite = database.Column(database.DateTime, nullable=True)
+
+    # O registro do arrependimento ou quebra
+    data_desconexao = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+    motivo_desconexao = database.Column(database.Text, nullable=True)  # Anotação de uso pessoal do solicitante
+
+    # Relacionamentos lógicos
+    solicitante = database.relationship('Usuario', foreign_keys=[id_solicitante], backref='desconexoes_iniciadas')
+
+
+class Bloqueios(database.Model):
+    __tablename__ = 'bloqueios'
+    id = database.Column(database.Integer, primary_key=True)
+
+    # O Muro entre as duas pessoas
+    id_autor = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_alvo = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    data_bloqueio = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # O contexto de inteligência da plataforma
+    id_local_contexto = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=True)
+    categoria_motivo = database.Column(database.String(30), nullable=False,
+                                       default='outros')  # 'importunacao', 'perfil_falso', 'comportamento_abusivo', 'outros'
+    relato_usuario = database.Column(database.Text, nullable=True)
+
+    # Relacionamento para o painel de administração (backref sutil)
+    alvo = database.relationship('Usuario', foreign_keys=[id_alvo], backref='bloqueios_recebidos')
+
+
 class Taxonomia(database.Model):
     __tablename__ = 'taxonomia'
     __table_args__ = {'extend_existing': True}

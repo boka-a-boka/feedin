@@ -11,7 +11,7 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            AtividadeLocal, VinculoUsuarioLocal, Taxonomia, LocalMidia, Convite,
                            taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
-                           AvaliacaoLocal, Notificacao)
+                           AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes)
 
 from feedin.utils import salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa, salvar_imagem_postagem
 from werkzeug.utils import secure_filename
@@ -1381,37 +1381,113 @@ def aceitar_conexao(conexao_id):
 @app.route('/desfazer_conexao/<int:usuario_id>', methods=['POST'])
 @login_required
 def desfazer_conexao(usuario_id):
-    # Procura a conexão ativa entre os dois usuários (em qualquer sentido: A->B ou B->A)
+    """
+    Desconecta o usuário salvando todo o contexto e motivos em uma tabela
+    de histórico dedicada, limpando o feed e a listagem ativa.
+    """
+    # 1. Localiza a conexão ativa
     conexao = Conexoes.query.filter(
         ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == usuario_id) & (
                     Conexoes.status == 'aceito')) |
         ((Conexoes.id_remetente == usuario_id) & (Conexoes.id_destinatario == current_user.id) & (
                     Conexoes.status == 'aceito'))
-    ).first()
+    ).first_or_404()
 
-    if not conexao:
-        flash('Conexão não encontrada ou já desfeita.', 'warning')
-        return redirect(request.referrer)
+    # Pega o motivo vindo do formulário (se houver)
+    motivo = request.form.get('motivo_desconexao', '')
 
     try:
-        # Mudamos o status para 'desfeito' de forma silenciosa
-        conexao.status = 'desfeito'
+        # 2. Registra o histórico detalhado na nova tabela
+        historico = Desconexoes(
+            id_conexao_original=conexao.id,
+            id_solicitante=current_user.id,
+            id_ex_parceiro=usuario_id,
+            categoria_original=conexao.categoria,
+            id_local_contexto=conexao.id_local_contexto,
+            data_original_aceite=conexao.data_aceite,
+            motivo_desconexao=motivo
+        )
+        database.session.add(historico)
 
-        # Opcional: Se você quiser sumir com a publicação antiga do feed que dizia "Rede Fortalecida!"
-        # podemos buscar a Memória vinculada a essa conexão e desativá-la
-        memoria_vinculada = Memoria.query.filter_by(id_conexao=conexao.id).first()
-        if memoria_vinculada:
-            database.session.delete(memoria_vinculada)  # Remove a postagem do feed para sumir com o rastro
+        # 3. Atualiza o status na tabela principal para tirá-los da rede ativa
+        conexao.status = 'desconectado'
+
+        # 4. Esconde a Memória Social mudando a privacidade para privado
+        memoria_social = Memoria.query.filter_by(id_conexao=conexao.id).first()
+        if memoria_social:
+            memoria_social.privacidade = 'privado'
 
         database.session.commit()
-        flash('Conexão desfeita com sucesso.', 'success')
+        flash('Vínculo desfeito com sucesso. Seu espaço foi atualizado.', 'success')
 
     except Exception as e:
         database.session.rollback()
-        print(f"--- ERRO AO DESFAZER CONEXÃO: {e} ---")
-        flash('Erro técnico ao processar a solicitação.', 'danger')
+        flash('Erro ao processar a desconexão.', 'danger')
+        print(f"Erro ao salvar histórico de desconexão: {e}")
 
-    return redirect(request.referrer)
+    return redirect(url_for('dashboard', aba='conexoes'))
+
+
+@app.route('/bloquear_usuario/<int:id_alvo>', methods=['POST'])
+@login_required
+def bloquear_usuario(id_alvo):
+    """
+    Bloqueio definitivo por transição de status.
+    Preserva todo o histórico de conexões e desconexões passadas para fins de auditoria.
+    """
+    if id_alvo == current_user.id:
+        flash("Ação inválida.", "danger")
+        return redirect(url_for('dashboard'))
+
+    # Coleta de contexto para a inteligência de segurança
+    categoria = request.form.get('categoria_motivo', 'outros')
+    relato = request.form.get('relato_usuario', '')
+    local_id = request.form.get('id_local_contexto')
+
+    try:
+        # 1. SOFT DELETE: Em vez de apagar, muda o status da conexão para 'bloqueado'
+        # Captura qualquer vínculo (pendente, aceito ou já desconectado) e altera o estado
+        conexoes_mutuas = Conexoes.query.filter(
+            ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == id_alvo)) |
+            ((Conexoes.id_remetente == id_alvo) & (Conexoes.id_destinatario == current_user.id))
+        ).all()
+
+        for conexao in conexoes_mutuas:
+            conexao.status = 'bloqueado'
+
+        # 2. HISTÓRICO DE DESCONEXÕES: Não mexemos em nada!
+        # Deixamos as linhas da tabela Desconexoes intactas, pois servem de prova cronológica.
+
+        # 3. REGISTRO DO MURO (Inteligência para o Admin)
+        # Criamos o registro na tabela Bloqueios para o sistema saber quem foi o autor da ação
+        ja_bloqueado = Bloqueios.query.filter_by(id_autor=current_user.id, id_alvo=id_alvo).first()
+
+        if not ja_bloqueado:
+            novo_bloqueio = Bloqueios(
+                id_autor=current_user.id,
+                id_alvo=id_alvo,
+                id_local_contexto=int(local_id) if local_id else None,
+                categoria_motivo=categoria,
+                relato_usuario=relato
+            )
+            database.session.add(novo_bloqueio)
+
+        # 4. OCULTAR MEMÓRIA SOCIAL DO FEED
+        # Garante que qualquer memória atrelada às conexões alteradas fique privada imediatamente
+        for conexao in conexoes_mutuas:
+            memoria_social = Memoria.query.filter_by(id_conexao=conexao.id).first()
+            if memoria_social:
+                memoria_social.privacidade = 'privado'
+
+        database.session.commit()
+        flash("Usuário bloqueado permanentemente.", "success")
+
+    except Exception as e:
+        database.session.rollback()
+        flash("Erro ao processar o bloqueio definitivo.", "danger")
+        print(f"Erro crítico na rota bloquear_usuario: {e}")
+
+    return redirect(url_for('dashboard', aba='conexoes'))
 
 
 @app.route("/responder_convite/<int:id_convite>/<string:acao>", methods=['POST', 'GET'])
@@ -1565,41 +1641,90 @@ def concluir_etapa_pioneiro():
 
 @login_required
 def enviar_solicitacao(id_destinatario):
-    # 1. Coleta os dados do formulário (que virão do card de sugestão ou perfil)
-    categoria = request.form.get('categoria') # 'familia', 'social', 'profissional'
-    id_referencia = request.form.get('id_referencia') # O "Gilmar" (fiador)
-    id_contexto = request.form.get('id_contexto') # ID do Grupo ou Empresa
-    id_parentesco = request.form.get('id_parentesco') # ID do Grau (se for família)
+    # Coleta os dados básicos do formulário
+    categoria = request.form.get('categoria')
+    id_referencia = request.form.get('id_referencia')
+    id_contexto = request.form.get('id_contexto')
+    id_parentesco = request.form.get('id_parentesco')
 
-    # 2. Verifica se já existe uma conexão pendente ou aceita para evitar duplicidade
+    # Parâmetro preventivo: indica se o usuário já clicou em "Ignorar aviso e conectar mesmo assim"
+    confirmado_historico = request.form.get('confirmado_historico') == 'true'
+
+    # 1. PROTEÇÃO/MEMÓRIA SOCIAL: Verifica se o usuário já desfez vínculo com essa pessoa no passado
+    historico_rompimento = Desconexoes.query.filter_by(
+        id_solicitante=current_user.id,
+        id_ex_parceiro=id_destinatario
+    ).order_by(Desconexoes.data_desconexao.desc()).first()
+
+    # Se existe um passado e o usuário NÃO clicou no botão de confirmação forçada ainda:
+    if historico_rompimento and not confirmado_historico:
+        data_str = historico_rompimento.data_desconexao.strftime('%d/%m/%Y')
+        motivo = historico_rompimento.motivo_desconexao or "Nenhum motivo anotado na época."
+
+        # Alerta o usuário trazendo o motivo guardado na "caixa-preta"
+        flash(
+            f"⚠️ Lembrete do FeedIn: Você desfez um vínculo com este usuário em {data_str}. "
+            f"Sua anotação na época foi: '{motivo}'. Verifique se deseja restabelecer o contato.",
+            "warning"
+        )
+        # Retorna para o dashboard. Na interface, você pode usar esse flash para renderizar
+        # um botão de envio contendo o input 'confirmado_historico' como 'true'.
+        return redirect(url_for('dashboard'))
+
+    # 2. Verifica se já existe uma conexão ATIVA ou PENDENTE para evitar duplicidade
     existente = Conexoes.query.filter(
         ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == id_destinatario)) |
         ((Conexoes.id_remetente == id_destinatario) & (Conexoes.id_destinatario == current_user.id))
-    ).first()
+    ).filter(Conexoes.status.in_(['pendente', 'aceito'])).first()  # <-- Importante: foca apenas nas ativas/pendentes
 
     if existente:
-        flash("Já existe uma solicitação ou conexão com este usuário.", "info")
+        flash("Já existe uma solicitação ou conexão ativa com este usuário.", "info")
         return redirect(url_for('dashboard'))
 
-    # 3. Cria a nova Conexão centralizada
-    nova_conexao = Conexoes(
-        id_remetente=current_user.id,
-        id_destinatario=id_destinatario,
-        id_referencia_comum=id_referencia if id_referencia else None,
-        categoria=categoria,
-        id_parentesco=id_parentesco if categoria == 'familia' else None,
-        id_grupo_social=id_contexto if categoria == 'social' else None,
-        id_empresa_contexto=id_contexto if categoria == 'profissional' else None,
-        status='pendente'
-    )
+    # 3. REAPROVEITAMENTO OU CRIAÇÃO DA CONEXÃO
+    # Se a conexão anterior estava como 'desconectado', nós apenas limpamos e reativamos a linha existente
+    conexao_antiga = Conexoes.query.filter(
+        ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == id_destinatario)) |
+        ((Conexoes.id_remetente == id_destinatario) & (Conexoes.id_destinatario == current_user.id))
+    ).filter_by(status='desconectado').first()
 
     try:
-        database.session.add(nova_conexao)
+        if conexao_antiga:
+            # Atualiza a linha antiga para evitar inflar o banco com duplicados do mesmo par
+            conexao_antiga.id_remetente = current_user.id  # Garante que o remetente atual é quem está pedindo agora
+            conexao_antiga.id_destinatario = id_destinatario
+            conexao_antiga.status = 'pendente'
+            conexao_antiga.data_solicitacao = datetime.now(timezone.utc)
+            conexao_antiga.categoria = categoria
+            conexao_antiga.id_referencia_comum = id_referencia if id_referencia else None
+            conexao_antiga.id_parentesco = id_parentesco if categoria == 'familia' else None
+            conexao_antiga.id_grupo_social = id_contexto if categoria == 'social' else None
+            conexao_antiga.id_empresa_contexto = id_contexto if categoria == 'profissional' else None
+
+            # Reseta as datas de aceite/recusa antigas para o novo ciclo
+            conexao_antiga.data_aceite = None
+            conexao_antiga.data_recusa = None
+        else:
+            # Se nunca houve conexão nenhuma antes, cria uma nova do zero
+            nova_conexao = Conexoes(
+                id_remetente=current_user.id,
+                id_destinatario=id_destinatario,
+                id_referencia_comum=id_referencia if id_referencia else None,
+                categoria=categoria,
+                id_parentesco=id_parentesco if categoria == 'familia' else None,
+                id_grupo_social=id_contexto if categoria == 'social' else None,
+                id_empresa_contexto=id_contexto if categoria == 'profissional' else None,
+                status='pendente'
+            )
+            database.session.add(nova_conexao)
+
         database.session.commit()
         flash("Solicitação de conexão enviada com sucesso!", "success")
+
     except Exception as e:
         database.session.rollback()
         flash("Erro ao enviar solicitação.", "danger")
+        print(f"Erro na rota enviar_solicitacao: {e}")
 
     return redirect(url_for('dashboard'))
 
@@ -1628,6 +1753,29 @@ def cancelar_convite(id_conexao):
         print(f"Erro ao cancelar: {e}")
 
     return redirect(url_for('dashboard', aba='conexoes'))
+
+
+def analisar_perfis_de_risco(limite_bloqueios=3, dias_retroativos=30):
+    """
+    Varre o banco de dados em busca de usuários que receberam múltiplos bloqueios
+    de pessoas diferentes recentemente, indicando um potencial stalker.
+    """
+    desde_quando = datetime.now(timezone.utc) - timedelta(days=dias_retroativos)
+
+    # Query que agrupa os bloqueios por usuário alvo e conta quantos ele recebeu
+    alertas = database.session.query(
+        Bloqueios.id_alvo,
+        database.func.count(Bloqueios.id).label('total_bloqueios')
+    ).filter(
+        Bloqueios.data_bloqueio >= desde_quando
+    ).group_by(
+        Bloqueios.id_alvo
+    ).having(
+        database.func.count(Bloqueios.id) >= limite_bloqueios
+    ).all()
+
+    return alertas  # Retorna uma lista de [ (id_do_sujeito, quantidade_de_bloqueios), ... ]
+
 
 # ------------> Rotas para tratamento de ações administrativas
 def apenas_admin(f):

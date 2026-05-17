@@ -78,6 +78,19 @@
         background: linear-gradient(135deg, #D4AF37 0%, #a87f32 100%);
     }
 
+    /* Botão Conectado Dinâmico para Desconexão */
+    .btn-conectado {
+        transition: all 0.2s ease-in-out;
+    }
+    .btn-conectado:hover {
+        background-color: #dc3545 !important;
+        border-color: #dc3545 !important;
+        color: white !important;
+    }
+    .btn-conectado:hover i::before {
+        content: "\f62a"; /* Altera o ícone para bi-person-x-fill no hover */
+    }
+
     @media (max-width: 768px) {
         .fab-container { bottom: 20px; right: 20px; }
         .fab-postagem { width: 55px; height: 55px; font-size: 24px; }
@@ -133,7 +146,6 @@
 
                     {% if signo_nome %}
                         <span class="ms-2 badge bg-light text-primary border-0 fw-medium shadow-sm">
-                            {# Aqui o ícone deve aparecer se a versão do BI for a 1.11.3 #}
                             <i class="{{ signo_icone }} me-1"></i> {{ signo_nome }}
                         </span>
                     {% endif %}
@@ -166,8 +178,12 @@
                             </form>
                         {% endif %}
                     {% elif conexao.status == 'aceito' %}
-                        {# Caso 3: Já são amigos #}
-                        <button class="btn btn-outline-primary rounded-pill px-4 fw-bold shadow-sm disabled">
+                        {# Caso 3: Já são amigos -> AGORA ATIVO PARA DESCONEXÃO #}
+                        <button type="button"
+                                class="btn btn-outline-primary btn-conectado rounded-pill px-4 fw-bold shadow-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalDesconexao"
+                                data-nome="{{ user_alvo.perfil.nome_completo or user_alvo.username }}">
                             <i class="bi bi-person-check-fill me-2"></i>Conectado
                         </button>
                     {% endif %}
@@ -246,7 +262,6 @@
                         </small>
                     </div>
 
-                    {# Se houver posts ocultos e não for o próprio dono, mostra o aviso didático #}
                     {% if not e_o_proprio and postagens|length < total_postagens %}
                         <span class="badge bg-light text-secondary border shadow-sm p-2"
                               style="font-size: 0.75rem; max-width: 300px; white-space: normal; text-align: left;"
@@ -323,10 +338,55 @@
             </div>
         </div>
     </div>
+
+    {# --- MODAL DINÂMICO DE DESCONEXÃO --- #}
+    {% if conexao %}
+    <div class="modal fade" id="modalDesconexao" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-light border-0 py-3">
+                    <h5 class="modal-title fw-bold text-dark">
+                        <i class="bi bi-person-x-fill text-danger me-2"></i>Desfazer Conexão
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <p class="text-dark">
+                        Tem certeza que deseja remover sua conexão com <strong id="nomeUsuarioDesconexao"></strong>?
+                    </p>
+                    <p class="text-muted small mb-0">
+                        Vocês deixarão de compartilhar atualizações diretas na rede de confiança, mas as memórias públicas compartilhadas em locais históricos continuarão visíveis no mapa.
+                    </p>
+                </div>
+                <div class="modal-footer border-0 p-3 bg-light rounded-bottom-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-light rounded-pill px-3 fw-bold small" data-bs-dismiss="modal">Manter Conectado</button>
+                    <form action="{{ url_for('cancelar_convite', id_conexao=conexao.id) }}" method="POST" class="m-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold small">Confirmar Desconexão</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Manipulação dinâmica do modal de desconexão
+        const modalDesconexao = document.getElementById('modalDesconexao');
+        if (modalDesconexao) {
+            modalDesconexao.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const nome = button.getAttribute('data-id') || button.getAttribute('data-nome');
+                const spanNome = modalDesconexao.querySelector('#nomeUsuarioDesconexao');
+                if (spanNome) spanNome.textContent = nome;
+            });
+        }
+    });
+
     function registrarReacaoSocial(postId, tipoReacao) {
         $.ajax({
             url: "/reagir_post/" + postId + "/" + tipoReacao,
@@ -363,7 +423,6 @@
 
     window.uploadCapaAutomatica = function(input) {
         if (input.files && input.files[0]) {
-            // Opcional: Mostrar um loading ou trocar o cursor para indicar processamento
             document.body.style.cursor = 'wait';
 
             const formData = new FormData();
@@ -378,7 +437,6 @@
                 contentType: false,
                 success: function(response) {
                     if (response.status === "success") {
-                        // Recarrega a página para mostrar a nova capa
                         window.location.reload();
                     } else {
                         alert("Erro ao atualizar capa.");

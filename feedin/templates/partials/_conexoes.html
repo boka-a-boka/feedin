@@ -101,7 +101,7 @@
         </div>
     </div>
 
-{# --- TAB: SEJA PIONEIRO (CONVITES WHATSAPP) --- #}
+    {# --- TAB: SEJA PIONEIRO (CONVITES WHATSAPP) --- #}
     <div class="tab-pane fade" id="pioneiro" role="tabpanel">
 
         {# 1. Card de Progresso e Meta #}
@@ -222,7 +222,6 @@
         </div>
     </div>
 
-
     {# --- TAB: SUGESTÕES (CORRIGIDA) --- #}
     <div class="tab-pane fade" id="sugestoes" role="tabpanel">
         <div class="card border-0 shadow-sm rounded-4 bg-transparent">
@@ -313,7 +312,7 @@
         </div>
     </div>
 
-{# --- TAB: REDE --- #}
+    {# --- TAB: REDE --- #}
     <div class="tab-pane fade" id="rede" role="tabpanel" aria-labelledby="rede-tab">
         <div class="card border-0 bg-transparent">
             <div class="card-body p-0">
@@ -396,19 +395,19 @@
                                                             {{ amigo.total_locais_comum|default(0) }} em comum
                                                         </small>
                                                     </div>
-                                                    <div class="d-flex align-items-center">
-                                                        <i class="bi bi-heart-fill text-primary me-1" style="font-size: 0.7rem;"></i>
-                                                        <small class="text-muted" style="font-size: 0.7rem;">
-                                                            {{ amigo.total_prefs_comum|default(0) }} interesses
-                                                        </small>
-                                                    </div>
                                                 </div>
 
-                                                {# Lado Direito: Ação #}
-                                                <div class="col-auto">
-                                                    <a href="{{ url_for('ver_perfil', usuario_id=amigo.id) }}"
-                                                       class="btn btn-light btn-sm rounded-circle shadow-sm border">
-                                                    </a>
+                                                {# Lado Direito: Ação de Bloqueio Executiva #}
+                                                <div class="col-auto" onclick="event.stopPropagation();">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm rounded-circle shadow-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalBloqueio"
+                                                            data-id="{{ amigo.id }}"
+                                                            data-nome="{{ amigo.perfil.nome_completo if amigo.perfil else amigo.username }}"
+                                                            title="Bloquear Usuário">
+                                                        <i class="bi bi-shield-slash"></i>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -423,7 +422,7 @@
                             <h6 class="text-secondary fw-bold">Sua rede ainda está crescendo</h6>
                             <p class="text-muted small px-4 mb-3">Aceite convites ou explore sugestões para encontrar conhecidos.</p>
                             <button class="btn btn-primary btn-sm rounded-pill px-4" onclick="document.getElementById('sugestoes-tab').click()">
-                                Explorar Sugestões
+                                Explore Sugestões
                             </button>
                         </div>
                     {% endif %}
@@ -431,27 +430,97 @@
             </div>
         </div>
     </div>
+
+</div>
+
+<!-- ==========================================
+     MODAL DE BLOQUEIO IRREVERSÍVEL (PREVENTIVO)
+     ========================================== -->
+<div class="modal fade" id="modalBloqueio" tabindex="-1" aria-labelledby="modalBloqueioLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white rounded-top-4 border-0 py-3">
+                <h5 class="modal-title fw-bold" id="modalBloqueioLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Ação Irreversível
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-close="modal" aria-label="Close"></button>
+            </div>
+
+            <form id="formBloqueio" action="" method="POST">
+                {{ form_convite.csrf_token }}
+                <!-- Contexto oculto opcional caso o bloqueio ocorra dentro de um local específico -->
+                <input type="hidden" name="id_local_contexto" value="{{ local_atual_id|default('') }}">
+
+                <div class="modal-body p-4">
+                    <p class="text-dark mb-3">
+                        Você está prestes a bloquear permanentemente <strong id="nomeUsuarioBloqueio"></strong>.
+                    </p>
+                    <div class="alert alert-warning rounded-3 small mb-3 text-dark">
+                        <ul class="mb-0 ps-3">
+                            <li>Seus vínculos e status mudarão para sempre.</li>
+                            <li>Vocês deixarão de existir um para o outro no Feed e buscas.</li>
+                            <li>Esta ação é definitiva para segurança da sua memória social.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Coleta de Inteligência para Monitoramento de Stalkers/Importunadores -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Motivo do Bloqueio (Uso da Plataforma):</label>
+                        <select name="categoria_motivo" class="form-select rounded-3 small" required>
+                            <option value="outros" selected>Outros motivos / Particular</option>
+                            <option value="importunacao">Importunação / Stalking</option>
+                            <option value="perfil_falso">Perfil Falso / Suspeito</option>
+                            <option value="comportamento_abusivo">Comportamento Inadequado</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label small fw-bold text-muted">Relato Adicional (Opcional/Confidencial):</label>
+                        <textarea name="relato_usuario" class="form-control rounded-3 small" rows="2" placeholder="Detalhes que ajudem a administração a auditar este perfil..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0 p-3 bg-light rounded-bottom-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-light rounded-pill px-3 small fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 small fw-bold">Confirmar Bloqueio</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    // 1. Pega os parâmetros da URL
+    // 1. Controle das Abas via Parâmetros de URL
     const urlParams = new URLSearchParams(window.location.search);
     const activeTab = urlParams.get('tab');
 
-    // 2. Se existir o parâmetro 'tab', procura o botão correspondente e clica nele
     if (activeTab) {
         const tabButton = document.querySelector(`#${activeTab}-tab`);
         if (tabButton) {
-            // Remove o 'active' da aba padrão (pendentes)
             document.querySelectorAll('#conexaoTabs .nav-link').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
 
-            // Ativa a aba solicitada
             const targetPane = document.querySelector(`#${activeTab}`);
             tabButton.classList.add('active');
             targetPane.classList.add('show', 'active');
         }
+    }
+
+    // 2. Escuta a abertura do modal de bloqueio para injetar os dados dinamicamente
+    const modalBloqueio = document.getElementById('modalBloqueio');
+    if (modalBloqueio) {
+        modalBloqueio.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const usuarioId = button.getAttribute('data-id');
+            const usuarioNome = button.getAttribute('data-nome');
+
+            const nomeSpan = modalBloqueio.querySelector('#nomeUsuarioBloqueio');
+            nomeSpan.textContent = usuarioNome;
+
+            const form = modalBloqueio.querySelector('#formBloqueio');
+            form.action = `/bloquear_usuario/${usuarioId}`;
+        });
     }
 });
 </script>

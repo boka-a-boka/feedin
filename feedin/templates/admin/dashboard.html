@@ -79,7 +79,7 @@
                 <div class="card-body p-0">
                     <div class="accordion accordion-flush" id="accordionUsuarios">
                         {% for letra, lista_usuarios in usuarios_agrupados.items() %}
-                        <div class="accordion-item bg-dark text-white border-secondary">
+                        <div class="accordion-item bg-dark text-white border-secondary user-group-container">
                             <h2 class="accordion-header" id="heading-{{ letra }}">
                                 <button class="accordion-button collapsed fw-bold"
                                         type="button"
@@ -112,8 +112,9 @@
                                                 {% for u in lista_usuarios %}
                                                 <tr class="user-row align-middle border-secondary">
                                                     <td class="ps-3">
-                                                        <strong>{{ u.username }}</strong><br>
-                                                        <small class="text-muted">{{ u.email }}</small>
+                                                        <!-- Adicionei as classes user-name e user-email aqui -->
+                                                        <strong class="user-name">{{ u.username }}</strong><br>
+                                                        <small class="text-muted user-email">{{ u.email }}</small>
                                                     </td>
                                                     <td><span class="badge bg-info">{{ u.nivel_acesso }}</span></td>
                                                     <!-- COLUNA STATUS (Corrigida para olhar o Nível 1 e com alto contraste) -->

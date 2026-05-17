@@ -275,3 +275,21 @@ def salvar_imagem_capa(foto, usuario_id):
     except Exception as e:
         print(f"Erro ao processar capa: {e}")
         return None
+
+
+def obter_lista_negra_usuario(usuario_id):
+    """
+    Retorna uma lista simples de IDs [2, 45, 88...] contendo todos os usuários
+    bloqueados por este usuário ou que bloquearam este usuário.
+    """
+    try:
+        from models import Bloqueios
+        from feedin import database
+        bloqueados_por_mim = database.session.query(Bloqueios.id_alvo).filter(Bloqueios.id_autor == usuario_id).all()
+        me_bloquearam = database.session.query(Bloqueios.id_autor).filter(Bloqueios.id_alvo == usuario_id).all()
+
+        # Converte as tuplas do banco em inteiros limpos em uma única linha
+        lista_negra = [id[0] for id in bloqueados_por_mim] + [id[0] for id in me_bloquearam]
+        return lista_negra
+    except Exception:
+        return []
