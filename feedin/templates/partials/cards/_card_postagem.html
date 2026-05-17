@@ -41,6 +41,64 @@
     /* O segredo: contain garante que 100% da foto apareça */
     object-fit: contain;
 }
+/* Estilo Padrão (Desktop) */
+.notification-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background-color: #f9f9f9; /* Padrão */
+}
+
+/* Cor especial para a Notificação Automática de Conexão */
+.notification-item.notification-conexao {
+    background-color: #e6f7ff; /* Um azul/celeste bem suave, ou mude para a cor da sua paleta */
+    border-left: 4px solid #1890ff; /* Barrinha lateral para dar destaque intuitivo */
+}
+
+.notification-content {
+    display: flex;
+    gap: 5px; /* Mantém na mesma linha no desktop */
+}
+
+.notification-users {
+    font-weight: bold;
+}
+
+/* O "Botão" identificador de tipo */
+.badge-conexao {
+    background-color: #1890ff;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* --- Ajuste Crítico para Smartphone --- */
+@media (max-width: 480px) {
+    .notification-item.notification-conexao {
+        flex-direction: column; /* Joga o botão "Conexão" para baixo se faltar espaço */
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .notification-content {
+        display: block; /* Força os spans internos a se comportarem como blocos (linhas novas) */
+    }
+
+    .notification-users {
+        display: block;
+        margin-bottom: 2px; /* Espacinho leve entre os nomes e a ação */
+    }
+
+    .notification-action {
+        display: block;
+        font-size: 0.9rem; /* Um tiquinho menor para garantir que não corte */
+        color: #555;
+    }
+}
 </style>
 
 {# 1. LÓGICA DE DADOS #}
@@ -69,14 +127,13 @@
                          onerror="this.src='/static/fotos_perfil/default.jpg'">
                 </div>
 
-                <!-- Texto em uma linha só -->
-                <div class="text-truncate">
-                    <span class="text-light small">
-                        <strong class="text-white">@{{ c.remetente.username }}</strong>
-                        e
-                        <strong class="text-white">@{{ c.destinatario.username }}</strong>
-                        agora estão conectados na teia!
-                    </span>
+                <div class="notification-item notification-conexao">
+                    <div class="notification-content">
+                        <!-- Linha 1: Os usuários -->
+                        <span class="notification-users">@{{ usuario1 }} e @{{ usuario2 }}</span>
+                        <!-- Linha 2: A mensagem de conexão -->
+                        <span class="notification-action">agora estão conectados na teia!</span>
+                    </div>
                 </div>
             </div>
 
