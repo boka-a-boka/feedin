@@ -3724,52 +3724,50 @@ def criar_postagem():
             ids_t = [int(i) for i in tags_ids.split(',') if i.strip().isdigit()]
             nova_postagem.tags_afinidade.extend(Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all())
 
-            # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS (CORRIGIDO E ATUALIZADO) ---
-            pessoas_ids = request.form.get('pessoas_ids', '')
-            if pessoas_ids:
-                ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
+        # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS (CORRIGIDO: AGORA FORA DO IF DE TAGS) ---
+        pessoas_ids = request.form.get('pessoas_ids', '')
+        if pessoas_ids:
+            ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
 
-                for id_marcado in ids_p:
-                    if id_marcado == current_user.id:
-                        continue
+            for id_marcado in ids_p:
+                if id_marcado == current_user.id:
+                    continue
 
-                    # 1. Gravação na nova tabela intermediária de controle de marcações
-                    # Substitua 'MarcacaoPostagem' pelo nome real da sua classe de Modelo se for diferente
-                    nova_marcacao = MarcacaoPostagem(
-                        id_postagem=nova_postagem.id,
-                        id_usuario=id_marcado,
-                        status='pendente',  # Começa pendente para o usuário poder aceitar/recusar no feed
-                        data_criacao=datetime.now(timezone.utc)
-                    )
-                    database.session.add(nova_marcacao)
-                    database.session.flush()  # Gera o ID da marcação para usarmos na notificação se necessário
+                # 1. Gravação na nova tabela intermediária de controle de marcações
+                nova_marcacao = MarcacaoPostagem(
+                    id_postagem=nova_postagem.id,
+                    id_usuario=id_marcado,
+                    status='pendente',
+                    data_criacao=datetime.now(timezone.utc)
+                )
+                database.session.add(nova_marcacao)
+                database.session.flush()
 
-                    # 2. Geração da Notificação/Atividade no formato exigido pelo seu Template
-                    # O card espera ler: m.usuario_origem_id, m.mensagem, m.postagem_id, m.lida, etc.
-                    notificacao_marcacao = Memoria(
-                        id_usuario=id_marcado,  # Quem recebe a notificação no feed
-                        id_usuario_origem=current_user.id,  # Quem gerou a marcação (m.usuario_origem_id)
-                        id_postagem_referencia=nova_postagem.id,  # O ID da publicação (m.postagem_id)
-                        id_local=local.id if local else None,
-                        tipo='marcacao',  # Crucial para o IF do template ativar o Layout C
-                        titulo="Você foi marcado!",
-                        mensagem=f"@{current_user.username} marcou você em uma publicação.",  # m.mensagem
-                        privacidade="privado",
-                        lida=False,  # m.lida
-                        data_criacao=datetime.now(timezone.utc)
-                    )
-                    database.session.add(notificacao_marcacao)
-            # --- FIM DA LÓGICA DE MARCAÇÃO ---
+                # 2. Geração da Notificação/Atividade para o Template
+                notificacao_marcacao = Memoria(
+                    id_usuario=id_marcado,
+                    id_usuario_origem=current_user.id,
+                    id_postagem_referencia=nova_postagem.id,
+                    id_local=local.id if local else None,
+                    tipo='marcacao',
+                    titulo="Você foi marcado!",
+                    mensagem=f"@{current_user.username} marcou você em uma publicação.",
+                    privacidade="privado",
+                    lida=False,
+                    data_criacao=datetime.now(timezone.utc)
+                )
+                database.session.add(notificacao_marcacao)
+        # --- FIM DA LÓGICA DE MARCAÇÃO ---
 
-            # 4. Salva tudo definitivamente no banco
-            database.session.commit()
-            flash("Memória compartilhada com sucesso!", "success")
+        # 4. Salva tudo definitivamente no banco
+        database.session.commit()
+        flash("Memória compartilhada com sucesso!", "success")
 
-        except Exception as e:
+    except Exception as e:
         database.session.rollback()
         print(f"--- ERRO CRÍTICO NA POSTAGEM: {e} ---")
-        import traceback;
-        traceback.print_exc()  # Ajuda a monitorar o console em caso de divergência de nomes de colunas
+        import traceback
+        traceback.print_exc()
         flash("Houve um erro técnico ao salvar.", "danger")
 
     return redirect(request.referrer)
