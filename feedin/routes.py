@@ -543,7 +543,7 @@ def dashboard():
         else:
             aba = 'perfil'
 
-    # --- 4. BUSCA DE DADOS SOCIAIS (A CIRURGIA) ---
+    # --- 4. BUSCA DE DADOS SOCIAIS ---
     if onboarding_completo or current_user.nivel_acesso >= 10:
         meus_grupos = MembroGrupo.query.filter_by(id_usuario=current_user.id).all()
         convites_pendentes = Conexoes.query.filter_by(id_destinatario=current_user.id, status='pendente').all()
@@ -555,21 +555,21 @@ def dashboard():
         ).order_by(Conexoes.data_solicitacao.desc()).all()
 
         if aba == 'feed':
-            # 1. Busca as atividades/postagens normais do feed
+            # 1. Recupera as atividades normais do feed
             atividades_normais = obter_atividades_feed(current_user)
 
-            # 2. Busca as notificações de marcação não lidas direcionadas ao usuário logado
-            # (Elas possuem a propriedade .dados_marcacao que o card_postagem.html espera)
-            notificacoes_marcacao = Notificacao.query.filter_by(
+            # 2. Busca apenas alertas de marcações já resolvidas direcionadas a mim (Confirmações)
+            # Isso garante que NUNCA apareçam botões de ação errados no feed de ninguém
+            alertas_confirmacao = Notificacao.query.filter_by(
                 id_usuario_destino=current_user.id,
                 tipo='marcacao',
                 lida=False
             ).order_by(Notificacao.data_criacao.desc()).all()
 
-            # 3. Unifica os dois mundos: as notificações entram no TOPO do feed para ação imediata
-            atividades_recentes = notificacoes_marcacao + atividades_normais
+            # 3. Unifica no topo do feed. O Layout C do card vai renderizar o texto liso perfeitamente
+            atividades_recentes = alertas_confirmacao + atividades_normais
 
-            # Mantém o carregamento essencial para o carrossel (Rápido)
+            # Mantém o carregamento do carrossel
             lista_sugestoes = obter_sugestoes_carrossel(current_user)
 
         if aba == 'conexoes':
@@ -3199,19 +3199,29 @@ def ver_perfil(usuario_id):
         s_nome, s_icone = res if res else (None, None)
 
     # =========================================================================
-    # 6. MOTOR DO MURAL DE POSTAGENS (CORRIGIDO E SEGURO)
+    # 6. MOTOR DO MURAL DE POSTAGENS (TRAVA DE PRIVACIDADE COMPLETA)
     # =========================================================================
     # Guardamos o total bruto para estatísticas do perfil
     total_mural_bruto = Postagem.query.filter_by(id_usuario=usuario_id, ativo=True).count()
+
+    # Checa de forma explícita se a amizade/conexão está ativa
+    tem_conexao_confirmada = (status_conexao == 'aceito')
 
     if e_o_proprio:
         # Dono do perfil tem passe livre total sobre suas publicações
         postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
             .filter_by(id_usuario=usuario_id, ativo=True) \
             .order_by(Postagem.data_criacao.desc()).all()
+
+    elif not tem_conexao_confirmada:
+        # TRAVA CIRÚRGICA: Se NÃO são amigos, aplica a restrição pesada de visualização institucional.
+        # Carrega APENAS as duas primeiras fotos sem cruzar tags ou regras de locais.
+        postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
+            .filter_by(id_usuario=usuario_id, ativo=True) \
+            .order_by(Postagem.data_criacao.desc()).limit(2).all()
+
     else:
-        # Filtros de restrição baseados nas regras de negócio do visitante
-        # Regra A: Post sem Tag (Porteira aberta se for geral ou local vinculado)
+        # SE SÃO AMIGOS ACEITOS: Roda o seu motor inteligente de afinidade por locais e subgrupos
         post_sem_tag = and_(
             ~Postagem.tags_afinidade.any(),
             or_(
@@ -3220,13 +3230,11 @@ def ver_perfil(usuario_id):
             )
         )
 
-        # Regra B: Post com Tag (Peneira restritiva de subgrupos direcionados)
         post_com_tag = and_(
             Postagem.tags_afinidade.any(),
             Postagem.tags_afinidade.any(Taxonomia.id.in_(minhas_tags_ids)) if minhas_tags_ids else False
         )
 
-        # Execução da query com os filtros combinados direto no banco
         postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)).filter(
             Postagem.id_usuario == usuario_id,
             Postagem.ativo == True,
@@ -3234,10 +3242,14 @@ def ver_perfil(usuario_id):
         ).order_by(Postagem.data_criacao.desc()).all()
     # =========================================================================
 
-    # 7. Postagens onde o USER_ALVO FOI MARCADO (Fotos com ele - Fora do bloco do signo)
-    fotos_com_alvo = Postagem.query.join(Postagem.pessoas_marcadas) \
-        .filter(Usuario.id == usuario_id, Postagem.ativo == True) \
-        .order_by(Postagem.data_criacao.desc()).all()
+    # 7. Postagens onde o USER_ALVO FOI MARCADO (Bloqueado ou restrito se não forem amigos)
+    if e_o_proprio or tem_conexao_confirmada:
+        fotos_com_alvo = Postagem.query.join(Postagem.pessoas_marcadas) \
+            .filter(Usuario.id == usuario_id, Postagem.ativo == True) \
+            .order_by(Postagem.data_criacao.desc()).all()
+    else:
+        # Se não há conexão confirmada, oculta o bloco de fotos onde terceiros marcaram ele
+        fotos_com_alvo = []
 
     form_convite = FormConexao()
 
