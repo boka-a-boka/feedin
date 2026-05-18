@@ -733,12 +733,6 @@ class Postagem(database.Model):
 
     # 2. NOVO RELACIONAMENTO (Adicionado aqui dentro)
     # É este campo que a rota 'criar_postagem' vai usar para dar o .append() ou .extend()
-    # 1. Antiga relação (Mudado para string para evitar o NameError na inicialização)
-    pessoas_marcadas = database.relationship(
-        'Usuario',
-        secondary='postagem_marcacoes',  # <--- O SEGREDO ESTÁ AQUI: virou string com aspas!
-        backref=database.backref('marcacoes_em_posts', lazy='dynamic')
-    )
 
     # 2. Nova relação (Mantida exatamente como você estruturou)
     pessoas_marcadas_novas = database.relationship(
