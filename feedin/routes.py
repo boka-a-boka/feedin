@@ -3724,7 +3724,7 @@ def criar_postagem():
             ids_t = [int(i) for i in tags_ids.split(',') if i.strip().isdigit()]
             nova_postagem.tags_afinidade.extend(Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all())
 
-        # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS (CORRIGIDO: AGORA FORA DO IF DE TAGS) ---
+        # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS (LIMPO E SANEADO) ---
         pessoas_ids = request.form.get('pessoas_ids', '')
         if pessoas_ids:
             ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
@@ -3733,30 +3733,14 @@ def criar_postagem():
                 if id_marcado == current_user.id:
                     continue
 
-                # 1. Gravação na nova tabela intermediária de controle de marcações
+                # Gravação direta na tabela intermediária com status 'aceito'
                 nova_marcacao = MarcacaoPostagem(
-                    id_postagem=nova_postagem.id,
-                    id_usuario=id_marcado,
-                    status='pendente',
-                    data_criacao=datetime.now(timezone.utc)
+                    postagem_id=nova_postagem.id,
+                    usuario_id=id_marcado,
+                    status='aceito',
+                    criado_em=datetime.now(timezone.utc)
                 )
                 database.session.add(nova_marcacao)
-                database.session.flush()
-
-                # 2. Geração da Notificação/Atividade para o Template
-                notificacao_marcacao = Memoria(
-                    id_usuario=id_marcado,
-                    id_usuario_origem=current_user.id,
-                    id_postagem_referencia=nova_postagem.id,
-                    id_local=local.id if local else None,
-                    tipo='marcacao',
-                    titulo="Você foi marcado!",
-                    mensagem=f"@{current_user.username} marcou você em uma publicação.",
-                    privacidade="privado",
-                    lida=False,
-                    data_criacao=datetime.now(timezone.utc)
-                )
-                database.session.add(notificacao_marcacao)
         # --- FIM DA LÓGICA DE MARCAÇÃO ---
 
         # 4. Salva tudo definitivamente no banco
@@ -3947,7 +3931,8 @@ def excluir_comentario(comentario_id):
     database.session.commit()
     return jsonify({"status": "success", "message": "Comentário removido."})
 
-# Para que a marcação de pessoas funcione
+
+# Para que a marcação de pessoas funcione (Apenas conexões aceitas na Teia)
 @app.route('/buscar_usuarios')
 @login_required
 def buscar_usuarios():
@@ -3955,10 +3940,24 @@ def buscar_usuarios():
     if len(termo) < 2:
         return jsonify([])
 
-    # Busca por username ou nome no perfil
+    # 1. Alinhamento com a Teia: Filtra usando o modelo correto 'Conexoes'
+    conexoes = Conexoes.query.filter(
+        (Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id),
+        Conexoes.status == 'aceito'
+    ).all()
+
+    # Isola os IDs dos amigos confirmados
+    amigos_ids = [c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente for c in conexoes]
+
+    # Se o usuário não tiver conexões aceitas, bloqueia a busca imediatamente
+    if not amigos_ids:
+        return jsonify([])
+
+    # 2. Busca refinada na lista restrita de amigos
     usuarios = Usuario.query.join(Perfil).filter(
-        (Usuario.username.ilike(f'%{termo}%')) |
-        (Perfil.nome_completo.ilike(f'%{termo}%'))
+        Usuario.id.in_(amigos_ids),  # Trava de segurança absoluta baseada no Grafo
+        ((Usuario.username.ilike(f'%{termo}%')) |
+         (Perfil.nome_completo.ilike(f'%{termo}%')))
     ).limit(5).all()
 
     return jsonify([{'id': u.id, 'username': u.username} for u in usuarios])
