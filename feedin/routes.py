@@ -2108,10 +2108,15 @@ def salvar_preferencias():
         # 1. Obter IDs e Termos
         ids_selecionados = [int(tid) for tid in ids_raw.split(',') if tid.strip().isdigit()]
 
-        # Como o relacionamento é lazy='dynamic', para limpar a lista fazemos:
-        # Nota: Em relacionamentos dinâmicos, o ideal é converter para lista
-        # ou remover um a um, mas atribuir uma lista vazia funciona se o backref permitir.
-        current_user.interesses = []
+        # CORREÇÃO 1: Forma segura de limpar relacionamento lazy='dynamic'
+        # Em vez de atribuir [], iteramos removendo ou limpando os objetos da sessão.
+        # Para tabelas dinâmicas, o método mais limpo é converter a query atual em lista e remover.
+        interesses_atuais = list(current_user.interesses)
+        for interesse in interesses_atuais:
+            current_user.interesses.remove(interesse)
+
+        # Força o SQLAlchemy a processar as remoções antes de começarmos as inserções
+        database.session.flush()
 
         # 2. Adicionar Tags Existentes
         if ids_selecionados:
@@ -2121,13 +2126,17 @@ def salvar_preferencias():
 
         # 3. Adicionar Novos Termos (Respeitando sua Model)
         if novos_termos_raw:
+            # Tratamento para evitar duplicados na mesma requisição se o usuário mandar o mesmo termo duas vezes
+            termos_processados = set()
+
             for nome in novos_termos_raw.split(','):
                 nome_limpo = nome.strip()
-                if not nome_limpo: continue
+                if not nome_limpo or nome_limpo in termos_processados:
+                    continue
+                termos_processados.add(nome_limpo)
 
                 tag_nova = Taxonomia.query.filter_by(nome=nome_limpo).first()
                 if not tag_nova:
-                    # Usando exatamente os nomes das colunas da sua Model
                     tag_nova = Taxonomia(
                         nome=nome_limpo,
                         status='pendente',
@@ -2136,17 +2145,16 @@ def salvar_preferencias():
                         categoria='Gosto'
                     )
                     database.session.add(tag_nova)
-                    database.session.flush()  # Importante para gerar o ID para a tabela de ligação
+                    database.session.flush()  # Gera o ID para a tag_nova
 
                 if tag_nova not in current_user.interesses:
                     current_user.interesses.append(tag_nova)
 
-        # 4. Commit Principal
+        # CORREÇÃO 2: Executar o Commit Principal AQUI!
+        # Isso garante que a tabela intermediária Many-to-Many grave os dados de verdade no banco.
         database.session.commit()
 
-        # 5. Validação de Nível (AQUI ESTÁ A MUDANÇA)
-        # Como é lazy='dynamic', .count() é um método do SQLAlchemy que gera um SELECT COUNT no banco.
-        # É mais seguro e performático.
+        # 4. Validação de Nível (Agora o banco de dados está 100% atualizado)
         total_atual = current_user.interesses.count()
         nivel_antes = current_user.nivel_acesso
 
@@ -2161,14 +2169,14 @@ def salvar_preferencias():
             return redirect(url_for('configuracoes', aba='preferencias'))
 
         else:
-            flash("Suas preferências foram atualizadas com sucesso.", "success")
+            flash("Suas preferências foram updated com sucesso.", "success")
             return redirect(url_for('configuracoes', aba='preferencias'))
 
     except Exception as e:
         database.session.rollback()
         print(f"DEBUG SALVAR PREFS (Erro Real): {str(e)}")
-        # Se quiser ver o rastro completo no console do servidor:
-        # import traceback; traceback.print_exc()
+        import traceback;
+        traceback.print_exc()  # Ativado para te ajudar a ver a linha exata no console caso dê outro erro
         flash("Erro ao salvar preferências. Tente novamente.", "danger")
         return redirect(url_for('configuracoes', aba='preferencias'))
 
