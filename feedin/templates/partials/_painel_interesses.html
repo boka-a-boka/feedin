@@ -51,11 +51,10 @@
 
 <form action="{{ url_for('salvar_preferencias') }}" method="POST" id="form-preferencias">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <!-- Inputs que o backend vai ler -->
     <input type="hidden" name="preferencias_ids" id="preferencias_ids">
     <input type="hidden" name="novos_termos" id="novos_termos">
 
-    <!-- Campo de Busca (Otimizado para os 1.735 itens) -->
+    <!-- Campo de Busca -->
     <div class="mb-5 position-relative">
         <label class="form-label fw-bold">O que você curte ou busca em Piracicaba?</label>
         <div class="input-group">
@@ -112,7 +111,6 @@
     </div>
 
     <div id="painel-interesses-container">
-        <!-- Dados iniciais do usuário -->
         <div id="data-prefs" data-minhas-prefs='{{ minhas_prefs_json | safe }}' style="display: none;"></div>
 
         <div class="text-center mt-4">
@@ -125,7 +123,6 @@
 
 <script>
 (function() {
-    // 1. ESTADO INTERNO (Centralizado)
     const selecionados = new Map();
 
     const refs = {
@@ -143,30 +140,29 @@
         form: document.getElementById('form-preferencias')
     };
 
-    // 2. PLÁSTICA NA INTERFACE (Sincronização Map -> UI)
     function atualizarInterface() {
-        // Limpeza Total dos containers
         [refs.containerPessoais, refs.containerLocais, refs.containerMarcas].forEach(c => { if(c) c.innerHTML = ''; });
 
         let idsNumericos = [];
         let nomesNovos = [];
 
-        // Renderização das Tags com Ordem Alfabética
         const listaOrdenada = Array.from(selecionados.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
 
         listaOrdenada.forEach(([id, dados]) => {
             const tag = document.createElement('div');
 
-            // Configuração visual dinâmica (A "Plástica")
             let config = { cor: 'bg-primary text-white', icone: 'bi-person' };
 
-            if (dados.v_usu && dados.v_neg) {
+            // O pai gerado pelo sistema recebe o estilo pontilhado/destacado
+            if (dados.isAutomated) {
+                config = {
+                    cor: 'bg-warning-subtle text-warning-emphasis border border-warning',
+                    icone: 'bi-magic'
+                };
+            } else if (dados.v_usu && dados.v_neg) {
                 config = { cor: 'bg-dark text-info border border-info', icone: 'bi-patch-check-fill' };
             } else if (!dados.v_usu && dados.v_neg) {
-                config = {
-                    cor: dados.isAutomated ? 'bg-warning-subtle text-warning-emphasis border border-warning' : 'bg-warning text-dark',
-                    icone: dados.isAutomated ? 'bi-magic' : 'bi-shop'
-                };
+                config = { cor: 'bg-warning text-dark', icone: 'bi-shop' };
             }
 
             tag.className = `badge rounded-pill p-2 px-3 pref-tag ${config.cor} m-1 border-0 shadow-sm animate__animated animate__fadeIn`;
@@ -181,11 +177,15 @@
 
             tag.onclick = () => {
                 selecionados.delete(id);
+                // Executa a faxina inteligente: se remover o último filho, remove o pai automático junto
+                reavaliarNecessidadeDePais();
                 atualizarInterface();
             };
 
-            // Distribuição por Categoria
-            if (dados.v_usu && dados.v_neg) {
+            // DISTRIBUIÇÃO FOCADA: Se for automatizado da árvore, cai OBLIGATORIAMENTE em Locais
+            if (dados.isAutomated) {
+                refs.containerLocais?.appendChild(tag);
+            } else if (dados.v_usu && dados.v_neg) {
                 refs.containerMarcas?.appendChild(tag);
             } else if (!dados.v_usu && dados.v_neg) {
                 refs.containerLocais?.appendChild(tag);
@@ -193,7 +193,6 @@
                 refs.containerPessoais?.appendChild(tag);
             }
 
-            // Coleta de dados para o Form
             if (id.toString().startsWith('novo_')) {
                 nomesNovos.push(dados.nome);
             } else {
@@ -201,11 +200,9 @@
             }
         });
 
-        // 3. SINCRONIZAÇÃO COM BACKEND
         document.getElementById('preferencias_ids').value = idsNumericos.join(',');
         document.getElementById('novos_termos').value = nomesNovos.join(',');
 
-        // 4. BARRA DE PROGRESSO & BOTÃO
         const total = selecionados.size;
         const progresso = Math.min((total / 10) * 100, 100);
 
@@ -220,42 +217,55 @@
         }
 
         if (refs.btnSalvar) {
-            const podeSalvar = total >= 5; // Mínimo para não quebrar a experiência
+            const podeSalvar = total >= 5;
             refs.btnSalvar.disabled = !podeSalvar;
             refs.btnSalvar.classList.toggle('opacity-50', !podeSalvar);
-            if(total >= 10) refs.btnSalvar.classList.replace('btn-outline-primary', 'btn-primary');
         }
 
-        // Atualização das Badges de Categoria
         if (refs.badgePessoais) refs.badgePessoais.innerText = refs.containerPessoais.children.length;
         if (refs.badgeMarcas) refs.badgeMarcas.innerText = refs.containerMarcas ? refs.containerMarcas.children.length : 0;
         if (refs.badgeLocais) refs.badgeLocais.innerText = refs.containerLocais.children.length;
     }
 
-    // 5. FUNÇÃO GLOBAL PARA ADIÇÃO (Usada no Autocomplete)
+    // Varre o estado limpando pais automáticos órfãos
+    function reavaliarNecessidadeDePais() {
+        const idsDosFilhosAtuais = Array.from(selecionados.values())
+            .filter(d => d.id_pai)
+            .map(d => d.id_pai.toString());
+
+        selecionados.forEach((dados, id) => {
+            if (dados.isAutomated && !idsDosFilhosAtuais.includes(id.toString())) {
+                selecionados.delete(id);
+            }
+        });
+    }
+
+    // AJUSTADO: Foco total na amarração e verificação de herança
     window.adicionarTagManual = function(id, nome, vUsu, vNeg, id_pai, nome_pai) {
-        if (selecionados.has(id.toString())) return; // Evita duplicados
+        if (selecionados.has(id.toString())) return;
 
         selecionados.set(id.toString(), {
             nome: nome,
             v_usu: vUsu,
             v_neg: vNeg,
-            id_pai: id_pai
+            id_pai: id_pai ? id_pai.toString() : null,
+            isAutomated: false
         });
 
-        // Inteligência: Adiciona Categoria Pai automaticamente se necessário
-        if (vUsu && vNeg && id_pai && nome_pai && !selecionados.has(id_pai.toString())) {
+        // CORREÇÃO: Removido o filtro rígido (vUsu && vNeg). Se o item clicado tem um pai válido,
+        // o pai é inserido imediatamente no bloco de Locais com estado automatizado ativo.
+        if (id_pai && nome_pai && !selecionados.has(id_pai.toString())) {
             selecionados.set(id_pai.toString(), {
                 nome: nome_pai,
                 v_usu: false,
                 v_neg: true,
-                isAutomated: true
+                id_pai: null,
+                isAutomated: true // Mantém a consistência visual pontilhada
             });
         }
         atualizarInterface();
     };
 
-    // 6. AUTOCOMPLETE (Busca na API)
     if (refs.inputBusca) {
         refs.inputBusca.addEventListener('input', function() {
             const termo = this.value.trim();
@@ -290,7 +300,6 @@
                         });
                         refs.sugestoes.classList.remove('d-none');
                     } else {
-                        // Sugestão de novo termo
                         refs.sugestoes.innerHTML = `
                             <button type="button" class="list-group-item list-group-item-action text-primary py-3"
                                     onclick="window.adicionarTagManual('novo_${termo}', '${termo}', true, false)">
@@ -302,30 +311,52 @@
         });
     }
 
-    // 7. CARGA INICIAL (Hydration)
-    document.addEventListener('DOMContentLoaded', () => {
-        const dataElement = document.getElementById('data-prefs');
-        if (dataElement?.dataset.minhasPrefs) {
-            try {
-                const iniciais = JSON.parse(dataElement.dataset.minhasPrefs);
-                iniciais.forEach(p => {
-                    selecionados.set(p.id.toString(), {
-                        nome: p.nome,
-                        v_usu: p.v_usu ?? true,
-                        v_neg: p.v_neg ?? false
-                    });
-                });
-                atualizarInterface();
-            } catch (e) { console.error("Erro na carga inicial:", e); }
-        }
-    });
+    // CORREÇÃO CRUCIAL NA CARGA INICIAL (Hydration):
+// Identifica a árvore de dependências direto do banco e coloca "cada um no seu quadrado"
+document.addEventListener('DOMContentLoaded', () => {
+    const dataElement = document.getElementById('data-prefs');
+    if (dataElement?.dataset.minhasPrefs) {
+        try {
+            const iniciais = JSON.parse(dataElement.dataset.minhasPrefs);
 
-    // Clique fora fecha sugestões
+            // Passo 1: Carrega todas as preferências do banco para o Map preservando as propriedades nativas
+            iniciais.forEach(p => {
+                selecionados.set(p.id.toString(), {
+                    nome: p.nome,
+                    v_usu: p.v_usu !== undefined ? p.v_usu : true,
+                    v_neg: p.v_neg !== undefined ? p.v_neg : false,
+                    id_pai: p.id_pai ? p.id_pai.toString() : null,
+                    isAutomated: false // Começa como falso; vamos validar abaixo
+                });
+            });
+
+            // Passo 2: Varredura de Ancestralidade (O segredo da carga inteligente)
+            // Descobre quais IDs na lista de selecionados estão atuando como PAI de alguém
+            const listaDeIdsFilhos = Array.from(selecionados.values())
+                .filter(item => item.id_pai !== null)
+                .map(item => item.id_pai.toString());
+
+            // Passo 3: Aplica a flag automatizada no quadrado correto
+            selecionados.forEach((dados, id) => {
+                // Se este ID é pai de alguma tag selecionada e possui o perfil de termo estrutural/local
+                if (listaDeIdsFilhos.includes(id.toString()) && !dados.v_usu && dados.v_neg) {
+                    dados.isAutomated = true; // Força o estilo pontilhado e joga pro bloco de Locais
+                }
+            });
+
+            // Renderiza a interface com a hierarquia totalmente reconstruída
+            atualizarInterface();
+
+        } catch (e) {
+            console.error("Erro na hidratação e mapeamento das preferências:", e);
+        }
+    }
+});
+
     document.addEventListener('click', (e) => {
         if (refs.inputBusca && !refs.inputBusca.contains(e.target)) refs.sugestoes.classList.add('d-none');
     });
 
-    // Feedback no envio
     if (refs.form) {
         refs.form.onsubmit = () => {
             if (selecionados.size < 5) return false;

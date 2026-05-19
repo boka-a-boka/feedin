@@ -21,8 +21,11 @@ from sqlalchemy import or_, func, asc, and_, not_
 from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
 from markupsafe import escape
-from PIL import Image, ImageOps
 import secrets, os, re, io, csv, json, pytz, uuid, markdown
+from itertools import groupby
+from io import TextIOWrapper
+from PIL import Image, ImageOps
+
 
 mail = Mail(app)
 s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -1819,37 +1822,385 @@ def apenas_admin(f):
 
 # ------------> rota que renderiza a central e a rota específica que dispara o download do CSV da tabela "Locais".
 
-@app.route("/admin/dashboard")
+@app.route('/admin/dashboard')
+@app.route('/admin/dashboard/<int:pai_id>')
 @login_required
-@apenas_admin
-def admin_sistema():
-    # 1. Definimos os dados (stats) logo no início
+def admin_sistema(pai_id=None):
+    # Verifica o nível de acesso de admin (ex: 9999)
+    if current_user.nivel_acesso < 9999:
+        flash('Acesso restrito aos administradores do sistema.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # 1. Estatísticas Rápidas dos Cards
     stats = {
         'usuarios': Usuario.query.count(),
         'pioneiros': Usuario.query.filter_by(is_pioneiro=True).count(),
-        'taxonomia': Taxonomia.query.count(),
-        'empreendedores': Usuario.query.filter_by(nivel_acesso=999).count()
+        'taxonomia': Taxonomia.query.count()
     }
 
-    # 2. Buscamos os usuários ordenados por nome
-    usuarios_ordenados = Usuario.query.order_by(Usuario.username.asc()).all()
+    # 2. Carrega o Pai Selecionado (se houver)
+    pai_selecionado = None
+    avos = []
+    qtd_filhos = 0
 
-    # 3. Criamos o agrupamento por letra inicial
-    # IMPORTANTE: A variável precisa ter este nome para o HTML funcionar
+    if pai_id:
+        pai_selecionado = Taxonomia.query.get(pai_id)
+    elif request.args.get('pai_id'):
+        pai_selecionado = Taxonomia.query.get(request.args.get('pai_id'))
+
+    if pai_selecionado:
+        # Contagem de filhos vinculados
+        qtd_filhos = database.session.query(taxonomia_conexoes).filter_by(pai_id=pai_selecionado.id).count()
+
+        # Busca os múltiplos Avôs na tabela associativa
+        conexoes_avos = database.session.query(taxonomia_conexoes.c.pai_id).filter(
+            taxonomia_conexoes.c.filho_id == pai_selecionado.id
+        ).all()
+        avo_ids = [c[0] for c in conexoes_avos]
+        if avo_ids:
+            avos = Taxonomia.query.filter(Taxonomia.id.in_(avo_ids)).all()
+
+    # 3. Agrupamento Alfabético para Gestão de Usuários (Accordion)
+    usuarios = Usuario.query.order_by(Usuario.username.asc()).all()
     usuarios_agrupados = {}
-    for letra, grupo in groupby(usuarios_ordenados, key=lambda x: x.username[0].upper() if x.username else "?"):
-        usuarios_agrupados[letra] = list(grupo)
+    for u in usuarios:
+        letra = u.username[0].upper() if u.username else '#'
+        if not letra.isalpha():
+            letra = '#'
+        if letra not in usuarios_agrupados:
+            usuarios_agrupados[letra] = []
+        usuarios_agrupados[letra].append(u)
 
-    usuarios_agrupados = dict(sorted(usuarios_agrupados.items()))
+    return render_template(
+        'admin/dashboard.html',
+        stats=stats,
+        pai_selecionado=pai_selecionado,
+        avos=avos,
+        qtd_filhos=qtd_filhos,
+        usuarios_agrupados=usuarios_agrupados
+    )
 
-    # 4. Enviamos para o template
-    return render_template("admin/dashboard.html",
-                           stats=stats,
-                           usuarios_agrupados=usuarios_agrupados)  # Enviando a variável correta
+
+@app.route('/admin/taxonomia/processar-pai', methods=['POST'])
+@login_required
+def admin_processar_pai():
+    if current_user.nivel_acesso < 9999:
+        return redirect(url_for('dashboard'))
+
+    nome_pai = request.form.get('termo_pai', '').strip()
+    if not nome_pai:
+        flash('Por favor, digite um termo válido.', 'warning')
+        return redirect(url_for('admin_sistema'))
+
+    # Busca ou cria o termo na tabela plana
+    termo = Taxonomia.query.filter_by(nome=nome_pai).first()
+    if not termo:
+        termo = Taxonomia(
+            nome=nome_pai,
+            status='homologado',
+            data_criacao=datetime.now(timezone.utc),
+            data_homologacao=datetime.now(timezone.utc),
+            visivel_usuario=True,  # Já nasce ativo como Pai para agilizar
+            visivel_negocio=True
+        )
+        database.session.add(termo)
+        database.session.commit()
+        flash(f'Novo termo "{nome_pai}" criado e definido como Pai.', 'success')
+    else:
+        flash(f'Termo "{nome_pai}" carregado com sucesso.', 'info')
+
+    return redirect(url_for('admin_sistema', pai_id=termo.id))
 
 
-# Rota para deletar ou editar taxonomia (Exemplo de manutenção)
-@app.route("/admin/taxonomia/delete/<int:id>")
+@app.route('/admin/taxonomia/selecionar-pai/<int:pai_id>')
+@login_required
+def admin_selecionar_pai_id(pai_id):
+    # Executa a escolha do administrador em caso de duplicidade detectada
+    pai = Taxonomia.query.get_or_404(pai_id)
+    pai.visivel_usuario = False
+    pai.visivel_negocio = True
+    database.session.commit()
+    flash(f"Termo Pai '{pai.nome}' selecionado e configurado via ID.", "success")
+    return redirect(url_for('admin_sistema', pai_id=pai.id))
+
+
+@app.route('/admin/taxonomia/alternar-visibilidade/<int:pai_id>')
+@login_required
+@apenas_admin
+def admin_alternar_visibilidade_pai(pai_id):
+    # O clique consciente do Administrador que altera o banco de dados
+    pai = Taxonomia.query.get_or_404(pai_id)
+
+    # Inversão cirúrgica de estado booleano (Toggle)
+    if pai.visivel_usuario:
+        pai.visivel_usuario = False  # Passa a atuar estritamente como Filho (0)
+    else:
+        pai.visivel_usuario = True  # Passa a atuar estritamente como Pai (1)
+
+    pai.visivel_negocio = True  # Garante a persistência da regra de negócio (1)
+
+    database.session.commit()
+
+    # Retorna silenciosamente atualizando o botão no painel do termo em foco
+    return redirect(url_for('admin_sistema', pai_id=pai.id))
+
+
+@app.route('/admin/taxonomia/vincular-filho-existente/<int:pai_id>', methods=['POST'])
+@login_required
+def admin_vincular_filho_existente(pai_id):
+    if current_user.nivel_acesso < 9999:
+        return redirect(url_for('dashboard'))
+
+    pai_termo = Taxonomia.query.get_or_404(pai_id)
+    nome_filho = request.form.get('termo_child_existe', '').strip()
+
+    if not nome_filho:
+        return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+    filho = Taxonomia.query.filter_by(nome=nome_filho).first()
+    if not filho:
+        flash(f'O termo "{nome_filho}" não foi encontrado na base para vinculação.', 'danger')
+        return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+    # CORRIGIDO: Vincula usando a coluna exata 'filho_id'
+    conexao_existe = database.session.query(taxonomia_conexoes).filter(
+        taxonomia_conexoes.c.pai_id == pai_termo.id,
+        taxonomia_conexoes.c.filho_id == filho.id
+    ).first()
+
+    if not conexao_existe:
+        insercao = taxonomia_conexoes.insert().values(pai_id=pai_termo.id, filho_id=filho.id)
+        database.session.execute(insercao)
+        database.session.commit()
+        flash(f'"{filho.nome}" agora é um subitem de "{pai_termo.nome}".', 'success')
+
+    return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+
+@app.route('/admin/taxonomia/autocomplete')
+@login_required
+@apenas_admin
+def admin_taxonomia_autocomplete():
+    termo_busca = request.args.get('q', '').strip()
+
+    if not termo_busca or len(termo_busca) < 2:
+        return jsonify([])  # Só começa a buscar a partir de 2 caracteres para poupar o banco
+
+    # Busca na tabela real pelo nome, ignorando maiúsculas/minúsculas (ilike)
+    sugestoes = Taxonomia.query.filter(
+        Taxonomia.nome.ilike(f'%{termo_busca}%')
+    ).limit(10).all()
+
+    # Retorna uma lista simples de strings com os nomes encontrados
+    lista_nomes = [t.nome for t in sugestoes]
+    return jsonify(lista_nomes)
+
+
+@app.route('/admin/taxonomia/inserir-filho-manual/<int:pai_id>', methods=['POST'])
+@login_required
+def admin_inserir_filho_manual(pai_id):
+    if current_user.nivel_acesso < 9999:
+        return redirect(url_for('dashboard'))
+
+    pai_termo = Taxonomia.query.get_or_404(pai_id)
+    nome_filho = request.form.get('termo_filho_manual', '').strip()
+
+    if not nome_filho:
+        return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+    # 1. Cria o termo se ele não existir
+    filho = Taxonomia.query.filter_by(nome=nome_filho).first()
+    if not filho:
+        filho = Taxonomia(
+            nome=nome_filho,
+            status='homologado',
+            data_criacao=datetime.now(timezone.utc),
+            data_homologacao=datetime.now(timezone.utc),
+            visivel_usuario=True,  # Deixamos True para que ele possa atuar como Pai dos modelos depois!
+            visivel_negocio=True
+        )
+        database.session.add(filho)
+        database.session.commit()
+
+    # 2. CORRIGIDO: Insere o vínculo na tabela associativa usando 'filho_id'
+    conexao_existe = database.session.query(taxonomia_conexoes).filter(
+        taxonomia_conexoes.c.pai_id == pai_termo.id,
+        taxonomia_conexoes.c.filho_id == filho.id
+    ).first()
+
+    if not conexao_existe:
+        insercao = taxonomia_conexoes.insert().values(pai_id=pai_termo.id, filho_id=filho.id)
+        database.session.execute(insercao)
+        database.session.commit()
+        flash(f'Novo termo "{nome_filho}" criado e vinculado a "{pai_termo.nome}".', 'success')
+    else:
+        flash(f'O termo "{nome_filho}" já estava vinculado a "{pai_termo.nome}".', 'info')
+
+    return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+
+@app.route('/admin/taxonomia/vincular-pai-raiz/<int:pai_id>', methods=['POST'])
+@login_required
+def admin_vincular_pai_raiz(pai_id):
+    if current_user.nivel_acesso < 9999:
+        return redirect(url_for('dashboard'))
+
+    pai_termo = Taxonomia.query.get_or_404(pai_id)
+    nome_raiz = request.form.get('raiz_nome', '').strip()
+
+    if not nome_raiz:
+        return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+    # 1. Busca ou cria o termo raiz (Avô) na tabela de taxonomia
+    raiz = Taxonomia.query.filter_by(nome=nome_raiz).first()
+    if not raiz:
+        raiz = Taxonomia(
+            nome=nome_raiz,
+            status='homologado',
+            data_criacao=datetime.now(timezone.utc),
+            data_homologacao=datetime.now(timezone.utc),
+            visivel_usuario=True,
+            visivel_negocio=True
+        )
+        database.session.add(raiz)
+        database.session.commit()
+    else:
+        # PADRONIZAÇÃO AUTOMÁTICA: Se o termo já existia mas estava desconfigurado,
+        # o sistema nivela ele para True em ambas as frentes ao virar Avô.
+        if not raiz.visivel_usuario or not raiz.visivel_negocio:
+            raiz.visivel_usuario = True
+            raiz.visivel_negocio = True
+            database.session.commit()
+
+    # 2. Insere a conexão na tabela associativa (se ela já não existir)
+    conexao_existe = database.session.query(taxonomia_conexoes).filter(
+        taxonomia_conexoes.c.pai_id == raiz.id,
+        taxonomia_conexoes.c.filho_id == pai_id
+    ).first()
+
+    if not conexao_existe:
+        insercao = taxonomia_conexoes.insert().values(pai_id=raiz.id, filho_id=pai_id)
+        database.session.execute(insercao)
+        database.session.commit()
+        flash(f'Termo "{pai_termo.nome}" nivelado e vinculado com sucesso ao grupo "{nome_raiz}".', 'success')
+    else:
+        flash(f'O vínculo entre "{pai_termo.nome}" e "{nome_raiz}" já estava ativo e foi validado.', 'info')
+
+    return redirect(url_for('admin_sistema', pai_id=pai_id))
+
+
+@app.route('/admin/importar-filhos-csv/<int:pai_id>', methods=['POST'])
+@login_required
+def admin_importar_filhos_csv(pai_id):
+    if current_user.nivel_acesso < 9999:
+        return redirect(url_for('dashboard'))
+
+    pai_termo = Taxonomia.query.get_or_404(pai_id)
+
+    # Captura o arquivo independentemente do name do input HTML
+    arquivo = request.files.get('file') or next(iter(request.files.values()), None)
+
+    if not arquivo or arquivo.filename == '':
+        flash('Por favor, envie um arquivo válido.', 'danger')
+        return redirect(request.referrer)
+
+    try:
+        arquivo.seek(0)
+        conteudo = arquivo.read().decode('utf-8-sig').splitlines()
+
+        # Identifica dinamicamente se o CSV usa padrão BR (;) ou americano (,)
+        primeira_linha = conteudo[0] if conteudo else ""
+        delimitador = ';' if ';' in primeira_linha else ','
+
+        leitor_csv = csv.reader(conteudo, delimiter=delimitador)
+
+        contador_novos = 0
+        contador_vinculos = 0
+
+        for linha in leitor_csv:
+            if not linha:
+                continue
+
+            nome_filho = linha[0].strip()
+            if not nome_filho or nome_filho.lower() == 'nome':
+                continue
+
+            # ========================================================
+            # 1. GARANTIA DO PAI (Ex: Nike ou Tênis)
+            # ========================================================
+            # O Pai da vez recebe sua ativação comercial própria,
+            # pois ele está participando ativamente de um agrupamento estruturado.
+            if not pai_termo.visivel_negocio or not pai_termo.visivel_usuario or pai_termo.status != 'homologado':
+                pai_termo.visivel_negocio = True
+                pai_termo.visivel_usuario = True
+                pai_termo.status = 'homologado'
+                database.session.commit()
+
+            # ========================================================
+            # 2. BUSCA OU CRIAÇÃO DO FILHO (Ex: Air Max ou Nike)
+            # ========================================================
+            filho = Taxonomia.query.filter_by(nome=nome_filho).first()
+
+            if not filho:
+                filho = Taxonomia(
+                    nome=nome_filho,
+                    status='homologado',
+                    data_criacao=datetime.now(timezone.utc),
+                    data_homologacao=datetime.now(timezone.utc),
+                    visivel_usuario=True,
+                    visivel_negocio=True,  # Entra na rede com passaporte comercial ativo!
+                    categoria='Gosto'
+                )
+                database.session.add(filho)
+                database.session.commit()
+                contador_novos += 1
+            else:
+                # Auto-cura: Se o termo já existia na base (solto ou pendente),
+                # ele é integrado à rede comercial com suas próprias flags ativas.
+                alterou = False
+                if not filho.visivel_usuario:
+                    filho.visivel_usuario = True
+                    alterou = True
+                if not filho.visivel_negocio:
+                    filho.visivel_negocio = True
+                    alterou = True
+                if filho.status != 'homologado':
+                    filho.status = 'homologado'
+                    alterou = True
+
+                if alterou:
+                    database.session.commit()
+
+            # ========================================================
+            # 3. VÍNCULO DO GRAFO (Tabela Intermediária)
+            # ========================================================
+            # Aqui criamos o elo específico dessa rota, sem travar o termo
+            # a um único caminho fixo.
+            conexao_existe = database.session.query(taxonomia_conexoes).filter(
+                taxonomia_conexoes.c.pai_id == pai_termo.id,
+                taxonomia_conexoes.c.filho_id == filho.id
+            ).first()
+
+            if not conexao_existe:
+                insercao = taxonomia_conexoes.insert().values(
+                    pai_id=pai_termo.id,
+                    filho_id=filho.id
+                )
+                database.session.execute(insercao)
+                database.session.commit()
+                contador_vinculos += 1
+
+        flash(
+            f"Sucesso! {contador_novos} novos termos cadastrados e {contador_vinculos} modelos vinculados a {pai_termo.nome}.",
+            "success")
+
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao processar o arquivo CSV: {str(e)}", "danger")
+
+    return redirect(request.referrer)
+
+
 @login_required
 @apenas_admin
 def admin_delete_taxonomia(id):
@@ -1857,7 +2208,7 @@ def admin_delete_taxonomia(id):
     database.session.delete(termo)
     database.session.commit()
     flash(f"Termo '{termo.nome}' removido com sucesso.", "success")
-    return redirect(url_for('admin_dashboard'))
+    return redirect(url_for('admin_sistema'))
 
 @app.route("/admin/exportar-locais")
 @login_required
@@ -2126,12 +2477,15 @@ def salvar_preferencias():
         # 1. Obter IDs e Termos
         ids_selecionados = [int(tid) for tid in ids_raw.split(',') if tid.strip().isdigit()]
 
-        # CORREÇÃO 1: Forma segura de limpar relacionamento lazy='dynamic'
-        # Em vez de atribuir [], iteramos removendo ou limpando os objetos da sessão.
-        # Para tabelas dinâmicas, o método mais limpo é converter a query atual em lista e remover.
+        # Guardamos uma lista de todas as tags que o usuário mexeu nesta rodada
+        # para analisar o volume de interesse delas logo depois de salvar
+        tags_para_analisar = []
+
+        # Limpa o relacionamento lazy='dynamic' de forma segura
         interesses_atuais = list(current_user.interesses)
         for interesse in interesses_atuais:
             current_user.interesses.remove(interesse)
+            tags_para_analisar.append(interesse)  # Analisa se perdeu interesse
 
         # Força o SQLAlchemy a processar as remoções antes de começarmos as inserções
         database.session.flush()
@@ -2141,10 +2495,10 @@ def salvar_preferencias():
             tags_existentes = Taxonomia.query.filter(Taxonomia.id.in_(ids_selecionados)).all()
             for tag in tags_existentes:
                 current_user.interesses.append(tag)
+                tags_para_analisar.append(tag)  # Analisa o ganho de interesse
 
         # 3. Adicionar Novos Termos (Respeitando sua Model)
         if novos_termos_raw:
-            # Tratamento para evitar duplicados na mesma requisição se o usuário mandar o mesmo termo duas vezes
             termos_processados = set()
 
             for nome in novos_termos_raw.split(','):
@@ -2168,9 +2522,33 @@ def salvar_preferencias():
                 if tag_nova not in current_user.interesses:
                     current_user.interesses.append(tag_nova)
 
-        # CORREÇÃO 2: Executar o Commit Principal AQUI!
-        # Isso garante que a tabela intermediária Many-to-Many grave os dados de verdade no banco.
+                tags_para_analisar.append(tag_nova)  # Analisa o termo novo criado da rua
+
+        # EXECUTA O COMMIT PRINCIPAL AQUI!
+        # Dados gravados e consolidados na tabela intermediária 'usuarios_interesses'
         database.session.commit()
+
+        # =====================================================================
+        # 🔥 GATILHO DOS 5 AUTOMÁTICO (Inteligência Coletiva do FeedIn)
+        # =====================================================================
+        # Remove duplicados da nossa lista de análise para rodar o SQL uma vez por tag
+        tags_unicas = set(tags_para_analisar)
+
+        for tag in tags_unicas:
+            # Só avaliamos termos que ainda estão na fila de espera ('pendente')
+            if tag.status == 'pendente':
+                # .buscar_total_seguidores() usa o .count() direto no banco que você já programou na Model!
+                total_seguidores_reais = tag.buscar_total_seguidores()
+
+                if total_seguidores_reais >= 5:
+                    tag.status = 'homologado'
+                    tag.data_homologacao = datetime.now(timezone.utc)
+                    tag.visivel_usuario = True
+                    tag.visivel_negocio = False  # Continua comercialmente seguro até o Admin dar um Pai
+
+        # Se alguma tag foi promovida a homologada, salva a mudança de status
+        database.session.commit()
+        # =====================================================================
 
         # 4. Validação de Nível (Agora o banco de dados está 100% atualizado)
         total_atual = current_user.interesses.count()
@@ -2179,7 +2557,7 @@ def salvar_preferencias():
         if nivel_antes < 10 and total_atual >= 10:
             processar_mudanca_nivel(current_user, 10)
             database.session.commit()  # Commit da mudança de nível
-            flash("Sensacional! Você agora é um Pioneiro do FeedIn.", "success")
+            flash("Bem-vindo ao FeedIn.", "success")
             return redirect(url_for('feed'))
 
         elif nivel_antes < 10:
@@ -2187,14 +2565,14 @@ def salvar_preferencias():
             return redirect(url_for('configuracoes', aba='preferencias'))
 
         else:
-            flash("Suas preferências foram updated com sucesso.", "success")
+            flash("Suas preferências foram atualizadas com sucesso.", "success")
             return redirect(url_for('configuracoes', aba='preferencias'))
 
     except Exception as e:
         database.session.rollback()
         print(f"DEBUG SALVAR PREFS (Erro Real): {str(e)}")
         import traceback;
-        traceback.print_exc()  # Ativado para te ajudar a ver a linha exata no console caso dê outro erro
+        traceback.print_exc()
         flash("Erro ao salvar preferências. Tente novamente.", "danger")
         return redirect(url_for('configuracoes', aba='preferencias'))
 
@@ -2221,6 +2599,31 @@ def remover_interesse(id_interesse):
         })
 
     return jsonify({"status": "erro", "msg": "Interesse não encontrado"}), 404
+
+
+@app.route('/admin/taxonomia/remover_raiz/<int:pai_id>/<int:raiz_id>', methods=['POST'])
+@login_required
+def admin_remover_pai_raiz(pai_id, raiz_id):
+    try:
+        termo_pai = Taxonomia.query.get(pai_id)
+        termo_raiz = Taxonomia.query.get(raiz_id)
+
+        if not termo_pai or not termo_raiz:
+            return jsonify({'success': False, 'error': 'Termos não localizados no banco.'}), 404
+
+        # Quebra o relacionamento na tabela polimórfica (taxonomia_conexoes)
+        if termo_raiz in termo_pai.contextos:
+            termo_pai.contextos.remove(termo_raiz)
+        elif termo_pai in termo_raiz.contextos:
+            termo_raiz.contextos.remove(termo_pai)
+
+        database.session.commit()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"ERRO API REMOVER VÍNCULO: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route("/declinar-conexao/<int:id_conexao>", methods=["POST"])
@@ -4040,31 +4443,37 @@ def buscar_usuarios():
 
 # consulta que gera a visão que o empreendedor de Piracicaba precisa para tomar decisões:
 def relatorio_nicho_piracicaba():
-    print("\n📊 RELATÓRIO DE DEMANDA - FEEDIN PIRACICABA")
+    print("\n📊 RELATÓRIO DE DEMANDA OTIMIZADO - FEEDIN PIRACICABA")
     print("-" * 60)
 
     try:
-        # 1. Pegamos todas as tags (Taxonomia) para analisar uma a uma
-        tags = Taxonomia.query.all()
+        # Subquery para contar seguidores por tag de uma só vez
+        sub_seguidores = database.session.query(
+            usuarios_interesses.c.taxonomia_id.label('tag_id'),
+            func.count(usuarios_interesses.c.usuario_id).label('total_seg')
+        ).group_by(usuarios_interesses.c.taxonomia_id).subquery()
 
-        for tag in tags:
-            # 2. Contamos seguidores (Interesses dos usuários)
-            # Acessamos a tabela 'usuarios_interesses' através do atributo 'c' (columns)
-            total_seguidores = database.session.query(func.count()) \
-                                   .select_from(usuarios_interesses) \
-                                   .filter(usuarios_interesses.c.taxonomia_id == tag.id) \
-                                   .scalar() or 0
+        # Subquery para contar memórias por tag de uma só vez
+        sub_memorias = database.session.query(
+            postagem_tags.c.taxonomia_id.label('tag_id'),
+            func.count(postagem_tags.c.postagem_id).label('total_mem')
+        ).group_by(postagem_tags.c.taxonomia_id).subquery()
 
-            # 3. Contamos memórias (Postagens marcadas com essa tag)
-            # Acessamos a tabela 'postagem_tags' através do atributo 'c'
-            vol_memorias = database.session.query(func.count()) \
-                               .select_from(postagem_tags) \
-                               .filter(postagem_tags.c.taxonomia_id == tag.id) \
-                               .scalar() or 0
+        # Consulta principal: Junta a Taxonomia com os totais calculados
+        # Usamos outerjoin para trazer a tag mesmo se um dos contadores for zero
+        relatorio = database.session.query(
+            Taxonomia.nome,
+            func.coalesce(sub_seguidores.c.total_seg, 0).label('seguidores'),
+            func.coalesce(sub_memorias.c.total_mem, 0).label('memorias')
+        ).outerjoin(sub_seguidores, Taxonomia.id == sub_seguidores.c.tag_id)\
+         .outerjoin(sub_memorias, Taxonomia.id == sub_memorias.c.tag_id)\
+         .filter((sub_seguidores.c.total_seg > 0) | (sub_memorias.c.total_mem > 0))\
+         .order_by(func.coalesce(sub_seguidores.c.total_seg, 0).desc())\
+         .all() # <-- UMA ÚNICA CONSULTA AO BANCO!
 
-            # Só exibe se houver algum movimento (seguidores ou fotos)
-            if total_seguidores > 0 or vol_memorias > 0:
-                print(f"Tag: {tag.nome:<20} | Seguidores: {total_seguidores:<4} | Memórias: {vol_memorias}")
+        # Exibe o resultado já ordenado pelo ranking real de relevância
+        for nome, seguidores, memorias in relatorio:
+            print(f"Tag: {nome:<20} | Seguidores: {seguidores:<4} | Memórias: {memorias}")
 
     except Exception as e:
         print(f"❌ Erro ao gerar relatório: {e}")
