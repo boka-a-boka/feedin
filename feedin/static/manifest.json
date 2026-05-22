@@ -1,0 +1,22 @@
+{
+  "short_name": "FeedIn",
+  "name": "FeedIn - Resgate de Memória Social",
+  "icons": [
+    {
+      "src": "/static/imagens/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/static/imagens/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "display": "standalone",
+  "orientation": "portrait"
+}

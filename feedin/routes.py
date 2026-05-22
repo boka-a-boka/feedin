@@ -85,6 +85,16 @@ def exibir_cofre():
                            data_verificacao=data_verificacao)
 
 
+@app.route('/sw.js')
+def serve_sw():
+    return app.send_static_file('js/sw.js')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return app.send_static_file('imagens/favicon.png')
+
+
 @app.route('/alterar-senha', methods=['GET', 'POST'])
 @login_required
 def alterar_senha():

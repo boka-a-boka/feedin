@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
     <title>FeedIn! - {% block titulo %}{% endblock %}</title>
 
+    <!-- Chamada para o Manifesto -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+
+    <!-- Configurações específicas para iOS (Safari) -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FeedIn">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='imagens/icon-512.png') }}">
+
     <!-- CSS: Bootstrap, Bi-Icons, FontAwesome -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -121,6 +130,14 @@
                 if (alert) alert.close();
             });
         }, 5000);
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('FeedIn PWA registrado com sucesso!', reg))
+            .catch(err => console.log('Erro ao registrar PWA:', err));
+        });
+      }
     </script>
 
     <!-- BLOCO PARA SCRIPTS ESPECÍFICOS DE CADA PÁGINA -->
