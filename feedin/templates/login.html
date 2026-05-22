@@ -43,71 +43,38 @@
 </div>
 
 <script>
-document.getElementById('btn-login-biometria').addEventListener('click', async () => {
-    // Pega o email que o usuário já digitou no campo de texto comum do seu formulário
-    const emailDigitado = document.getElementById('email').value; // Ajuste o ID do seu campo se necessário
+// Esse é o código que roda quando clicam no botão "Entrar com Face ID" na tela de login normal
+async function entrarComBiometria() {
+    const email = document.getElementById('email_login_principal').value;
 
-    if (!emailDigitado) {
-        alert('Por favor, digite seu e-mail primeiro para identificarmos seu dispositivo.');
+    if (!email) {
+        alert("Por favor, digite seu e-mail primeiro para identificarmos o dispositivo.");
         return;
-    }
-
-    // 1. Busca o desafio do Flask para este e-mail
-    const respostaOpcoes = await fetch('/biometria/login/opcoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailDigitado })
-    });
-
-    if (!respostaOpcoes.ok) {
-        alert('Usuário não encontrado ou biometria não cadastrada.');
-        return;
-    }
-
-    const opcoes = await respostaOpcoes.json();
-
-    // Converte os dados de Base64 para ArrayBuffer (o formato que o sensor do celular exige)
-    opcoes.challenge = Uint8Array.from(atob(opcoes.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-    if (opcoes.allowCredentials) {
-        opcoes.allowCredentials.forEach(c => c.id = Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
     }
 
     try {
-        // 2. Acende o sensor de Face ID / Digital do celular do usuário!
-        const credencialNativa = await navigator.credentials.get({ publicKey: opcoes });
-
-        // Prepara a resposta criptográfica do hardware para enviar ao servidor
-        const dadosParaEnviar = {
-            id: credencialNativa.id,
-            rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.rawId))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-            type: credencialNativa.type,
-            response: {
-                authenticatorData: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.authenticatorData))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.clientDataJSON))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-                signature: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.signature))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-                userHandle: credencialNativa.response.userHandle ? btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.userHandle))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '') : null
-            }
-        };
-
-        // 3. Envia o veredito criptográfico para o Flask autenticar
-        const resultadoFinal = await fetch('/biometria/login/verificar', {
+        // Chamada para a sua rota atual de login por biometria
+        const resposta = await fetch('/login-biometrico-verificar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosParaEnviar)
+            body: JSON.stringify({ email: email })
         });
 
-        const statusServidor = await resultadoFinal.json();
-        if (statusServidor.status === 'sucesso') {
-            // Sucesso absoluto! Redireciona o usuário para dentro do sistema
-            window.location.href = statusServidor.redirecionar;
-        } else {
-            alert('Falha na autenticação: ' + statusServidor.mensagem);
+        // O PULO DO GATO ESTÁ AQUI:
+        if (resposta.status === 404 || resposta.status === 401) {
+            // Se o Flask disser que não achou a biometria no banco...
+            // Levamos o usuário direto para a tela dedicada que criamos!
+            window.location.href = '/ativar-biometria';
+            return;
         }
 
-    } catch (err) {
-        console.error(err);
-        alert('O acesso por biometria foi cancelado ou falhou.');
+        const dados = await resposta.json();
+
+        // ... se a biometria existir, segue o fluxo normal de autenticação que você já tinha pronto ...
+
+    } catch (erro) {
+        console.error("Erro no processo:", erro);
     }
-});
+}
 </script>
 {% endblock content %}
