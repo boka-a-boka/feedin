@@ -223,3 +223,55 @@ document.getElementById('input-foto').addEventListener('change', function(event)
     }
 });
 
+async function iniciarCadastroBiometrico(email, senha) {
+    // 1. Envia os dados para a rota que criamos acima
+    const resposta = await fetch('/ativar-biometria', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha })
+    });
+
+    if (!resposta.ok) {
+        alert("Falha na validação dos dados.");
+        return;
+    }
+
+    const dados = await resposta.json();
+    const options = dados.options;
+
+    // 2. Converte as strings base64 do Flask para ArrayBuffer (Exigência do navegador)
+    options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0));
+    options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0));
+
+    try {
+        // 3. A MÁGICA: Abre o Face ID no iPhone, a Digital no Android ou o PIN no Windows
+        const credential = await navigator.credentials.create({ publicKey: options });
+
+        // 4. Prepara a resposta do sensor para enviar de volta ao Flask
+        const dadosParaSalvar = {
+            id: credential.id,
+            rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credential.rawId))),
+            type: credential.type,
+            response: {
+                attestationObject: btoa(String.fromCharCode.apply(null, new Uint8Array(credential.response.attestationObject))),
+                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(credential.response.clientDataJSON)))
+            }
+        };
+
+        // 5. Envia para uma rota de finalização para salvar na tabela 'credenciais_biometricas'
+        const salvarResposta = await fetch('/salvar-biometria', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosParaSalvar)
+        });
+
+        if (salvarResposta.ok) {
+            alert("Biometria ativada com sucesso! Próximos logins serão diretos.");
+            window.location.href = '/dashboard';
+        }
+
+    } catch (err) {
+        console.error("O usuário cancelou ou o dispositivo não suporta:", err);
+        alert("O processo de biometria foi cancelado ou não é suportado neste navegador.");
+    }
+}

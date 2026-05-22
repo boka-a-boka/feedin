@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedIn - Ativar Acesso Biométrico</title>
+    <!-- Se você usa Bootstrap, ele vai herdar o visual bonitão -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card-biometria {
+            max-width: 450px;
+            width: 100%;
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        }
+        .icon-shield {
+            font-size: 3rem;
+            color: #0d6efd;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container p-3">
+    <div class="row justify-content-center">
+        <div class="card card-biometria p-4 text-center">
+
+            <!-- Ícone ou Logo do FeedIn -->
+            <div class="mb-3">
+                <span class="icon-shield">🛡️</span>
+            </div>
+
+            <h3 class="fw-bold mb-2">Primeiro Acesso Biométrico</h3>
+            <p class="text-muted small mb-4">
+                Identificamos que este é seu primeiro acesso via biometria neste dispositivo.
+                Por segurança, confirme seus dados para vincular o seu Face ID, Digital ou PIN.
+            </p>
+
+            <!-- Alerta de Erro caso a senha esteja errada -->
+            <div id="erro-mensagem" class="alert alert-danger d-none small text-start" role="alert"></div>
+
+            <!-- Formulário Dedicado -->
+            <form id="form-biometria">
+                <div class="form-floating mb-3 text-start">
+                    <input type="email" class="form-control" id="email" placeholder="nome@exemplo.com" required>
+                    <label for="email">Seu e-mail do FeedIn</label>
+                </div>
+
+                <div class="form-floating mb-4 text-start">
+                    <input type="password" class="form-control" id="senha" placeholder="Senha" required>
+                    <label for="senha">Sua senha do FeedIn</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100 rounded-3 mb-2" id="btn-ativar">
+                    Validar e Ativar Biometria
+                </button>
+
+                <a href="/login" class="text-decoration-none small text-secondary d-block mt-3">
+                    Voltar para o login tradicional
+                </a>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<!-- Importando o script JS universal que te passei antes -->
+<script src="{{ url_for('static', filename='js/webauthn_cadastro.js') }}"></script>
+
+<script>
+    // Escuta o envio do formulário dedicado
+    document.getElementById('form-biometria').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const email = document.getElementById('email').value;
+        const senha = document.getElementById('senha').value;
+        const btn = document.getElementById('btn-ativar');
+        const erroDiv = document.getElementById('erro-mensagem');
+
+        // Desabilita o botão para o usuário não clicar duas vezes
+        btn.disabled = true;
+        btn.innerText = "Aguardando sensor do aparelho...";
+        erroDiv.classList.add('d-none');
+
+        try {
+            // Chama aquela função assíncrona do arquivo JS universal
+            await iniciarCadastroBiometrico(email, senha);
+        } catch (error) {
+            // Se der ruim na validação ou o usuário cancelar o Face ID/Digital
+            erroDiv.innerText = error.message || "Erro ao processar o cadastro biométrico.";
+            erroDiv.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerText = "Validar e Ativar Biometria";
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -32,7 +32,7 @@ from sqlalchemy import or_, func, asc, and_, not_
 from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
 from markupsafe import escape
-import secrets, os, re, io, csv, json, pytz, uuid, markdown
+import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64
 from itertools import groupby
 from io import TextIOWrapper
 from PIL import Image, ImageOps
@@ -378,6 +378,49 @@ def login_verificar():
 
     except Exception as e:
         return jsonify({'status': 'erro', 'mensagem': 'Falha na autenticação biométrica'}), 400
+
+
+@app.route('/ativar-biometria', methods=['GET', 'POST'])
+def ativar_biometria():
+    if request.method == 'GET':
+        # Renderiza a tela dedicada e focada que você idealizou
+        return render_template('ativar_biometria.html')
+
+    # Processamento do POST (Validação de primeiro vínculo)
+    dados = request.get_json()
+    email = dados.get('email')
+    senha = dados.get('senha')
+
+    usuario = Usuario.query.filter_by(email=email).first()
+
+    if usuario and usuario.verificar_senha(senha):
+        # Gerar o desafio criptográfico (Challenge) que o hardware exige
+        challenge = base64.b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
+
+        # Opções universais do WebAuthn (Funciona em iOS, Android, Windows e Mac)
+        registration_options = {
+            "challenge": challenge,
+            "rp": {"name": "FeedIn", "id": request.host.split(':')[0]},
+            "user": {
+                "id": base64.b64encode(str(usuario.id).encode()).decode('utf-8').rstrip('='),
+                "name": usuario.email,
+                "displayName": usuario.nome
+            },
+            "pubKeyCredParams": [{"type": "public-key", "alg": -7}],  # ES256 (Algoritmo universal)
+            "authenticatorSelection": {
+                "authenticatorAttachment": "platform",  # Força biometria nativa do dispositivo
+                "userVerification": "required"
+            },
+            "timeout": 60000
+        }
+
+        # Salva o desafio temporariamente na sessão para validar no próximo passo
+        session['biometria_challenge'] = challenge
+        session['biometria_user_id'] = usuario.id
+
+        return jsonify({"status": "sucesso", "options": registration_options})
+
+    return jsonify({"status": "erro", "mensagem": "E-mail ou senha incorretos."}), 401
 
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])
