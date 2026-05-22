@@ -36,9 +36,8 @@
                     <div class="col-md-9">{{ form.nome_completo(class="form-control border-0") }}</div>
                 </div>
 
-                <div class="row-striped p-3 d-md-flex align-items-center">
-                    {{ form.data_nascimento.label(class="col-md-3 fw-bold mb-0") }}
-                    <div class="col-md-4">{{ form.data_nascimento(class="form-control border-0", type="date") }}</div>
+                <div class="col-md-4">
+                    {{ form.data_nascimento(class="form-control border-0 JSON-data-mascara", type="tel", placeholder="dd/mm/aaaa", maxlength="10", autocomplete="off") }}
                 </div>
 
                 <div class="row-striped p-3 d-md-flex align-items-center">
@@ -128,4 +127,39 @@ function disableButton() {
     btn.disabled = true;
     btn.innerHTML = 'Enviando... <span class="spinner-border spinner-border-sm"></span>';
 }
+
+// Adicione este bloco dentro do seu bloco <script> existente
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInput = document.querySelector('.JSON-data-mascara');
+
+    if (dataInput) {
+        dataInput.addEventListener('input', function(e) {
+            // Remove tudo o que não for número
+            let v = e.target.value.replace(/\D/g, '');
+
+            // Se passar do tamanho de uma data, corta
+            if (v.length > 8) v = v.substring(0, 8);
+
+            // Aplica a máscara de barras conforme a digitação
+            if (v.length > 2 && v.length <= 4) {
+                v = v.replace(/^(\d{2})(\d+)/, '$1/$2');
+            } else if (v.length > 4) {
+                v = v.replace(/^(\d{2})(\d{2})(\d+)/, '$1/$2/$3');
+            }
+
+            e.target.value = v;
+        });
+
+        // Validação visual rápida ao perder o foco (opcional)
+        dataInput.addEventListener('blur', function(e) {
+            const val = e.target.value;
+            if (val && val.length < 10) {
+                // Se a data estiver incompleta, dá um aviso visual discreto do Bootstrap
+                dataInput.classList.add('is-invalid');
+            } else {
+                dataInput.classList.remove('is-invalid');
+            }
+        });
+    }
+});
 </script>

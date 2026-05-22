@@ -901,3 +901,17 @@ class MarcacaoPostagem(database.Model):
                                     backref=database.backref('memorias_marcado', lazy='dynamic'))
     solicitante = database.relationship('Usuario', foreign_keys=[solicitante_id],
                                         backref=database.backref('solicitacoes_marcacao_feitas', lazy='dynamic'))
+
+
+class CredencialBiometrica(database.Model):
+    __tablename__ = 'credenciais_biometricas'
+
+    id = database.Column(database.Integer, primary_key=True)
+    user_id = database.Column(database.Integer, database.ForeignKey('usuario.id'),
+                        nullable=False)  # Ajuste 'usuario.id' se sua tabela tiver outro nome
+    credential_id = database.Column(database.String(255), unique=True, nullable=False)
+    public_key = database.Column(database.Text, nullable=False)
+    sign_count = database.Column(database.Integer, default=0)
+
+    # Relacionamento com o usuário
+    usuario = database.relationship('usuario', backref=database.backref('biometrias', lazy=True))

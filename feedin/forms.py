@@ -36,7 +36,9 @@ class FormPerfil(FlaskForm):
     nome_completo = StringField("Nome completo", validators=[DataRequired(message="Nome é obrigatório")])
 
     # Adicionamos Optional() para que, se a data vier vazia ou estranha, o form NÃO invalide
-    data_nascimento = DateField('Data de Nascimento', validators=[Optional()])
+    # No seu forms.py, mude a validação do campo para ler a string brasileira:
+    data_nascimento = DateField('Data de Nascimento', format='%d/%m/%Y',
+                                validators=[DataRequired(message="Insira uma data válida")])
 
     cidade_natal = StringField("Cidade natal", validators=[Optional()])
 

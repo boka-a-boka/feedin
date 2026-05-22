@@ -11,10 +11,21 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            AtividadeLocal, VinculoUsuarioLocal, Taxonomia, LocalMidia, Convite,
                            taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
-                           AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem)
+                           AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
+                           CredencialBiometrica)
 
 from feedin.utils import salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa, salvar_imagem_postagem
-from werkzeug.utils import secure_filename
+
+from webauthn import (generate_registration_options, verify_registration_response, options_to_json,
+                      generate_authentication_options, verify_authentication_response)
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+
+biometria_bp = Blueprint('biometria', __name__)
+
+# O WebAuthn precisa saber o domínio exato do seu app
+RP_ID = "boka-a-boka.com.br"  # Ou o subdomínio completo do FeedIn se preferir: "feedin.boka-a-boka.com.br"
+RP_NAME = "FeedIn"
+
 from urllib.parse import quote
 from functools import wraps
 from sqlalchemy import or_, func, asc, and_, not_
@@ -229,6 +240,145 @@ def login():
             flash('E-mail e/ou senha incorretos.', 'danger')
 
     return render_template("login.html", form=form_login)
+
+
+@biometria_bp.route('/biometria/login/opcoes', methods=['POST'])
+def login_opcoes():
+    """1. Gera o desafio de segurança para o celular tentar autenticar"""
+    dados = request.get_json()
+    email = dados.get('email')
+
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario or not usuario.biometrias:
+        return jsonify({'status': 'erro', 'mensagem': 'Biometria não configurada para este usuário'}), 404
+
+    # Lista as credenciais permitidas para este usuário
+    credenciais_permitidas = [
+        PublicKeyCredentialDescriptor(id=c.credential_id.encode('utf-8'))
+        for c in usuario.biometrias
+    ]
+
+    opcoes = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=credenciais_permitidas,
+    )
+
+    # Salva o desafio na sessão do Flask para validar no próximo passo
+    session['authentication_challenge'] = opcoes.challenge.decode('utf-8')
+    session['auth_user_id'] = usuario.id
+
+    return options_to_json(opcoes)
+
+
+@biometria_bp.route('/biometria/login/verificar', methods=['POST'])
+def login_verificar():
+    """2. Confere a resposta do Face ID e faz o login do usuário"""
+    dados_resposta = request.get_json()
+    desafio_salvo = session.get('authentication_challenge')
+    user_id = session.get('auth_user_id')
+
+    if not desafio_salvo or not user_id:
+        return jsonify({'status': 'erro', 'mensagem': 'Sessão de login expirada'}), 400
+
+    usuario = Usuario.query.get(user_id)
+    # Busca a chave pública que salvamos no passo de ativação
+    credencial_banco = CredencialBiometrica.query.filter_by(
+        credential_id=dados_resposta.get('id'),
+        user_id=user_id
+    ).first()
+
+    if not credencial_banco:
+        return jsonify({'status': 'erro', 'mensagem': 'Credencial não encontrada'}), 400
+
+    try:
+        verificacao = verify_authentication_response(
+            credential=dados_resposta,
+            expected_challenge=desafio_salvo.encode('utf-8'),
+            expected_origin=f"https://{RP_ID}",
+            expected_rp_id=RP_ID,
+            credential_public_key=credencial_banco.public_key.encode('utf-8'),
+            credential_current_sign_count=credencial_banco.sign_count,
+        )
+
+        # Atualiza o contador de uso da chave (exigência de segurança do WebAuthn)
+        credencial_banco.sign_count = verificacao.new_sign_count
+        database.session.commit()
+
+        # LOGADO COM SUCESSO! O Flask assume a sessão do usuário aqui
+        login_user(usuario)
+
+        return jsonify({'status': 'sucesso', 'redirecionar': '/dashboard'})  # Altere para sua rota pós-login
+
+    except Exception as e:
+        return jsonify({'status': 'erro', 'mensagem': 'Falha na autenticação biométrica'}), 400
+
+
+@biometria_bp.route('/biometria/login/opcoes', methods=['POST'])
+def login_opcoes():
+    """1. Gera o desafio de segurança para o dispositivo do usuário tentar autenticar"""
+    dados = request.get_json()
+    email = dados.get('email')
+
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario or not usuario.biometrias:
+        return jsonify({'status': 'erro', 'mensagem': 'Biometria não configurada'}), 404
+
+    credenciais_permitidas = [
+        PublicKeyCredentialDescriptor(id=c.credential_id.encode('utf-8'))
+        for c in usuario.biometrias
+    ]
+
+    # Ajustado para o nome real da sua máquina: generate_authentication_options
+    opcoes = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=credenciais_permitidas,
+    )
+
+    session['authentication_challenge'] = opcoes.challenge.decode('utf-8')
+    session['auth_user_id'] = usuario.id
+
+    return options_to_json(opcoes)
+
+
+@biometria_bp.route('/biometria/login/verificar', methods=['POST'])
+def login_verificar():
+    """2. Confere a resposta do sensor biométrico e realiza o login"""
+    dados_resposta = request.get_json()
+    desafio_salvo = session.get('authentication_challenge')
+    user_id = session.get('auth_user_id')
+
+    if not desafio_salvo or not user_id:
+        return jsonify({'status': 'erro', 'mensagem': 'Sessão expirada'}), 400
+
+    usuario = Usuario.query.get(user_id)
+    credencial_banco = CredencialBiometrica.query.filter_by(
+        credential_id=dados_resposta.get('id'),
+        user_id=user_id
+    ).first()
+
+    if not credencial_banco:
+        return jsonify({'status': 'erro', 'mensagem': 'Credencial não encontrada'}), 400
+
+    try:
+        # Ajustado para o nome real da sua máquina: verify_authentication_response
+        verificacao = verify_authentication_response(
+            credential=dados_resposta,
+            expected_challenge=desafio_salvo.encode('utf-8'),
+            expected_origin=f"https://{RP_ID}",
+            expected_rp_id=RP_ID,
+            credential_public_key=credencial_banco.public_key.encode('utf-8'),
+            credential_current_sign_count=credencial_banco.sign_count,
+        )
+
+        credencial_banco.sign_count = verificacao.new_sign_count
+        database.session.commit()
+
+        login_user(usuario)
+        return jsonify({'status': 'sucesso', 'redirecionar': '/dashboard'})
+
+    except Exception as e:
+        return jsonify({'status': 'erro', 'mensagem': 'Falha na autenticação biométrica'}), 400
+
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])
 def esqueci_senha():

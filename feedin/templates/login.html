@@ -35,4 +35,79 @@
         </form>
     </div>
 </div>
+<!-- Botão Face ID / Biometria -->
+<div class="text-center mt-3">
+    <button type="button" id="btn-login-biometria" class="btn btn-light rounded-pill border w-100 fw-bold shadow-sm py-2">
+        <i class="bi bi-face-id me-2 text-primary"></i> Entrar com Face ID / Biometria
+    </button>
+</div>
+
+<script>
+document.getElementById('btn-login-biometria').addEventListener('click', async () => {
+    // Pega o email que o usuário já digitou no campo de texto comum do seu formulário
+    const emailDigitado = document.getElementById('email').value; // Ajuste o ID do seu campo se necessário
+
+    if (!emailDigitado) {
+        alert('Por favor, digite seu e-mail primeiro para identificarmos seu dispositivo.');
+        return;
+    }
+
+    // 1. Busca o desafio do Flask para este e-mail
+    const respostaOpcoes = await fetch('/biometria/login/opcoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailDigitado })
+    });
+
+    if (!respostaOpcoes.ok) {
+        alert('Usuário não encontrado ou biometria não cadastrada.');
+        return;
+    }
+
+    const opcoes = await respostaOpcoes.json();
+
+    // Converte os dados de Base64 para ArrayBuffer (o formato que o sensor do celular exige)
+    opcoes.challenge = Uint8Array.from(atob(opcoes.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    if (opcoes.allowCredentials) {
+        opcoes.allowCredentials.forEach(c => c.id = Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+    }
+
+    try {
+        // 2. Acende o sensor de Face ID / Digital do celular do usuário!
+        const credencialNativa = await navigator.credentials.get({ publicKey: opcoes });
+
+        // Prepara a resposta criptográfica do hardware para enviar ao servidor
+        const dadosParaEnviar = {
+            id: credencialNativa.id,
+            rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.rawId))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+            type: credencialNativa.type,
+            response: {
+                authenticatorData: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.authenticatorData))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.clientDataJSON))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+                signature: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.signature))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+                userHandle: credencialNativa.response.userHandle ? btoa(String.fromCharCode.apply(null, new Uint8Array(credencialNativa.response.userHandle))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '') : null
+            }
+        };
+
+        // 3. Envia o veredito criptográfico para o Flask autenticar
+        const resultadoFinal = await fetch('/biometria/login/verificar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosParaEnviar)
+        });
+
+        const statusServidor = await resultadoFinal.json();
+        if (statusServidor.status === 'sucesso') {
+            // Sucesso absoluto! Redireciona o usuário para dentro do sistema
+            window.location.href = statusServidor.redirecionar;
+        } else {
+            alert('Falha na autenticação: ' + statusServidor.mensagem);
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert('O acesso por biometria foi cancelado ou falhou.');
+    }
+});
+</script>
 {% endblock content %}
