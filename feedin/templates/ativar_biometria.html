@@ -105,13 +105,15 @@
 async function iniciarCadastroBiometrico() {
     console.log("Iniciando o processo de vínculo biométrico...");
 
-    // 1. Captura o e-mail e a senha que o usuário usou (ou que estão associados à sessão/modal)
-    // Certifique-se de que esses IDs existam na sua modal/página se for coletar dados lá
-    const campoEmail = document.getElementById('email_biometria') || document.getElementById('email');
-    const campoSenha = document.getElementById('senha_biometria') || document.getElementById('senha');
+    // 1. Busca os campos do formulário atual (padrão do Flask-WTF)
+    const campoEmail = document.getElementById('email');
+    const campoSenha = document.getElementById('senha');
+
+    // Busca o Token de Segurança gerado pelo Flask na sua página
+    const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
 
     if (!campoEmail || !campoSenha) {
-        alert("Erro técnico: Campos de e-mail ou senha não encontrados na tela para o vínculo.");
+        alert("Por favor, preencha os campos de e-mail e senha para prosseguir.");
         return;
     }
 
@@ -120,38 +122,46 @@ async function iniciarCadastroBiometrico() {
         senha: campoSenha.value
     };
 
+    // Monta os cabeçalhos de comunicação incluindo a proteção do Flask se ela existir
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfTokenInput) {
+        headers['X-CSRFToken'] = csrfTokenInput.value;
+    }
+
     try {
-        // 2. Dispara o POST para a sua rota real do Flask que gera o Challenge (Desafio)
+        // 2. Dispara a requisição para a sua rota exata na raiz
         const resposta = await fetch('/ativar-biometria', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: headers,
             body: JSON.stringify(dadosParaEnvio)
         });
+
+        // Se o Flask responder mas com erro de rota ou servidor
+        if (!resposta.ok) {
+            console.error(`Erro no servidor: Status ${resposta.status}`);
+            alert("O servidor encontrou um problema ao processar a biometria.");
+            return;
+        }
 
         const resultado = await resposta.json();
 
         if (resultado.status === 'erro') {
-            alert("Erro no servidor: " + resultado.mensagem);
+            alert(resultado.mensagem);
             return;
         }
 
-        // 3. SE O FLASK DEVOLVER O DESAFIO (options) COM SUCESSO:
+        // 3. Resposta de sucesso do seu Python com as opções do WebAuthn
         if (resultado.status === 'sucesso' && resultado.options) {
-            console.log("Desafio recebido do Flask!", resultado.options);
-
-            // Aqui o hardware do celular (Face ID/Touch ID) entraria em ação se estivéssemos em produção
+            console.log("Desafio gerado pelo Flask com sucesso:", resultado.options);
             alert("Sucesso! O Flask gerou o desafio criptográfico universal (WebAuthn).");
 
-            // Tratamento temporário para testes locais no desktop:
-            // Como estamos simulando, você pode fechar a modal ou dar um refresh para ver o fluxo
+            // Aqui o fluxo segue para registrar no dispositivo do usuário em produção
             window.location.reload();
         }
 
     } catch (erro) {
-        console.error("Erro na comunicação da biometria:", erro);
-        alert("Não foi possível conectar ao servidor de biometria.");
+        console.error("Erro detalhado na comunicação da biometria:", erro);
+        alert("Erro de conexão: Não foi possível alcançar o servidor de biometria.");
     }
 }
 </script>
