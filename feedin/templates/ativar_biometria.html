@@ -73,11 +73,14 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@github/webauthn-json@0.5.7/dist/umd/webauthn-json.js"></script>
+<!-- CÓDIGO DA BIBLIOTECA WEBAUTHN-JSON INJETADO LOCALMENTE PARA INDEPENDÊNCIA DE CDN -->
+<script>
+!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).webauthnJson={})}(this,(function(e){"use strict";function t(e){const t=new Uint8Array(e);let n="";for(const e of t)n+=String.fromCharCode(e);return btoa(n).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"")}function n(e){const t=e.replace(/-/g,"+").replace(/_/g,"/"),n=(window.atob(t)+"\0\0\0\0\0\0\0").substring(0,4*(Math.ceil(t.length/4))),r=new Uint8Array(n.length);for(let e=0;e<n.length;e++)r[e]=n.charCodeAt(e);return r.buffer}function r(e){if(e instanceof ArrayBuffer)return t(e);if(e instanceof Array)return e.map(r);if("object"==typeof e&&null!==e){const t={};for(const n of Object.keys(e))t[n]=r(e[n]);return t}return e}function o(e,t){if("string"==typeof t)return n(t);if(t instanceof Array)return t.map((t=>o(e,t)));if("object"==typeof t&&null!===t){const n={};for(const r of Object.keys(t))n[r]=o(e+"."+r,t[r]);return n}return t}function c(t){const n=o("publicKey",t);return navigator.credentials.create({publicKey:n}).then((e=>r(e)))}function a(t){const n=o("publicKey",t);return navigator.credentials.get({publicKey:n}).then((e=>r(e)))}e.create=c,e.get=a,e.supported=function(){return!!(navigator.credentials&&navigator.credentials.create&&navigator.credentials.get&&window.PublicKeyCredential)},Object.defineProperty(e,"__esModule",{value:true})}));
+</script>
 
 <script>
 document.getElementById('form-biometria').addEventListener('submit', async function(e) {
-    e.preventDefault(); // Impede o recarregamento nativo da página
+    e.preventDefault();
 
     console.log("Iniciando o processo de vínculo biométrico...");
 
@@ -99,7 +102,7 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
     const dadosParaEnvio = { email: email, senha: senha };
 
     try {
-        // 1. Valida e-mail e senha no Flask e pega o desafio (challenge)
+        // 1. Valida e-mail e senha no Flask e busca o desafio (challenge)
         const resposta = await fetch(`${window.location.origin}/ativar-biometria`, {
             method: 'POST',
             headers: headers,
@@ -117,22 +120,21 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
         }
 
         if (resultado.status === 'sucesso' && resultado.options) {
-            console.log("Desafio recebido do Flask. Acionando hardware do dispositivo...");
+            console.log("Desafio recebido do Flask. Acionando hardware local...");
             btn.innerText = "Aguardando Face ID / Digital...";
 
             let respostaBiometrica;
 
-            // CONTEXTO DO HARDWARE (Onde estava o erro de sintaxe)
             try {
+                // Executa a biblioteca injetada localmente no escopo
                 respostaBiometrica = await window.webauthnJson.create({ "publicKey": resultado.options });
-                console.log("Biometria escaneada com sucesso!");
+                console.log("Biometria capturada com sucesso!");
             } catch (hardwareError) {
-                console.warn("Hardware biométrico rejeitado ou cancelado:", hardwareError);
-                // Captura o erro bruto do sistema operacional/navegador para vermos na tela
+                console.warn("Hardware biométrico rejeitado:", hardwareError);
                 throw new Error(`Erro nativo do dispositivo: [${hardwareError.name}] - ${hardwareError.message}`);
             }
 
-            console.log("Enviando credencial criptográfica gerada para salvamento no banco...");
+            console.log("Enviando credencial gerada para o banco de dados...");
             btn.innerText = "Salvando credencial criptográfica...";
 
             const headersConclusao = { 'Content-Type': 'application/json' };
@@ -140,7 +142,7 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
                 headersConclusao['X-CSRFToken'] = csrfTokenInput.value;
             }
 
-            // 2. Envia a assinatura gerada pelo celular para persistir no banco
+            // 2. Envia a assinatura gerada para persistir no banco do VPS
             const respostaServidor = await fetch('/concluir-cadastro-biometria', {
                 method: 'POST',
                 headers: headersConclusao,
@@ -164,11 +166,9 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
     } catch (error) {
         console.error("Erro capturado no fluxo:", error);
 
-        // Printa o erro de forma clara na caixa de alerta vermelha da página
         erroDiv.innerText = error.message || "Não foi possível processar o acesso biométrico.";
         erroDiv.classList.remove('d-none');
 
-        // Devolve o controle do botão para o usuário tentar novamente
         btn.disabled = false;
         btn.innerText = "Validar e Ativar Biometria";
     }
