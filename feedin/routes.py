@@ -394,29 +394,31 @@ def ativar_biometria():
     usuario = Usuario.query.filter_by(email=email).first()
 
     if usuario and bcrypt.check_password_hash(usuario.senha, senha):
-        # Gerar o Challenge de forma segura e limpa para o ecossistema Mobile
+        # Gerar o Challenge de forma limpa para Base64URL
         challenge_bytes = os.urandom(32)
         challenge = base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('=')
 
-        # Codificar o User ID estritamente em Base64URL sem caracteres inválidos (+, / ou =)
+        # Codificar o User ID em Base64URL rígido
         user_id_str = str(usuario.id)
         user_id_b64url = base64.urlsafe_b64encode(user_id_str.encode('utf-8')).decode('utf-8').rstrip('=')
 
-        # Opções universais do WebAuthn (Compatível com iOS, Android, Windows e Mac)
+        # Estrutura padrão exigida pela especificação W3C / @github/webauthn-json
         registration_options = {
-            "challenge": challenge,
-            "rp": {"name": "FeedIn", "id": request.host.split(':')[0]},
-            "user": {
-                "id": user_id_b64url,
-                "name": usuario.email,
-                "displayName": usuario.username
-            },
-            "pubKeyCredParams": [{"type": "public-key", "alg": -7}],  # ES256 (Algoritmo universal)
-            "authenticatorSelection": {
-                "authenticatorAttachment": "platform",  # Força biometria nativa do dispositivo
-                "userVerification": "required"
-            },
-            "timeout": 60000
+            "publicKey": {
+                "challenge": challenge,
+                "rp": {"name": "FeedIn", "id": request.host.split(':')[0]},
+                "user": {
+                    "id": user_id_b64url,
+                    "name": usuario.email,
+                    "displayName": usuario.username
+                },
+                "pubKeyCredParams": [{"type": "public-key", "alg": -7}],  # ES256
+                "authenticatorSelection": {
+                    "authenticatorAttachment": "platform",
+                    "userVerification": "required"
+                },
+                "timeout": 60000
+            }
         }
 
         # Salva o desafio temporariamente na sessão para validar no próximo passo
@@ -426,9 +428,6 @@ def ativar_biometria():
         return jsonify({"status": "sucesso", "options": registration_options})
 
     return jsonify({"status": "erro", "mensagem": "E-mail ou senha incorretos."}), 401
-
-
-import json
 
 
 @app.route('/concluir-cadastro-biometria', methods=['POST'])
