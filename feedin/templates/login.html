@@ -43,6 +43,9 @@
 }
 </style>
 
+<hr class="text-muted opacity-25">
+
+<!-- O CONTAINER E O CARD AGORA FICAM LIVRES (APARECEM PARA TODO MUNDO) -->
 <div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
     <div class="text-center mb-4">
         <h2 class="fw-bold text-primary">Acesso à plataforma</h2>
@@ -73,90 +76,105 @@
                 </a>
             </div>
 
-            <hr class="text-muted opacity-25">
+            {# APENAS O BLOCO DE BIOMETRIA FICA CONDICIONAL AGORA, INSERIDO DENTRO DO CARD #}
+            {% if tem_biometria %}
+                <hr class="text-muted opacity-25">
 
-            <!-- O Botão agora integrado perfeitamente dentro do design do Card -->
-            <div class="d-grid gap-2 mt-3">
-                <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
-                        <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
-                        <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
-                        <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
-                        <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
-                    </svg>
-                    Entrar com Face ID / Biometria
-                </button>
-            </div>
+                <div class="d-grid gap-2 mt-3">
+                    <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
+                            <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
+                            <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
+                            <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
+                            <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
+                        </svg>
+                        Entrar com Face ID / Biometria
+                    </button>
+                </div>
+            {% endif %}
         </form>
     </div>
 </div>
 
 <script>
+// Função auxiliar para converter string Base64 que vem da VPS em ArrayBuffer (o que o sensor exige)
+function base64ToBuffer(base64String) {
+    const binaryString = window.atob(base64String.replace(/-/g, '+').replace(/_/g, '/'));
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// Função auxiliar para converter o buffer do sensor em texto antes de mandar para a VPS
+function bufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
 async function entrarComBiometria() {
     try {
-        // 1. Pede os dados iniciais de autenticação para a VPS
-        const respostaDesafio = await fetch('/login-biometrico-desafio', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+        // 1. SOLICITA O DESAFIO DE LOGIN PARA A VPS
+        const respostaDesafio = await fetch('/login-biometria-challenge', { method: 'POST' });
+        const dadosDesafio = await respostaDesafio.json();
 
-        const opcoes = await respostaDesafio.json();
-
-        if (opcoes.status === 'erro') {
-            alert(opcoes.mensagem);
+        if (dadosDesafio.status === 'erro') {
+            alert(dadosDesafio.mensagem);
             return;
         }
 
-        // Converte o challenge de string/base64 para array de bytes (o que o celular exige)
-        opcoes.publicKey.challenge = Uint8Array.from(atob(opcoes.publicKey.challenge), c => c.charCodeAt(0));
-
-        if (opcoes.publicKey.allowCredentials) {
-            opcoes.publicKey.allowCredentials = opciones.publicKey.allowCredentials.map(c => ({
-                ...c,
-                id: Uint8Array.from(atob(c.id), x => x.charCodeAt(0))
-            }));
-        }
-
-        // 2. Aciona o Hardware (Pisca o Face ID / Pede a Digital)
-        const credencialIdentificada = await navigator.credentials.get({
-            publicKey: opciones.publicKey
-        });
-
-        // 3. Prepara a resposta do hardware para enviar de volta para a VPS
-        const dadosParaEnviar = {
-            id: credencialIdentificada.id,
-            rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.rawId))),
-            type: credencialIdentificada.type,
-            response: {
-                authenticatorData: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.authenticatorData))),
-                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.clientDataJSON))),
-                signature: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.signature))),
-                userHandle: credencialIdentificada.response.userHandle ? btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.userHandle))) : null
+        // 2. PREPARA OS REQUISITOS QUE O SENSOR DO CELULAR EXIGE
+        const options = {
+            publicKey: {
+                challenge: base64ToBuffer(dadosDesafio.challenge),
+                allowCredentials: dadosDesafio.credential_ids.map(id => ({
+                    type: 'public-key',
+                    id: base64ToBuffer(id)
+                })),
+                userVerification: "required",
+                timeout: 60000
             }
         };
 
-        // 4. Envia o ID para a rota de login que valida no banco de dados
-        const respostaLogin = await fetch('/login-biometrico', {
+        // 3. ATIVA O SENSOR NATIVO DO APARELHO (Face ID / Touch ID / Senha do Dispositivo)
+        const assertCredencial = await navigator.credentials.get(options);
+
+        // 4. EMBALA A RESPOSTA CRIPTOGRAFADA DO SENSOR
+        const dadosAutenticacao = {
+            id: assertCredencial.id,
+            rawId: bufferToBase64(assertCredencial.rawId),
+            response: {
+                clientDataJSON: bufferToBase64(assertCredencial.response.clientDataJSON),
+                authenticatorData: bufferToBase64(assertCredencial.response.authenticatorData),
+                signature: bufferToBase64(assertCredencial.response.signature),
+                userHandle: assertCredencial.response.userHandle ? bufferToBase64(assertCredencial.response.userHandle) : null
+            }
+        };
+
+        // 5. ENVIA PARA A VPS FAZER A VALIDAÇÃO FINAL E FAZER O LOGIN
+        const respostaLogin = await fetch('/verificar-login-biometria', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
-            },
-            body: JSON.stringify(dadosParaEnviar)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosAutenticacao)
         });
 
         const resultadoFinal = await respostaLogin.json();
 
         if (resultadoFinal.status === 'sucesso') {
-            // LOGIN COM SUCESSO! Redireciona o usuário para o Feed
-            window.location.href = resultadoFinal.redirecionar || '/feed';
+            // Sucesso total! Redireciona direto para o feed
+            window.location.href = resultadoFinal.redirect || '/feed';
         } else {
-            alert(resultadoFinal.mensagem || "Biometria não reconhecida.");
+            alert("Falha na autenticação: " + resultadoFinal.mensagem);
         }
 
-    } catch (err) {
-        console.error(err);
-        alert("Falha na leitura biométrica ou processo cancelado.");
+    } catch (erro) {
+        console.error("Erro no processo de biometria:", erro);
+        alert("O processo de biometria foi cancelado ou não é suportado neste navegador.");
     }
 }
 </script>
