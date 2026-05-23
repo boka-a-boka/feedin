@@ -39,7 +39,7 @@
 
 /* Estilo do ícone SVG */
 .btn-biometria-moderno svg {
-    color: #0d6efd; /* Azul padrão do Bootstrap para dar o destaque de tecnologia */
+    color: #0d6efd; /* Azul padrão do Bootstrap */
 }
 </style>
 
@@ -67,42 +67,34 @@
                 {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
             </div>
 
-            <div class="text-center mt-3">
+            <div class="text-center mt-3 mb-2">
                 <a href="{{ url_for('esqueci_senha') }}" class="small text-muted text-decoration-none">
                     Esqueceu sua senha? Clique aqui.
                 </a>
+            </div>
+
+            <hr class="text-muted opacity-25">
+
+            <!-- O Botão agora integrado perfeitamente dentro do design do Card -->
+            <div class="d-grid gap-2 mt-3">
+                <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
+                        <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
+                        <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
+                        <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
+                        <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
+                    </svg>
+                    Entrar com Face ID / Biometria
+                </button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- Cole este bloco no lugar do botão atual de biometria -->
-<div class="d-grid gap-2 mt-3">
-    <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
-        <!-- Ícone SVG elegante de Biometria/FaceID -->
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
-            <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
-            <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
-            <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
-            <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
-        </svg>
-        Entrar com Face ID / Biometria
-    </button>
-</div>
-
 <script>
-async function entrarComBiometria() {
-    // Busca o e-mail pelo ID padrão que o Flask-WTF gera para o FormLogin
-    const emailInput = document.getElementById('email');
-
-    // Se o input não for encontrado com ID 'email', tentamos o outro
-    const email = emailInput ? emailInput.value : "";
-
-    // Como estamos no desktop sem sensor, vamos direto ao ponto:
-    // Se você clicar no botão, ele vai te jogar direto para a tela de cadastro para testarmos o layout!
-    alert("Redirecionando para a tela de ativação da biometria...");
+function entrarComBiometria() {
+    // Redireciona de forma direta e limpa para a tela de ativação
     window.location.href = '/ativar-biometria';
-    return;
 }
 </script>
 {% endblock content %}
