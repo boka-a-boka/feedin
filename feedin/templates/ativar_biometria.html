@@ -74,6 +74,9 @@
     </div>
 </div>
 
+<!-- 1. IMPORTA A BIBLIOTECA AUXILIAR DO WEBAUTHN (Adicione isso logo ANTES do seu script) -->
+<script src="https://cdn.jsdelivr.net/npm/@github/webauthn-json@0.5.7/dist/esm/webauthn-json.browser-global.min.js"></script>
+
 <script>
 document.getElementById('form-biometria').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -86,12 +89,10 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
     const erroDiv = document.getElementById('erro-mensagem');
     const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
 
-    // Estado visual de carregamento (previne duplo clique)
     btn.disabled = true;
     btn.innerText = "Validando dados no servidor...";
     erroDiv.classList.add('d-none');
 
-    // Configura os cabeçalhos da requisição com a proteção CSRF do Flask
     const headers = { 'Content-Type': 'application/json' };
     if (csrfTokenInput && csrfTokenInput.value) {
         headers['X-CSRFToken'] = csrfTokenInput.value;
@@ -100,42 +101,66 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
     const dadosParaEnvio = { email: email, senha: senha };
 
     try {
-        // Dispara a comunicação direta usando a origem correta do VPS (via HTTPS)
         const resposta = await fetch(`${window.location.origin}/ativar-biometria`, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(dadosParaEnvio)
         });
 
-        // Se o Nginx ou o Flask recusarem o acesso (Erros 403, 404, 500)
         if (!resposta.ok) {
             throw new Error(`Erro de resposta do servidor (Status ${resposta.status}).`);
         }
 
         const resultado = await resposta.json();
 
-        // Se o seu Python validar a senha e retornar um erro de negócio
         if (resultado.status === 'erro') {
             throw new Error(resultado.mensagem);
         }
 
-        // Caso de sucesso total: desafio WebAuthn gerado
+        // Caso de sucesso: desafio gerado pelo Flask
         if (resultado.status === 'sucesso' && resultado.options) {
-            console.log("Desafio gerado com sucesso pelo Flask:", resultado.options);
-            alert("Sucesso! O Flask gerou o desafio criptográfico universal (WebAuthn).");
+            console.log("Desafio recebido do Flask. Acionando hardware do dispositivo...");
 
-            // Redireciona de volta para concluir o login
-            window.location.href = '/login';
+            // Usando a biblioteca global importada para disparar o Face ID / Touch ID legítimo
+            const respostaBiometrica = await webauthnJson.create({ "publicKey": resultado.options });
+
+            console.log("Biometria escaneada com sucesso! Enviando credencial ao servidor...");
+            btn.innerText = "Salvando credencial criptográfica...";
+
+            // Prepara o cabeçalho incluindo o token CSRF para a rota de conclusão
+            const headersConclusao = { 'Content-Type': 'application/json' };
+            if (csrfTokenInput && csrfTokenInput.value) {
+                headersConclusao['X-CSRFToken'] = csrfTokenInput.value;
+            }
+
+            // Envia a assinatura gerada pelo Face ID de volta para o Flask salvar no banco
+            const respostaServidor = await fetch('/concluir-cadastro-biometria', {
+                method: 'POST',
+                headers: headersConclusao,
+                body: JSON.stringify(respostaBiometrica)
+            });
+
+            const resultadoFinal = await respostaServidor.json();
+
+            if (resultadoFinal.status === 'sucesso') {
+                alert("Face ID / Biometria vinculada com sucesso no FeedIn!");
+                window.location.href = '/feed';
+            } else {
+                throw new Error(resultadoFinal.mensagem || "Erro ao salvar credencial biométrica.");
+            }
         }
 
     } catch (error) {
         console.error("Erro capturado no fluxo:", error);
 
-        // Exibe o erro real diretamente na caixinha vermelha do HTML
-        erroDiv.innerText = error.message || "Erro de conexão: Não foi possível alcançar o servidor.";
-        erroDiv.classList.remove('d-none');
+        // Se o usuário cancelar o Face ID, dá um feedback amigável em vez de travar tudo
+        if (error.name === 'NotAllowedError') {
+            erroDiv.innerText = "Operação cancelada ou tempo limite do Face ID esgotado.";
+        } else {
+            erroDiv.innerText = error.message || "Não foi possível processar o acesso biométrico.";
+        }
 
-        // Destrava o botão para o usuário tentar novamente sem precisar atualizar a página
+        erroDiv.classList.remove('d-none');
         btn.disabled = false;
         btn.innerText = "Validar e Ativar Biometria";
     }
