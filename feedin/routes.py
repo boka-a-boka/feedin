@@ -432,44 +432,75 @@ def ativar_biometria():
 
 @app.route('/concluir-cadastro-biometria', methods=['POST'])
 def concluir_cadastro_biometria():
-    """Recebe a chave criptográfica gerada pelo Face ID/Digital do celular e salva no banco"""
-    dados_resposta = request.get_json()
-    desafio_salvo = session.get('biometria_challenge')
-    user_id = session.get('biometria_user_id')
+    print("DEBUG VPS: Recebi a resposta do hardware para salvar no banco!")
 
-    if not desafio_salvo or not user_id:
-        return jsonify({'status': 'erro', 'mensagem': 'Sessão de ativação expirada ou inválida.'}), 400
+    dados = request.get_json()
+    usuario_id = session.get('biometria_user_id')
+    challenge_salvo = session.get('biometria_challenge')
 
-    usuario = Usuario.query.get(user_id)
-    if not usuario:
-        return jsonify({'status': 'erro', 'mensagem': 'Usuário não encontrado.'}), 404
+    if not usuario_id or not challenge_salvo:
+        return jsonify({"status": "erro", "mensagem": "Sessão expirada ou inválida. Recomece o processo."}), 400
 
     try:
-        # Extrai os dados essenciais que a biblioteca WebAuthn gerou no celular
-        # Nota: O WebAuthn entrega o ID da credencial e a Chave Pública.
-        credential_id = dados_resposta.get('id')
+        # 1. Coleta os dados que o JavaScript enviou do hardware do celular
+        credential_id = dados.get('id')
+        public_key_b64 = dados.get('response', {}).get('attestationObject')  # String Base64 segura
+        client_data_json_b64 = dados.get('response', {}).get('clientDataJSON')
 
-        # Se você estiver usando a biblioteca fido2 para validar o registro:
-        # Aqui você extrairia a public_key do attestation_object.
-        # Em fase de testes/simplificada, armazenamos a resposta estruturada:
-        raw_id = dados_resposta.get('rawId')
+        if not credential_id or not public_key_b64:
+            return jsonify(
+                {"status": "erro", "mensagem": "Dados biométricos incompletos enviados pelo dispositivo."}), 400
 
-        # Cria o registro no banco associando ao usuário
-        nova_credencial = CredencialBiometrica(
-            user_id=usuario.id,
+        # 2. Salva na sua tabela de chaves biométricas vinculada ao ID do usuário
+        # NOTA: Ajuste o nome do modelo 'BiometriaCredencial' e das colunas para bater com o seu banco.
+        nova_credencial = BiometriaCredencial(
+            usuario_id=usuario_id,
             credential_id=credential_id,
-            # Importante: certifique-se de preencher os campos exigidos pelo seu modelo CredencialBiometrica:
-            public_key=dados_resposta.get('response', {}).get('attestationObject', 'chave_temporaria_teste'),
-            sign_count=0
+            public_key=public_key_b64,  # Guardamos a assinatura pública gerada pelo celular
+            device_name=request.user_agent.platform or "Dispositivo Móvel"
         )
 
         database.session.add(nova_credencial)
         database.session.commit()
 
-        # Limpa o desafio da sessão por segurança
+        # Limpa as variáveis temporárias da sessão pós-gravação bem-sucedida
         session.pop('biometria_challenge', None)
+        session.pop('biometria_user_id', None)
 
-        return jsonify({'status': 'sucesso', 'mensagem': 'Biometria vinculada!'})
+        print(f"DEBUG VPS: Credencial {credential_id[:10]}... salva com sucesso para o usuário {usuario_id}!")
+        return jsonify({"status": "sucesso"})
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"ERRO BACKEND BANCO: {str(e)}")
+        return jsonify({"status": "erro", "mensagem": f"Erro interno ao salvar no banco: {str(e)}"}), 500
+
+
+@app.route('/login-biometrico', methods=['POST'])
+def login_biometrico():
+    print("DEBUG VPS: Tentativa de login via biometria iniciada!")
+
+    dados = request.get_json()
+    credential_id = dados.get('id')  # O ID que o navegador achou no hardware
+
+    if not credential_id:
+        return jsonify({"status": "erro", "mensagem": "Nenhuma credencial informada."}), 400
+
+    # 1. Busca no banco se existe alguma biometria cadastrada com esse ID
+    credencial = BiometriaCredencial.query.filter_by(credential_id=credential_id).first()
+
+    if credencial:
+        # 2. Se achou, localiza o dono dela
+        usuario = Usuario.query.get(credencial.usuario_id)
+        if usuario:
+            # 3. Loga o usuário diretamente na sessão do Flask
+            session['user_id'] = usuario.id
+            session['logged_in'] = True
+
+            print(f"DEBUG VPS: Usuário {usuario.email} logado com sucesso via Face ID/Digital!")
+            return jsonify({"status": "sucesso", "redirecionar": "/dashboard"})  # Mude para a sua rota pós-login
+
+    return jsonify({"status": "erro", "mensagem": "Biometria não reconhecida ou não vinculada a esta conta."}), 401
 
     except Exception as e:
         database.session.rollback()
