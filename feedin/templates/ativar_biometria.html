@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FeedIn - Ativar Acesso Biométrico</title>
-    <!-- Se você usa Bootstrap, ele vai herdar o visual bonitão -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         body {
@@ -33,7 +32,7 @@
     <div class="row justify-content-center">
         <div class="card card-biometria p-4 text-center">
 
-            <!-- Ícone ou Logo do FeedIn -->
+            <!-- Ícone visual -->
             <div class="mb-3">
                 <span class="icon-shield">🛡️</span>
             </div>
@@ -44,11 +43,14 @@
                 Por segurança, confirme seus dados para vincular o seu Face ID, Digital ou PIN.
             </p>
 
-            <!-- Alerta de Erro caso a senha esteja errada -->
+            <!-- Alerta de Erro dinâmico (mostra o motivo real do erro na tela) -->
             <div id="erro-mensagem" class="alert alert-danger d-none small text-start" role="alert"></div>
 
-            <!-- Formulário Dedicado -->
+            <!-- Formulário Unificado -->
             <form id="form-biometria">
+                <!-- Segurança: Gera o token CSRF obrigatório para o VPS aceitar o POST -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
                 <div class="form-floating mb-3 text-start">
                     <input type="email" class="form-control" id="email" placeholder="nome@exemplo.com" required>
                     <label for="email">Seu e-mail do FeedIn</label>
@@ -73,94 +75,71 @@
 </div>
 
 <script>
-    // Escuta o envio do formulário dedicado
-    document.getElementById('form-biometria').addEventListener('submit', async function(e) {
-        e.preventDefault();
+document.getElementById('form-biometria').addEventListener('submit', async function(e) {
+    e.preventDefault();
 
-        const email = document.getElementById('email').value;
-        const senha = document.getElementById('senha').value;
-        const btn = document.getElementById('btn-ativar');
-        const erroDiv = document.getElementById('erro-mensagem');
-
-        // Desabilita o botão para o usuário não clicar duas vezes
-        btn.disabled = true;
-        btn.innerText = "Aguardando sensor do aparelho...";
-        erroDiv.classList.add('d-none');
-
-        try {
-            // Chama aquela função assíncrona do arquivo JS universal
-            await iniciarCadastroBiometrico(email, senha);
-        } catch (error) {
-            // Se der ruim na validação ou o usuário cancelar o Face ID/Digital
-            erroDiv.innerText = error.message || "Erro ao processar o cadastro biométrico.";
-            erroDiv.classList.remove('d-none');
-            btn.disabled = false;
-            btn.innerText = "Validar e Ativar Biometria";
-        }
-    });
-
-async function iniciarCadastroBiometrico() {
     console.log("Iniciando o processo de vínculo biométrico...");
 
-    // 1. Busca os campos do formulário atual (padrão do Flask-WTF)
-    const campoEmail = document.getElementById('email');
-    const campoSenha = document.getElementById('senha');
-
-    // Busca o Token de Segurança gerado pelo Flask na sua página
+    const email = document.getElementById('email').value;
+    const senha = document.getElementById('senha').value;
+    const btn = document.getElementById('btn-ativar');
+    const erroDiv = document.getElementById('erro-mensagem');
     const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
 
-    if (!campoEmail || !campoSenha) {
-        alert("Por favor, preencha os campos de e-mail e senha para prosseguir.");
-        return;
-    }
+    // Estado visual de carregamento (previne duplo clique)
+    btn.disabled = true;
+    btn.innerText = "Validando dados no servidor...";
+    erroDiv.classList.add('d-none');
 
-    const dadosParaEnvio = {
-        email: campoEmail.value,
-        senha: campoSenha.value
-    };
-
-    // Monta os cabeçalhos de comunicação incluindo a proteção do Flask se ela existir
+    // Configura os cabeçalhos da requisição com a proteção CSRF do Flask
     const headers = { 'Content-Type': 'application/json' };
-    if (csrfTokenInput) {
+    if (csrfTokenInput && csrfTokenInput.value) {
         headers['X-CSRFToken'] = csrfTokenInput.value;
     }
 
+    const dadosParaEnvio = { email: email, senha: senha };
+
     try {
-        // 2. Dispara a requisição para a sua rota exata na raiz
+        // Dispara a comunicação direta usando a origem correta do VPS (via HTTPS)
         const resposta = await fetch(`${window.location.origin}/ativar-biometria`, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(dadosParaEnvio)
         });
 
-        // Se o Flask responder mas com erro de rota ou servidor
+        // Se o Nginx ou o Flask recusarem o acesso (Erros 403, 404, 500)
         if (!resposta.ok) {
-            console.error(`Erro no servidor: Status ${resposta.status}`);
-            alert("O servidor encontrou um problema ao processar a biometria.");
-            return;
+            throw new Error(`Erro de resposta do servidor (Status ${resposta.status}).`);
         }
 
         const resultado = await resposta.json();
 
+        // Se o seu Python validar a senha e retornar um erro de negócio
         if (resultado.status === 'erro') {
-            alert(resultado.mensagem);
-            return;
+            throw new Error(resultado.mensagem);
         }
 
-        // 3. Resposta de sucesso do seu Python com as opções do WebAuthn
+        // Caso de sucesso total: desafio WebAuthn gerado
         if (resultado.status === 'sucesso' && resultado.options) {
-            console.log("Desafio gerado pelo Flask com sucesso:", resultado.options);
+            console.log("Desafio gerado com sucesso pelo Flask:", resultado.options);
             alert("Sucesso! O Flask gerou o desafio criptográfico universal (WebAuthn).");
 
-            // Aqui o fluxo segue para registrar no dispositivo do usuário em produção
-            window.location.reload();
+            // Redireciona de volta para concluir o login
+            window.location.href = '/login';
         }
 
-    } catch (erro) {
-        console.error("Erro detalhado na comunicação da biometria:", erro);
-        alert("Erro de conexão: Não foi possível alcançar o servidor de biometria.");
+    } catch (error) {
+        console.error("Erro capturado no fluxo:", error);
+
+        // Exibe o erro real diretamente na caixinha vermelha do HTML
+        erroDiv.innerText = error.message || "Erro de conexão: Não foi possível alcançar o servidor.";
+        erroDiv.classList.remove('d-none');
+
+        // Destrava o botão para o usuário tentar novamente sem precisar atualizar a página
+        btn.disabled = false;
+        btn.innerText = "Validar e Ativar Biometria";
     }
-}
+});
 </script>
 
 </body>
