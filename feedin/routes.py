@@ -20,6 +20,8 @@ from webauthn import (generate_registration_options, verify_registration_respons
                       generate_authentication_options, verify_authentication_response)
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
+from flask_wtf.csrf import CSRFProtect
+
 biometria_bp = Blueprint('biometria', __name__)
 
 # O WebAuthn precisa saber o domínio exato do seu app
@@ -431,6 +433,7 @@ def ativar_biometria():
 
 
 @app.route('/concluir-cadastro-biometria', methods=['POST'])
+@csrf.exempt
 def concluir_cadastro_biometria():
     print("DEBUG VPS: Recebi a resposta do hardware para salvar no banco!")
 
