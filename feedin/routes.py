@@ -455,15 +455,15 @@ def concluir_cadastro_biometria():
 
             # ==================== CÓDIGO FINAL E LIMPO ====================
             # 2. Salva na sua tabela de chaves biométricas vinculada ao ID do usuário
-            nova_credencial = CredencialBiometrica(
-                user_id=usuario_id,  # Ajustado para o nome real da coluna no banco
-                credential_id=credential_id,  # Com a letra 'c' corrigida
-                public_key=public_key_b64  # A assinatura pública em Base64
-            )
+        nova_credencial = CredencialBiometrica(
+            user_id=usuario_id,  # Alinhado com as colunas certas do banco
+            credential_id=credential_id,
+            public_key=public_key_b64
+        )
 
-            database.session.add(nova_credencial)
-            database.session.commit()
-            # ==============================================================
+        database.session.add(nova_credencial)
+        database.session.commit()
+        # ==============================================================
 
         # Limpa as variáveis temporárias da sessão pós-gravação bem-sucedida
         session.pop('biometria_challenge', None)
@@ -492,23 +492,23 @@ def login_biometrico():
         credencial = CredencialBiometrica.query.filter_by(credential_id=credential_id).first()
 
         if credencial:
-            # 2. Se achou, localiza o dono dela
-            usuario = Usuario.query.get(credencial.usuario_id)
+            # CORRIGIDO: O nome da coluna na tabela é 'user_id', e não 'usuario_id'
+            usuario = Usuario.query.get(credencial.user_id)
             if usuario:
-                # 3. Loga o usuário diretamente na sessão do Flask
-                session['user_id'] = usuario.id
+                # CORRIGIDO: Verifique se no resto do seu sistema você usa 'user_id' ou 'usuario_id' na sessão!
+                session['usuario_id'] = usuario.id
                 session['logged_in'] = True
 
                 print(f"DEBUG VPS: Usuário {usuario.email} logado com sucesso via Face ID/Digital!")
-                return jsonify({"status": "sucesso", "redirecionar": "/dashboard"})  # Mude para a sua rota pós-login
+                # Ajuste o redirecionamento abaixo para a rota real do seu Feed
+                return jsonify({"status": "sucesso", "redirecionar": "/feed"})
 
-        # Caso não encontre a credencial ou o usuário
         return jsonify({"status": "erro", "mensagem": "Biometria não reconhecida ou não vinculada a esta conta."}), 401
 
     except Exception as e:
         database.session.rollback()
-        print(f"Erro ao salvar credencial: {str(e)}")
-        return jsonify({'status': 'erro', 'mensagem': f'Falha ao registrar biometria no banco: {str(e)}'}), 500
+        print(f"Erro no login biometrico: {str(e)}")
+        return jsonify({'status': 'erro', 'mensagem': f'Erro interno no servidor: {str(e)}'}), 500
 
 
 @app.route('/esqueci-senha', methods=['GET', 'POST'])

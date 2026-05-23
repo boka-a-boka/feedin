@@ -175,7 +175,7 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
 
             if (resultadoFinal.status === 'sucesso') {
                 alert("Face ID / Biometria vinculada com sucesso no FeedIn!");
-                window.location.href = '/login';
+                window.location.href = '/feed';
             } else {
                 throw new Error(resultadoFinal.mensagem || "Erro ao registrar credencial.");
             }
