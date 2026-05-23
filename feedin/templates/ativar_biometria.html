@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FeedIn - Ativar Acesso Biométrico</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-
-    <!-- Biblioteca Oficial do WebAuthn (GitHub/W3C) -->
-    <script src="https://cdn.jsdelivr.net/npm/@github/webauthn-json@0.5.7/dist/browser-global/webauthn-json.browser-global.min.js"></script>
-
     <style>
         body {
             background-color: #f8f9fa;
@@ -75,6 +71,27 @@
 </div>
 
 <script>
+// Conversores nativos padrão W3C para WebAuthn (Base64URL seguro para o hardware)
+def ueb64ParaBytes(strBase64Url) {
+    let base64 = strBase64Url.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) { base64 += '='; }
+    const binario = window.atob(base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) {
+        bytes[i] = binario.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+def bytesParaUeb64(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    let binario = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binario += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
 document.getElementById('form-biometria').addEventListener('submit', async function(e) {
     e.preventDefault();
 
@@ -108,19 +125,35 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
         if (resultado.status === 'sucesso' && resultado.options) {
             btn.innerText = "Aguardando biometria do celular...";
 
-            let respostaBiometrica;
+            // Captura as opções vindo do Flask (que agora vem envelopada em "publicKey")
+            const opt = resultado.options.publicKey || resultado.options;
+
+            // Transforma estritamente o challenge e o user.id de texto limpo para Buffer
+            opt.challenge = ueb64ParaBytes(opt.challenge);
+            if (opt.user && opt.user.id) {
+                opt.user.id = ueb64ParaBytes(opt.user.id);
+            }
+
+            let credencialNativa;
             try {
-                // Correção do nome global da biblioteca para maiúsculo (webauthnJSON)
-                const optionsFormatadas = webauthnJSON.parseCreationOptionsFromJSON(resultado.options);
-                respostaBiometrica = await navigator.credentials.create(optionsFormatadas);
+                // Dispara o hardware nativo do iOS/Android
+                credencialNativa = await navigator.credentials.create({ publicKey: opt });
             } catch (hardwareError) {
                 throw new Error(`Erro nativo do dispositivo: [${hardwareError.name}] - ${hardwareError.message}`);
             }
 
             btn.innerText = "Salvando credencial no FeedIn...";
 
-            // Correção aqui também para formatar o JSON de envio de volta para o Flask
-            const respostaParaOBackend = webauthnJSON.formatCreateCredentialToJson(respostaBiometrica);
+            // Prepara a resposta estruturada para o Flask aceitar na rota de conclusão
+            const dadosParaEnviar = {
+                id: credencialNativa.id,
+                rawId: bytesParaUeb64(credencialNativa.rawId),
+                type: credencialNativa.type,
+                response: {
+                    attestationObject: bytesParaUeb64(credencialNativa.response.attestationObject),
+                    clientDataJSON: bytesParaUeb64(credencialNativa.response.clientDataJSON)
+                }
+            };
 
             const headersConclusao = { 'Content-Type': 'application/json' };
             if (csrfTokenInput && csrfTokenInput.value) {
@@ -130,7 +163,7 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
             const respostaServidor = await fetch('/concluir-cadastro-biometria', {
                 method: 'POST',
                 headers: headersConclusao,
-                body: JSON.stringify(respostaParaOBackend)
+                body: JSON.stringify(dadosParaEnviar)
             });
 
             if (!respostaServidor.ok) throw new Error("Erro ao salvar a credencial no servidor.");
