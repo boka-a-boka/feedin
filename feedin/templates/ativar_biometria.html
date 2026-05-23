@@ -71,8 +71,8 @@
 </div>
 
 <script>
-// Conversores nativos padrão W3C para WebAuthn (Base64URL seguro para o hardware)
-def ueb64ParaBytes(strBase64Url) {
+// Conversores corrigidos para a sintaxe nativa do JavaScript (function)
+function ueb64ParaBytes(strBase64Url) {
     let base64 = strBase64Url.replace(/-/g, '+').replace(/_/g, '/');
     while (base64.length % 4) { base64 += '='; }
     const binario = window.atob(base64);
@@ -83,7 +83,7 @@ def ueb64ParaBytes(strBase64Url) {
     return bytes.buffer;
 }
 
-def bytesParaUeb64(arrayBuffer) {
+function bytesParaUeb64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binario = '';
     for (let i = 0; i < bytes.byteLength; i++) {
@@ -125,10 +125,9 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
         if (resultado.status === 'sucesso' && resultado.options) {
             btn.innerText = "Aguardando biometria do celular...";
 
-            // Captura as opções vindo do Flask (que agora vem envelopada em "publicKey")
             const opt = resultado.options.publicKey || resultado.options;
 
-            // Transforma estritamente o challenge e o user.id de texto limpo para Buffer
+            // Conversão dos dados de texto para ArrayBuffer exigido pelo navegador
             opt.challenge = ueb64ParaBytes(opt.challenge);
             if (opt.user && opt.user.id) {
                 opt.user.id = ueb64ParaBytes(opt.user.id);
@@ -136,7 +135,7 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
 
             let credencialNativa;
             try {
-                // Dispara o hardware nativo do iOS/Android
+                // Aciona o sensor biométrico do aparelho
                 credencialNativa = await navigator.credentials.create({ publicKey: opt });
             } catch (hardwareError) {
                 throw new Error(`Erro nativo do dispositivo: [${hardwareError.name}] - ${hardwareError.message}`);
@@ -144,7 +143,6 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
 
             btn.innerText = "Salvando credencial no FeedIn...";
 
-            // Prepara a resposta estruturada para o Flask aceitar na rota de conclusão
             const dadosParaEnviar = {
                 id: credencialNativa.id,
                 rawId: bytesParaUeb64(credencialNativa.rawId),
