@@ -20,6 +20,7 @@ from webauthn import (generate_registration_options, verify_registration_respons
                       generate_authentication_options, verify_authentication_response)
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
 
+from feedin import csrf
 from flask_wtf.csrf import CSRFProtect
 
 biometria_bp = Blueprint('biometria', __name__)
