@@ -92,9 +92,72 @@
 </div>
 
 <script>
-function entrarComBiometria() {
-    // Redireciona de forma direta e limpa para a tela de ativação
-    window.location.href = '/ativar-biometria';
+async function entrarComBiometria() {
+    try {
+        // 1. Pede os dados iniciais de autenticação para a VPS
+        const respostaDesafio = await fetch('/login-biometrico-desafio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const opcoes = await respostaDesafio.json();
+
+        if (opcoes.status === 'erro') {
+            alert(opcoes.mensagem);
+            return;
+        }
+
+        // Converte o challenge de string/base64 para array de bytes (o que o celular exige)
+        opcoes.publicKey.challenge = Uint8Array.from(atob(opcoes.publicKey.challenge), c => c.charCodeAt(0));
+
+        if (opcoes.publicKey.allowCredentials) {
+            opcoes.publicKey.allowCredentials = opciones.publicKey.allowCredentials.map(c => ({
+                ...c,
+                id: Uint8Array.from(atob(c.id), x => x.charCodeAt(0))
+            }));
+        }
+
+        // 2. Aciona o Hardware (Pisca o Face ID / Pede a Digital)
+        const credencialIdentificada = await navigator.credentials.get({
+            publicKey: opciones.publicKey
+        });
+
+        // 3. Prepara a resposta do hardware para enviar de volta para a VPS
+        const dadosParaEnviar = {
+            id: credencialIdentificada.id,
+            rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.rawId))),
+            type: credencialIdentificada.type,
+            response: {
+                authenticatorData: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.authenticatorData))),
+                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.clientDataJSON))),
+                signature: btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.signature))),
+                userHandle: credencialIdentificada.response.userHandle ? btoa(String.fromCharCode.apply(null, new Uint8Array(credencialIdentificada.response.userHandle))) : null
+            }
+        };
+
+        // 4. Envia o ID para a rota de login que valida no banco de dados
+        const respostaLogin = await fetch('/login-biometrico', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]')?.value || ''
+            },
+            body: JSON.stringify(dadosParaEnviar)
+        });
+
+        const resultadoFinal = await respostaLogin.json();
+
+        if (resultadoFinal.status === 'sucesso') {
+            // LOGIN COM SUCESSO! Redireciona o usuário para o Feed
+            window.location.href = resultadoFinal.redirecionar || '/feed';
+        } else {
+            alert(resultadoFinal.mensagem || "Biometria não reconhecida.");
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert("Falha na leitura biométrica ou processo cancelado.");
+    }
 }
 </script>
 {% endblock content %}

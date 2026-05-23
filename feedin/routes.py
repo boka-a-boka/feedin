@@ -478,6 +478,26 @@ def concluir_cadastro_biometria():
         return jsonify({"status": "erro", "mensagem": f"Erro interno ao salvar no banco: {str(e)}"}), 500
 
 
+@app.route('/login-biometrico-desafio', methods=['POST'])
+def login_biometrico_desafio():
+    # Gera um código aleatório de segurança para o hardware assinar
+    challenge = os.urandom(32)
+    challenge_b64 = base64.b64encode(challenge).decode('utf-8')
+
+    # Salva na sessão temporária para conferir depois
+    session['login_challenge'] = challenge_b64
+
+    # Devolve a estrutura que o JavaScript precisa para abrir o Face ID
+    return jsonify({
+        "status": "sucesso",
+        "publicKey": {
+            "challenge": challenge_b64,
+            "timeout": 60000,
+            "userVerification": "preferred"
+        }
+    })
+
+
 @app.route('/login-biometrico', methods=['POST'])
 def login_biometrico():
     print("DEBUG VPS: Tentativa de login via biometria iniciada!")
