@@ -443,7 +443,7 @@ def concluir_cadastro_biometria():
 
     try:
         # 1. Coleta os dados que o JavaScript enviou do hardware do celular
-        credential_id = dados.get('id')
+        redential_id = dados.get('rawId')
         public_key_b64 = dados.get('response', {}).get('attestationObject')  # String Base64 segura
         client_data_json_b64 = dados.get('response', {}).get('clientDataJSON')
 
