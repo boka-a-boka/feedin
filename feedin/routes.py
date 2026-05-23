@@ -393,7 +393,7 @@ def ativar_biometria():
 
     usuario = Usuario.query.filter_by(email=email).first()
 
-    if usuario and usuario.verificar_senha(senha):
+    if usuario and bcrypt.check_password_hash(usuario.senha, senha):
         # Gerar o desafio criptográfico (Challenge) que o hardware exige
         challenge = base64.b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
 
