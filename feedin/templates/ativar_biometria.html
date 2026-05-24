@@ -49,73 +49,93 @@ function ueb64ParaBytes(strBase64Url) {
     const bytes = new Uint8Array(binario.length);
     for (let i = 0; i < binario.length; i++) { bytes[i] = binario.charCodeAt(i); }
     return bytes.buffer;
-}
-
-function bytesParaUeb64(arrayBuffer) {
-    const bytes = new Uint8Array(arrayBuffer);
-    let binario = '';
-    for (let i = 0; i < bytes.byteLength; i++) { binario += String.fromCharCode(bytes[i]); }
-    return window.btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}// VERSÃO ROBUSTA: Corrige os caracteres do Base64URL antes de aplicar o atob
+function base64ToBufferCadastro(base64String) {
+    let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+        base64 += '=';
+    }
+    const binaryString = window.atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 async function iniciarCadastroBiometrico() {
-    const btn = document.getElementById('btn-ativar');
-    const erroDiv = document.getElementById('erro-mensagem');
-
-    btn.disabled = true;
-    btn.innerText = "Solicitando desafio...";
-    erroDiv.classList.add('d-none');
-
     try {
-        // Passo 1: Solicita o desafio para a VPS (A rota identifica quem você é de forma invisível)
-        const resposta = await fetch('/ativar-biometria', { method: 'POST' });
-        if (!resposta.ok) throw new Error(`Erro no servidor (Status ${resposta.status}).`);
-        const resultado = await resposta.json();
+        // 1. Solicita o desafio para a VPS (Rota de ativação correta)
+        const respostaDesafio = await fetch('/ativar-biometria', { method: 'POST' });
 
-        if (resultado.status === 'erro') throw new Error(resultado.mensagem);
+        if (!respostaDesafio.ok) {
+            const erroDados = await respostaDesafio.json();
+            alert("Erro: " + (erroDados.mensagem || "Não foi possível iniciar o cadastro."));
+            return;
+        }
 
-        btn.innerText = "Aguardando biometria...";
-        const opt = resultado.options.publicKey;
-        opt.challenge = ueb64ParaBytes(opt.challenge);
-        if (opt.user && opt.user.id) { opt.user.id = ueb64ParaBytes(opt.user.id); }
+        const dadosDesafio = await respostaDesafio.json();
 
-        // Aciona o sensor físico do dispositivo
-        const credencialNativa = await navigator.credentials.create({ publicKey: opt });
+        if (dadosDesafio.status === 'erro') {
+            alert(dadosDesafio.mensagem);
+            return;
+        }
 
-        // Embala a chave pública
-        const dadosParaEnviar = {
-            id: credencialNativa.id,
-            rawId: credencialNativa.id,
-            type: credencialNativa.type,
-            response: {
-                attestationObject: bytesParaUeb64(credencialNativa.response.attestationObject),
-                clientDataJSON: bytesParaUeb64(credencialNativa.response.clientDataJSON)
+        // 2. Prepara os requisitos tratando o Base64URL de forma segura
+        const opcionesCadastro = {
+            publicKey: {
+                challenge: base64ToBufferCadastro(dadosDesafio.options.publicKey.challenge),
+                rp: dadosDesafio.options.publicKey.rp,
+                user: {
+                    id: base64ToBufferCadastro(dadosDesafio.options.publicKey.user.id),
+                    name: dadosDesafio.options.publicKey.user.name,
+                    displayName: dadosDesafio.options.publicKey.user.displayName
+                },
+                pubKeyCredParams: dadosDesafio.options.publicKey.pubKeyCredParams,
+                authenticatorSelection: dadosDesafio.options.publicKey.authenticatorSelection,
+                timeout: dadosDesafio.options.publicKey.timeout,
+                attestation: dadosDesafio.options.publicKey.attestation
             }
         };
 
-        btn.innerText = "Salvando credencial...";
-        const respostaServidor = await fetch('/concluir-cadastro-biometria', {
+        // Fecha o modal do Bootstrap para liberar a tela
+        const modalElement = document.getElementById('modalAtivarBiometria');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) modalInstance.hide();
+
+        // 3. Aciona o sensor físico (Face ID / Digital)
+        const novaChaveCriada = await navigator.credentials.create(opcionesCadastro);
+
+        // 4. Embala a resposta em Base64 padrão para a VPS aceitar
+        const dadosParaSalvar = {
+            id: novaChaveCriada.id,
+            rawId: novaChaveCriada.id,
+            type: novaChaveCriada.type,
+            response: {
+                attestationObject: btoa(String.fromCharCode.apply(null, new Uint8Array(novaChaveCriada.response.attestationObject))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(novaChaveCriada.response.clientDataJSON))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+            }
+        };
+
+        // 5. Envia os dados embalados para gravação na tabela
+        const respostaSalvamento = await fetch('/concluir-cadastro-biometria', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosParaEnviar)
+            body: JSON.stringify(dadosParaSalvar)
         });
 
-        if (!respostaServidor.ok) throw new Error("Erro ao salvar a credencial na VPS.");
-        const resultadoFinal = await respostaServidor.json();
+        const resultadoFinal = await respostaSalvamento.json();
 
         if (resultadoFinal.status === 'sucesso') {
-            alert("Biometria vinculada com sucesso!");
-            window.location.href = '/feed';
+            alert("Face ID / Biometria vinculada com sucesso no FeedIn!");
+            window.location.reload();
         } else {
-            throw new Error(resultadoFinal.mensagem || "Erro no registro.");
+            alert("Erro ao salvar no servidor: " + resultadoFinal.mensagem);
         }
 
-    } catch (error) {
-        console.error(error);
-        erroDiv.innerText = error.message;
-        erroDiv.classList.remove('d-none');
-        btn.disabled = false;
-        btn.innerText = "Ativar Biometria neste Dispositivo";
+    } catch (err) {
+        console.error("Erro no cadastro biométrico:", err);
+        alert("O processo foi cancelado ou não pôde ser completado neste dispositivo.");
     }
 }
 </script>
