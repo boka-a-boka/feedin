@@ -478,25 +478,34 @@ def concluir_cadastro_biometria():
 
 
 @app.route('/login-biometria-challenge', methods=['POST'])
+@login_required  # <-- Garante que só quem está logado acessa
 def login_biometrico_desafio():
-    # 1. Gera o código aleatório de segurança (idêntico ao seu original)
+    # 1. Gera o código aleatório de segurança
     challenge = os.urandom(32)
     challenge_b64 = base64.b64encode(challenge).decode('utf-8').replace('=', '')
 
     # Salva na sessão temporária para conferirmos no próximo passo
     session['login_challenge'] = challenge_b64
 
-    # 2. BUSCA AS CREDENCIAIS NO BANCO
-    # Linha corrigida: alinhada perfeitamente com o bloco da função
-    todas_credenciais = ChaveBiometrica.query.all()
+    # Captura o domínio atual dinamicamente (ex: 'feedin.com.br' ou 'localhost')
+    rp_id = request.host.split(':')[0]
 
-    # Extraímos apenas as IDs textuais das chaves para enviar ao front-end
-    credential_ids = [c.credential_id for c in todas_credenciais]
+    # 2. BUSCA AS CREDENCIAIS DO USUÁRIO LOGADO DIRETO DA SESSÃO
+    # Sem buscas por e-mail, sem inputs. Direto e seguro pelo ID do current_user
+    credenciais_usuario = ChaveBiometrica.query.filter_by(usuario_id=current_user.id).all()
+    credential_ids = [c.credential_id for c in credenciais_usuario]
 
-    # 3. Devolve a estrutura limpa que o novo JavaScript espera
+    if not credential_ids:
+        return jsonify({
+            "status": "erro",
+            "mensagem": "Nenhuma chave biométrica cadastrada para a sua conta neste dispositivo."
+        }), 400
+
+    # 3. Devolve a estrutura para o front-end
     return jsonify({
         "status": "sucesso",
         "challenge": challenge_b64,
+        "rpId": rp_id,
         "credential_ids": credential_ids
     })
 

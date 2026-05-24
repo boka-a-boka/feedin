@@ -118,8 +118,20 @@ function bufferToBase64(buffer) {
 }
 
 async function entrarComBiometria() {
+async function entrarComBiometria() {
     try {
-        // 1. SOLICITA O DESAFIO DE LOGIN PARA A VPS
+        // CAPTURA O E-MAIL DIGITADO NO FORMULÁRIO DO FLASK
+        const emailInput = document.querySelector('input[type="email"]');
+        const emailValor = emailInput ? emailInput.value.trim() : '';
+
+        if (!emailValor) {
+            alert("Por favor, digite seu e-mail antes de acessar com a biometria.");
+            return;
+        }
+
+async function entrarComBiometria() {
+    try {
+        // 1. SOLICITA O DESAFIO DIRETAMENTE (A VPS já sabe quem você é pela sessão ativa)
         const respostaDesafio = await fetch('/login-biometria-challenge', { method: 'POST' });
         const dadosDesafio = await respostaDesafio.json();
 
@@ -128,10 +140,11 @@ async function entrarComBiometria() {
             return;
         }
 
-        // 2. PREPARA OS REQUISITOS QUE O SENSOR DO CELULAR EXIGE
+        // 2. PREPARA OS REQUISITOS COM O RPID ENVIADO PELA VPS
         const options = {
             publicKey: {
                 challenge: base64ToBuffer(dadosDesafio.challenge),
+                rpId: dadosDesafio.rpId, // Domínio calculado dinamicamente pela VPS
                 allowCredentials: dadosDesafio.credential_ids.map(id => ({
                     type: 'public-key',
                     id: base64ToBuffer(id)
@@ -141,7 +154,7 @@ async function entrarComBiometria() {
             }
         };
 
-        // 3. ATIVA O SENSOR NATIVO DO APARELHO (Face ID / Touch ID / Senha do Dispositivo)
+        // 3. ATIVA O SENSOR NATIVO DO APARELHO
         const assertCredencial = await navigator.credentials.get(options);
 
         // 4. EMBALA A RESPOSTA CRIPTOGRAFADA DO SENSOR
