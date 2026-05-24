@@ -96,80 +96,119 @@
     </div>
 </div>
 
+<style>
+.btn-biometria-moderno {
+    background-color: #ffffff; color: #495057; border: 1px solid #ced4da; padding: 12px 20px;
+    font-size: 15px; font-weight: 500; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; transition: all 0.2s ease-in-out; width: 100%; cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+.btn-biometria-moderno:hover { background-color: #f8f9fa; border-color: #adb5bd; color: #212529; box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
+.btn-biometria-moderno:active { background-color: #e9ecef; transform: scale(0.98); }
+.btn-biometria-moderno svg { color: #0d6efd; }
+</style>
+
+<hr class="text-muted opacity-25">
+
+<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Acesso à plataforma</h2>
+        <p class="text-muted">Bem-vindo de volta!</p>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 450px;">
+        <form method="POST">
+            {{ form.csrf_token }}
+
+            <div class="form-floating mb-3">
+                {{ form.email(class="form-control", placeholder="nome@exemplo.com", style="height: 60px;") }}
+                {{ form.email.label }}
+            </div>
+
+            <div class="form-floating mb-4">
+                {{ form.senha(class="form-control", placeholder="Senha", style="height: 60px;") }}
+                {{ form.senha.label }}
+            </div>
+
+            <div class="d-grid">
+                {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
+            </div>
+
+            <div class="text-center mt-3 mb-2">
+                <a href="{{ url_for('esqueci_senha') }}" class="small text-muted text-decoration-none">
+                    Esqueceu sua senha? Clique aqui.
+                </a>
+            </div>
+
+            {% if tem_biometria %}
+                <hr class="text-muted opacity-25">
+                <div class="d-grid gap-2 mt-3">
+                    <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
+                            <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
+                            <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
+                            <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
+                            <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
+                        </svg>
+                        Entrar com Face ID / Biometria
+                    </button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
 <script>
-// Função auxiliar para converter string Base64 que vem da VPS em ArrayBuffer (o que o sensor exige)
-function base64ToBuffer(base64String) {
-    const binaryString = window.atob(base64String.replace(/-/g, '+').replace(/_/g, '/'));
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
+function ueb64ParaBytes(strBase64Url) {
+    let base64 = strBase64Url.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) { base64 += '='; }
+    const binario = window.atob(base64);
+    const bytes = new Uint8Array(binario.length);
+    for (let i = 0; i < binario.length; i++) { bytes[i] = binario.charCodeAt(i); }
     return bytes.buffer;
 }
 
-// Função auxiliar para converter o buffer do sensor em texto antes de mandar para a VPS
-function bufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+function bytesParaUeb64(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    let binario = '';
+    for (let i = 0; i < bytes.byteLength; i++) { binario += String.fromCharCode(bytes[i]); }
+    return window.btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 async function entrarComBiometria() {
-async function entrarComBiometria() {
     try {
-        // CAPTURA O E-MAIL DIGITADO NO FORMULÁRIO DO FLASK
-        const emailInput = document.querySelector('input[type="email"]');
-        const emailValor = emailInput ? emailInput.value.trim() : '';
-
-        if (!emailValor) {
-            alert("Por favor, digite seu e-mail antes de acessar com a biometria.");
-            return;
-        }
-
-async function entrarComBiometria() {
-    try {
-        // 1. SOLICITA O DESAFIO DIRETAMENTE (A VPS já sabe quem você é pela sessão ativa)
         const respostaDesafio = await fetch('/login-biometria-challenge', { method: 'POST' });
+        if (!respostaDesafio.ok) throw new Error("Falha ao iniciar o fluxo biométrico.");
+
         const dadosDesafio = await respostaDesafio.json();
+        if (dadosDesafio.status === 'erro') { alert(dadosDesafio.mensagem); return; }
 
-        if (dadosDesafio.status === 'erro') {
-            alert(dadosDesafio.mensagem);
-            return;
-        }
-
-        // 2. PREPARA OS REQUISITOS COM O RPID ENVIADO PELA VPS
         const options = {
             publicKey: {
-                challenge: base64ToBuffer(dadosDesafio.challenge),
-                rpId: dadosDesafio.rpId, // Domínio calculado dinamicamente pela VPS
+                challenge: ueb64ParaBytes(dadosDesafio.challenge),
+                rpId: dadosDesafio.rpId,
                 allowCredentials: dadosDesafio.credential_ids.map(id => ({
                     type: 'public-key',
-                    id: base64ToBuffer(id)
+                    id: ueb64ParaBytes(id)
                 })),
                 userVerification: "required",
                 timeout: 60000
             }
         };
 
-        // 3. ATIVA O SENSOR NATIVO DO APARELHO
         const assertCredencial = await navigator.credentials.get(options);
 
-        // 4. EMBALA A RESPOSTA CRIPTOGRAFADA DO SENSOR
         const dadosAutenticacao = {
             id: assertCredencial.id,
-            rawId: bufferToBase64(assertCredencial.rawId),
+            rawId: assertCredencial.id,
             response: {
-                clientDataJSON: bufferToBase64(assertCredencial.response.clientDataJSON),
-                authenticatorData: bufferToBase64(assertCredencial.response.authenticatorData),
-                signature: bufferToBase64(assertCredencial.response.signature),
-                userHandle: assertCredencial.response.userHandle ? bufferToBase64(assertCredencial.response.userHandle) : null
+                clientDataJSON: bytesParaUeb64(assertCredencial.response.clientDataJSON),
+                authenticatorData: bytesParaUeb64(assertCredencial.response.authenticatorData),
+                signature: bytesParaUeb64(assertCredencial.response.signature),
+                userHandle: assertCredencial.response.userHandle ? bytesParaUeb64(assertCredencial.response.userHandle) : null
             }
         };
 
-        // 5. ENVIA PARA A VPS FAZER A VALIDAÇÃO FINAL E FAZER O LOGIN
         const respostaLogin = await fetch('/verificar-login-biometria', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -177,9 +216,7 @@ async function entrarComBiometria() {
         });
 
         const resultadoFinal = await respostaLogin.json();
-
         if (resultadoFinal.status === 'sucesso') {
-            // Sucesso total! Redireciona direto para o feed
             window.location.href = resultadoFinal.redirect || '/feed';
         } else {
             alert("Falha na autenticação: " + resultadoFinal.mensagem);
@@ -187,7 +224,7 @@ async function entrarComBiometria() {
 
     } catch (erro) {
         console.error("Erro no processo de biometria:", erro);
-        alert("O processo de biometria foi cancelado ou não é suportado neste navegador.");
+        alert("O processo de biometria foi cancelado.");
     }
 }
 </script>

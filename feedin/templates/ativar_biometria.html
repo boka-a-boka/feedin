@@ -6,24 +6,9 @@
     <title>FeedIn - Ativar Acesso Biométrico</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
-        body {
-            background-color: #f8f9fa;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .card-biometria {
-            max-width: 450px;
-            width: 100%;
-            border: none;
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-        }
-        .icon-shield {
-            font-size: 3rem;
-            color: #0d6efd;
-        }
+        body { background-color: #f8f9fa; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card-biometria { max-width: 450px; width: 100%; border: none; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
+        .icon-shield { font-size: 3rem; color: #0d6efd; }
     </style>
 </head>
 <body>
@@ -36,35 +21,20 @@
                 <span class="icon-shield">🛡️</span>
             </div>
 
-            <h3 class="fw-bold mb-2">Primeiro Acesso Biométrico</h3>
+            <h3 class="fw-bold mb-2">Ativar Acesso Biométrico</h3>
             <p class="text-muted small mb-4">
-                Identificamos que este é seu primeiro acesso via biometria neste dispositivo.
-                Por segurança, confirme seus dados para vincular o seu Face ID, Digital ou PIN.
+                Vincule este dispositivo à sua conta do FeedIn para acessar rapidamente usando seu Face ID, Digital ou PIN nos próximos acessos.
             </p>
 
             <div id="erro-mensagem" class="alert alert-danger d-none small text-start" role="alert"></div>
 
-            <form id="form-biometria">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+            <button type="button" class="btn btn-primary btn-lg w-100 rounded-3 mb-2" id="btn-ativar" onclick="iniciarCadastroBiometrico()">
+                Ativar Biometria neste Dispositivo
+            </button>
 
-                <div class="form-floating mb-3 text-start">
-                    <input type="email" class="form-control" id="email" placeholder="nome@exemplo.com" required>
-                    <label for="email">Seu e-mail do FeedIn</label>
-                </div>
-
-                <div class="form-floating mb-4 text-start">
-                    <input type="password" class="form-control" id="senha" placeholder="Senha" required>
-                    <label for="senha">Sua senha do FeedIn</label>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-lg w-100 rounded-3 mb-2" id="btn-ativar">
-                    Validar e Ativar Biometria
-                </button>
-
-                <a href="/login" class="text-decoration-none small text-secondary d-block mt-3">
-                    Voltar para o login tradicional
-                </a>
-            </form>
+            <a href="/feed" class="text-decoration-none small text-secondary d-block mt-3">
+                Voltar para o Painel
+            </a>
 
         </div>
     </div>
@@ -77,105 +47,67 @@ function ueb64ParaBytes(strBase64Url) {
     while (base64.length % 4) { base64 += '='; }
     const binario = window.atob(base64);
     const bytes = new Uint8Array(binario.length);
-    for (let i = 0; i < binario.length; i++) {
-        bytes[i] = binario.charCodeAt(i);
-    }
+    for (let i = 0; i < binario.length; i++) { bytes[i] = binario.charCodeAt(i); }
     return bytes.buffer;
 }
 
 function bytesParaUeb64(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     let binario = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binario += String.fromCharCode(bytes[i]);
-    }
+    for (let i = 0; i < bytes.byteLength; i++) { binario += String.fromCharCode(bytes[i]); }
     return window.btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
-document.getElementById('form-biometria').addEventListener('submit', async function(e) {
-    e.preventDefault();
-
-    const email = document.getElementById('email').value;
-    const senha = document.getElementById('senha').value;
+async function iniciarCadastroBiometrico() {
     const btn = document.getElementById('btn-ativar');
     const erroDiv = document.getElementById('erro-mensagem');
-    const csrfTokenInput = document.querySelector('input[name="csrf_token"]');
 
     btn.disabled = true;
-    btn.innerText = "Validando dados...";
+    btn.innerText = "Solicitando desafio...";
     erroDiv.classList.add('d-none');
 
-    const headers = { 'Content-Type': 'application/json' };
-    if (csrfTokenInput && csrfTokenInput.value) {
-        headers['X-CSRFToken'] = csrfTokenInput.value;
-    }
-
     try {
-        // Passo 1: Pede as opções à VPS
-        const resposta = await fetch(`${window.location.origin}/ativar-biometria`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ email, senha })
-        });
-
+        // Passo 1: Solicita o desafio para a VPS (A rota identifica quem você é de forma invisível)
+        const resposta = await fetch('/ativar-biometria', { method: 'POST' });
         if (!resposta.ok) throw new Error(`Erro no servidor (Status ${resposta.status}).`);
         const resultado = await resposta.json();
 
         if (resultado.status === 'erro') throw new Error(resultado.mensagem);
 
-        if (resultado.status === 'sucesso' && resultado.options) {
-            btn.innerText = "Aguardando hardware...";
+        btn.innerText = "Aguardando biometria...";
+        const opt = resultado.options.publicKey;
+        opt.challenge = ueb64ParaBytes(opt.challenge);
+        if (opt.user && opt.user.id) { opt.user.id = ueb64ParaBytes(opt.user.id); }
 
-            // Captura cirúrgica do nó publicKey vindo do Python
-            const opt = resultado.options.publicKey;
+        // Aciona o sensor físico do dispositivo
+        const credencialNativa = await navigator.credentials.create({ publicKey: opt });
 
-            // Transforma os textos em buffers binários exigidos pela W3C
-            opt.challenge = ueb64ParaBytes(opt.challenge);
-            if (opt.user && opt.user.id) {
-                opt.user.id = ueb64ParaBytes(opt.user.id);
+        // Embala a chave pública
+        const dadosParaEnviar = {
+            id: credencialNativa.id,
+            rawId: credencialNativa.id,
+            type: credencialNativa.type,
+            response: {
+                attestationObject: bytesParaUeb64(credencialNativa.response.attestationObject),
+                clientDataJSON: bytesParaUeb64(credencialNativa.response.clientDataJSON)
             }
+        };
 
-            let credencialNativa;
-            try {
-                // Aciona o sensor físico do computador / celular
-                credencialNativa = await navigator.credentials.create({ publicKey: opt });
-            } catch (hardwareError) {
-                // Captura o motivo exato se o navegador rejeitar o objeto
-                throw new Error(`[${hardwareError.name}] - ${hardwareError.message}`);
-            }
+        btn.innerText = "Salvando credencial...";
+        const respostaServidor = await fetch('/concluir-cadastro-biometria', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosParaEnviar)
+        });
 
-            // Embala os dados binários de volta para texto para o Python salvar
-            const dadosParaEnviar = {
-                id: credencialNativa.id,
-                rawId: credencialNativa.id, // O ID textual direto serve perfeitamente como chave primária alternada
-                type: credencialNativa.type,
-                response: {
-                    attestationObject: bytesParaUeb64(credencialNativa.response.attestationObject),
-                    clientDataJSON: bytesParaUeb64(credencialNativa.response.clientDataJSON)
-                }
-            };
+        if (!respostaServidor.ok) throw new Error("Erro ao salvar a credencial na VPS.");
+        const resultadoFinal = await respostaServidor.json();
 
-            const headersConclusao = { 'Content-Type': 'application/json' };
-            if (csrfTokenInput && csrfTokenInput.value) {
-                headersConclusao['X-CSRFToken'] = csrfTokenInput.value;
-            }
-
-            btn.innerText = "Salvando no banco...";
-            const respostaServidor = await fetch('/concluir-cadastro-biometria', {
-                method: 'POST',
-                headers: headersConclusao,
-                body: JSON.stringify(dadosParaEnviar)
-            });
-
-            if (!respostaServidor.ok) throw new Error("Erro ao salvar a credencial na VPS.");
-            const resultadoFinal = await respostaServidor.json();
-
-            if (resultadoFinal.status === 'sucesso') {
-                alert("Biometria vinculada com sucesso!");
-                window.location.href = '/feed';
-            } else {
-                throw new Error(resultadoFinal.mensagem || "Erro no registro.");
-            }
+        if (resultadoFinal.status === 'sucesso') {
+            alert("Biometria vinculada com sucesso!");
+            window.location.href = '/feed';
+        } else {
+            throw new Error(resultadoFinal.mensagem || "Erro no registro.");
         }
 
     } catch (error) {
@@ -183,10 +115,9 @@ document.getElementById('form-biometria').addEventListener('submit', async funct
         erroDiv.innerText = error.message;
         erroDiv.classList.remove('d-none');
         btn.disabled = false;
-        btn.innerText = "Validar e Ativar Biometria";
+        btn.innerText = "Ativar Biometria neste Dispositivo";
     }
-});
+}
 </script>
-
 </body>
 </html>

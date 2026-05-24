@@ -391,23 +391,22 @@ from flask_login import login_required, current_user
 from feedin import app, database, bcrypt
 from feedin.models import Usuario, CredencialBiometrica
 
+
 # ==========================================
-# 1. CADASTRO: GERAR DESAFIO (ÁREA LOGADA)
+# 1. CADASTRO: GERAR DESAFIO (ÁREA LOGADA) - CORRIGIDO!
 # ==========================================
 @app.route('/ativar-biometria', methods=['GET', 'POST'])
 @csrf.exempt
-@login_required  # Ideal que seja na área logada
+@login_required  # Garante que a VPS sabe quem é o usuário pela sessão ativa
 def ativar_biometria():
     if request.method == 'GET':
         return render_template('ativar_biometria.html')
 
-    dados = request.get_json() or {}
-    email = dados.get('email')
-    senha = dados.get('senha')
+    # NÃO PEDE MAIS EMAIL E SENHA! Usa o usuário que já está logado na sessão
+    # Se você usa Flask-Login, usamos o current_user. Se usa sessão pura, buscamos pelo ID da sessão.
+    usuario = current_user
 
-    usuario = Usuario.query.filter_by(email=email).first()
-
-    if usuario and bcrypt.check_password_hash(usuario.senha, senha):
+    if usuario:
         # Desafio padrão W3C em Base64URL sem padding (=)
         challenge_bytes = os.urandom(32)
         challenge = base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('=')
@@ -419,10 +418,7 @@ def ativar_biometria():
         registration_options = {
             "publicKey": {
                 "challenge": challenge,
-
-                # ALTERE ESTA LINHA ABAIXO:
                 "rp": {"name": "FeedIn", "id": "feedin.boka-a-boka.com.br"},
-
                 "user": {
                     "id": user_id_b64url,
                     "name": usuario.email,
@@ -445,7 +441,7 @@ def ativar_biometria():
 
         return jsonify({"status": "sucesso", "options": registration_options})
 
-    return jsonify({"status": "erro", "mensagem": "E-mail ou senha incorretos."}), 401
+    return jsonify({"status": "erro", "mensagem": "Usuário não autenticado."}), 401
 
 
 # ==========================================
