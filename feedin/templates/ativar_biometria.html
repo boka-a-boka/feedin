@@ -42,14 +42,7 @@
 
 <script>
 // Conversores robustos Base64URL <-> ArrayBuffer
-function ueb64ParaBytes(strBase64Url) {
-    let base64 = strBase64Url.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) { base64 += '='; }
-    const binario = window.atob(base64);
-    const bytes = new Uint8Array(binario.length);
-    for (let i = 0; i < binario.length; i++) { bytes[i] = binario.charCodeAt(i); }
-    return bytes.buffer;
-}// VERSÃO ROBUSTA: Corrige os caracteres do Base64URL antes de aplicar o atob
+// VERSÃO ROBUSTA: Corrige os caracteres do Base64URL antes de aplicar o atob
 function base64ToBufferCadastro(base64String) {
     let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
     while (base64.length % 4) {
