@@ -780,15 +780,57 @@ def editar_perfil():
             id_civ = request.form.get('estado_civil')
 
             # 3. ATRIBUIR DIRETAMENTE AO OBJETO LOCAL
-            perfil_obj.data_nascimento = form.data_nascimento.data
+
+            # Buscamos a string do input direto do request
+            data_nascimento_str = request.form.get('data_nascimento')
+
+            # Só atualizamos a data se o campo veio preenchido no POST
+            if data_nascimento_str:
+                from datetime import datetime
+                try:
+                    # Converte a string do input (formato HTML padrão: YYYY-MM-DD) para objeto date do Python
+                    perfil_obj.data_nascimento = datetime.strptime(data_nascimento_str, '%Y-%m-%d').date()
+                except ValueError:
+                    # Caso a data venha em um formato inesperado, evita quebrar o sistema
+                    print("Formato de data inválido recebido.")
+            # Se 'data_nascimento_str' for vazio ou None (usuário só mudou a foto),
+            # nós NÃO entramos no IF. O banco mantém a data antiga intacta!
+
             perfil_obj.cidade_natal = request.form.get('cidade_natal')
             perfil_obj.biografia = request.form.get('biografia')
 
-            if id_gen and id_gen.isdigit():
-                perfil_obj.genero = int(id_gen)  # Use o nome da coluna do banco aqui
+            # =================================================================
+            # AJUSTE PONTUAL: CAPTURA E PROCESSAMENTO DA FOTO DE PERFIL
+            # =================================================================
+            file = request.files.get('foto_perfil')
+            if file and file.filename != '':
+                nome_da_foto_para_deletar = current_user.foto_perfil
 
-            if id_civ and id_civ.isdigit():
-                perfil_obj.estado_civil = int(id_civ)  # Use o nome da coluna do banco aqui
+                # Processa e salva a imagem no disco usando sua função existente
+                novo_nome = salvar_imagem(file)
+
+                if novo_nome:
+                    # Atualiza o nome da foto no objeto do usuário
+                    current_user.foto_perfil = novo_nome
+                    print(f"DEBUG [editar_perfil]: Banco atualizado com a nova foto: {novo_nome}")
+
+                    # Lógica de exclusão física do arquivo antigo (idêntica à sua)
+                    if nome_da_foto_para_deletar and \
+                            nome_da_foto_para_deletar != 'default.jpg' and \
+                            nome_da_foto_para_deletar != novo_nome:
+
+                        import os
+                        from flask import current_app
+                        pasta_fotos = os.path.join(current_app.root_path, 'static', 'fotos_perfil')
+                        caminho_completo_antigo = os.path.join(pasta_fotos, nome_da_foto_para_deletar)
+
+                        if os.path.exists(caminho_completo_antigo):
+                            try:
+                                os.remove(caminho_completo_antigo)
+                                print(f"SUCESSO: Arquivo antigo {nome_da_foto_para_deletar} removido.")
+                            except Exception as e:
+                                print(f"ERRO AO DELETAR FOTO ANTIGA: {e}")
+            # =================================================================
 
             # 4. COMMIT
             database.session.commit()
