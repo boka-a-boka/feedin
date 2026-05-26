@@ -423,7 +423,16 @@
         </div>
     </div>
 
-</div>
+    {# BOTÃO FLUTUANTE VOLTAR AO TOPO: Fixo, centralizado e flutuando no rodapé #}
+    {% if current_user.is_authenticated and user_alvo and current_user.id != user_alvo.id %}
+        <div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1040;">
+            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap"
+                    onclick="voltarAoTopo()"
+                    style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
+                <i class="bi bi-arrow-up-circle-fill me-2"></i>Voltar ao Topo
+            </button>
+        </div>
+    {% endif %}
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
@@ -439,26 +448,39 @@
         }
     });
 
-    function registrarReacaoSocial(postId, tipoReacao) {
+// 1. ADAPTADO: Nome correto chamado pelo _footer_reacoes.html e IDs sincronizados
+    function reagirPostagem(postId, tipoReacao) {
         $.ajax({
             url: "/reagir_post/" + postId + "/" + tipoReacao,
             method: 'POST',
             data: { csrf_token: "{{ csrf_token() }}" },
             success: function(response) {
                 if (response.status === "success") {
-                    $(`#cont-curti-${postId}`).text(response.novo_total_curti);
-                    $(`#cont-nao_curti-${postId}`).text(response.novo_total_nao_curti);
+                    // Atualiza os seletores numéricos com os IDs exatos do HTML do footer
+                    const $contCurtir = $(`#contagem-curti-${postId}`);
+                    const $contNaoCurtir = $(`#contagem-nao-curti-${postId}`);
+
+                    if ($contCurtir.length) $contCurtir.text(response.novo_total_curti);
+                    if ($contNaoCurtir.length) $contNaoCurtir.text(response.novo_total_nao_curti);
+
+                    // Pulo do gato para atualizar o visual das cores sem precisar dar reload na página inteira:
+                    window.location.reload();
                 }
+            },
+            error: function(xhr) {
+                console.error("Erro na reação:", xhr.responseText);
             }
         });
     }
 
+    // 2. MANTIDO: Abre o modal de comentários associando o ID do post pai correto
     function abrirComentarios(postId) {
         $('#modalPostId').val(postId);
         const modal = new bootstrap.Modal(document.getElementById('modalComentario'));
         modal.show();
     }
 
+    // 3. CONFIRMADO: Envia o comentário e recarrega para renderizar no card universal
     function enviarComentarioModal() {
         const postId = $('#modalPostId').val();
         const texto = $('#textoComentario').val();
@@ -468,7 +490,12 @@
             method: 'POST',
             data: { texto: texto, csrf_token: "{{ csrf_token() }}" },
             success: function(response) {
-                if (response.status === "success") window.location.reload();
+                if (response.status === "success") {
+                    window.location.reload();
+                }
+            },
+            error: function(xhr) {
+                alert("Erro ao enviar comentário: " + xhr.responseText);
             }
         });
     }
@@ -615,5 +642,15 @@ async function iniciarCadastroBiometrico() {
         alert("O processo foi cancelado ou não pôde ser completado neste dispositivo.");
     }
 }
+/**
+ * ROLAGEM SUAVE ATÉ O TOPO DA PÁGINA
+ */
+function voltarAoTopo() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth' // Desliza suavemente até o topo
+    });
+}
 </script>
+
 {% endblock %}

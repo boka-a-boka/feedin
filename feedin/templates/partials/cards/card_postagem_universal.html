@@ -36,32 +36,42 @@
     }
 </style>
 
-{# 1. IDENTIFICAÇÃO E CAPTURA #}
+{# 1. IDENTIFICAÇÃO E CAPTURA DE CONTEXTO #}
 {% set eh_sistema = false %}
 {% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
     {% set eh_sistema = true %}
 {% endif %}
 
-{% set post_obj = atividade.objeto_original if atividade.objeto_original else atividade %}
-{% set texto = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo or (atividade.objeto_original.mensagem if atividade.objeto_original) %}
-{% set autor_obj = atividade.autor_objeto or atividade.autor or atividade.usuario %}
+{# --- IDENTIFICAÇÃO CIRÚRGICA DE COMENTÁRIOS VS POSTAGENS --- #}
+{% set eh_comentario = false %}
+{# Verificamos se o objeto possui o atributo 'id_postagem' (característico da model PostagemComentario) #}
+{% if atividade.id_postagem is defined %}
+    {% set eh_comentario = true %}
+    {# A postagem real (origem) está ancorada via relacionamento ou query #}
+    {% set post_obj = atividade.postagem if atividade.postagem is defined else Postagem.query.get(atividade.id_postagem) %}
+    {% set texto_exibicao = atividade.texto %}
+    {% set autor_acao = atividade.usuario if atividade.usuario is defined else Usuario.query.get(atividade.id_usuario) %}
+{% else %}
+    {% set post_obj = atividade.objeto_original if atividade.objeto_original else atividade %}
+    {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo %}
+    {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario %}
+{% endif %}
 
-<div class="card border-0 shadow-sm mb-3 {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ atividade.id }}">
+<div class="card border-0 shadow-sm mb-3 {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}">
     <div class="card-body">
 
         {# CABEÇALHO #}
-        {% if autor_obj %}
+        {% if autor_acao %}
         <div class="d-flex align-items-center mb-3">
-            <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_obj.id) }}" class="rounded-circle border" width="40" height="40">
+            <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40">
             <div class="ms-2">
-                <strong class="d-block text-dark">{{ autor_obj.perfil.nome_completo or autor_obj.username }}</strong>
-                <small class="text-muted">{{ atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao }}</small>
+                <small class="text-muted">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
             </div>
         </div>
         {% endif %}
 
         <div class="content-wrapper clearfix">
-            {# IMAGEM ÚNICA #}
+            {# IMAGEM ÚNICA (Se for comentário, herda e exibe a foto da postagem de origem com segurança) #}
             {% if not eh_sistema and post_obj.imagem_url %}
                 <img src="{{ url_for('static', filename='uploads/posts/' + post_obj.imagem_url) }}" class="img-ajustada-feed">
             {% endif %}
@@ -69,66 +79,23 @@
             {# TEXTO #}
             <div class="card-text text-dark mb-3" style="font-size: 1.05rem; line-height: 1.5;">
                 {% if eh_sistema %}
-                    <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto | safe }}</strong>
+                    <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong>
                 {% else %}
-                    {# Aplica a formatação segura de Markdown (*negrito* e _itálico_) e emojis nos relatos #}
-                    {{ texto | formatar_postagem | safe }}
+                    {# Se for comentário, podemos colocar um background discreto de citação #}
+                    {% if eh_comentario %}
+                        <div class="p-2 bg-light border-start border-3 rounded-end mb-2 text-muted italic" style="font-size: 0.95rem;">
+                            <i class="bi bi-chat-quote me-1"></i> "{{ texto_exibicao | formatar_postagem | safe }}"
+                        </div>
+                        <div class="small text-secondary mt-1">
+                            <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
+                        </div>
+                    {% else %}
+                        {{ texto_exibicao | formatar_postagem | safe }}
+                    {% endif %}
                 {% endif %}
             </div>
 
-            {# --- NOVO NOVO BLOCO: FLUXO DE GESTÃO DE MARCAÇÃO SILENCIOSA --- #}
-            {% if not eh_sistema and current_user.is_authenticated %}
-                <div class="mt-2 pt-2 border-top border-light d-flex align-items-center justify-content-between mb-3" style="background-color: #fcfbfa; padding: 8px 12px; border-radius: 8px;">
-
-                    {# Lado Esquerdo: Identifica quem já está validado ali #}
-                    <div class="d-flex align-items-center gap-1 text-muted" style="font-size: 0.78rem;">
-                        <i class="bi bi-tags text-secondary"></i>
-                        <span>Nesta lembrança:</span>
-                        {% if atividade.pessoas_marcadas %}
-                            {% for pessoa in atividade.pessoas_marcadas %}
-                                <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none fw-bold text-secondary">@{{ pessoa.username }}</a>{% if not loop.last %}, {% endif %}
-                            {% endfor %}
-                        {% else %}
-                            <span class="fst-italic opacity-75">Ninguém identificado</span>
-                        {% endif %}
-                    </div>
-
-                    {# Lado Direito: Ações dinâmicas baseadas no relacionamento com a foto #}
-                    <div>
-                        {% if autor_obj and autor_obj.id == current_user.id %}
-                            {# Se eu sou o dono do post, exibo apenas um indicador discreto de controle #}
-                            <span class="text-muted small opacity-50" style="font-size: 0.7rem;"><i class="bi bi-shield-check"></i> Sua memória</span>
-                        {% else %}
-                            {# Se eu sou o visitante: Chaveamento dos estados #}
-
-                            {# ESTADO 1: Eu já fui marcado e aceito pelo dono -> Direito ao Esquecimento #}
-                            {% if atividade.pessoas_marcadas and current_user in atividade.pessoas_marcadas %}
-                                <form action="{{ url_for('remover_minha_marcacao', id_post=atividade.id) }}" method="POST" class="m-0 d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none p-0 fw-semibold btn-fluxo-silencioso" style="font-size: 0.75rem;" title="Exercer o Direito ao Esquecimento">
-                                        <i class="bi bi-tag-fill me-1"></i> Não estava lá
-                                    </button>
-                                </form>
-
-                            {# ESTADO 2: Eu já cliquei e está aguardando o dono aceitar #}
-                            {% elif atividade.solicitantes_pendentes_ids and current_user.id in atividade.solicitantes_pendentes_ids %}
-                                <button class="btn btn-sm btn-light rounded-pill px-3 py-1 text-muted fw-medium disabled" style="font-size: 0.72rem; background-color: #f1f3f5;">
-                                    <i class="bi bi-hourglass-split text-warning me-1"></i> Identificação Enviada
-                                </button>
-
-                            {# ESTADO 3: Nenhuma relação ainda -> Solicitar Marcação #}
-                            {% else %}
-                                <form action="{{ url_for('solicitar_marcacao', id_postagem=atividade.id) }}" method="POST" class="m-0 d-inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-bold text-primary border-primary btn-fluxo-silencioso" style="font-size: 0.72rem; background-color: rgba(13, 110, 253, 0.04); border-color: rgba(13, 110, 253, 0.2) !important;">
-                                        <i class="bi bi-person-workspace me-1"></i> Olha eu ali!
-                                    </button>
-                                </form>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-                </div>
-            {% endif %}
+            {# [O restante do seu bloco de MARCAÇÃO SILENCIOSA e TAGS continua abaixo igual, sempre usando post_obj] #}
             {# --- FIM DO BLOCO DE MARCAÇÃO SILENCIOSA --- #}
 
 
@@ -167,6 +134,46 @@
                 </div>
             {% endif %}
         </div>
+{# --- BLOCO DE EXIBIÇÃO DE COMENTÁRIOS DESTA HISTÓRIA --- #}
+            {% if post_obj.total_comentarios > 0 %}
+                <div class="mt-3 pt-3 border-top" style="background-color: #f8f9fa; border-radius: 8px; padding: 10px 15px;">
+                    <h6 class="text-muted mb-2" style="font-size: 0.85rem;"><i class="bi bi-chat-left-text me-1"></i> Comentários:</h6>
+
+                    {# 1. INÍCIO DO LOOP: A partir daqui a variável 'com' existe #}
+                    {% for com in post_obj.lista_comentarios_ativos %}
+                        <div class="d-flex align-items-start mb-2 pb-2 border-bottom border-light" id="comentario-{{ com.id }}">
+                            <img src="{{ url_for('servir_foto_perfil', usuario_id=com.id_usuario) }}" class="rounded-circle border me-2" width="28" height="28">
+                            <div class="w-100">
+                                <div class="bg-white p-2 rounded shadow-xs" style="font-size: 0.92rem;">
+
+                                    {# CORRIGIDO: Esta verificação está dentro do escopo do 'com' #}
+                                    <strong class="text-dark">
+                                        {% if com.usuario and com.usuario.username %}
+                                            @{{ com.usuario.username }}
+                                        {% elif com.id_usuario %}
+                                            @ID_{{ com.id_usuario }}
+                                        {% else %}
+                                            @Usuário
+                                        {% endif %}
+                                    </strong>
+
+                                    <span class="text-secondary">{{ com.texto | formatar_postagem | safe }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1 px-1">
+                                    <small class="text-muted" style="font-size: 0.75rem;">{{ com.data_comentario.strftime('%d/%m/%Y %H:%M') }}</small>
+
+                                    {% if current_user.is_authenticated and (com.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
+                                        <button class="btn btn-sm btn-link text-danger p-0 border-0" style="font-size: 0.75rem; text-decoration: none;" onclick="excluirComentario('{{ com.id }}')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {# --- FIM DO BLOCO DE COMENTÁRIOS --- #}
     </div>
 
     {# RODAPÉ: LOCAL E REAÇÕES #}

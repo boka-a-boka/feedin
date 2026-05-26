@@ -743,6 +743,12 @@ class Postagem(database.Model):
         viewonly=True
     )
 
+    @property
+    def lista_comentarios_ativos(self):
+        """Retorna os comentários ativos ordenados para o template"""
+        return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).order_by(
+            PostagemComentario.data_comentario.asc()).all()
+
     # Métodos de conveniência
     @property
     def total_curtidas(self):
@@ -829,6 +835,16 @@ class PostagemComentario(database.Model):
     texto = database.Column(database.String(500), nullable=False)
     data_comentario = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
     ativo = database.Column(database.Boolean, default=True)  # Para "exclusão" lógica
+
+    @property
+    def usuario(self):
+        """Busca o objeto do usuário dono do comentário direto na sessão ativa do banco"""
+        from feedin.models import Usuario  # Mantém a importação isolada contra loops cíclicos
+        try:
+            # Buscamos direto pela sessão global do banco, garantindo o mapeamento no Jinja
+            return database.session.query(Usuario).get(self.id_usuario)
+        except Exception:
+            return None
 
 
 # Tabela para tratamento da reinvindicação na versão Beta.

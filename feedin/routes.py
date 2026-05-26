@@ -4746,21 +4746,67 @@ def comentar_post(post_id):
         )
         database.session.add(novo_comentario)
 
-        # NOTIFICAÇÃO: Notifica o dono do post
+        # =========================================================================
+        # MOTOR DE DISTRIBUIÇÃO DE NOTIFICAÇÕES EXPANDIDO (VALIDADO)
+        # =========================================================================
+        usuarios_notificados = set()
+
+        # 1. Notifica o dono do post original
         if post.id_usuario != current_user.id:
-            notif = Notificacao(
+            notif_dono = Notificacao(
                 id_usuario_destino=post.id_usuario,
                 id_usuario_origem=current_user.id,
                 id_postagem_referencia=post.id,
                 mensagem="comentou em sua publicação.",
                 tipo="comentario"
             )
-            database.session.add(notif)
+            database.session.add(notif_dono)
+            usuarios_notificados.add(post.id_usuario)
+
+        # 2. CORRIGIDO: Notifica as pessoas confirmadas marcadas na foto (Ajustado o nome do método)
+        for pessoa in post.pessoas_marcadas_confirmadas:
+            if pessoa.id != current_user.id and pessoa.id not in usuarios_notificados:
+                notif_marcado = Notificacao(
+                    id_usuario_destino=pessoa.id,
+                    id_usuario_origem=current_user.id,
+                    id_postagem_referencia=post.id,
+                    mensagem="comentou em uma lembrança onde você está identificado.",
+                    tipo="comentario"
+                )
+                database.session.add(notif_marcado)
+                usuarios_notificados.add(pessoa.id)
+
+        # 3. Notifica os usuários que seguem as tags dessa publicação
+        if post.tags:
+            tag_ids = [t.id for t in post.tags]
+
+            # Buscamos usuários interessados através da tabela intermediária explicitamente
+            usuarios_interessados_ids = [res[0] for res in database.session.query(
+                usuarios_interesses.c.usuario_id
+            ).filter(
+                usuarios_interesses.c.taxonomia_id.in_(tag_ids)
+            ).distinct().all()]
+
+            for user_id in usuarios_interessados_ids:
+                if user_id != current_user.id and user_id not in usuarios_notificados:
+                    notif_tag = Notificacao(
+                        id_usuario_destino=user_id,
+                        id_usuario_origem=current_user.id,
+                        id_postagem_referencia=post.id,
+                        mensagem="comentou em uma publicação sobre um tema que você segue.",
+                        tipo="comentario"
+                    )
+                    database.session.add(notif_tag)
+                    usuarios_notificados.add(user_id)
+        # =========================================================================
 
         database.session.commit()
         return jsonify({"status": "success", "message": "Comentário enviado!"})
+
     except Exception as e:
         database.session.rollback()
+        # Log local útil para você pegar no terminal do PyCharm se algo falhar internamente
+        print(f"ERRO CRÍTICO AO COMENTAR: {str(e)}")
         return jsonify({"status": "error", "message": "Erro ao comentar."}), 500
 
 

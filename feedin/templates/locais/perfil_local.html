@@ -202,30 +202,31 @@
                 </div>
             </div>
         </div>
-{# MODAL DE EDIÇÃO DE POSTAGEM #}
-<div class="modal fade" id="modalEditarPost" tabindex="-1" aria-labelledby="modalEditarPostLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 border-0 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold text-secondary" id="modalEditarPostLabel">Editar sua História</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="formEditarPost" method="POST" action="">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="inputConteudoPost" class="form-label small text-muted">Sua memória:</label>
-                        <textarea class="form-control rounded-3" id="inputConteudoPost" name="conteudo" rows="4" required></textarea>
+
+        {# MODAL DE EDIÇÃO DE POSTAGEM #}
+        <div class="modal fade" id="modalEditarPost" tabindex="-1" aria-labelledby="modalEditarPostLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content rounded-4 border-0 shadow">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold text-secondary" id="modalEditarPostLabel">Editar sua História</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
+                    <form id="formEditarPost" method="POST" action="">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="inputConteudoPost" class="form-label small text-muted">Sua memória:</label>
+                                <textarea class="form-control rounded-3" id="inputConteudoPost" name="conteudo" rows="4" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-header border-0 pt-0 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="disabled" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Alterações</button>
+                        </div>
+                    </form>
                 </div>
-                <div class="modal-header border-0 pt-0 d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="disabled" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Alterações</button>
-                </div>
-            </form>
+            </div>
         </div>
-    </div>
-</div>
     </div>
 </div>
 
@@ -259,23 +260,17 @@
 
 <script>
 /**
- * REAÇÕES SOCIAIS (CURTIDAS)
- * Mantém o padrão do Perfil Público e Feed
+ * REAÇÕES SOCIAIS (CURTIDAS) - ALINHADA E SINCRONIZADA COM O _FOOTER_REACOES
  */
-function registrarReacaoSocial(postId, tipoReacao) {
+function reagirPostagem(postId, tipoReacao) {
     if (window.event) window.event.preventDefault();
 
     const urlReacao = "/reagir_post/" + postId + "/" + tipoReacao;
+    const $contCurti = $('#contagem-curti-' + postId);
+    const $contNaoCurti = $('#contagem-nao-curti-' + postId);
 
-    // Seletores dinâmicos
-    const $iconeCurti = $('#icon-curti-' + postId);
-    const $iconeNaoCurti = $('#icon-nao_curti-' + postId);
-    const $contCurti = $('#cont-curti-' + postId);
-    const $contNaoCurti = $('#cont-nao_curti-' + postId);
-
-    // Evita cliques duplos durante o processamento
-    if ($iconeCurti.parent().data('loading')) return;
-    $iconeCurti.parent().data('loading', true);
+    if ($(`#contagem-curti-${postId}`).parent().data('loading')) return;
+    $(`#contagem-curti-${postId}`).parent().data('loading', true);
 
     $.ajax({
         url: urlReacao,
@@ -283,38 +278,35 @@ function registrarReacaoSocial(postId, tipoReacao) {
         data: { csrf_token: "{{ csrf_token() }}" },
         success: function(response) {
             if (response.status === "success") {
-                // Atualiza contadores
                 if ($contCurti.length) $contCurti.text(response.novo_total_curti);
                 if ($contNaoCurti.length) $contNaoCurti.text(response.novo_total_nao_curti);
-
-                // Alterna classes visuais (Preenchido vs Vazio)
-                if (tipoReacao === 'curti') {
-                    $iconeCurti.toggleClass('bi-hand-thumbs-up bi-hand-thumbs-up-fill text-primary text-muted');
-                    $iconeNaoCurti.removeClass('bi-hand-thumbs-down-fill text-danger').addClass('bi-hand-thumbs-down text-muted');
-                } else if (tipoReacao === 'nao_curti') {
-                    $iconeNaoCurti.toggleClass('bi-hand-thumbs-down bi-hand-thumbs-down-fill text-danger text-muted');
-                    $iconeCurti.removeClass('bi-hand-thumbs-up-fill text-primary').addClass('bi-hand-thumbs-up text-muted');
-                }
+                window.location.reload();
             }
         },
+        error: function(xhr) {
+            console.error("Erro ao registrar reação:", xhr.responseText);
+        },
         complete: function() {
-            $iconeCurti.parent().data('loading', false);
+            $(`#contagem-curti-${postId}`).parent().data('loading', false);
         }
     });
 }
 
+function registrarReacaoSocial(postId, tipoReacao) {
+    reagirPostagem(postId, tipoReacao);
+}
+
 /**
- * SISTEMA DE COMENTÁRIOS
+ * SISTEMA DE COMENTÁRIOS (BLINDADO CONTRA CONFLITOS DE NOME)
  */
 function abrirComentarios(postId) {
     $('#modalPostId').val(postId);
-    $('#textoComentario').val(''); // Limpa o campo
+    $('#textoComentario').val('');
 
     const modalElement = document.getElementById('modalComentario');
     if (modalElement) {
         const meuModal = new bootstrap.Modal(modalElement);
         meuModal.show();
-        // Foco automático no campo de texto após abrir
         modalElement.addEventListener('shown.bs.modal', function () {
             document.getElementById('textoComentario').focus();
         }, { once: true });
@@ -322,6 +314,10 @@ function abrirComentarios(postId) {
 }
 
 function enviarComentarioPeloModal() {
+    enviarComentarioModal();
+}
+
+function enviarComentarioModal() {
     const postId = $('#modalPostId').val();
     const texto = $('#textoComentario').val().trim();
 
@@ -339,12 +335,17 @@ function enviarComentarioPeloModal() {
         },
         success: function(response) {
             if (response.status === "success") {
-                // Fechar modal e atualizar a página para mostrar o novo comentário
-                bootstrap.Modal.getInstance(document.getElementById('modalComentario')).hide();
+                const modalElement = document.getElementById('modalComentario');
+                if (bootstrap.Modal.getInstance(modalElement)) {
+                    bootstrap.Modal.getInstance(modalElement).hide();
+                }
                 location.reload();
             } else {
                 alert("Erro ao publicar comentário: " + response.message);
             }
+        },
+        error: function(xhr) {
+            alert("Erro ao enviar comentário para o servidor.");
         }
     });
 }
@@ -394,16 +395,11 @@ function enviarAvaliacaoCompleta() {
 }
 
 function cancelarAvaliacao() {
-    $('#feedback-container').fadeOut(); // Apenas esconde, sem recarregar a página do nada
-}
-
-function colocarEmModoEspera() {
     $('#feedback-container').fadeOut();
 }
 
 /**
  * LÓGICA DE SEGUIR LOCAL
- * Passagem explícita de 'evt' para evitar quebras em navegadores restritivos
  */
 function prepararSeguirDireto(localId, localNome, evt) {
     if (evt) evt.preventDefault();
@@ -447,7 +443,6 @@ function abrirModalTagsOcultas(localId) {
 
         $lista.empty();
         tags.forEach(function(tag) {
-            // Garante a chamada global correta na página do local
             const itemHtml = `
                 <button type="button" onclick="window.ativarEPassarASeguirTag(${tag.id}, this)"
                         class="btn btn-outline-secondary btn-sm text-start w-100 px-3 py-2 d-flex justify-content-between align-items-center rounded-3 position-relative border-dashed"
@@ -467,7 +462,6 @@ function abrirModalTagsOcultas(localId) {
     });
 }
 
-// Escopo global na página do local para o clique do botão funcionar
 window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
     if ($(elementoBotao).data('processando')) return;
     $(elementoBotao).data('processando', true).prop('disabled', true).addClass('opacity-50');
@@ -499,5 +493,25 @@ window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
         }
     });
 };
+
+/**
+ * ROLAGEM SUAVE ATÉ O TOPO DA PÁGINA
+ */
+function voltarAoTopo() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
 </script>
+
+{# BOTÃO FLUTUANTE VOLTAR AO TOPO: Fora de qualquer modal e travado perfeitamente no rodapé #}
+<div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;">
+    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap"
+            onclick="voltarAoTopo()"
+            style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;">
+        <i class="bi bi-arrow-up-circle-fill me-2"></i>Voltar ao Topo
+    </button>
+</div>
+
 {% endblock %}
