@@ -190,22 +190,42 @@
                                 <th class="border-0 py-3 text-end px-3">Ação</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for conv in lista_de_convites %}
-                                <tr>
-                                    <td>{{ conv.whatsapp_destino }}</td>
-                                    <td>
-                                        <form action="{{ url_for('gerar_convite') }}" method="POST" class="d-inline" onclick="event.stopPropagation();">
-                                            {{ form_convite.csrf_token }}
-                                            <input type="hidden" name="whatsapp" value="{{ conv.whatsapp_destino }}">
-                                            <button type="submit" class="btn btn-outline-primary btn-sm rounded-circle" title="Reenviar Mensagem">
-                                                <i class="bi bi-arrow-repeat"></i>
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
+                            <tbody>
+                                {% for conv in lista_de_convites %}
+                                    <tr>
+                                        <td class="px-3">
+                                            <span class="fw-bold text-dark">{{ conv.whatsapp_destino }}</span>
+                                            <!-- Se você salvar uma data de envio na model, pode exibir aqui sutilmente -->
+                                        </td>
+                                        <td class="text-center">
+                                            {% if conv.status_onboarding %}
+                                                <span class="badge bg-success-subtle text-success rounded-pill px-2.5 py-1" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Cadastrado
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning-subtle text-warning rounded-pill px-2.5 py-1" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-clock-history me-1"></i>Pendente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end px-3">
+                                            {% if not conv.status_onboarding %}
+                                                {# Só mostra o botão de reenvio se o amigo ainda não tiver entrado na rede #}
+                                                <form action="{{ url_for('gerar_convite') }}" method="POST" class="d-inline" onclick="event.stopPropagation();">
+                                                    {{ form_convite.csrf_token }}
+                                                    <input type="hidden" name="whatsapp" value="{{ conv.whatsapp_destino }}">
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm rounded-circle" title="Reenviar Mensagem">
+                                                        <i class="bi bi-arrow-repeat"></i>
+                                                    </button>
+                                                </form>
+                                            {% else %}
+                                                {# Ícone discreto de sucesso se já concluiu #}
+                                                <i class="bi bi-person-check-fill text-success fs-5 me-2" title="Conexão Estabelecida"></i>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
                     </table>
                 </div>
             </div>
