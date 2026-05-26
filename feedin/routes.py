@@ -1038,6 +1038,7 @@ def dashboard():
     form_p = FormPerfil(obj=perfil_usuario)
     form_a = FormApelido()
     form_convite = FormConvite()
+    lista_de_convites = current_user.convites_enviados_whats
 
     try:
         form_p.genero.choices = [(g.id, g.genero) for g in Generos.query.all()]
@@ -1068,6 +1069,7 @@ def dashboard():
                            minhas_prefs_ids=minhas_prefs_ids,
                            notificacoes=notificacoes_sino,
                            locais_populares=locais_populares,
+                           lista_de_convites=lista_de_convites,
                            minhas_prefs_json=json.dumps(prefs_atuais_data))
 
 
