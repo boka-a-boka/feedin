@@ -277,6 +277,56 @@ def salvar_imagem_capa(foto, usuario_id):
         return None
 
 
+def salvar_imagem_anuncio(foto, local_id):
+    """
+    Processa o flyer/arte de publicidade do estabelecimento local.
+    Garante orientação EXIF, converte para RGB, faz o Crop Central 1:1,
+    redimensiona para 1080x1080 e salva em WEBP com qualidade 85.
+    """
+    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
+        return None
+
+    # Nome padronizado: anuncio_IDDOLOCAL_TIMESTAMP.webp
+    nome_arquivo = f"anuncio_{local_id}_{int(datetime.now().timestamp())}.webp"
+    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'anuncios')
+
+    if not os.path.exists(pasta_destino):
+        os.makedirs(pasta_destino)
+
+    caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+
+    try:
+        img = Image.open(foto)
+
+        # 1. Corrigir orientação EXIF (evita que a arte suba deitada se tirada do celular)
+        img = ImageOps.exif_transpose(img)
+
+        # 2. Converter para RGB (Garante compatibilidade e remove transparências nocivas em anúncios)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        # 3. Lógica de Crop Central 1:1 (Enquadra perfeitamente se o comerciante mandar uma foto fora do padrão)
+        largura, altura = img.size
+        if largura > altura:
+            margem = (largura - altura) / 2
+            img = img.crop((margem, 0, largura - margem, altura))
+        elif altura > largura:
+            margem = (altura - largura) / 2
+            img = img.crop((0, margem, largura, altura - margem))
+
+        # 4. Redimensionar para 1080x1080 (O "sweet spot" de qualidade/peso para anúncios no Feed)
+        img = img.resize((1080, 1080), Image.Resampling.LANCZOS)
+
+        # 5. Salvar em WEBP (Otimização máxima de carregamento para a VPS)
+        img.save(caminho_completo, "WEBP", quality=85)
+
+        return nome_arquivo
+
+    except Exception as e:
+        print(f"Erro ao processar imagem do anúncio: {e}")
+        return None
+
+
 def obter_lista_negra_usuario(usuario_id):
     """
     Retorna uma lista simples de IDs [2, 45, 88...] contendo todos os usuários

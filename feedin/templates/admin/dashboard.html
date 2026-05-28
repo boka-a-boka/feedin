@@ -17,6 +17,24 @@
         filter: invert(1) grayscale(100%) brightness(200%);
     }
     .user-row:hover { background-color: #323539 !important; }
+    .ui-autocomplete {
+        z-index: 9999 !important; /* Joga a lista para a frente de tudo */
+        background-color: #343a40 !important; /* Fundo escuro idêntico ao painel */
+        color: #ffffff !important;
+        border: 1px solid #ffc107 !important; /* Bordinha amarela dos seus blocos */
+        max-height: 250px;
+        overflow-y: auto;
+        font-size: 0.9rem;
+    }
+    .ui-menu-item {
+        padding: 6px 12px !important;
+    }
+    .ui-menu-item .ui-state-active {
+        background-color: #ffc107 !important; /* Destaque amarelo ao passar o mouse */
+        color: #000000 !important;
+        border: none !important;
+        margin: 0 !important;
+    }
 </style>
 
 <div class="container py-5">
@@ -71,10 +89,10 @@
         </div>
     </div>
 
-<!-- BLOCO DE GESTÃO DE TAXONOMIA (ESQUERDA VS DIREITA) -->
+    <!-- BLOCO DE GESTÃO DE TAXONOMIA (ESQUERDA VS DIREITA) -->
     <div class="row g-4 mb-5">
 
-        <!-- COLUNA DA ESQUERDA: TRATAMENTO DO PAI (CORRIGIDA) -->
+        <!-- COLUNA DA ESQUERDA: TRATAMENTO DO PAI -->
         <div class="col-lg-5">
             <div class="card bg-dark text-white border-secondary h-100">
                 <div class="card-header border-secondary d-flex justify-content-between align-items-center py-3">
@@ -124,11 +142,11 @@
                             {% endif %}
                         </div>
 
-                        {# GESTÃO MULTIPLA DE AVÔS (RAÍZES DE TELA) #}
+                        {# GESTÃO MULTIPLA DE AVÔS #}
                         {% if pai_selecionado.visivel_usuario == True %}
                             <hr class="border-secondary my-3">
 
-                            <!-- EXIBIÇÃO DOS AVÔS ATUAIS (BADGES COM REMOÇÃO DIRETA VIA JS) -->
+                            <!-- EXIBIÇÃO DOS AVÔS ATUAIS -->
                             <div class="mb-3">
                                 <span class="small d-block text-white-50 mb-1"><i class="fas fa-layer-group"></i> Grupos Superiores Vinculados:</span>
                                 {% if avos %}
@@ -146,7 +164,7 @@
                                 {% endif %}
                             </div>
 
-                            <!-- FORMULÁRIO PARA ADICIONAR NOVO AVÔ (SOMA AO BANCO) -->
+                            <!-- FORMULÁRIO PARA ADICIONAR NOVO AVÔ -->
                             <form method="POST" action="{{ url_for('admin_vincular_pai_raiz', pai_id=pai_selecionado.id) }}" class="mt-2">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <label class="form-label small text-info fw-bold">Atrelar a mais um Grupo Superior:</label>
@@ -176,7 +194,7 @@
             </div>
         </div>
 
-        <!-- COLUNA DA DIREITA: TRATAMENTO DOS FILHOS (ROTAS ATUALIZADAS) -->
+        <!-- COLUNA DA DIREITA: TRATAMENTO DOS FILHOS -->
         <div class="col-lg-7">
             <div class="card bg-dark text-white border-secondary h-100">
                 <div class="card-header border-secondary py-3">
@@ -223,7 +241,7 @@
                             </form>
                         </div>
 
-                        <!-- FORMULÁRIO 3: IMPORTAÇÃO CSV (DIRECIONADA PARA A NOVA ROTA) -->
+                        <!-- FORMULÁRIO 3: IMPORTAÇÃO CSV -->
                         <div id="sectionAutomatica" class="filho-section d-none p-3 rounded mb-3" style="background-color: #212529;">
                             <form method="POST" action="{{ url_for('admin_importar_filhos_csv', pai_id=pai_selecionado.id) }}" enctype="multipart/form-data">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -252,7 +270,81 @@
                 </div>
             </div>
         </div>
+
     </div>
+
+    <!-- DEVOLUÇÃO DO AJUSTE PONTUAL SOLICITADO: NOVO BLOCO 3 ADAPTADO COM INTELIGÊNCIA COMERCIAL -->
+    {% if pai_selecionado %}
+    <div class="row mb-5">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-warning">
+                <div class="card-header border-warning py-3">
+                    <span class="fw-bold text-uppercase text-warning" style="letter-spacing: 1px;">
+                        <i class="fas fa-ad"></i> 3. Publicidade Contextual Avançada (Motor Comercial Beta)
+                    </span>
+                </div>
+                <div class="card-body">
+                    <!-- Rota apontando dinamicamente para o ID da Taxonomia ativa -->
+                    <form method="POST" action="{{ url_for('admin_configurar_anuncio', taxonomia_id=pai_selecionado.id) }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Empresa Proprietária do Anúncio (Digite o nome):</label>
+
+                                <input type="text" id="busca_local_autocomplete" class="form-control bg-secondary text-white border-0"
+                                       placeholder="Comece a digitar o nome..." required>
+
+                                <input type="hidden" id="local_id_hidden" name="local_id" required>
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label small text-white-50">Link de Destino do Botão (Ex: WhatsApp ou Instagram):</label>
+                                <input type="url" name="url_destino" class="form-control bg-secondary text-white border-0"
+                                       placeholder="https://wa.me/5519..." required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Upload da Arte do Flyer (Proporção 1:1 - Saída WebP):</label>
+                                <input type="file" name="flyer_arte" class="form-control bg-secondary text-white border-0" accept="image/*">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Data de Expiração da Divulgação (Janela de Avaliação):</label>
+                                <input type="date" name="data_expiracao" class="form-control bg-secondary text-white border-0" required>
+                            </div>
+                        </div>
+
+                        {# Se o termo já possuir campanhas ativas mapeadas em nosso novo relacionamento #}
+                        {% if pai_selecionado.anuncios %}
+                        <div class="mb-4 p-3 rounded border border-secondary text-center" style="background-color: #212529;">
+                            <div class="row align-items-center">
+                                <div class="col-md-4 text-md-start">
+                                    <small class="text-success fw-bold d-block mb-1"><i class="fas fa-check-circle"></i> Campanha Ativa no Contexto:</small>
+                                    <span class="small text-white-50 d-block">Termo: {{ pai_selecionado.nome }}</span>
+                                    <span class="small text-warning d-block mt-2">
+                                        <i class="fas fa-eye"></i> Exibições Computadas: <strong>{{ pai_selecionado.anuncios[0].visualizacoes }}</strong>
+                                    </span>
+                                </div>
+                                <div class="col-md-8 text-md-end">
+                                    <img src="{{ url_for('static', filename='uploads/flyers/' ~ pai_selecionado.anuncios[0].url_flyer) }}"
+                                         class="img-fluid rounded border border-secondary"
+                                         style="max-height: 120px; object-fit: contain;"
+                                         alt="Flyer Ativo">
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <button type="submit" class="btn btn-warning text-dark fw-bold w-100 py-2">
+                            <i class="fas fa-rocket"></i> Validar e Injetar Publicidade no Feed
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- SEÇÃO ACCORDION: GESTÃO DE USUÁRIOS -->
     <div class="row">
@@ -357,16 +449,19 @@
     </div>
 </div>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
 <!-- SCRIPTS JAVASCRIPT COMPLETOS -->
 <script>
 // Controle do Dropdown de Seleção de Operação de Filhos
 document.getElementById('selectOperacaoFilho')?.addEventListener('change', function() {
-    // Esconde todas as seções de formulários de filhos
     document.querySelectorAll('.filho-section').forEach(section => {
         section.classList.add('d-none');
     });
 
-    // Mostra estritamente o formulário do container selecionado
     const valor = this.value;
     if (valor === 'pesquisa') document.getElementById('sectionPesquisa')?.classList.remove('d-none');
     if (valor === 'automatica') document.getElementById('sectionAutomatica')?.classList.remove('d-none');
@@ -441,29 +536,27 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
 function removerVinculoSuperior(paiId, raizId, nomeRaiz) {
     if (!confirm(`Deseja remover o vínculo com o grupo superior "${nomeRaiz}"?`)) {
         return;
     }
 
-    // Dispara a requisição em segundo plano para o Flask
     fetch(`/admin/taxonomia/remover_raiz/${paiId}/${raizId}`, {
         method: 'POST',
         headers: {
-            'X-CSRFToken': '{{ csrf_token() }}', // Proteção contra CSRF se o seu app exigir
+            'X-CSRFToken': '{{ csrf_token() }}',
             'Content-Type': 'application/json'
         }
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Remove a badge da tela instantaneamente sem recarregar a página
             const badge = document.getElementById(`badge-avo-${raizId}`);
             if (badge) {
                 badge.remove();
             }
 
-            // Opcional: Se não sobrar nenhuma badge, mostra o texto de aviso
             const container = document.getElementById('container-avos');
             if (container && container.children.length === 0) {
                 container.innerHTML = '<span class="text-muted small d-block italic">Nenhum grupo superior atrelado ainda.</span>';
@@ -477,5 +570,46 @@ function removerVinculoSuperior(paiId, raizId, nomeRaiz) {
         alert('Erro de comunicação com o servidor.');
     });
 }
+
+// Usamos o padrão nativo do jQuery para garantir que ele espere tudo carregar na tela
+jQuery(document).ready(function($) {
+    console.log("Motor de busca ativo e ouvindo no painel!");
+
+    $("#busca_local_autocomplete").autocomplete({
+        source: function(request, response) {
+            $.ajax({
+                url: "/buscar_locais",
+                dataType: "json",
+                data: {
+                    q: request.term
+                },
+                success: function(data) {
+                    response($.map(data, function(item) {
+                        return {
+                            label: item.nome + " - " + item.info_exibicao,
+                            value: item.id,
+                            nome_puro: item.nome
+                        };
+                    }));
+                },
+                error: function(err) {
+                    console.error("Erro na comunicação AJAX:", err);
+                }
+            });
+        },
+        minLength: 2,
+        select: function(event, ui) {
+            // Preenche o campo de texto com o nome limpo e o input oculto com o ID real
+            $("#busca_local_autocomplete").val(ui.item.nome_puro);
+            $("#local_id_hidden").val(ui.item.value);
+            return false;
+        },
+        focus: function(event, ui) {
+            $("#busca_local_autocomplete").val(ui.item.nome_puro);
+            return false;
+        }
+    });
+});
+
 </script>
 {% endblock %}

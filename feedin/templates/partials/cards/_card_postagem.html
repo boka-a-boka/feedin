@@ -161,7 +161,7 @@
         'usuario_origem_username': atividade.origem.username if atividade.origem else (atividade.autor.username if atividade.autor else 'Usuário'),
         'mensagem': texto_verificacao,
         'postagem_id': atividade.id_postagem_referencia or atividade.id,
-        'lida': atividade.lida if atividade.lida is defined else True
+        'lida': activity.lida if atividade.lida is defined else True
     } %}
     {% set c = None %}
 {% else %}
@@ -206,7 +206,7 @@
     </div>
 
 {% elif m %}
-    {# --- LAYOUT C: NOTIFICAÇÃO INTELIGENTE DE MARCAÇÃO (Corrigido e Saneado) --- #}
+    {# --- LAYOUT C: NOTIFICAÇÃO INTELIGENTE DE MARCAÇÃO --- #}
     {% set postagem_mae = atividade.postagem_referencia or atividade.postagem %}
 
     {% if m.postagem_id %}
@@ -216,7 +216,6 @@
     <div class="card border-0 shadow-sm rounded-3 mb-3 notification-item notification-marcacao" style="padding: 0; transition: transform 0.2s; cursor: pointer;" onmouseover="this.style.transform='scale(1.005)'" onmouseout="this.style.transform='scale(1)'">
         <div class="card-body p-2 px-3 d-flex align-items-center justify-content-between">
 
-            <!-- Lado Esquerdo: Avatar e Mensagem Dinâmica sem Spam -->
             <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
                 <div class="me-3" style="flex-shrink: 0;">
                     <img src="{{ url_for('servir_foto_perfil', usuario_id=m.usuario_origem_id) }}"
@@ -226,13 +225,11 @@
                 </div>
 
                 <div class="notification-content text-dark fw-medium" style="font-size: 0.95rem;">
-                    <!-- Apelido de quem realizou a ação corrigido via m.usuario_origem_username -->
                     <span class="notification-users">@{{ m.usuario_origem_username }}</span>
 
                     <span>marcou </span>
                     <span class="fw-bold" style="color: #a06a42;">Você</span>
 
-                    <!-- Tratamento inteligente para os demais usuários vinculados -->
                     {% if postagem_mae and postagem_mae.marcacoes %}
                         {% set outros_marcados = postagem_mae.marcacoes | rejectattr("usuario_id", "equalto", current_user.id) | list %}
                         {% if outros_marcados | length > 0 %}, {% endif %}
@@ -247,7 +244,6 @@
                 </div>
             </div>
 
-            <!-- Lado Direito: Ações e Redirecionamentos -->
             <div class="d-flex align-items-center gap-2 botoes-acao-marcacao flex-shrink-0" onclick="event.stopPropagation();">
                 {% if not m.lida and "aceitou" not in m.mensagem %}
                     <div class="d-flex gap-1">
@@ -279,9 +275,9 @@
     {% endif %}
 
 {% else %}
-    {# --- LAYOUT B: PUBLICAÇÃO ORIGINAL (Tratada e Preservada) --- #}
+    {# --- LAYOUT B: PUBLICAÇÃO ORIGINAL --- #}
     {% set autor = atividade.autor_objeto or atividade.autor or atividade['autor'] %}
-    {% set texto = atividade.descricao or atividade.conteudo_exibicao or atividade.mensagem or atividade.conteudo or "Uma nova memória foi resgatada!" %}
+    {% set texto = atividade.descricao or atividade.conteudo_exibicao or broomstick_mensagem or atividade.mensagem or atividade.conteudo or "Uma nova memória foi resgatada!" %}
     {% set imagem = atividade.imagem_url or atividade['imagem_url'] %}
 
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final" id="post-{{ id_post }}">
@@ -309,6 +305,7 @@
                         <small class="text-muted small d-block" style="margin-top: 1px;">
                             {{ atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao is defined else "Recente" }}
                         </small>
+
                     </div>
                 {% endif %}
             </div>
@@ -325,6 +322,93 @@
             <p class="text-dark mb-0 texto-postagem" style="white-space: pre-line; font-size: 1.1rem; line-height: 1.4; font-weight: 500; margin: 0; padding: 0;">{{- texto.strip() | safe -}}</p>
 
             <div style="clear: both;"></div>
+
+            {# ======================================================================= #}
+            {# COMPONENTE VISUAL COMPACTO - COM GATILHO DE CURIOSIDADE                #}
+            {# ======================================================================= #}
+            {% if atividade.anuncio %}
+                <div class="feed-ad-inline-wrapper my-2" style="width: 100%; display: block;">
+
+                    {# 1. GATILHO COMPACTO (Trocado de "Resgate" para "Apoio:" indutor de clique) #}
+                    <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 540px;">
+                        <span class="text-dark small fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.2px;">
+                            <i class="bi bi-heart-fill text-danger me-1"></i> Apoio:
+                        </span>
+
+                        {# Botão com o nome da empresa + indicador dinâmico +X #}
+                        <button class="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#ad-collapse-{{ atividade.id }}"
+                                aria-expanded="false"
+                                style="font-size: 0.75rem; letter-spacing: 0.3px;">
+
+                            {{ atividade.anuncio.local.nome }}
+
+                            {% if atividade.anuncio.mais_x > 0 %}
+                                <span class="badge bg-white text-primary ms-1" style="font-size: 0.7rem; padding: 2px 5px;">
+                                    +{{ atividade.anuncio.mais_x }}
+                                </span>
+                            {% else %}
+                                <i class="bi bi-plus-lg ms-1"></i>
+                            {% endif %}
+                        </button>
+                    </div>
+
+                    {# 2. A CAIXA EXPANSÍVEL (Com exibição explícita da Tag de Referência) #}
+                    <div class="collapse" id="ad-collapse-{{ atividade.id }}">
+                        <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3 text-center" style="max-width: 540px;">
+
+                            <div class="parceiro-destaque-bloco mb-3 pb-3 {% if atividade.anuncio.mais_x > 0 %}border-bottom{% endif %}">
+
+                                {# 🏷️ SELO DE REFERÊNCIA: Mostra a tag que o usuário segue ou que venceu o sorteio #}
+                                {% if atividade.anuncio.tag_referencia_nome %}
+                                    <div class="mb-2">
+                                        <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.3px; text-transform: uppercase;">
+                                            <i class="bi bi-tag-fill me-1"></i> Conteúdo relacionado: {{ atividade.anuncio.tag_referencia_nome }}
+                                        </span>
+                                    </div>
+                                {% endif %}
+
+                                <h6 class="fw-bold text-dark mb-1">{{ atividade.anuncio.local.nome }}</h6>
+
+                                {# A frase rotativa informal que já usa o nome da tag internamente #}
+                                <p class="card-text text-muted small mb-3" style="line-height: 1.4; font-size: 0.82rem;">
+                                    {{ atividade.anuncio.texto_formatado }}
+                                </p>
+
+                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
+                                   class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
+                                    <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+
+                            {% if atividade.anuncio.mais_x > 0 %}
+                                <div class="outros-parceiros-bloco text-start mt-2">
+                                    <small class="text-muted fw-bold d-block mb-2" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                                        Também apoiam histórias de {{ atividade.anuncio.tag_referencia_nome }}:
+                                    </small>
+
+                                    {% for outro in atividade.anuncio.outros_parceiros %}
+                                        <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded-2 mb-2 border border-light-subtle">
+                                            <div style="max-width: 70%;">
+                                                <span class="fw-bold text-dark d-block" style="font-size: 0.8rem;">{{ outro.local.nome }}</span>
+                                                <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Parceiro Comercial</small>
+                                            </div>
+                                            <a href="{{ url_for('registrar_clique', anuncio_id=outro.id, origem='botao', tag_id=outro.taxonomia_id) }}"
+                                               class="btn btn-xs btn-primary rounded-pill fw-bold px-3" style="font-size: 0.7rem; padding: 3px 10px;">
+                                                Visitar
+                                            </a>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                        </div>
+                    </div>
+
+                </div>
+            {% endif %}
         </div>
 
         {# RODAPÉ #}

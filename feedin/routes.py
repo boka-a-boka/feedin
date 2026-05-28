@@ -1,5 +1,5 @@
 from flask import (url_for, redirect, render_template, flash, session, request,
-                   abort, Response, jsonify, current_app, send_from_directory, Blueprint)
+                   abort, Response, jsonify, current_app, send_from_directory, Blueprint, send_file)
 from feedin import app, database, bcrypt, csrf
 from flask_mail import Mail, Message
 from flask_login import login_required, login_user, logout_user, current_user
@@ -12,9 +12,10 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
                            AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
-                           CredencialBiometrica)
+                           CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio)
 
-from feedin.utils import salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa, salvar_imagem_postagem
+from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa,
+                          salvar_imagem_postagem, salvar_imagem_anuncio)
 
 from webauthn import (generate_registration_options, verify_registration_response, options_to_json,
                       generate_authentication_options, verify_authentication_response)
@@ -34,7 +35,7 @@ from sqlalchemy import or_, func, asc, and_, not_
 from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
 from markupsafe import escape
-import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64
+import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64, random
 from itertools import groupby
 from io import TextIOWrapper
 from PIL import Image, ImageOps
@@ -50,6 +51,18 @@ fuso_sp = pytz.timezone('America/Sao_Paulo')
 # Supondo que você guardou sua chave na configuração do App ou variável de ambiente
 CHAVE_MESTRA = b'VUSlvfpIeAMtezp0VfI76eArKJ6f-Xp9UsPqmZDzxlI='
 fernet = Fernet(CHAVE_MESTRA)
+
+
+def apenas_admin(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.nivel_acesso < 9999:
+            flash('Acesso restrito aos administradores do sistema.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+
+    return decorated_function
+
 
 def generate_confirmation_token(email):
     serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
@@ -980,16 +993,34 @@ def dashboard():
             # 1. Recupera as atividades normais do feed
             atividades_normais = obter_atividades_feed(current_user)
 
-            # 2. Busca apenas alertas de marcações já resolvidas direcionadas a mim (Confirmações)
-            # Isso garante que NUNCA apareçam botões de ação errados no feed de ninguém
+            # 2. Busca apenas alertas de marcações já resolvidas direcionadas a mim
             alertas_confirmacao = Notificacao.query.filter_by(
                 id_usuario_destino=current_user.id,
                 tipo='marcacao',
                 lida=False
             ).order_by(Notificacao.data_criacao.desc()).all()
 
-            # 3. Unifica no topo do feed. O Layout C do card vai renderizar o texto liso perfeitamente
+            # 3. Unifica no topo do feed.
             atividades_recentes = alertas_confirmacao + atividades_normais
+
+            # 🎯 ALINHAMENTO DO TIME DOS PROIBIDOS: Sistema de respiro igual ao da rota /feed
+            proximo_gatilho = random.randint(1, 4)
+            contador_respiro = 0
+
+            for atividade in atividades_recentes:
+                contador_respiro += 1
+
+                # Se a atividade atingiu o número do sorteio, tenta injetar o anúncio
+                if contador_respiro >= proximo_gatilho:
+                    atividade.anuncio = obter_publicidade_contextual(atividade)
+
+                    # Se o anúncio foi injetado com sucesso, reinicia o respiro dinâmico
+                    if atividade.anuncio:
+                        contador_respiro = 0
+                        proximo_gatilho = random.randint(1, 6)
+                else:
+                    # Garante que a atividade está limpa de anúncios
+                    atividade.anuncio = None
 
             # Mantém o carregamento do carrossel
             lista_sugestoes = obter_sugestoes_carrossel(current_user)
@@ -1034,6 +1065,10 @@ def dashboard():
                 .order_by(func.count(VinculoUsuarioLocal.id).desc(), Local.nome.asc()) \
                 .all()
 
+    publicacoes_banco = Publicacao.query.order_by(Publicacao.data_cadastro.desc()).all()
+    for pub in publicacoes_banco:
+        pub.anuncio = obter_publicidade_contextual(pub)
+
     # --- 5. FORMULÁRIOS ---
     form_p = FormPerfil(obj=perfil_usuario)
     form_a = FormApelido()
@@ -1070,6 +1105,7 @@ def dashboard():
                            notificacoes=notificacoes_sino,
                            locais_populares=locais_populares,
                            lista_de_convites=lista_de_convites,
+                           publicacoes=publicacoes_banco,
                            minhas_prefs_json=json.dumps(prefs_atuais_data))
 
 
@@ -1734,6 +1770,27 @@ def mudar_nivel(id_alvo, novo_nivel):
 
     return redirect(url_for('admin_sistema'))
 
+
+@app.route('/admin/backup-database', methods=['GET'])
+def backup_database():
+    # Caminho do seu banco de dados SQLite. Ajuste o nome do arquivo para o seu real (ex: instance/feedin.db)
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    db_path = os.path.join(base_dir, 'instance', 'feedin.db')  # certifique-se do caminho correto
+
+    if os.path.exists(db_path):
+        try:
+            return send_file(
+                db_path,
+                mimetype='application/x-sqlite3',
+                as_attachment=True,
+                download_name=f"backup_feedin_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            )
+        except Exception as e:
+            return f"Erro ao gerar backup: {str(e)}", 500
+    else:
+        abort(404, description="Arquivo de banco de dados não encontrado.")
+
+
 @app.route("/convidar_parente", methods=['GET', 'POST'])
 @login_required
 def convidar_parente():
@@ -2228,33 +2285,35 @@ def apenas_admin(f):
 @app.route('/admin/dashboard')
 @app.route('/admin/dashboard/<int:pai_id>')
 @login_required
+@apenas_admin  # Padronizado para segurança total do ecossistema
 def admin_sistema(pai_id=None):
-    # 1. VALIDAÇÃO DE ACESSO (O bloco do 'if' termina no return redirect)
-    if current_user.nivel_acesso < 9999:
-        flash('Acesso restrito aos administradores do sistema.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    # 2. CARREGAMENTO DAS SUAS VARIÁVEIS DE TAXONOMIA E STATS
-    # (Recupere aqui as suas queries originais do banco, como os exemplos abaixo)
+    # 1. CARREGAMENTO DOS TERMOS DE TAXONOMIA BASEADO NO GRAFO REAL
     pai_selecionado = Taxonomia.query.get(pai_id) if pai_id else None
-    qtd_filhos = Taxonomia.query.filter_by(pai_id=pai_id).count() if pai_id else 0
-    avos = pai_selecionado.raizes_superiores if pai_selecionado else []  # ajuste conforme sua model
 
-    # Suas queries originais que geram o dicionário stats:
+    # AJUSTE PONTUAL: Utiliza o backref 'subitens' dinâmico da sua model
+    qtd_filhos = pai_selecionado.subitens.count() if pai_selecionado else 0
+
+    # AJUSTE PONTUAL: Utiliza o relacionamento real 'contextos' que aponta para cima
+    avos = pai_selecionado.contextos if pai_selecionado else []
+
+    # 2. CARREGAMENTO DOS STATS DO PAINEL
     stats = {
         'usuarios': Usuario.query.count(),
-        'pioneiros': Usuario.query.filter_by(is_pioneiro=True).count(),  # ou sua lógica de contagem
+        'pioneiros': Usuario.query.filter_by(is_pioneiro=True).count(),
         'taxonomia': Taxonomia.query.count()
     }
 
     # =================================================================
-    # 3. AJUSTE DA ORDENAÇÃO ALFABÉTICA (Alinhado fora do IF)
+    # 3. AJUSTE DA ORDENAÇÃO ALFABÉTICA (Blindado contra nomes vazios)
     # =================================================================
     todos_usuarios = Usuario.query.order_by(Usuario.username.asc()).all()
 
     agrupado_bruto = {}
     for u in todos_usuarios:
-        letra = u.username[0].upper() if u.username else '#'
+        # Trava de segurança contra usernames nulos, vazios ou com espaços
+        nome_limpo = u.username.strip() if u.username else ""
+        letra = nome_limpo[0].upper() if nome_limpo else '#'
+
         if letra not in agrupado_bruto:
             agrupado_bruto[letra] = []
         agrupado_bruto[letra].append(u)
@@ -2262,7 +2321,6 @@ def admin_sistema(pai_id=None):
     usuarios_agrupados = {letra: agrupado_bruto[letra] for letra in sorted(agrupado_bruto.keys())}
     # =================================================================
 
-    # 4. RENDERIZAÇÃO DA TELA (Agora com todas as variáveis vivas)
     return render_template(
         'admin/dashboard.html',
         stats=stats,
@@ -2275,16 +2333,13 @@ def admin_sistema(pai_id=None):
 
 @app.route('/admin/taxonomia/processar-pai', methods=['POST'])
 @login_required
+@apenas_admin
 def admin_processar_pai():
-    if current_user.nivel_acesso < 9999:
-        return redirect(url_for('dashboard'))
-
     nome_pai = request.form.get('termo_pai', '').strip()
     if not nome_pai:
         flash('Por favor, digite um termo válido.', 'warning')
         return redirect(url_for('admin_sistema'))
 
-    # Busca ou cria o termo na tabela plana
     termo = Taxonomia.query.filter_by(nome=nome_pai).first()
     if not termo:
         termo = Taxonomia(
@@ -2292,7 +2347,7 @@ def admin_processar_pai():
             status='homologado',
             data_criacao=datetime.now(timezone.utc),
             data_homologacao=datetime.now(timezone.utc),
-            visivel_usuario=True,  # Já nasce ativo como Pai para agilizar
+            visivel_usuario=True,
             visivel_negocio=True
         )
         database.session.add(termo)
@@ -2306,8 +2361,8 @@ def admin_processar_pai():
 
 @app.route('/admin/taxonomia/selecionar-pai/<int:pai_id>')
 @login_required
+@apenas_admin
 def admin_selecionar_pai_id(pai_id):
-    # Executa a escolha do administrador em caso de duplicidade detectada
     pai = Taxonomia.query.get_or_404(pai_id)
     pai.visivel_usuario = False
     pai.visivel_negocio = True
@@ -2320,20 +2375,13 @@ def admin_selecionar_pai_id(pai_id):
 @login_required
 @apenas_admin
 def admin_alternar_visibilidade_pai(pai_id):
-    # O clique consciente do Administrador que altera o banco de dados
     pai = Taxonomia.query.get_or_404(pai_id)
 
     # Inversão cirúrgica de estado booleano (Toggle)
-    if pai.visivel_usuario:
-        pai.visivel_usuario = False  # Passa a atuar estritamente como Filho (0)
-    else:
-        pai.visivel_usuario = True  # Passa a atuar estritamente como Pai (1)
-
-    pai.visivel_negocio = True  # Garante a persistência da regra de negócio (1)
+    pai.visivel_usuario = not pai.visivel_usuario
+    pai.visivel_negocio = True  # Garante a persistência da regra de negócio
 
     database.session.commit()
-
-    # Retorna silenciosamente atualizando o botão no painel do termo em foco
     return redirect(url_for('admin_sistema', pai_id=pai.id))
 
 
@@ -2813,11 +2861,18 @@ def obter_atividades_feed(usuario):
                 setattr(item, 'total_curtidas', item.total_curtidas_memoria)
 
             elif isinstance(item, Postagem):
+
                 item.tipo = 'postagem'
                 item.local_foco = getattr(item, 'local', None)
                 item.autor_objeto = getattr(item, 'autor', None) or getattr(item, 'usuario', None)
+
+            # 🌟 FORÇA A EXISTÊNCIA DO ATRIBUTO ANÚNCIO COMO ALVO SEGURO
+                if not hasattr(item, 'anuncio'):
+                    setattr(item, 'anuncio', None)
+
                 if not hasattr(item, 'usuario_ja_curtiu'):
                     setattr(item, 'usuario_ja_curtiu', lambda x: False)
+
                 if not hasattr(item, 'total_curtidas'):
                     setattr(item, 'total_curtidas', 0)
 
@@ -3321,25 +3376,22 @@ def buscar_afinidades_por_fiador(usuario, tag_nome):
 
     return afinidades_validadas
 
+
 @app.route("/feed")
 @login_required
 def feed():
-
     # 1. Identifica a aba (útil se você unificar com a homepage futuramente)
     aba = 'feed'
 
     # 2. Dados básicos para a "Linha Mágica" e Identificação de Posse
-    # Buscamos Grupos Sociais (MembroGrupo)
     grupos_filiados = MembroGrupo.query.filter_by(id_usuario=current_user.id).all()
     grupos_ids = [m.id_grupo for m in grupos_filiados]
 
-    # Buscamos Estabelecimentos de Piracicaba (Local - Empreendedor ou Indicador)
     locais_vinculados = Local.query.filter(
         (Local.id_empreendedor == current_user.id) | (Local.id_indicador == current_user.id)
     ).all()
     locais_negocio_ids = [l.id for l in locais_vinculados]
 
-    # Unificação para o Verificador do Template (meus_locais_ids)
     meus_locais_ids = grupos_ids + locais_negocio_ids
 
     # --- CONTADORES PARA O DASHBOARD ---
@@ -3356,13 +3408,34 @@ def feed():
     ).count()
 
     # 3. Busca de Conteúdo Dinâmico
-    # Sugestões para o carrossel de Pioneiros
     sugestoes = obter_sugestoes_pioneiras(current_user)
 
-    # Atividades (Memórias do usuário + Amigos + Públicas)
+    # Suas memórias, amigos e postagens públicas chegam aqui
     atividades_recentes = obter_atividades_feed(current_user)
 
-    # 4. Renderização com todas as variáveis "vivas"
+    # --- O PULO DO GATO: INJEÇÃO DO RESPIRO ALEATÓRIO DE PUBLICIDADE ---
+    # Sorteia em qual posição de post o primeiro anúncio vai aparecer (ex: entre o 1º e o 4º)
+    proximo_gatilho = random.randint(1, 4)
+    contador_respiro = 0
+
+    for atividade in atividades_recentes:
+        contador_respiro += 1
+
+        # Se a atividade atingiu o número do sorteio, ela ganha o direito ao anúncio
+        if contador_respiro >= proximo_gatilho:
+            # Passamos a atividade (post) para a função correta mapeada para o Beta do FeedIn
+            atividade.anuncio = obter_publicidade_contextual(atividade)
+
+            # Zera o contador e sorteia o próximo respiro dinâmico (de 1 a 6 posts livres)
+            # Se a função retornar None (ex: uma conexão automática), o respiro continua correndo
+            if atividade.anuncio:
+                contador_respiro = 0
+                proximo_gatilho = random.randint(1, 6)
+        else:
+            # Garante que a atividade está 100% limpa de anúncios
+            atividade.anuncio = None
+
+    # 4. Renderização com todas as variáveis "vivas" e protegidas
     return render_template("homepage.html",
                            aba=aba,
                            atividades_recentes=atividades_recentes,
@@ -3467,6 +3540,10 @@ def obter_destaque_comercial(categoria_alvo):
     ).count()
 
     return parceiro, outros_parceiros
+
+@app.context_processor
+def inject_publicidade_fn():
+    return dict(obter_publicidade_contextual=obter_publicidade_contextual)
 
 
 # Para que o Admin consiga moderar com eficiência, a rota precisa registrar quem sugeriu, criando um vínculo de confiança.
@@ -4129,6 +4206,14 @@ def ver_perfil(usuario_id):
     else:
         fotos_com_alvo = []
 
+    # =========================================================================
+    # ACOPLAMENTO DO MOTOR DE PUBLICIDADE NO PERFIL DO USUÁRIO
+    # =========================================================================
+    for post in postagens_permitidas:
+        # Passamos o post pelo motor para achar o parceiro ideal baseado nas tags dele
+        post.anuncio = obter_publicidade_contextual(post)
+    # =========================================================================
+
     form_convite = FormConexao()
 
     return render_template("perfil_publico.html",
@@ -4214,6 +4299,24 @@ def perfil_local(local_id):
     if atividades_formatadas:
         atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
 
+        # =========================================================================
+        # ACOPLAMENTO DO MOTOR NO PERFIL DO LOCAL (Regra de Exclusividade da Casa)
+        # =========================================================================
+        # Buscamos se o próprio local possui algum anúncio ativo cadastrado
+        from feedin.models import LocalAnuncio  # Garanta a importação se necessário
+        anuncio_do_local = LocalAnuncio.query.filter_by(local_id=local_id, status='ativo').first()
+
+        if anuncio_do_local:
+            # Injeta uma frase personalizada da própria casa
+            anuncio_do_local.texto_formatado = f"Você está visitando nossa página! Apoie quem mantém viva a história de Piracicaba."
+            anuncio_do_local.mais_x = 0  # Força modo SOLO absoluto (sem carona para concorrentes aqui dentro)
+            anuncio_do_local.tag_referencia_nome = "Página Oficial"
+
+            # Colamos esse anúncio em todas as atividades da timeline do próprio local
+            for atividade in atividades:
+                atividade['anuncio'] = anuncio_do_local
+        # =========================================================================
+        
     # 7. RENDERIZAÇÃO FINAL (Todas as variáveis aqui foram garantidas no Passo 1)
     return render_template('locais/perfil_local.html',
                            local=local,
@@ -5176,3 +5279,250 @@ def recusar_marcacao(id_marcacao):
 
 from flask import jsonify  # Certifique-se de que o jsonify está importado no topo do arquivo
 
+from flask_login import current_user
+
+
+def obter_publicidade_contextual(pub):
+    """
+    O Motor de Vanguarda do FeedIn: Cruza as tags do post com as tags que o
+    usuário logado segue para entregar anúncios 100% personalizados e sem ofuscamento.
+    """
+    tags_do_post = []
+
+    # 1. CAPTURA AS TAGS DO POST (Seus mapeamentos de segurança mantidos)
+    if hasattr(pub, 'tags_afinidade') and pub.tags_afinidade is not None:
+        tags_do_post = pub.tags_afinidade.all() if hasattr(pub.tags_afinidade, 'all') else pub.tags_afinidade
+    elif hasattr(pub, 'tags') and pub.tags is not None:
+        tags_do_post = pub.tags.all() if hasattr(pub.tags, 'all') else pub.tags
+    elif hasattr(pub, 'postagem') and hasattr(pub.postagem,
+                                              'tags_afinidade') and pub.postagem.tags_afinidade is not None:
+        tags_do_post = pub.postagem.tags_afinidade.all() if hasattr(pub.postagem.tags_afinidade,
+                                                                    'all') else pub.postagem.tags_afinidade
+    elif hasattr(pub, 'objeto_original') and hasattr(pub.objeto_original,
+                                                     'tags_afinidade') and pub.objeto_original.tags_afinidade is not None:
+        tags_do_post = pub.objeto_original.tags_afinidade.all() if hasattr(pub.objeto_original.tags_afinidade,
+                                                                           'all') else pub.objeto_original.tags_afinidade
+
+    if not tags_do_post and hasattr(pub, 'id_postagem'):
+        from feedin.models import Postagem
+        post_real = Postagem.query.get(pub.id_postagem)
+        if post_real and post_real.tags_afinidade:
+            tags_do_post = post_real.tags_afinidade.all() if hasattr(post_real.tags_afinidade,
+                                                                     'all') else post_real.tags_afinidade
+
+    if not tags_do_post:
+        return None
+
+    import random
+    from sqlalchemy import func
+
+    # Mapeia os IDs das tags que estão presentes nesta publicação
+    ids_tags_post = [t.id for t in tags_do_post]
+    tag_vencedora = None
+
+    # 2. O FILTRO DE AFINIDADE DO USUÁRIO (A mudança do jogo)
+    if current_user.is_authenticated:
+        # Pega as tags que o usuário logado de fato segue no FeedIn
+        # (Ajuste o termo 'tags_seguidas' para o nome exato da sua relação no model Usuário)
+        if hasattr(current_user, 'tags_seguidas') and current_user.tags_seguidas:
+            tags_usuario = current_user.tags_seguidas.all() if hasattr(current_user.tags_seguidas,
+                                                                       'all') else current_user.tags_seguidas
+            ids_tags_usuario = [t.id for t in tags_usuario]
+
+            # Descobre quais tags estão no post E o usuário segue ao mesmo tempo (Interseção)
+            tags_em_comum = [t for t in tags_do_post if t.id in ids_tags_usuario]
+
+            if tags_em_comum:
+                # Perfeito! Sorteia uma das tags que o usuário tem interesse real
+                tag_vencedora = random.choice(tags_em_comum)
+
+    # Contingência: Se o usuário não segue nenhuma tag dali ou não está logado, sorteia uma do post
+    if not tag_vencedora:
+        tag_vencedora = random.choice(tags_do_post)
+
+    # 3. BUSCA CIRÚRGICA BASEADA APENAS NA TAG VENCEDORA
+    anuncios_brutos = LocalAnuncio.query.filter(
+        LocalAnuncio.taxonomia_id == tag_vencedora.id,
+        LocalAnuncio.status == 'ativo'
+    ).order_by(func.random()).all()
+
+    # Se a tag ultra-específica não tiver anúncios cadastrados, recorre ao bolo geral do post
+    if not anuncios_brutos:
+        ids_restantes = [t.id for t in tags_do_post if t.id != tag_vencedora.id]
+        anuncios_brutos = LocalAnuncio.query.filter(
+            LocalAnuncio.taxonomia_id.in_(ids_restantes),
+            LocalAnuncio.status == 'ativo'
+        ).order_by(func.random()).all()
+        if anuncios_brutos:
+            from feedin.models import Taxonomia
+            tag_vencedora = Taxonomia.query.get(anuncios_brutos[0].taxonomia_id)
+
+    if not anuncios_brutos:
+        return None
+
+    # Regra rígida de planos (Investidor premium sempre barra gratuito)
+    anuncios_pagos = [a for a in anuncios_brutos if
+                      hasattr(a, 'plano_marketing') and a.plano_marketing == 'patrocinado']
+    anuncios_filtrados = anuncios_pagos if anuncios_pagos else anuncios_brutos
+
+    # Definição do Destaque da rodada
+    anuncio_destaque = anuncios_filtrados[0]
+    id_empresa_destaque = getattr(anuncio_destaque, 'local_id', None)
+
+    # Injeta o nome da tag que amarrou a ação para usarmos de justificativa no HTML
+    anuncio_destaque.tag_referencia_nome = tag_vencedora.nome
+
+    # Frases informais rotativas e contextualizadas
+    textos_parceria = (
+        f"Esse lugar faz parte da história viva de Piracicaba e apoia o resgate de memórias sobre {tag_vencedora.nome}!",
+        f"Quem é daqui conhece! Esse parceiro fecha com o FeedIn no segmento de {tag_vencedora.nome}.",
+        f"Tradicional em nossa região, este local apoia a salvaguarda das nossas histórias de {tag_vencedora.nome}!",
+        f"Valorize o comércio local! Esse parceiro apoia a nossa comunidade e se destaca em {tag_vencedora.nome}."
+    )
+    anuncio_destaque.texto_formatado = random.choice(textos_parceria)
+
+    # 4. MAPEAMENTO DO ECOSSISTEMA REAL DA TAG SELECIONADA
+    empresas_concorrentes = set()
+    outros_parceiros_unicos = []
+
+    for a in anuncios_filtrados:
+        id_empresa_atual = getattr(a, 'local_id', None)
+        if id_empresa_atual and id_empresa_atual != id_empresa_destaque:
+            if id_empresa_atual not in empresas_concorrentes:
+                empresas_concorrentes.add(id_empresa_atual)
+                outros_parceiros_unicos.append(a)
+
+    anuncio_destaque.mais_x = len(empresas_concorrentes)
+    anuncio_destaque.outros_parceiros = outros_parceiros_unicos
+
+    # 5. COMPUTA VISUALIZAÇÃO
+    anuncio_destaque.visualizacoes += 1
+    try:
+        database.session.commit()
+    except Exception as e:
+        database.session.rollback()
+        print(f"Erro silencioso ao computar visualização: {e}")
+
+    return anuncio_destaque
+
+
+@app.route('/feed')
+@login_required
+def exibir_feed():
+    # 1. Busca as postagens reais do banco (filtrando por ativas e ordenando pelas mais recentes)
+    postagens_do_feed = Postagem.query.filter_by(ativo=True).order_by(Postagem.data_creation.desc()).all()
+
+    print(f"=== INICIANDO RASTREAMENTO NO FEED (Total de posts: {len(postagens_do_feed)}) ===")
+
+    # 2. Varre cada postagem e acopla o anúncio comercial se houver match de tag
+    for post in postagens_do_feed:
+        anuncio_encontrado = obter_publicidade_contextual(post)
+
+        if anuncio_encontrado:
+            print(f"[SUCESSO] Post ID {post.id} ganhou o anúncio da empresa {anuncio_encontrado.local.nome}")
+            post.anuncio = anuncio_encontrado
+        else:
+            print(f"[VAZIO] Post ID {post.id} não encontrou anúncio comercial correspondente.")
+
+    print("=== FIM DO RASTREAMENTO ===")
+
+    # 3. Envia a lista de postagens atualizada para o seu template
+    return render_template('feed.html', atividade_lista=postagens_do_feed)
+
+
+@app.route('/admin/configurar-anuncio/<int:taxonomia_id>', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_configurar_anuncio(taxonomia_id):
+    termo_pai = Taxonomia.query.get_or_404(taxonomia_id)
+
+    local_id = request.form.get('local_id')
+    if not local_id:
+        flash('Por favor, selecione uma empresa proprietária do flyer.', 'danger')
+        return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
+
+    local = Local.query.get_or_404(local_id)
+    plano = request.form.get('plano_marketing', 'gratuito')
+    arquivo_foto = request.files.get('flyer_arte')
+
+    # Como estamos no cenário do Botão, vai ser None
+    if arquivo_foto and arquivo_foto.filename != '':
+        nome_imagem = salvar_imagem_anuncio(arquivo_foto, local.id)
+    else:
+        nome_imagem = None
+
+    # === O SEGREDO ESTÁ AQUI: Captura e converte a data do HTML ===
+    data_exp_form = request.form.get('data_expiracao')
+    data_expiracao = None
+
+    if data_exp_form:
+        try:
+            # Converte a string 'YYYY-MM-DD' do HTML em objeto Datetime para o SQLite
+            data_expiracao = datetime.strptime(data_exp_form, '%Y-%m-%d')
+        except ValueError:
+            data_expiracao = None # Segurança caso venha um formato inválido
+
+    url_destino_form = request.form.get('url_destino')
+
+    if not url_destino_form:
+        flash('Por favor, insira o link de destino (WhatsApp, Instagram ou Site) para o botão.', 'danger')
+        return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
+
+    # Injeta o campo na criação do registro
+    novo_anuncio = LocalAnuncio(
+        local_id=local.id,
+        taxonomia_id=taxonomia_id,
+        url_flyer=nome_imagem,
+        url_destino=url_destino_form,  # <-- GRAVA A URL AQUI!
+        plano_marketing=plano,
+        status='ativo',
+        data_expiracao=data_expiracao
+    )
+
+    database.session.add(novo_anuncio)
+
+    try:
+        database.session.commit()
+        flash(f'Anúncio de Ação (Botão) para "{local.nome}" ativado com sucesso!', 'success')
+    except Exception as e:
+        database.session.rollback()
+        flash(f'Erro ao salvar configurações no banco: {str(e)}', 'danger')
+
+    return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
+
+
+@app.route('/anuncio/clique/<int:anuncio_id>')
+@login_required
+def registrar_clique(anuncio_id):
+    # 1. Recupera o anúncio clicado
+    anuncio = LocalAnuncio.query.get_or_404(anuncio_id)
+
+    # 2. Captura os parâmetros contextuais enviados pelo HTML
+    origem = request.args.get('origem', 'flyer')  # Padrão assume flyer se falhar
+    tag_id = request.args.get('tag_id', anuncio.taxonomia_id)
+
+    # 3. Alimenta o motor de BI salvando a ocorrência exata
+    novo_clique = AnuncioClique(
+        anuncio_id=anuncio.id,
+        usuario_id=current_user.id,
+        taxonomia_id=tag_id,
+        origem_clique=origem
+    )
+
+    database.session.add(novo_clique)
+
+    try:
+        database.session.commit()
+    except Exception as e:
+        database.session.rollback()
+        # Logamos o erro silenciosamente para não quebrar a experiência do usuário
+        print(f"Erro ao computar clique de BI: {str(e)}")
+
+    # 4. REDIRECIONAMENTO RETILÍNEO ADAPTADO:
+    # Se o anúncio tiver a nova coluna 'url_destino' preenchida, leva para o link externo (WhatsApp/Insta).
+    # Se por acaso estiver vazia (fallback de segurança), ele usa o perfil interno como plano B.
+    if hasattr(anuncio, 'url_destino') and anuncio.url_destino:
+        return redirect(anuncio.url_destino)
+
+    # Fallback de segurança original que você já tinha estruturado
+    return redirect(url_for('ver_perfil', usuario_id=anuncio.local_id))

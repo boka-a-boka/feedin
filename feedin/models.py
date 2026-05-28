@@ -51,6 +51,7 @@ taxonomia_conexoes = database.Table('taxonomia_conexoes',
 
 class Desconexoes(database.Model):
     __tablename__ = 'desconexoes'
+    __table_args__ = {'extend_existing': True}
     id = database.Column(database.Integer, primary_key=True)
 
     # Referência à conexão original que foi quebrada (para manter o histórico do contexto)
@@ -431,6 +432,7 @@ class Local(database.Model):
     data_expiracao_teste = database.Column(database.Date, nullable=True)
     verificado = database.Column(database.Boolean, default=False)
     google_place_id = database.Column(database.String(255), unique=True, nullable=True)
+    url_flyer = database.Column(database.String(255), nullable=True)
 
     # RASTREABILIDADE
     id_indicador = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=True)
@@ -731,6 +733,8 @@ class Postagem(database.Model):
                                            secondary=postagem_tags,
                                            backref=database.backref('postagens_relacionadas', lazy='dynamic'))
 
+    anuncio = None
+
     # 2. NOVO RELACIONAMENTO (Adicionado aqui dentro)
     # É este campo que a rota 'criar_postagem' vai usar para dar o .append() ou .extend()
 
@@ -930,3 +934,81 @@ class CredencialBiometrica(database.Model):
 
     # Passando a classe direto (sem aspas!) e deixando o backref explícito
     usuario = database.relationship(Usuario, backref=database.backref('biometrias', lazy=True))
+
+
+# Tabela Intermediária (Many-to-Many) para ligar Publicações às suas Tags
+publicacao_taxonomia = database.Table('publicacao_taxonomia',
+    database.Column('publicacao_id', database.Integer, database.ForeignKey('publicacao.id', ondelete='CASCADE'), primary_key=True),
+    database.Column('taxonomia_id', database.Integer, database.ForeignKey('taxonomia.id', ondelete='CASCADE'), primary_key=True),
+    extend_existing=True  # 🌟 Adicionado para não dar erro no PyCharm ao recriar o banco
+)
+
+# Tabela Intermediária: Publicações <-> Tags (Se você usar Many-to-Many aqui)
+publicacao_tags = database.Table('publicacao_tags',
+                                 database.Column('publicacao_id', database.Integer,
+                                                 database.ForeignKey('publicacao.id', ondelete='CASCADE'),
+                                                 primary_key=True),
+                                 database.Column('taxonomia_id', database.Integer,
+                                                 database.ForeignKey('taxonomia.id', ondelete='CASCADE'),
+                                                 primary_key=True),
+                                 extend_existing=True
+                                 )
+
+
+class Publicacao(database.Model):
+    __tablename__ = 'publicacao'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    descricao = database.Column(database.Text, nullable=False)
+    imagem_url = database.Column(database.String(255), nullable=True)
+
+    # Aponta para 'locais.id' (no plural, como está na sua tabela real)
+    local_id = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=True)
+
+    # 🌟 A LINHA QUE FALTAVA: Registro cronológico da memória
+    data_cadastro = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # RELACIONAMENTOS
+    local_objeto = database.relationship('Local', backref='publicacoes_vinculadas', foreign_keys=[local_id])
+
+    tags = database.relationship('Taxonomia',
+                                 secondary=publicacao_taxonomia,
+                                 backref='publicacoes_com_esta_tag')
+
+
+class LocalAnuncio(database.Model):
+    __tablename__ = 'local_anuncio'
+
+    id = database.Column(database.Integer, primary_key=True)
+    local_id = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
+    taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id'), nullable=False)
+    url_flyer = database.Column(database.String(255), nullable=True)  # Guarda o arquivo se hovar
+    local = database.relationship('Local', backref='anuncios_locais')
+    
+    # === AQUI ESTÁ O QUE FALTAVA: O link de destino do botão/flyer ===
+    url_destino = database.Column(database.String(500), nullable=False)
+
+    plano_marketing = database.Column(database.String(50), default='gratuito')
+    status = database.Column(database.String(20), default='ativo')
+    data_expiracao = database.Column(database.DateTime, nullable=True)
+    visualizacoes = database.Column(database.Integer, default=0)
+    cliques = database.Column(database.Integer, default=0)
+
+
+class AnuncioClique(database.Model):
+    __tablename__ = 'anuncio_clique'
+
+    id = database.Column(database.Integer, primary_key=True)
+    anuncio_id = database.Column(database.Integer, database.ForeignKey('local_anuncio.id'), nullable=False)
+
+    # AJUSTE AQUI: Verifique se sua tabela de usuários se chama 'usuario' ou 'usuarios'
+    usuario_id = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+
+    taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id'), nullable=False)
+    origem_clique = database.Column(database.String(20), nullable=False)
+    data_hora = database.Column(database.DateTime, default=datetime.utcnow)
+
+    anuncio = database.relationship('LocalAnuncio', backref='cliques_detalhados')
+    usuario = database.relationship('Usuario', backref='cliques_anuncios')
