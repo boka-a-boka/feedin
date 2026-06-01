@@ -1,0 +1,20 @@
+{# _feed_atividades.html - O MAESTRO (Ajustado com Segurança) #}
+
+{% if aba == 'feed' %}
+    {# Se for um post normal, passa direto #}
+    {% if not (atividade.id_conexao or atividade.tipo in ['vinculo', 'rede']) %}
+        {# O anúncio injetado via Python já vai junto com a 'atividade' para dentro do card #}
+        {% include "partials/cards/_card_postagem.html" %}
+
+    {# Se for uma conexão automática, SÓ exibe se o usuário logado for uma das duas pontas #}
+    {% elif atividade.dados_conexao and (current_user.id == atividade.dados_conexao.id_remetente or current_user.id == atividade.dados_conexao.id_destinatario) %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endif %}
+{% else %}
+    {# Se for Locais ou Perfil, mantemos a lógica de diferenciação intacta #}
+    {% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
+        {% include "partials/cards/card_postagem_universal.html" %}
+    {% else %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endif %}
+{% endif %}

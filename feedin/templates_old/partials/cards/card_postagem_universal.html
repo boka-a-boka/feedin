@@ -1,0 +1,247 @@
+{# card_postagem_universal.html #}
+
+<style>
+    .img-ajustada-feed {
+        {% if context_origem in ['perfil_local', 'perfil_publico'] %}
+            width: 100% !important;
+            max-height: 550px !important;
+            object-fit: contain !important;
+            background-color: #000 !important;
+            display: block !important;
+            margin-bottom: 15px !important;
+            border-radius: 12px !important;
+            float: none !important;
+        {% else %}
+            width: 100px !important;
+            height: 100px !important;
+            object-fit: cover !important;
+            float: left !important;
+            margin-right: 15px !important;
+            margin-bottom: 8px !important;
+            border-radius: 8px !important;
+            display: inline-block !important;
+        {% endif %}
+    }
+    .clearfix::after { content: ""; clear: both; display: table; }
+    {% if context_origem not in ['perfil_local', 'perfil_publico'] %}
+    .card-text { overflow: hidden; }
+    {% endif %}
+
+    /* Ajuste de transição para o botão discreto */
+    .btn-fluxo-silencioso {
+        transition: all 0.2s ease-in-out;
+    }
+    .btn-fluxo-silencioso:hover {
+        transform: translateY(-1px);
+    }
+</style>
+
+{# 1. IDENTIFICAÇÃO E CAPTURA DE CONTEXTO #}
+{% set eh_sistema = false %}
+{% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
+    {% set eh_sistema = true %}
+{% endif %}
+
+{# --- IDENTIFICAÇÃO CIRÚRGICA DE COMENTÁRIOS VS POSTAGENS --- #}
+{% set eh_comentario = false %}
+{# Verificamos se o objeto possui o atributo 'id_postagem' (característico da model PostagemComentario) #}
+{% if atividade.id_postagem is defined %}
+    {% set eh_comentario = true %}
+    {# A postagem real (origem) está ancorada via relacionamento ou query #}
+    {% set post_obj = atividade.postagem if atividade.postagem is defined else Postagem.query.get(atividade.id_postagem) %}
+    {% set texto_exibicao = atividade.texto %}
+    {% set autor_acao = atividade.usuario if atividade.usuario is defined else Usuario.query.get(atividade.id_usuario) %}
+{% else %}
+    {% set post_obj = atividade.objeto_original if atividade.objeto_original else atividade %}
+    {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo %}
+    {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario %}
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-3 {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}">
+    <div class="card-body">
+
+        {# CABEÇALHO #}
+        {% if autor_acao %}
+        <div class="d-flex align-items-center mb-3">
+            <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40">
+            <div class="ms-2">
+                <small class="text-muted">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="content-wrapper clearfix">
+            {# IMAGEM ÚNICA (Se for comentário, herda e exibe a foto da postagem de origem com segurança) #}
+            {% if not eh_sistema and post_obj.imagem_url %}
+                <img src="{{ url_for('static', filename='uploads/posts/' + post_obj.imagem_url) }}" class="img-ajustada-feed">
+            {% endif %}
+
+            {# TEXTO #}
+            <div class="card-text text-dark mb-3" style="font-size: 1.05rem; line-height: 1.5;">
+                {% if eh_sistema %}
+                    <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong>
+                {% else %}
+                    {# Se for comentário, podemos colocar um background discreto de citação #}
+                    {% if eh_comentario %}
+                        <div class="p-2 bg-light border-start border-3 rounded-end mb-2 text-muted italic" style="font-size: 0.95rem;">
+                            <i class="bi bi-chat-quote me-1"></i> "{{ texto_exibicao | formatar_postagem | safe }}"
+                        </div>
+                        <div class="small text-secondary mt-1">
+                            <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
+                        </div>
+                    {% else %}
+                        {{ texto_exibicao | formatar_postagem | safe }}
+                    {% endif %}
+                {% endif %}
+            </div>
+
+            {# [O restante do seu bloco de MARCAÇÃO SILENCIOSA e TAGS continua abaixo igual, sempre usando post_obj] #}
+            {# --- FIM DO BLOCO DE MARCAÇÃO SILENCIOSA --- #}
+
+
+            {# LINHA 1: PESSOAS MARCADAS ANTIGAS (Mantive intacto para não quebrar dependências visuais suas) #}
+            {% if atividade and atividade.pessoas_marcadas %}
+                <div class="mb-2">
+                    <div class="d-flex flex-wrap gap-1 align-items-center">
+                        <i class="bi bi-people text-muted small me-1"></i>
+                        {% for pessoa in atividade.pessoas_marcadas %}
+                            <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-normal" style="font-size: 0.7rem;">
+                                    @{{ pessoa.username }}
+                                </span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# LINHA 2: TAGS DE AFINIDADE #}
+            {% if post_obj and post_obj.tags %}
+                <div class="mt-2 border-top pt-2" style="border-top-style: dotted !important; opacity: 0.9;">
+                    <div class="d-flex flex-wrap gap-1">
+                        {% for tag in post_obj.tags %}
+                            {% if meus_interesses_ids and tag.id in meus_interesses_ids %}
+                                <span class="badge bg-primary rounded-pill px-2 py-1 shadow-xs" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.3px;">
+                                    <i class="bi bi-bookmark-check-fill me-1"></i>#{{ tag.nome.replace(' ', '') }}
+                                </span>
+                            {% else %}
+                                <span class="badge bg-light text-muted rounded-pill px-2 py-1 border text-secondary" style="font-size: 0.68rem; font-weight: 600; opacity: 0.65; border-color: #dee2e6 !important;" title="Você não segue esta tag.">
+                                    <i class="bi bi-eye-slash me-1"></i>#{{ tag.nome.replace(' ', '') }}
+                                </span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+{# --- BLOCO DE EXIBIÇÃO DE COMENTÁRIOS DESTA HISTÓRIA --- #}
+            {% if post_obj.total_comentarios > 0 %}
+                <div class="mt-3 pt-3 border-top" style="background-color: #f8f9fa; border-radius: 8px; padding: 10px 15px;">
+                    <h6 class="text-muted mb-2" style="font-size: 0.85rem;"><i class="bi bi-chat-left-text me-1"></i> Comentários:</h6>
+
+                    {# 1. INÍCIO DO LOOP: A partir daqui a variável 'com' existe #}
+                    {% for com in post_obj.lista_comentarios_ativos %}
+                        <div class="d-flex align-items-start mb-2 pb-2 border-bottom border-light" id="comentario-{{ com.id }}">
+                            <img src="{{ url_for('servir_foto_perfil', usuario_id=com.id_usuario) }}" class="rounded-circle border me-2" width="28" height="28">
+                            <div class="w-100">
+                                <div class="bg-white p-2 rounded shadow-xs" style="font-size: 0.92rem;">
+
+                                    {# CORRIGIDO: Esta verificação está dentro do escopo do 'com' #}
+                                    <strong class="text-dark">
+                                        {% if com.usuario and com.usuario.username %}
+                                            @{{ com.usuario.username }}
+                                        {% elif com.id_usuario %}
+                                            @ID_{{ com.id_usuario }}
+                                        {% else %}
+                                            @Usuário
+                                        {% endif %}
+                                    </strong>
+
+                                    <span class="text-secondary">{{ com.texto | formatar_postagem | safe }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1 px-1">
+                                    <small class="text-muted" style="font-size: 0.75rem;">{{ com.data_comentario.strftime('%d/%m/%Y %H:%M') }}</small>
+
+                                    {% if current_user.is_authenticated and (com.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
+                                        <button class="btn btn-sm btn-link text-danger p-0 border-0" style="font-size: 0.75rem; text-decoration: none;" onclick="excluirComentario('{{ com.id }}')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {# --- FIM DO BLOCO DE COMENTÁRIOS --- #}
+    </div>
+
+    {# RODAPÉ: LOCAL E REAÇÕES #}
+    <div class="px-3 pb-3">
+        <div class="pt-2 d-flex justify-content-between align-items-center">
+            <div>
+                {% if post_obj.id_local and context_origem != 'perfil_local' %}
+                    <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
+                        <span class="badge rounded-pill bg-light text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
+                            <i class="bi ge-alt-fill me-1 text-danger"></i>
+                            <span class="fw-bold">
+                                {{ post_obj.local_foco.nome if post_obj.local_foco else "Local" }}
+                            </span>
+                        </span>
+                    </a>
+                {% endif %}
+            </div>
+
+            <!-- BOTÕES DE GERENCIAMENTO (EDITAR / EXCLUIR) -->
+            {% if current_user.is_authenticated and atividade.id_usuario == current_user.id %}
+            <div class="dropdown ms-auto">
+                <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical fs-5"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
+                    <li>
+                        <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
+                            <i class="bi bi-pencil me-2 text-primary"></i> Editar História
+                        </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
+                            <i class="bi bi-trash3 me-2"></i> Excluir Memória
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            </form>
+            {% endif %}
+
+            <div class="d-flex align-items-center gap-3">
+                {% include "partials/cards/_footer_reacoes.html" %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.preencherDadosModalEditar = function(postId, conteudoAtual) {
+    const formEditar = document.getElementById('formEditarPost');
+    const inputConteudo = document.getElementById('inputConteudoPost');
+
+    if (formEditar && inputConteudo) {
+        formEditar.action = "/editar_post/" + postId;
+        inputConteudo.value = conteudoAtual;
+    } else {
+        console.error("Erro: Elementos do formulário de edição não encontrados na página.");
+    }
+};
+
+window.confirmarExclusaoPost = function(postId) {
+    if (confirm("Tem certeza que deseja remover esta história permanentemente? Esta ação não poderá ser desfeita.")) {
+        const formExcluir = document.getElementById('form-excluir-' + postId);
+        if (formExcluir) formExcluir.submit();
+    }
+};
+</script>

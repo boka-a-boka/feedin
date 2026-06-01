@@ -404,7 +404,6 @@ local_preferencias = database.Table('local_preferencias',
 
 class Local(database.Model):
     __tablename__ = 'locais'
-    __table_args__ = {'extend_existing': True}
 
     id = database.Column(database.Integer, primary_key=True)
     nome = database.Column(database.String(100), nullable=False)
@@ -463,6 +462,9 @@ class Local(database.Model):
         primaryjoin="Local.id == local_preferencias.c.local_id",
         secondaryjoin="Taxonomia.id == local_preferencias.c.taxonomia_id",
         backref=database.backref('locais_relacionados', lazy='dynamic'))
+
+    # VÍNCULO DO MURAL DE HISTÓRIAS (Bloqueio definitivo contra resets de ID)
+    mural_historias = database.relationship('Postagem', back_populates='local_foco', lazy='dynamic')
 
     def __repr__(self):
         return f'<Local {self.nome}>'
@@ -713,7 +715,6 @@ postagem_tags = database.Table('postagem_tags',
 
 class Postagem(database.Model):
     __tablename__ = 'postagens'
-    __table_args__ = {'extend_existing': True}
 
     id = database.Column(database.Integer, primary_key=True)
     id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
@@ -727,16 +728,20 @@ class Postagem(database.Model):
     # RELACIONAMENTOS EXISTENTES
     autor = database.relationship('Usuario', backref=database.backref('postagens', lazy='dynamic'),
                                   foreign_keys=[id_usuario])
-    local_foco = database.relationship('Local', backref=database.backref('mural', lazy='dynamic'))
+
+    # Ajustado de backref para back_populates apontando para a nova variável da classe Local
+    local_foco = database.relationship(
+        'Local',
+        back_populates='mural_historias',
+        foreign_keys=[id_local],
+        passive_deletes=True  # <-- Impede que o SQLAlchemy altere essa coluna de forma automatizada
+    )
 
     tags_afinidade = database.relationship('Taxonomia',
                                            secondary=postagem_tags,
                                            backref=database.backref('postagens_relacionadas', lazy='dynamic'))
 
     anuncio = None
-
-    # 2. NOVO RELACIONAMENTO (Adicionado aqui dentro)
-    # É este campo que a rota 'criar_postagem' vai usar para dar o .append() ou .extend()
 
     # 2. Nova relação (Mantida exatamente como você estruturou)
     pessoas_marcadas = database.relationship(
@@ -750,68 +755,72 @@ class Postagem(database.Model):
     @property
     def lista_comentarios_ativos(self):
         """Retorna os comentários ativos ordenados para o template"""
-        return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).order_by(
-            PostagemComentario.data_comentario.asc()).all()
+        with database.session.no_autoflush:
+            return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).order_by(
+                PostagemComentario.data_comentario.asc()).all()
 
     # Métodos de conveniência
     @property
     def total_curtidas(self):
-        return PostagemInteracao.query.filter_by(id_postagem=self.id, tipo='curti').count()
+        from feedin.models import PostagemInteracao
+        with database.session.no_autoflush:
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, tipo='curti').count()
 
     @property
     def total_comentarios(self):
-        return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).count()
+        with database.session.no_autoflush:
+            return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).count()
 
     def usuario_ja_curtiu(self, user_id):
-        return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id).first() is not None
+        from feedin.models import PostagemInteracao
+        with database.session.no_autoflush:
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id, tipo='curti').first() is not None
 
-# Métodos de compatibilidade para o template (Espelhamento)
+    # Métodos de compatibilidade para o template (Espelhamento)
     @property
     def total_curtidas_memoria(self):
         return self.total_curtidas
 
-    def usuario_ja_curtiu(self, user_id):
-        # CRITICAL: Certifique-se de filtrar pelo tipo='curti'
-        return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id,
-                                                 tipo='curti').first() is not None
-
     @property
     def total_nao_curtidas(self):
-        # Aqui contamos as interações do tipo 'nao_curti'
-        return PostagemInteracao.query.filter_by(id_postagem=self.id, tipo='nao_curti').count()
+        from feedin.models import PostagemInteracao
+        with database.session.no_autoflush:
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, tipo='nao_curti').count()
 
     @property
     def tags(self):
-        """Apelido para tags_afinidade para facilitar o uso nos templates e rotas"""
         return self.tags_afinidade
 
     @property
     def pessoas_marcadas_confirmadas(self):
         """Retorna a lista de usuários cuja marcação já foi aceita pelo autor"""
-        # Importação tardia para evitar importação cíclica
         from feedin.models import MarcacaoPostagem
-        vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='aceito').all()
-        return [v.usuario for v in vinculos if v.usuario]
+        with database.session.no_autoflush:
+            vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='aceito').all()
+            return [v.usuario for v in vinculos if v.usuario]
 
     @property
     def solicitantes_pendentes_ids(self):
         """Retorna uma lista de IDs de usuários que pediram para ser marcados e estão aguardando"""
         from feedin.models import MarcacaoPostagem
-        vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='pendente').all()
-        return [v.usuario_id for v in vinculos]
+        with database.session.no_autoflush:
+            vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='pendente').all()
+            return [v.usuario_id for v in vinculos]
 
     def usuario_ja_deu_nao_curti(self, user_id):
-        # CRITICAL: Certifique-se de filtrar pelo tipo='nao_curti'
-        return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id,
-                                                 tipo='nao_curti').first() is not None
+        from feedin.models import PostagemInteracao
+        with database.session.no_autoflush:
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id, tipo='nao_curti').first() is not None
 
     def usuario_ja_reagiu_tipo(self, user_id, tipo_procurado):
-        """Verifica se o usuário reagiu com um tipo específico (curti, nao_curti, triste, etc)"""
-        return PostagemInteracao.query.filter_by(
-            id_postagem=self.id,
-            id_usuario=user_id,
-            tipo=tipo_procurado
-        ).first() is not None
+        """Verifica se o usuário reagiu com um tipo específico"""
+        from feedin.models import PostagemInteracao
+        with database.session.no_autoflush:
+            return PostagemInteracao.query.filter_by(
+                id_postagem=self.id,
+                id_usuario=user_id,
+                tipo=tipo_procurado
+            ).first() is not None
 
 
 class PostagemInteracao(database.Model):
@@ -1012,3 +1021,24 @@ class AnuncioClique(database.Model):
 
     anuncio = database.relationship('LocalAnuncio', backref='cliques_detalhados')
     usuario = database.relationship('Usuario', backref='cliques_anuncios')
+
+    from sqlalchemy import event
+
+    # Ouvinte de evento: Toda vez que o id_local de QUALQUER postagem mudar...
+    @event.listens_for(Postagem.id_local, 'set')
+    def interceptar_reset_id(target, value, oldvalue, initiator):
+        # Se o valor antigo era um ID válido (como 671) e o novo é None (NULL)
+        if oldvalue is not None and value is None:
+            import traceback
+            print("\n❌❌❌ [ALERTA CRÍTICO] PEGAMOS O CULPADO NO PULO! ❌❌❌")
+            print(f"A Postagem ID {target.id} estava amarrada ao local {oldvalue} e foi resetada para NULL.")
+            print("Rastro de execução (Quem chamou essa limpeza):")
+            # Imprime a linha exata do código que disparou o comando
+            traceback.print_stack()
+
+
+class MensagemCampanha(database.Model):
+    id = database.Column(database.Integer, primary_key=True)
+    texto = database.Column(database.String(255), nullable=False) # Ex: "Clima de Copa! Esse parceiro apoia nossas memórias de futebol..."
+    taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id')) # Atrelado a #Futebol, #Samba, etc.
+    ativo = database.Column(database.Boolean, default=True)

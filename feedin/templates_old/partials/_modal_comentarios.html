@@ -1,0 +1,21 @@
+<!-- No seu arquivo partials/_modal_comentarios.html -->
+<div class="modal fade" id="modalComentario" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 20px; border: none;">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold text-secondary">Responder à Memória</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="modalPostId">
+                <textarea id="textoComentario" class="form-control border-0 bg-light"
+                          rows="7" style="border-radius: 15px; resize: none;"
+                          placeholder="Escreva aqui sua resposta ou recordação..."></textarea>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" onclick="enviarComentarioPeloModal()" class="btn btn-primary rounded-pill px-4 fw-bold">Publicar</button>
+            </div>
+        </div>
+    </div>
+</div>

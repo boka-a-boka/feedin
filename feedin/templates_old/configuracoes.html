@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* Estilização para os cards e alertas */
+    .card { border-radius: 1.2rem; transition: transform 0.2s; border: none; }
+    .alert { border-radius: 1rem; }
+
+    /* Estilo para manter os botões de gestão bonitos */
+    .btn-outline-secondary, .btn-outline-primary, .btn-outline-info, .btn-outline-danger {
+        border-width: 1px;
+    }
+
+    .conteudo-dinamico {
+        min-height: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-7">
+
+            <!-- Título Discreto e Linha Superior -->
+            <div class="text-center mb-4">
+                <hr style="border: 0; border-top: 1px solid #dee2e6; opacity: 0.6;">
+                <h6 class="text-muted text-uppercase fw-bold" style="letter-spacing: 2px; font-size: 0.8rem;">
+                    Gestão da Conta FeedIn
+                </h6>
+            </div>
+
+            <!-- OS 4 BOTÕES DE NAVEGAÇÃO DIRETA -->
+            {% if current_user.nivel_acesso >= 10 %}
+                <div class="row g-2 mb-4">
+                    <div class="col-6 col-md-3">
+                        <a href="{{ url_for('configuracoes', aba='perfil') }}"
+                           class="btn {% if aba_ativa == 'perfil' %}btn-secondary{% else %}btn-outline-secondary{% endif %} w-100 py-3 rounded-4 shadow-sm">
+                            <i class="bi bi-person-circle d-block fs-4 mb-1"></i>
+                            <small class="fw-bold">Dados</small>
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <a href="{{ url_for('configuracoes', aba='preferencias') }}"
+                           class="btn {% if aba_ativa == 'preferencias' %}btn-primary{% else %}btn-outline-primary{% endif %} w-100 py-3 rounded-4 shadow-sm">
+                            <i class="bi bi-heart-fill d-block fs-4 mb-1"></i>
+                            <small class="fw-bold">Interesses</small>
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <a href="{{ url_for('configuracoes', aba='identidade') }}"
+                           class="btn {% if aba_ativa == 'identidade' %}btn-info text-white{% else %}btn-outline-info{% endif %} w-100 py-3 rounded-4 shadow-sm">
+                            <i class="bi bi-shield-lock-fill d-block fs-4 mb-1"></i>
+                            <small class="fw-bold">Cofre</small>
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <a href="{{ url_for('configuracoes', aba='seguranca') }}"
+                           class="btn {% if aba_ativa == 'seguranca' %}btn-danger{% else %}btn-outline-danger{% endif %} w-100 py-3 rounded-4 shadow-sm">
+                            <i class="bi bi-key-fill d-block fs-4 mb-1"></i>
+                            <small class="fw-bold">Senha</small>
+                        </a>
+                    </div>
+                </div>
+            {% else %}
+                <!-- MENSAGEM DE BOAS-VINDAS PARA O NOVATO -->
+                <div class="text-center mb-4">
+                    <h4 class="fw-bold text-primary">Quase lá!</h4>
+                    <p class="text-muted">Complete seus interesses para liberar seu perfil.</p>
+                </div>
+            {% endif %}
+            <!-- Linha Inferior dos Botões -->
+            <hr style="border: 0; border-top: 1px solid #dee2e6; opacity: 0.6;" class="mb-5">
+
+            <!-- BLOCO DE MENSAGENS FLASH (Feedback de Sucesso/Erro) -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm border-0 mb-4" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <!-- ÁREA DE EXIBIÇÃO DINÂMICA (Baseada na aba selecionada) -->
+            <div class="conteudo-dinamico">
+                {% if aba_ativa == 'perfil' %}
+                    <div class="card shadow-sm p-4 mb-4 rounded-4">
+                        {% include "partials/_form_edicao_perfil_basico.html" %}
+                    </div>
+                    <div class="card shadow-sm p-4 rounded-4">
+                        <h5 class="fw-bold mb-3 text-secondary"><i class="bi bi-tags-fill me-2"></i>Identidade Social</h5>
+                        {% include "partials/_form_apelidos.html" %}
+                    </div>
+
+                {% elif aba_ativa == 'preferencias' %}
+                    <div class="card shadow-sm p-4 rounded-4">
+                        <h5 class="fw-bold mb-3 text-primary"><i class="bi bi-bookmark-heart-fill me-2"></i>Meus Interesses</h5>
+                        {% include "partials/_painel_interesses.html" %}
+                    </div>
+
+                {% elif aba_ativa == 'identidade' %}
+                    {# O cofre geralmente já vem com sua própria estrutura de card #}
+                    {% include "cofre.html" %}
+
+                {% elif aba_ativa == 'seguranca' %}
+                    <div class="card shadow-sm p-4 rounded-4">
+                        <h5 class="fw-bold mb-3 text-danger"><i class="bi bi-shield-lock-fill me-2"></i>Segurança da Conta</h5>
+                        <p class="text-muted small mb-4">Atualize sua senha de acesso periodicamente.</p>
+                        {% include "partials/_form_alterar_senha.html" %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- BOTÃO DE SAÍDA FINAL (O "Sair pela mesma porta que entrou") -->
+            <div class="text-center mt-5">
+                <a href="{{ url_for('ver_perfil', usuario_id=current_user.id) }}" class="btn btn-link text-muted text-decoration-none">
+                    <i class="bi bi-arrow-left"></i> Voltar para o meu Perfil
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Se houver troca de aba, garante que o foco comece no topo do conteúdo
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('aba')) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+});
+</script>
+{% endblock %}

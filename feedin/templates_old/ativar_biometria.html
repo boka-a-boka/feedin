@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedIn - Ativar Acesso Biométrico</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { background-color: #f8f9fa; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .card-biometria { max-width: 450px; width: 100%; border: none; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
+        .icon-shield { font-size: 3rem; color: #0d6efd; }
+    </style>
+</head>
+<body>
+
+<div class="container p-3">
+    <div class="row justify-content-center">
+        <div class="card card-biometria p-4 text-center">
+
+            <div class="mb-3">
+                <span class="icon-shield">🛡️</span>
+            </div>
+
+            <h3 class="fw-bold mb-2">Ativar Acesso Biométrico</h3>
+            <p class="text-muted small mb-4">
+                Vincule este dispositivo à sua conta do FeedIn para acessar rapidamente usando seu Face ID, Digital ou PIN nos próximos acessos.
+            </p>
+
+            <div id="erro-mensagem" class="alert alert-danger d-none small text-start" role="alert"></div>
+
+            <button type="button" class="btn btn-primary btn-lg w-100 rounded-3 mb-2" id="btn-ativar" onclick="iniciarCadastroBiometrico()">
+                Ativar Biometria neste Dispositivo
+            </button>
+
+            <a href="/feed" class="text-decoration-none small text-secondary d-block mt-3">
+                Voltar para o Painel
+            </a>
+
+        </div>
+    </div>
+</div>
+
+<script>
+// Conversores robustos Base64URL <-> ArrayBuffer
+// VERSÃO ROBUSTA: Corrige os caracteres do Base64URL antes de aplicar o atob
+function base64ToBufferCadastro(base64String) {
+    let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+        base64 += '=';
+    }
+    const binaryString = window.atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+async function iniciarCadastroBiometrico() {
+    try {
+        // 1. Solicita o desafio para a VPS na rota correta de ativação
+        const respostaDesafio = await fetch('/ativar-biometria', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+
+        if (!respostaDesafio.ok) {
+            const erroDados = await respostaDesafio.json();
+            alert("Erro: " + (erroDados.mensagem || "Não foi possível iniciar o cadastro."));
+            return;
+        }
+
+        const dadosDesafio = await respostaDesafio.json();
+
+        if (dadosDesafio.status === 'erro') {
+            alert(dadosDesafio.mensagem);
+            return;
+        }
+
+        // 2. Prepara os requisitos tratando o Base64URL
+        const opcionesCadastro = {
+            publicKey: {
+                challenge: base64ToBufferCadastro(dadosDesafio.options.publicKey.challenge),
+                rp: dadosDesafio.options.publicKey.rp,
+                user: {
+                    id: base64ToBufferCadastro(dadosDesafio.options.publicKey.user.id),
+                    name: dadosDesafio.options.publicKey.user.name,
+                    displayName: dadosDesafio.options.publicKey.user.displayName
+                },
+                pubKeyCredParams: dadosDesafio.options.publicKey.pubKeyCredParams,
+                authenticatorSelection: dadosDesafio.options.publicKey.authenticatorSelection,
+                timeout: 60000,
+                attestation: "none"
+            }
+        };
+
+        // 3. Aciona o sensor físico (Windows Hello / Touch ID do Notebook)
+        const novaChaveCriada = await navigator.credentials.create(opcionesCadastro);
+
+        // SE CHEGOU AQUI, O USUÁRIO AUTENTICOU COM SUCESSO NO SENSOR.
+        // Agora fechamos o modal de forma limpa:
+        const modalElement = document.getElementById('modalAtivarBiometria');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) modalInstance.hide();
+
+        // 4. Embala a resposta em Base64 padrão
+        const dadosParaSalvar = {
+            id: novaChaveCriada.id,
+            rawId: novaChaveCriada.id,
+            type: novaChaveCriada.type,
+            response: {
+                attestationObject: btoa(String.fromCharCode.apply(null, new Uint8Array(novaChaveCriada.response.attestationObject))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+                clientDataJSON: btoa(String.fromCharCode.apply(null, new Uint8Array(novaChaveCriada.response.clientDataJSON))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+            }
+        };
+
+        // 5. Envia para salvar na VPS
+        const respostaSalvamento = await fetch('/concluir-cadastro-biometria', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dadosParaSalvar)
+        });
+
+        const resultadoFinal = await respostaSalvamento.json();
+
+        if (resultadoFinal.status === 'sucesso') {
+            alert("Biometria vinculada com sucesso!");
+            window.location.reload();
+        } else {
+            alert("Erro ao salvar no servidor: " + resultadoFinal.mensagem);
+        }
+
+    } catch (err) {
+        console.error("Erro no cadastro biométrico:", err);
+        alert("O processo foi cancelado ou não pôde ser completado neste dispositivo.");
+    }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!-- Estilos específicos do Painel de Interesses -->
+<style>
+    .categoria-wrapper button:not(.collapsed) i.bi-chevron-down { transform: rotate(180deg); }
+    .categoria-wrapper i.bi-chevron-down { transition: transform 0.3s ease; }
+
+    @keyframes pulse-small { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    .badge-pulse { animation: pulse-small 0.3s ease-out; }
+
+    .pref-tag {
+        transition: all 0.2s ease;
+        cursor: pointer;
+        border: none !important;
+    }
+    .pref-tag:hover {
+        filter: brightness(1.1);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1) !important;
+    }
+
+    #sugestoes-wrapper {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        background: white;
+    }
+
+    .cursor-pointer { cursor: pointer; }
+</style>
+
+<!-- Bloco de Progresso do Pioneiro -->
+{% if current_user.nivel_acesso < 10 %}
+    <div class="mb-4" id="container-progresso-pioneiro">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold text-primary mb-0">Sua Jornada no Feed In!</h6>
+                <span id="contador-label" class="badge bg-primary rounded-pill fs-6">0 / 10</span>
+            </div>
+
+            <p class="text-muted small mb-3">
+                <i class="bi bi-info-circle me-1"></i>
+                Selecione pelo menos <strong>10 interesses</strong>. Isso nos ajuda a calibrar o FeedIn para que sua experiência em Piracicaba seja incrível!
+            </p>
+
+            <div class="progress" style="height: 12px; border-radius: 10px;">
+                <div id="barra-progresso" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                     role="progressbar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+<form action="{{ url_for('salvar_preferencias') }}" method="POST" id="form-preferencias">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="preferencias_ids" id="preferencias_ids">
+    <input type="hidden" name="novos_termos" id="novos_termos">
+
+    <!-- Campo de Busca -->
+    <div class="mb-5 position-relative">
+        <label class="form-label fw-bold">O que você curte ou busca em Piracicaba?</label>
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 rounded-start-4"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" id="busca-interesse" class="form-control form-control-lg border-start-0 shadow-none rounded-end-4"
+                   placeholder="Ex: Samba, Cerveja Artesanal, Pet Friendly..." autocomplete="off">
+        </div>
+        <div id="sugestoes-wrapper" class="list-group shadow-lg position-absolute w-100 d-none" style="z-index: 1000;"></div>
+    </div>
+
+    <!-- Categoria: Pessoais -->
+    <div class="categoria-wrapper mb-3">
+        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 p-3 rounded-4 shadow-sm"
+                type="button" data-bs-toggle="collapse" data-bs-target="#collapsePessoais">
+            <div class="d-flex align-items-center text-primary">
+                <i class="bi bi-person-heart me-2 fs-5"></i>
+                <span class="fw-bold">MEUS INTERESSES PESSOAIS</span>
+            </div>
+            <span class="badge rounded-pill bg-primary px-3" id="badge-count-pessoais">0</span>
+        </button>
+        <div class="collapse show mt-2" id="collapsePessoais">
+            <div id="tags-pessoais" class="d-flex flex-wrap gap-2 p-2 border-start border-2 ms-3"></div>
+        </div>
+    </div>
+
+    <!-- Categoria: Marcas -->
+    <div class="categoria-wrapper mb-3">
+        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 p-3 rounded-4 shadow-sm"
+                type="button" data-bs-toggle="collapse" data-bs-target="#collapseMarcas">
+            <div class="d-flex align-items-center text-info">
+                <i class="bi bi-tag-fill me-2 fs-5"></i>
+                <span class="fw-bold">MINHAS MARCAS & ESTILO</span>
+            </div>
+            <span class="badge rounded-pill bg-info text-dark px-3" id="badge-count-marcas">0</span>
+        </button>
+        <div class="collapse mt-2" id="collapseMarcas">
+            <div id="tags-marcas" class="d-flex flex-wrap gap-2 p-2 border-start border-2 ms-3 border-info"></div>
+        </div>
+    </div>
+
+    <!-- Categoria: Locais -->
+    <div class="categoria-wrapper mb-5">
+        <button class="btn btn-light w-100 d-flex justify-content-between align-items-center border-0 p-3 rounded-4 shadow-sm"
+                type="button" data-bs-toggle="collapse" data-bs-target="#collapseLocais">
+            <div class="d-flex align-items-center text-warning-emphasis">
+                <i class="bi bi-shop me-2 fs-5"></i>
+                <span class="fw-bold">O QUE VALORIZO EM LOCAIS</span>
+            </div>
+            <span class="badge rounded-pill bg-warning text-dark px-3" id="badge-count-locais">0</span>
+        </button>
+        <div class="collapse mt-2" id="collapseLocais">
+            <div id="tags-locais" class="d-flex flex-wrap gap-2 p-2 border-start border-2 ms-3 border-warning"></div>
+        </div>
+    </div>
+
+    <div id="painel-interesses-container">
+        <div id="data-prefs" data-minhas-prefs='{{ minhas_prefs_json | safe }}' style="display: none;"></div>
+
+        <div class="text-center mt-4">
+            <button type="submit" id="btn-salvar-preferencias" class="btn btn-primary btn-lg rounded-pill px-5 opacity-50" disabled>
+                Atualizar Preferências
+            </button>
+        </div>
+    </div>
+</form>
+
+<script>
+(function() {
+    const selecionados = new Map();
+
+    const refs = {
+        inputBusca: document.getElementById('busca-interesse'),
+        sugestoes: document.getElementById('sugestoes-wrapper'),
+        barra: document.getElementById('barra-progresso'),
+        contador: document.getElementById('contador-label'),
+        btnSalvar: document.getElementById('btn-salvar-preferencias'),
+        containerPessoais: document.getElementById('tags-pessoais'),
+        containerLocais: document.getElementById('tags-locais'),
+        containerMarcas: document.getElementById('tags-marcas'),
+        badgePessoais: document.getElementById('badge-count-pessoais'),
+        badgeLocais: document.getElementById('badge-count-locais'),
+        badgeMarcas: document.getElementById('badge-count-marcas'),
+        form: document.getElementById('form-preferencias')
+    };
+
+    function atualizarInterface() {
+        [refs.containerPessoais, refs.containerLocais, refs.containerMarcas].forEach(c => { if(c) c.innerHTML = ''; });
+
+        let idsNumericos = [];
+        let nomesNovos = [];
+
+        const listaOrdenada = Array.from(selecionados.entries()).sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+
+        listaOrdenada.forEach(([id, dados]) => {
+            const tag = document.createElement('div');
+
+            let config = { cor: 'bg-primary text-white', icone: 'bi-person' };
+
+            // O pai gerado pelo sistema recebe o estilo pontilhado/destacado
+            if (dados.isAutomated) {
+                config = {
+                    cor: 'bg-warning-subtle text-warning-emphasis border border-warning',
+                    icone: 'bi-magic'
+                };
+            } else if (dados.v_usu && dados.v_neg) {
+                config = { cor: 'bg-dark text-info border border-info', icone: 'bi-patch-check-fill' };
+            } else if (!dados.v_usu && dados.v_neg) {
+                config = { cor: 'bg-warning text-dark', icone: 'bi-shop' };
+            }
+
+            tag.className = `badge rounded-pill p-2 px-3 pref-tag ${config.cor} m-1 border-0 shadow-sm animate__animated animate__fadeIn`;
+            tag.style.cursor = 'pointer';
+            tag.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="bi ${config.icone} me-2"></i>
+                    <span>${dados.nome}</span>
+                    <i class="bi bi-x-circle-fill ms-2 opacity-50 hover-danger"></i>
+                </div>
+            `;
+
+            tag.onclick = () => {
+                selecionados.delete(id);
+                // Executa a faxina inteligente: se remover o último filho, remove o pai automático junto
+                reavaliarNecessidadeDePais();
+                atualizarInterface();
+            };
+
+            // DISTRIBUIÇÃO FOCADA: Se for automatizado da árvore, cai OBLIGATORIAMENTE em Locais
+            if (dados.isAutomated) {
+                refs.containerLocais?.appendChild(tag);
+            } else if (dados.v_usu && dados.v_neg) {
+                refs.containerMarcas?.appendChild(tag);
+            } else if (!dados.v_usu && dados.v_neg) {
+                refs.containerLocais?.appendChild(tag);
+            } else {
+                refs.containerPessoais?.appendChild(tag);
+            }
+
+            if (id.toString().startsWith('novo_')) {
+                nomesNovos.push(dados.nome);
+            } else {
+                idsNumericos.push(id);
+            }
+        });
+
+        document.getElementById('preferencias_ids').value = idsNumericos.join(',');
+        document.getElementById('novos_termos').value = nomesNovos.join(',');
+
+        const total = selecionados.size;
+        const progresso = Math.min((total / 10) * 100, 100);
+
+        if (refs.barra) {
+            refs.barra.style.width = `${progresso}%`;
+            refs.barra.className = `progress-bar progress-bar-striped progress-bar-animated ${total >= 10 ? 'bg-primary' : 'bg-success'}`;
+        }
+
+        if (refs.contador) {
+            refs.contador.innerText = `${total} / 10`;
+            refs.contador.className = `badge rounded-pill fs-6 ${total >= 10 ? 'bg-primary' : 'bg-secondary'}`;
+        }
+
+        if (refs.btnSalvar) {
+            const podeSalvar = total >= 5;
+            refs.btnSalvar.disabled = !podeSalvar;
+            refs.btnSalvar.classList.toggle('opacity-50', !podeSalvar);
+        }
+
+        if (refs.badgePessoais) refs.badgePessoais.innerText = refs.containerPessoais.children.length;
+        if (refs.badgeMarcas) refs.badgeMarcas.innerText = refs.containerMarcas ? refs.containerMarcas.children.length : 0;
+        if (refs.badgeLocais) refs.badgeLocais.innerText = refs.containerLocais.children.length;
+    }
+
+    // Varre o estado limpando pais automáticos órfãos
+    function reavaliarNecessidadeDePais() {
+        const idsDosFilhosAtuais = Array.from(selecionados.values())
+            .filter(d => d.id_pai)
+            .map(d => d.id_pai.toString());
+
+        selecionados.forEach((dados, id) => {
+            if (dados.isAutomated && !idsDosFilhosAtuais.includes(id.toString())) {
+                selecionados.delete(id);
+            }
+        });
+    }
+
+    // AJUSTADO: Foco total na amarração e verificação de herança
+    window.adicionarTagManual = function(id, nome, vUsu, vNeg, id_pai, nome_pai) {
+        if (selecionados.has(id.toString())) return;
+
+        selecionados.set(id.toString(), {
+            nome: nome,
+            v_usu: vUsu,
+            v_neg: vNeg,
+            id_pai: id_pai ? id_pai.toString() : null,
+            isAutomated: false
+        });
+
+        // CORREÇÃO: Removido o filtro rígido (vUsu && vNeg). Se o item clicado tem um pai válido,
+        // o pai é inserido imediatamente no bloco de Locais com estado automatizado ativo.
+        if (id_pai && nome_pai && !selecionados.has(id_pai.toString())) {
+            selecionados.set(id_pai.toString(), {
+                nome: nome_pai,
+                v_usu: false,
+                v_neg: true,
+                id_pai: null,
+                isAutomated: true // Mantém a consistência visual pontilhada
+            });
+        }
+        atualizarInterface();
+    };
+
+    if (refs.inputBusca) {
+        refs.inputBusca.addEventListener('input', function() {
+            const termo = this.value.trim();
+            if (termo.length < 2) {
+                refs.sugestoes.classList.add('d-none');
+                return;
+            }
+
+            fetch(`/api/buscar-interesses-onboarding?q=${encodeURIComponent(termo)}`)
+                .then(res => res.json())
+                .then(dados => {
+                    refs.sugestoes.innerHTML = '';
+                    if (dados && dados.length > 0) {
+                        dados.forEach(item => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center border-0 py-3 border-bottom';
+
+                            let icone = item.v_usu && item.v_neg ? 'bi-patch-check-fill text-info' : (!item.v_usu && item.v_neg ? 'bi-shop text-warning' : 'bi-person text-primary');
+
+                            btn.innerHTML = `
+                                <div><i class="bi ${icone} me-2"></i><strong>${item.nome}</strong></div>
+                                <small class="text-muted">${item.categoria_pai || ''}</small>
+                            `;
+
+                            btn.onclick = () => {
+                                window.adicionarTagManual(item.id, item.nome, item.v_usu, item.v_neg, item.id_pai, item.categoria_pai);
+                                refs.inputBusca.value = '';
+                                refs.sugestoes.classList.add('d-none');
+                            };
+                            refs.sugestoes.appendChild(btn);
+                        });
+                        refs.sugestoes.classList.remove('d-none');
+                    } else {
+                        refs.sugestoes.innerHTML = `
+                            <button type="button" class="list-group-item list-group-item-action text-primary py-3"
+                                    onclick="window.adicionarTagManual('novo_${termo}', '${termo}', true, false)">
+                                <i class="bi bi-plus-circle-fill me-2"></i> Sugerir novo: "${termo}"
+                            </button>`;
+                        refs.sugestoes.classList.remove('d-none');
+                    }
+                });
+        });
+    }
+
+    // CORREÇÃO CRUCIAL NA CARGA INICIAL (Hydration):
+// Identifica a árvore de dependências direto do banco e coloca "cada um no seu quadrado"
+document.addEventListener('DOMContentLoaded', () => {
+    const dataElement = document.getElementById('data-prefs');
+    if (dataElement?.dataset.minhasPrefs) {
+        try {
+            const iniciais = JSON.parse(dataElement.dataset.minhasPrefs);
+
+            // Passo 1: Carrega todas as preferências do banco para o Map preservando as propriedades nativas
+            iniciais.forEach(p => {
+                selecionados.set(p.id.toString(), {
+                    nome: p.nome,
+                    v_usu: p.v_usu !== undefined ? p.v_usu : true,
+                    v_neg: p.v_neg !== undefined ? p.v_neg : false,
+                    id_pai: p.id_pai ? p.id_pai.toString() : null,
+                    isAutomated: false // Começa como falso; vamos validar abaixo
+                });
+            });
+
+            // Passo 2: Varredura de Ancestralidade (O segredo da carga inteligente)
+            // Descobre quais IDs na lista de selecionados estão atuando como PAI de alguém
+            const listaDeIdsFilhos = Array.from(selecionados.values())
+                .filter(item => item.id_pai !== null)
+                .map(item => item.id_pai.toString());
+
+            // Passo 3: Aplica a flag automatizada no quadrado correto
+            selecionados.forEach((dados, id) => {
+                // Se este ID é pai de alguma tag selecionada e possui o perfil de termo estrutural/local
+                if (listaDeIdsFilhos.includes(id.toString()) && !dados.v_usu && dados.v_neg) {
+                    dados.isAutomated = true; // Força o estilo pontilhado e joga pro bloco de Locais
+                }
+            });
+
+            // Renderiza a interface com a hierarquia totalmente reconstruída
+            atualizarInterface();
+
+        } catch (e) {
+            console.error("Erro na hidratação e mapeamento das preferências:", e);
+        }
+    }
+});
+
+    document.addEventListener('click', (e) => {
+        if (refs.inputBusca && !refs.inputBusca.contains(e.target)) refs.sugestoes.classList.add('d-none');
+    });
+
+    if (refs.form) {
+        refs.form.onsubmit = () => {
+            if (selecionados.size < 5) return false;
+            refs.btnSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> Salvando Preferências...`;
+            return true;
+        };
+    }
+})();
+</script>

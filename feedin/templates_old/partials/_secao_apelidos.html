@@ -1,0 +1,28 @@
+<div class="mb-4 p-3 bg-light rounded-4 border shadow-sm">
+    <label class="form-label fw-bold small text-muted text-uppercase mb-3">
+        <i class="bi bi-person-badge me-1 text-primary"></i> Como você era conhecido?
+    </label>
+
+    <form action="{{ url_for('adicionar_apelido') }}" method="POST" class="row g-2 mb-3">
+        {{ form_apelido.csrf_token }}
+        <div class="col">
+            <input type="text" name="apelido" class="form-control border-2" placeholder="Ex: Magrão, Cabelo..." required>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary fw-bold" type="submit">Adicionar</button>
+        </div>
+    </form>
+
+    {% if current_user.perfil.apelidos %}
+        <div class="d-flex flex-wrap gap-2 mt-2">
+            {% for ap in current_user.perfil.apelidos %}
+                <div class="badge bg-white text-dark border p-2 d-flex align-items-center shadow-sm">
+                    <span class="me-2">{{ ap.apelido }}</span>
+                    <a href="{{ url_for('excluir_apelido', id_apelido=ap.id) }}" class="text-danger small">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

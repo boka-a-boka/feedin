@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-br" class="h-100">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
+    <title>FeedIn! - {% block titulo %}{% endblock %}</title>
+
+    <!-- Chamada para o Manifesto -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+
+    <!-- Configurações específicas para iOS (Safari) -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="FeedIn">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='imagens/icon-512.png') }}">
+
+    <!-- CSS: Bootstrap, Bi-Icons, FontAwesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        :root {
+            --primary-color: #1e3c72;
+            --secondary-color: #2a5298;
+            --feedin-blue: #1e3c72;
+        }
+        body { background-color: #f8f9fa; transition: all 0.3s ease; }
+
+        /* Ajuste para não colidir com o menu inferior no mobile */
+        @media (max-width: 768px) { body { padding-bottom: 60px; } }
+
+        .navbar-brand img { object-fit: cover; border-radius: 8px; }
+        .text-primary { color: var(--feedin-blue) !important; }
+        .btn-primary { background-color: var(--feedin-blue); border-color: var(--feedin-blue); }
+
+        /* Altura da Navbar conforme solicitado anteriormente */
+        .navbar { min-height: 100px; }
+    </style>
+    {% block styles %}{% endblock %}
+</head>
+<body class="d-flex flex-column h-100">
+
+{# A NAVBAR SÓ APARECE SE NÃO ESTIVERMOS NA HOMEPAGE E SE NÃO ESTIVER AUTENTICADO #}
+    {% if request.endpoint != 'homepage' %}
+        {% if not current_user.is_authenticated %}
+        <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-2" style="min-height: 80px;">
+            <div class="container-fluid d-flex align-items-center justify-content-between">
+
+                <!-- Logo: Mantendo o ajuste aprovado -->
+                <a class="navbar-brand d-flex align-items-center" href="/" style="margin-top: -8px;">
+                    <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" alt="Logo" width="35" height="35" class="me-1 shadow-sm">
+                    <span class="fw-bold text-primary" style="letter-spacing: -1.5px; font-size: 1.15rem;">FEEDIN!</span>
+                </a>
+
+                <!-- Botões: Entrar em Verde e Criar Conta no seu Azul original -->
+                <div class="d-flex align-items-center gap-1">
+                    {% if request.endpoint not in ['login'] %}
+                        <a href="{{ url_for('login') }}"
+                           class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                           style="background-color: #28a745; color: #ffffff; border: none; font-size: 0.85rem;">
+                            Entrar
+                        </a>
+                    {% endif %}
+
+                    {% if request.endpoint not in ['newuser', 'registro'] %}
+                        <a href="{{ url_for('newuser') }}"
+                           class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                           style="background-color: #1e3c72; color: #ffffff; border: 1px solid #1e3c72; font-size: 0.85rem;">
+                            Criar conta
+                        </a>
+                    {% endif %}
+                </div>
+
+            </div>
+        </nav>
+        {% endif %}
+    {% endif %}
+
+    {# MENSAGENS FLASH (Alertas) #}
+    <div class="container mt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'message' else 'info' }} alert-dismissible fade show shadow-sm border-0" role="alert">
+                <i class="bi bi-info-circle me-2"></i> {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </div>
+
+    {# CONTEÚDO DINÂMICO #}
+    <main class="flex-shrink-0">
+        {% block content %} {% endblock %}
+    </main>
+
+    {# FOOTER ESTRUTURADO #}
+    {% if request.endpoint in ['index', 'login', 'newuser', 'homepage'] %}
+        <footer class="footer mt-auto py-4 bg-dark text-white">
+            <div class="container text-center text-md-start">
+                <div class="row">
+                    <div class="col-md-6 mb-3 mb-md-0">
+                        <h5 class="text-primary fw-bold">FeedIn!</h5>
+                        <p class="small text-white-50">Construindo conexões mais humanas e baseadas em contexto real.</p>
+                        <p class="mb-0 text-white-50" style="font-size: 0.75rem;">
+                            Desenvolvido com ❤️ em Piracicaba & Co-criado com Gemini.
+                        </p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <p class="small text-white-50 mb-0">&copy; 2026 FeedIn! - Todos os direitos reservados.</p>
+                        <div class="mt-1">
+                            <a href="mailto:feedin.adms@outlook.com" class="text-white-50 small text-decoration-none">Suporte: feedin.adms@outlook.com</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    {% endif %}
+
+<!-- SCRIPTS GLOBAIS DO SISTEMA (Nunca são apagados) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-close para alertas após 5 segundos
+        setTimeout(() => {
+            document.querySelectorAll('.alert').forEach(a => {
+                const alert = bootstrap.Alert.getOrCreateInstance(a);
+                if (alert) alert.close();
+            });
+        }, 5000);
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('FeedIn PWA registrado com sucesso!', reg))
+            .catch(err => console.log('Erro ao registrar PWA:', err));
+        });
+      }
+    </script>
+
+    <!-- BLOCO PARA SCRIPTS ESPECÍFICOS DE CADA PÁGINA -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

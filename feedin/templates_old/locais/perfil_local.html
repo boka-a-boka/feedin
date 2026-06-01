@@ -2,7 +2,7 @@
 
 {% block content %}
 <style>
-    /* Suas estilizações originais mantidas integralmente e protegidas */
+    /* Suas estilizações originais mantidas integralmente */
     {% set cores = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69'] %}
     {% set cor_fundo = cores[local.id % cores|length] %}
 
@@ -110,12 +110,14 @@
 
                 <div>
                     {% if not usuario_segue %}
+                        {# BOTÃO PARA SEGUIR (PREENCHIDO) #}
                         <button type="button"
                                 onclick="prepararSeguirDireto('{{ local.id }}', '{{ local.nome }}', event)"
                                 class="btn btn-light btn-lg rounded-pill px-4 shadow fw-bold text-primary">
                             <i class="fas fa-plus me-2"></i>Seguir Local
                         </button>
                     {% else %}
+                        {# BOTÃO "VAZADO" (SEGUINDO) #}
                         <button type="button"
                                 onclick="prepararSeguirDireto('{{ local.id }}', '{{ local.nome }}', event)"
                                 class="btn btn-outline-light btn-lg rounded-pill px-4 fw-bold">
@@ -138,10 +140,11 @@
                 <div>
                     <h4 class="fw-bold text-secondary mb-0">Linha do Tempo</h4>
                     <small class="text-muted">
-                        Exibindo <strong>{{ posts_exibidos_contador }}</strong> de <strong>{{ total_posts_reais }}</strong> histórias deste local.
+                        Exibindo <strong>{{ atividades|length }}</strong> de <strong>{{ total_atividades if total_atividades is defined else atividades|length }}</strong> histórias deste local.
                     </small>
                 </div>
 
+                {# Informa educadamente e convida para a ação via Modal #}
                 {% if total_atividades is defined and atividades|length < total_atividades %}
                     <button type="button"
                             onclick="abrirModalTagsOcultas({{ local.id }})"
@@ -155,21 +158,18 @@
                 {% endif %}
             </div>
 
-{# LOOP DA TIMELINE UNIFICADO E ADAPTADO #}
-{% for item_post in atividades %}
-    <div class="col-12">
-        {# Isolamos o contexto exatamente como é feito no perfil público #}
-        {% with atividade = item_post, post_obj = item_post.objeto_original, context_origem = 'perfil_local', exibir_como_flyer = True %}
-            {% set post = post_obj %}
-            {% include "partials/cards/card_postagem_universal.html" %}
-        {% endwith %}
-    </div>
-{% else %}
-    <div class="text-center py-5 bg-light rounded-4 border-dashed animate__animated animate__fadeIn">
-        <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
-        <p class="text-muted mt-3 mb-0">Nenhuma história ou atividade registrada ainda neste local.</p>
-    </div>
-{% endfor %}
+            {% for item in atividades %}
+                {% if item.tipo_card != 'conexao' %}
+                    {% with atividade = item, context_origem = 'perfil_local' %}
+                        {% include "partials/cards/card_postagem_universal.html" %}
+                    {% endwith %}
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5 bg-light rounded-4 border-dashed">
+                    <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
+                    <p class="text-muted mt-3">Nenhuma história ou atividade registrada ainda.</p>
+                </div>
+            {% endfor %}
         </div>
 
         <div class="col-lg-4">
@@ -177,6 +177,7 @@
                 <div class="card border-0 shadow-sm rounded-4 p-4">
                     <h6 class="text-uppercase fw-bold text-muted small mb-4">Quem frequenta</h6>
 
+                    {# Aplicamos o filtro sort baseado no nome_completo do perfil #}
                     {% for atividade in local.atividades|sort(attribute='criador.perfil.nome_completo', case_sensitive=False) %}
                         <div class="row align-items-center mb-3">
                             <div class="col-auto pe-0">
@@ -243,6 +244,8 @@
             </div>
             <div class="modal-body pt-0">
                 <p class="text-muted small mb-3">Estas são as memórias locais que você ainda não acompanha. Clique para passar a seguir o tema:</p>
+
+                {# A lista será populada dinamicamente via JS #}
                 <div id="lista-tags-ocultas" class="d-flex flex-column gap-2" style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
                     <div class="text-center py-3 text-muted small">
                         <div class="spinner-border spinner-border-sm text-primary" role="status"></div> Buscando temas...
@@ -256,8 +259,12 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
+/**
+ * REAÇÕES SOCIAIS (CURTIDAS) - ALINHADA E SINCRONIZADA COM O _FOOTER_REACOES
+ */
 function reagirPostagem(postId, tipoReacao) {
     if (window.event) window.event.preventDefault();
+
     const urlReacao = "/reagir_post/" + postId + "/" + tipoReacao;
     const $contCurti = $('#contagem-curti-' + postId);
     const $contNaoCurti = $('#contagem-nao-curti-' + postId);
@@ -276,16 +283,26 @@ function reagirPostagem(postId, tipoReacao) {
                 window.location.reload();
             }
         },
-        error: function(xhr) { console.error("Erro ao registrar reação:", xhr.responseText); },
-        complete: function() { $(`#contagem-curti-${postId}`).parent().data('loading', false); }
+        error: function(xhr) {
+            console.error("Erro ao registrar reação:", xhr.responseText);
+        },
+        complete: function() {
+            $(`#contagem-curti-${postId}`).parent().data('loading', false);
+        }
     });
 }
 
-function registrarReacaoSocial(postId, tipoReacao) { reagirPostagem(postId, tipoReacao); }
+function registrarReacaoSocial(postId, tipoReacao) {
+    reagirPostagem(postId, tipoReacao);
+}
 
+/**
+ * SISTEMA DE COMENTÁRIOS (BLINDADO CONTRA CONFLITOS DE NOME)
+ */
 function abrirComentarios(postId) {
     $('#modalPostId').val(postId);
     $('#textoComentario').val('');
+
     const modalElement = document.getElementById('modalComentario');
     if (modalElement) {
         const meuModal = new bootstrap.Modal(modalElement);
@@ -296,92 +313,159 @@ function abrirComentarios(postId) {
     }
 }
 
-function enviarComentarioPeloModal() { enviarComentarioModal(); }
+function enviarComentarioPeloModal() {
+    enviarComentarioModal();
+}
 
 function enviarComentarioModal() {
     const postId = $('#modalPostId').val();
     const texto = $('#textoComentario').val().trim();
-    if (!texto) { alert("Por favor, escreva algo para comentar."); return; }
+
+    if (!texto) {
+        alert("Por favor, escreva algo para comentar.");
+        return;
+    }
 
     $.ajax({
         url: "/comentar_post/" + postId,
         method: 'POST',
-        data: { texto: texto, csrf_token: "{{ csrf_token() }}" },
+        data: {
+            texto: texto,
+            csrf_token: "{{ csrf_token() }}"
+        },
         success: function(response) {
             if (response.status === "success") {
                 const modalElement = document.getElementById('modalComentario');
-                if (bootstrap.Modal.getInstance(modalElement)) { bootstrap.Modal.getInstance(modalElement).hide(); }
+                if (bootstrap.Modal.getInstance(modalElement)) {
+                    bootstrap.Modal.getInstance(modalElement).hide();
+                }
                 location.reload();
-            } else { alert("Erro ao publicar comentário: " + response.message); }
+            } else {
+                alert("Erro ao publicar comentário: " + response.message);
+            }
         },
-        error: function(xhr) { alert("Erro ao enviar comentário para o servidor."); }
+        error: function(xhr) {
+            alert("Erro ao enviar comentário para o servidor.");
+        }
     });
 }
 
+/**
+ * LÓGICA DE AVALIAÇÃO (RATING)
+ */
 let notaSelecionada = 0;
+
 $(document).ready(function() {
     $(document).on('click', '#rating-container i', function() {
         const podeAvaliar = $('#rating-container').data('pode-avaliar') === true;
-        if (!podeAvaliar) { alert("Você precisa seguir este local para poder avaliar!"); return; }
+        if (!podeAvaliar) {
+            alert("Você precisa seguir este local para poder avaliar!");
+            return;
+        }
+
         notaSelecionada = $(this).data('value');
         $('#rating-container i').each(function(index) {
             $(this).toggleClass('fas', index < notaSelecionada).toggleClass('far', index >= notaSelecionada);
         });
+
         $('#feedback-container').removeClass('d-none').hide().fadeIn();
     });
 });
 
 function enviarAvaliacaoCompleta() {
     const texto = $('#feedback-texto').val().trim();
-    if (texto.length < 5) { alert("Conte um pouco mais sobre sua experiência (mínimo 5 caracteres)."); return; }
+    if (texto.length < 5) {
+        alert("Conte um pouco mais sobre sua experiência (mínimo 5 caracteres).");
+        return;
+    }
+
     fetch(`/local/avaliar/{{ local.id }}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': "{{ csrf_token() }}" },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': "{{ csrf_token() }}"
+        },
         body: JSON.stringify({ nota: notaSelecionada, feedback: texto })
     })
     .then(r => r.json())
-    .then(data => { alert(data.mensagem); if (data.sucesso) location.reload(); });
-}
-
-function cancelarAvaliacao() { $('#feedback-container').fadeOut(); }
-
-function prepararSeguirDireto(localId, localNome, evt) {
-    if (evt) evt.preventDefault();
-    $.ajax({
-        url: "/seguir_local/" + localId,
-        method: 'POST',
-        data: { csrf_token: "{{ csrf_token() }}" || $('input[name=csrf_token]').val() },
-        success: function(response) { if (response.status === "success" || response.sucesso) { window.location.reload(); } else { alert("Aviso: " + (response.message || "Não foi possível alterar o vínculo.")); } },
-        error: function(xhr) { alert("Erro de comunicação com o servidor ao tentar seguir o local."); }
+    .then(data => {
+        alert(data.mensagem);
+        if (data.sucesso) location.reload();
     });
 }
 
+function cancelarAvaliacao() {
+    $('#feedback-container').fadeOut();
+}
+
+/**
+ * LÓGICA DE SEGUIR LOCAL
+ */
+function prepararSeguirDireto(localId, localNome, evt) {
+    if (evt) evt.preventDefault();
+
+    $.ajax({
+        url: "/seguir_local/" + localId,
+        method: 'POST',
+        data: {
+            csrf_token: "{{ csrf_token() }}" || $('input[name=csrf_token]').val()
+        },
+        success: function(response) {
+            if (response.status === "success" || response.sucesso) {
+                window.location.reload();
+            } else {
+                alert("Aviso: " + (response.message || "Não foi possível alterar o vínculo."));
+            }
+        },
+        error: function(xhr) {
+            console.error("Erro no Ajax de seguir:", xhr.responseText);
+            alert("Erro de comunicação com o servidor ao tentar seguir o local.");
+        }
+    });
+}
+
+/**
+ * SISTEMA EXPLORADOR DE TAGS OCULTAS DO LOCAL
+ */
 function abrirModalTagsOcultas(localId) {
     const $lista = $('#lista-tags-ocultas');
     $lista.html('<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>');
+
     const modalElement = document.getElementById('modalTagsOcultas');
     const meuModal = new bootstrap.Modal(modalElement);
     meuModal.show();
 
     $.getJSON(`/api/local/${localId}/tags_ocultas`, function(tags) {
-        if (!tags.length) { $lista.html('<p class="text-muted text-center small my-2">Nenhum tema oculto restante!</p>'); return; }
+        if (!tags.length) {
+            $lista.html('<p class="text-muted text-center small my-2">Nenhum tema oculto restante!</p>');
+            return;
+        }
+
         $lista.empty();
         tags.forEach(function(tag) {
             const itemHtml = `
                 <button type="button" onclick="window.ativarEPassarASeguirTag(${tag.id}, this)"
                         class="btn btn-outline-secondary btn-sm text-start w-100 px-3 py-2 d-flex justify-content-between align-items-center rounded-3 position-relative border-dashed"
                         style="font-size: 0.85rem; transition: all 0.2s;">
-                    <span><i class="bi bi-hash text-muted"></i><strong>${tag.nome}</strong></span>
-                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.7rem;">${tag.total} ${tag.total > 1 ? 'posts' : 'post'}</span>
-                </button>`;
+                    <span>
+                        <i class="bi bi-hash text-muted"></i><strong>${tag.nome}</strong>
+                    </span>
+                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.7rem;">
+                        ${tag.total} ${tag.total > 1 ? 'posts' : 'post'}
+                    </span>
+                </button>
+            `;
             $lista.append(itemHtml);
         });
-    }).fail(function() { $lista.html('<p class="text-danger text-center small my-2">Erro ao carregar temas.</p>'); });
+    }).fail(function() {
+        $lista.html('<p class="text-danger text-center small my-2">Erro ao carregar temas.</p>');
+    });
 }
 
 window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
     if ($(elementoBotao).data('processando')) return;
     $(elementoBotao).data('processando', true).prop('disabled', true).addClass('opacity-50');
+
     const csrfToken = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
 
     $.ajax({
@@ -390,17 +474,38 @@ window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
         headers: { 'X-CSRFToken': csrfToken },
         success: function(response) {
             if (response.sucesso) {
-                $(elementoBotao).removeClass('btn-outline-secondary border-dashed').addClass('btn-success text-white').html('<span><i class="bi bi-check-lg me-1"></i> Tema Adicionado!</span>');
-                setTimeout(function() { location.reload(); }, 600);
-            } else { alert(response.mensagem || "Não foi possível seguir este tema."); $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50'); }
+                $(elementoBotao).removeClass('btn-outline-secondary border-dashed')
+                                .addClass('btn-success text-white')
+                                .html('<span><i class="bi bi-check-lg me-1"></i> Tema Adicionado!</span>');
+
+                setTimeout(function() {
+                    location.reload();
+                }, 600);
+            } else {
+                alert(response.mensagem || "Não foi possível seguir este tema.");
+                $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
+            }
         },
-        error: function(xhr) { $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50'); }
+        error: function(xhr) {
+            console.error("Erro no Ajax de seguir tag:", xhr.responseText);
+            alert("Erro de comunicação com o servidor ao salvar interesse.");
+            $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
+        }
     });
 };
 
-function voltarAoTopo() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+/**
+ * ROLAGEM SUAVE ATÉ O TOPO DA PÁGINA
+ */
+function voltarAoTopo() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
 </script>
 
+{# BOTÃO FLUTUANTE VOLTAR AO TOPO: Fora de qualquer modal e travado perfeitamente no rodapé #}
 <div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;">
     <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap"
             onclick="voltarAoTopo()"
@@ -408,4 +513,5 @@ function voltarAoTopo() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
         <i class="bi bi-arrow-up-circle-fill me-2"></i>Voltar ao Topo
     </button>
 </div>
+
 {% endblock %}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeedIn! - Conexões Reais</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+            <td style="padding: 20px 0;">
+                <table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+
+                    <tr>
+                        <td align="center" style="padding: 40px 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; letter-spacing: 1px;">FeedIn!</h1>
+                            <p style="color: #e1d9ff; margin: 5px 0 0 0; font-size: 14px;">A Rede do Nós</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #333333; font-size: 20px; margin-top: 0;">Olá, {{ nome }}!</h2>
+
+                            <p style="color: #555555; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
+                                {% block corpo %}{% endblock %}
+                            </p>
+
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{ url_cadastro }}" target="_blank" style="background-color: #ffc107; color: #000000; padding: 18px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                            {% block texto_botao %}CRIAR MINHA CONTA{% endblock %}
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 30px; background-color: #fcfcfc; border-top: 1px solid #eeeeee; text-align: center;">
+                            <p style="color: #999999; font-size: 12px; margin: 0;">
+                                Você recebeu este e-mail porque demonstrou interesse em se tornar um pioneiro no FeedIn!<br>
+                                &copy; 2026 FeedIn! - A evolução das redes sociais.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

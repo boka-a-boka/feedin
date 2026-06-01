@@ -1,0 +1,22 @@
+{# Lógica de decisão de Cards - FeedIn (VERSÃO REVISADA) #}
+
+{% if atividade.id_conexao or atividade.tipo == 'conexao' or atividade.tipo in ['pioneiro', 'vinculo', 'rede'] %}
+    {# CASO 1: Vínculos e mensagens de sistema #}
+    {# Redirecionamos para o card limpo para evitar as reações do Universal #}
+    {% with atividade = atividade, context_origem = 'feed' %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endwith %}
+
+{% elif atividade.__tablename__ == 'postagens' or atividade.tipo == 'postagem' %}
+    {# CASO 2: Postagens de usuários #}
+    {% with atividade = atividade %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endwith %}
+
+{% else %}
+    {# CASO 3: Memórias de locais (Fallback) #}
+    {# Se for para o feed, podemos usar o card postagem também #}
+    {% with atividade = atividade %}
+        {% include "partials/cards/_card_postagem.html" %}
+    {% endwith %}
+{% endif %}

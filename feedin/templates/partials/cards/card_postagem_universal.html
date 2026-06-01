@@ -1,162 +1,208 @@
 {# card_postagem_universal.html #}
 
 <style>
-    .img-ajustada-feed {
-        {% if context_origem in ['perfil_local', 'perfil_publico'] %}
-            width: 100% !important;
-            max-height: 550px !important;
-            object-fit: contain !important;
-            background-color: #000 !important;
-            display: block !important;
-            margin-bottom: 15px !important;
-            border-radius: 12px !important;
-            float: none !important;
-        {% else %}
-            width: 100px !important;
-            height: 100px !important;
-            object-fit: cover !important;
-            float: left !important;
-            margin-right: 15px !important;
-            margin-bottom: 8px !important;
-            border-radius: 8px !important;
-            display: inline-block !important;
-        {% endif %}
-    }
-    .clearfix::after { content: ""; clear: both; display: table; }
-    {% if context_origem not in ['perfil_local', 'perfil_publico'] %}
-    .card-text { overflow: hidden; }
+.img-ajustada-feed {
+    {% if context_origem in ['perfil_local', 'perfil_publico'] %}
+        width: 100% !important;
+        max-height: 550px !important;
+        object-fit: contain !important;
+        background-color: #000 !important;
+        display: block !important;
+        margin-bottom: 15px !important;
+        border-radius: 12px !important;
+        float: none !important;
+    {% else %}
+        width: 100px !important;
+        height: 100px !important;
+        object-fit: cover !important;
+        float: left !important;
+        margin-right: 15px !important;
+        margin-bottom: 8px !important;
+        border-radius: 8px !important;
+        display: inline-block !important;
     {% endif %}
+}
+.clearfix::after { content: ""; clear: both; display: table; }
+{% if context_origem not in ['perfil_local', 'perfil_publico'] %}
+.card-text { overflow: hidden; }
+{% endif %}
 
-    /* Ajuste de transição para o botão discreto */
-    .btn-fluxo-silencioso {
-        transition: all 0.2s ease-in-out;
-    }
-    .btn-fluxo-silencioso:hover {
-        transform: translateY(-1px);
-    }
+/* Ajuste de transição para o botão discreto */
+.btn-fluxo-silencioso {
+    transition: all 0.2s ease-in-out;
+}
+.btn-fluxo-silencioso:hover {
+    transform: translateY(-1px);
+}
 </style>
 
-{# 1. IDENTIFICAÇÃO E CAPTURA DE CONTEXTO #}
-{% set eh_sistema = false %}
-{% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
-    {% set eh_sistema = true %}
-{% endif %}
+{# --- DETERMINAÇÃO DE FORMATO: FLYER VS POST NORMAL --- #}
+{# O Flyer vira um card próprio se houver imagem cadastrada e o back-end der o comando de exibição #}
+{% set renderizar_como_flyer = (atividade.anuncio is defined and atividade.anuncio and atividade.anuncio.url_flyer and exibir_como_flyer) %}
 
-{# --- IDENTIFICAÇÃO CIRÚRGICA DE COMENTÁRIOS VS POSTAGENS --- #}
-{% set eh_comentario = false %}
-{# Verificamos se o objeto possui o atributo 'id_postagem' (característico da model PostagemComentario) #}
-{% if atividade.id_postagem is defined %}
-    {% set eh_comentario = true %}
-    {# A postagem real (origem) está ancorada via relacionamento ou query #}
-    {% set post_obj = atividade.postagem if atividade.postagem is defined else Postagem.query.get(atividade.id_postagem) %}
-    {% set texto_exibicao = atividade.texto %}
-    {% set autor_acao = atividade.usuario if atividade.usuario is defined else Usuario.query.get(atividade.id_usuario) %}
-{% else %}
-    {% set post_obj = atividade.objeto_original if atividade.objeto_original else atividade %}
-    {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo %}
-    {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario %}
-{% endif %}
+{% if renderizar_como_flyer %}
 
-<div class="card border-0 shadow-sm mb-3 {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}">
-    <div class="card-body">
+    {# ======================================================================= #}
+    {# FORMATO FLYER: CARD EXCLUSIVO DE ANÚNCIO NATIVO                         #}
+    {# ======================================================================= #}
+    <div class="card border border-primary-subtle rounded-4 shadow-sm mb-4 bg-white mx-auto overflow-hidden card-postagem-final" style="max-width: 540px;">
 
-        {# CABEÇALHO #}
-        {% if autor_acao %}
-        <div class="d-flex align-items-center mb-3">
-            <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40">
-            <div class="ms-2">
-                <small class="text-muted">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
+        {# CABEÇALHO DO FLYER #}
+        <div class="p-3 bg-light bg-opacity-50 d-flex justify-content-between align-items-center border-bottom">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-patch-check-fill text-primary me-2" style="font-size: 1.1rem;"></i>
+                <div>
+                    <strong class="text-dark d-block" style="font-size: 0.9rem; line-height: 1.2;">{{ atividade.anuncio.local.nome }}</strong>
+                    <small class="text-muted small" style="font-size: 0.72rem;">Anfitrião da Memória • Espaço Verificado</small>
+                </div>
+            </div>
+
+            {# 🏷️ SELO DE CONTEXTO: Trazendo a tag de referência para dentro do Flyer #}
+            {% if atividade.anuncio.tag_referencia_nome %}
+                <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.65rem; text-transform: uppercase;">
+                    <i class="bi bi-tag-fill me-1"></i> {{ atividade.anuncio.tag_referencia_nome }}
+                </span>
+            {% endif %}
+        </div>
+
+        {# CORPO DO FLYER: Imagem de Destaque + Frase de Impacto Unificada #}
+        <div class="position-relative container-memoria">
+            {# O link do Flyer inteiro agora passa pelo registrador interno na mesma janela #}
+            <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='flyer', tag_id=atividade.anuncio.taxonomia_id) }}" class="w-100 d-block">
+                <img src="{{ url_for('static', filename='uploads/anuncios/' ~ atividade.anuncio.url_flyer) }}" class="img-respeitosa w-100">
+            </a>
+        </div>
+
+        {# TEXTO DE APOIO: A mesma essência de mensagem que roda no feed #}
+        <div class="p-3 bg-white border-top">
+            <p class="text-dark mb-0 fw-medium card-text style-postagem" style="font-size: 0.95rem; line-height: 1.4;">
+                <i class="bi bi-chat-quote-fill text-primary-subtle me-1"></i>
+                {{ atividade.anuncio.texto_formatado }}
+            </p>
+
+            {# Botão de Ação Direta sob o Flyer #}
+            <div class="mt-3">
+                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='flyer', tag_id=atividade.anuncio.taxonomia_id) }}"
+                   class="btn btn-sm btn-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
+                    Conhecer Histórias Deste Local <i class="bi bi-arrow-right ms-1"></i>
+                </a>
             </div>
         </div>
-        {% endif %}
+    </div> {# 💥 FIX: Fechamento da div do Card do Flyer que estava faltando aqui! #}
 
-        <div class="content-wrapper clearfix">
-            {# IMAGEM ÚNICA (Se for comentário, herda e exibe a foto da postagem de origem com segurança) #}
-            {% if not eh_sistema and post_obj.imagem_url %}
-                <img src="{{ url_for('static', filename='uploads/posts/' + post_obj.imagem_url) }}" class="img-ajustada-feed">
+{% else %}
+
+    {# ======================================================================= #}
+    {# FORMATO POST NORMAL: FLUXO DE MEMÓRIA ORIGINAL HOMOLOGADO DE CARLOS     #}
+    {# ======================================================================= #}
+    {% set eh_sistema = false %}
+    {% if atividade.tipo in ['pioneiro', 'vinculo', 'rede'] or atividade.id_conexao %}
+        {% set eh_sistema = true %}
+    {% endif %}
+
+    {% set eh_comentario = false %}
+    {% if atividade.id_postagem is defined %}
+        {% set eh_comentario = true %}
+        {% set post_obj = atividade.postagem if atividade.postagem is defined else (Postagem.query.get(atividade.id_postagem) if Postagem is defined else none) %}
+        {% set texto_exibicao = atividade.texto %}
+        {% set autor_acao = atividade.usuario if atividade.usuario is defined else (Usuario.query.get(atividade.id_usuario) if Usuario is defined else none) %}
+    {% else %}
+        {# GUARDA DE SEGURANÇA: Se o pai já definiu o post_obj, nós o preservamos intacto #}
+        {% set post_obj = post_obj if post_obj is defined else (atividade.objeto_original if atividade.objeto_original else atividade) %}
+        {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo or (post_obj.conteudo if post_obj) %}
+        {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario or (post_obj.autor if post_obj) %}
+    {% endif %}
+
+    {# 💥 FIX DA BORDA FANTASMA: Adicionado inline 'border-left: 0 !important;' para impedir a linha vertical de vazar na exibição normal #}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}" style="border-left: 0 !important;">
+        <div class="card-body">
+
+            {# CABEÇALHO DO AUTOR #}
+            {% if autor_acao %}
+                <div class="d-flex align-items-center mb-3">
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                    <div class="ms-2">
+                        <span class="text-dark fw-bold d-block" style="font-size: 0.95rem;">{{ autor_acao.username }}</span>
+                        <small class="text-muted" style="font-size: 0.78rem;">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
+                    </div>
+                </div>
             {% endif %}
 
-            {# TEXTO #}
-            <div class="card-text text-dark mb-3" style="font-size: 1.05rem; line-height: 1.5;">
-                {% if eh_sistema %}
-                    <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong>
-                {% else %}
-                    {# Se for comentário, podemos colocar um background discreto de citação #}
-                    {% if eh_comentario %}
-                        <div class="p-2 bg-light border-start border-3 rounded-end mb-2 text-muted italic" style="font-size: 0.95rem;">
-                            <i class="bi bi-chat-quote me-1"></i> "{{ texto_exibicao | formatar_postagem | safe }}"
-                        </div>
-                        <div class="small text-secondary mt-1">
-                            <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
-                        </div>
+            <div class="content-wrapper clearfix">
+                {# IMAGEM ÚNICA #}
+                {% if not eh_sistema and post_obj.imagem_url %}
+                    <img src="{{ url_for('static', filename='uploads/posts/' + post_obj.imagem_url) }}" class="img-ajustada-feed">
+                {% endif %}
+
+                {# TEXTO DA HISTÓRIA #}
+                <div class="card-text text-dark mb-3" style="font-size: 1.05rem; line-height: 1.5;">
+                    {% if eh_sistema %}
+                        <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong>
                     {% else %}
-                        {{ texto_exibicao | formatar_postagem | safe }}
+                        {% if eh_comentario %}
+                            <div class="p-2 bg-light border-start border-3 rounded-end mb-2 text-muted italic" style="font-size: 0.95rem;">
+                                <i class="bi bi-chat-quote me-1"></i> "{{ texto_exibicao | formatar_postagem | safe }}"
+                            </div>
+                            <div class="small text-secondary mt-1">
+                                <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
+                            </div>
+                        {% else %}
+                            {{ texto_exibicao | formatar_postagem | safe }}
+                        {% endif %}
                     {% endif %}
+                </div>
+
+                {# LINHA 1: PESSOAS MARCADAS ANTIGAS #}
+                {% if atividade and atividade.pessoas_marcadas %}
+                    <div class="mb-2">
+                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                            <i class="bi bi-people text-muted small me-1"></i>
+                            {% for pessoa in atividade.pessoas_marcadas %}
+                                <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-normal" style="font-size: 0.7rem;">
+                                        @{{ pessoa.username }}
+                                    </span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# LINHA 2: TAGS DE AFINIDADE #}
+                {% if post_obj and post_obj.tags %}
+                    <div class="mt-2 border-top pt-2" style="border-top-style: dotted !important; opacity: 0.9;">
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for tag in post_obj.tags %}
+                                {% if meus_interesses_ids and tag.id in meus_interesses_ids %}
+                                    <span class="badge bg-primary rounded-pill px-2 py-1 shadow-xs" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.3px;">
+                                        <i class="bi bi-bookmark-check-fill me-1"></i>#{{ tag.nome.replace(' ', '') }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-muted rounded-pill px-2 py-1 border text-secondary" style="font-size: 0.68rem; font-weight: 600; opacity: 0.65; border-color: #dee2e6 !important;" title="Você não segue esta tag.">
+                                        <i class="bi bi-eye-slash me-1"></i>#{{ tag.nome.replace(' ', '') }}
+                                    </span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
                 {% endif %}
             </div>
 
-            {# [O restante do seu bloco de MARCAÇÃO SILENCIOSA e TAGS continua abaixo igual, sempre usando post_obj] #}
-            {# --- FIM DO BLOCO DE MARCAÇÃO SILENCIOSA --- #}
-
-
-            {# LINHA 1: PESSOAS MARCADAS ANTIGAS (Mantive intacto para não quebrar dependências visuais suas) #}
-            {% if atividade and atividade.pessoas_marcadas %}
-                <div class="mb-2">
-                    <div class="d-flex flex-wrap gap-1 align-items-center">
-                        <i class="bi bi-people text-muted small me-1"></i>
-                        {% for pessoa in atividade.pessoas_marcadas %}
-                            <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none">
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-normal" style="font-size: 0.7rem;">
-                                    @{{ pessoa.username }}
-                                </span>
-                            </a>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-
-            {# LINHA 2: TAGS DE AFINIDADE #}
-            {% if post_obj and post_obj.tags %}
-                <div class="mt-2 border-top pt-2" style="border-top-style: dotted !important; opacity: 0.9;">
-                    <div class="d-flex flex-wrap gap-1">
-                        {% for tag in post_obj.tags %}
-                            {% if meus_interesses_ids and tag.id in meus_interesses_ids %}
-                                <span class="badge bg-primary rounded-pill px-2 py-1 shadow-xs" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.3px;">
-                                    <i class="bi bi-bookmark-check-fill me-1"></i>#{{ tag.nome.replace(' ', '') }}
-                                </span>
-                            {% else %}
-                                <span class="badge bg-light text-muted rounded-pill px-2 py-1 border text-secondary" style="font-size: 0.68rem; font-weight: 600; opacity: 0.65; border-color: #dee2e6 !important;" title="Você não segue esta tag.">
-                                    <i class="bi bi-eye-slash me-1"></i>#{{ tag.nome.replace(' ', '') }}
-                                </span>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-        </div>
-{# --- BLOCO DE EXIBIÇÃO DE COMENTÁRIOS DESTA HISTÓRIA --- #}
-            {% if post_obj.total_comentarios > 0 %}
+            {# --- BLOCO DE EXIBIÇÃO DE COMENTÁRIOS DESTA HISTÓRIA --- #}
+            {% if post_obj and post_obj.total_comentarios is defined and post_obj.total_comentarios > 0 %}
                 <div class="mt-3 pt-3 border-top" style="background-color: #f8f9fa; border-radius: 8px; padding: 10px 15px;">
                     <h6 class="text-muted mb-2" style="font-size: 0.85rem;"><i class="bi bi-chat-left-text me-1"></i> Comentários:</h6>
 
-                    {# 1. INÍCIO DO LOOP: A partir daqui a variável 'com' existe #}
                     {% for com in post_obj.lista_comentarios_ativos %}
                         <div class="d-flex align-items-start mb-2 pb-2 border-bottom border-light" id="comentario-{{ com.id }}">
-                            <img src="{{ url_for('servir_foto_perfil', usuario_id=com.id_usuario) }}" class="rounded-circle border me-2" width="28" height="28">
+                            <img src="{{ url_for('servir_foto_perfil', usuario_id=com.id_usuario) }}" class="rounded-circle border me-2" width="28" height="28" onerror="this.src='/static/fotos_perfil/default.jpg'">
                             <div class="w-100">
                                 <div class="bg-white p-2 rounded shadow-xs" style="font-size: 0.92rem;">
-
-                                    {# CORRIGIDO: Esta verificação está dentro do escopo do 'com' #}
                                     <strong class="text-dark">
-                                        {% if com.usuario and com.usuario.username %}
-                                            @{{ com.usuario.username }}
-                                        {% elif com.id_usuario %}
-                                            @ID_{{ com.id_usuario }}
-                                        {% else %}
-                                            @Usuário
-                                        {% endif %}
+                                        {% if com.usuario and com.usuario.username %} @{{ com.usuario.username }}
+                                        {% elif com.id_usuario %} @ID_{{ com.id_usuario }}
+                                        {% else %} @Usuário {% endif %}
                                     </strong>
-
                                     <span class="text-secondary">{{ com.texto | formatar_postagem | safe }}</span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mt-1 px-1">
@@ -173,57 +219,138 @@
                     {% endfor %}
                 </div>
             {% endif %}
-        {# --- FIM DO BLOCO DE COMENTÁRIOS --- #}
-    </div>
+        </div>
 
-    {# RODAPÉ: LOCAL E REAÇÕES #}
-    <div class="px-3 pb-3">
-        <div class="pt-2 d-flex justify-content-between align-items-center">
-            <div>
-                {% if post_obj.id_local and context_origem != 'perfil_local' %}
-                    <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
-                        <span class="badge rounded-pill bg-light text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
-                            <i class="bi ge-alt-fill me-1 text-danger"></i>
-                            <span class="fw-bold">
-                                {{ post_obj.local_foco.nome if post_obj.local_foco else "Local" }}
+        {# RODAPÉ: LOCAL E REAÇÕES #}
+        <div class="px-3 pb-2 border-top bg-light bg-opacity-25">
+            <div class="pt-2 d-flex justify-content-between align-items-center">
+                <div>
+                    {% if post_obj.id_local and context_origem != 'perfil_local' %}
+                        <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
+                            <span class="badge rounded-pill bg-white text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
+                                <i class="bi bi-geo-alt-fill me-1 text-danger"></i>
+                                <span class="fw-bold">{{ post_obj.local_foco.nome if post_obj.local_foco else "Local" }}</span>
                             </span>
-                        </span>
-                    </a>
+                        </a>
+                    {% endif %}
+                </div>
+
+                {# GERENCIAMENTO DE EDIÇÃO/EXCLUSÃO DO USUÁRIO #}
+                {% if current_user.is_authenticated and atividade.id_usuario == current_user.id %}
+                    <div class="dropdown ms-auto">
+                        <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-three-dots-vertical fs-5"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
+                            <li>
+                                <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
+                                    <i class="bi bi-pencil me-2 text-primary"></i> Editar História
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
+                                    <i class="bi bi-trash3 me-2"></i> Excluir Memória
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    </form>
                 {% endif %}
-            </div>
 
-            <!-- BOTÕES DE GERENCIAMENTO (EDITAR / EXCLUIR) -->
-            {% if current_user.is_authenticated and atividade.id_usuario == current_user.id %}
-            <div class="dropdown ms-auto">
-                <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-three-dots-vertical fs-5"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
-                    <li>
-                        <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
-                            <i class="bi bi-pencil me-2 text-primary"></i> Editar História
-                        </button>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                        <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
-                            <i class="bi bi-trash3 me-2"></i> Excluir Memória
-                        </button>
-                    </li>
-                </ul>
-            </div>
-
-            <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            </form>
-            {% endif %}
-
-            <div class="d-flex align-items-center gap-3">
-                {% include "partials/cards/_footer_reacoes.html" %}
+                <div class="d-flex align-items-center gap-3">
+                    {% include "partials/cards/_footer_reacoes.html" %}
+                </div>
             </div>
         </div>
+
+        {# ======================================================================= #}
+        {# 🎯 SUBSOLO DO CARD: FORMATAÇÃO DO BOTÃO ATUALIZADA (MODELO FEED)       #}
+        {# ======================================================================= #}
+        {% if atividade.anuncio and not atividade.anuncio.url_flyer and not (context_origem == 'perfil_local' and atividade.anuncio.local_id == local.id) %}
+            <div class="feed-ad-inline-wrapper my-2 border-top pt-2" style="width: 100%; display: block;">
+
+                {# GATILHO COMPACTO IDENTADO AO GABARITO DO FEED #}
+                <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 500px;">
+                    <span class="text-dark small fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.2px;">
+                        <i class="bi bi-heart-fill text-danger me-1"></i> Apoio:
+                    </span>
+
+                    {# Botão acionador do colapso identado ao modelo verificado #}
+                    <button class="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#ad-universal-collapse-{{ post_obj.id }}"
+                            aria-expanded="false"
+                            style="font-size: 0.75rem; letter-spacing: 0.3px;">
+                        {{ atividade.anuncio.local.nome }}
+                        {% if atividade.anuncio.mais_x > 0 %}
+                            <span class="badge bg-white text-primary ms-1" style="font-size: 0.7rem; padding: 2px 5px;">
+                                +{{ atividade.anuncio.mais_x }}
+                            </span>
+                        {% else %}
+                            <i class="bi bi-plus-lg ms-1"></i>
+                        {% endif %}
+                    </button>
+                </div>
+
+                {# CAIXA EXPANSÍVEL (Contendo a Frase Rotativa e a Tag de Referência) #}
+                <div class="collapse" id="ad-universal-collapse-{{ post_obj.id }}">
+                    <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3 text-center" style="max-width: 500px;">
+
+                        <div class="parceiro-destaque-bloco mb-3 pb-3 {% if atividade.anuncio.mais_x > 0 %}border-bottom{% endif %}">
+                            {% if atividade.anuncio.tag_referencia_nome %}
+                                <div class="mb-2">
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.3px; text-transform: uppercase;">
+                                        <i class="bi bi-tag-fill me-1"></i> Conteúdo relacionado: {{ atividade.anuncio.tag_referencia_nome }}
+                                    </span>
+                                </div>
+                            {% endif %}
+
+                            <h6 class="fw-bold text-dark mb-1">{{ atividade.anuncio.local.nome }}</h6>
+
+                            {# Exibição da Frase Dinâmica #}
+                            <p class="card-text text-muted small mb-3" style="line-height: 1.4; font-size: 0.82rem;">
+                                {{ atividade.anuncio.texto_formatado }}
+                            </p>
+
+                            {# link de clique sem target="_blank" para respeitar a navegação fluida interna #}
+                            <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
+                               class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
+                                <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+
+                        {% if atividade.anuncio.mais_x > 0 %}
+                            <div class="outros-parceiros-bloco text-start mt-2">
+                                <small class="text-muted fw-bold d-block mb-2" style="font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    Também apoiam histórias de {{ atividade.anuncio.tag_referencia_nome }}:
+                                </small>
+
+                                {% for outro in atividade.anuncio.outros_parceiros %}
+                                    <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded-2 mb-2 border border-light-subtle">
+                                        <div style="max-width: 70%;">
+                                            <span class="fw-bold text-dark d-block" style="font-size: 0.8rem;">{{ outro.local.nome }}</span>
+                                            <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Parceiro Comercial</small>
+                                        </div>
+                                        <a href="{{ url_for('registrar_clique', anuncio_id=outro.id, origem='botao', tag_id=outro.taxonomia_id) }}"
+                                           class="btn btn-xs btn-primary rounded-pill fw-bold px-3" style="font-size: 0.7rem; padding: 3px 10px;">
+                                            Visitar
+                                        </a>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
     </div>
-</div>
+{% endif %}
 
 <script>
 window.preencherDadosModalEditar = function(postId, conteudoAtual) {

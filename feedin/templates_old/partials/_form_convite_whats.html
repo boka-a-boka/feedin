@@ -1,0 +1,95 @@
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-column">
+        <h3 class="fw-bold text-success m-0">Convidar para a Teia</h3>
+        <p class="text-muted small mb-0">Ajude o FeedIn a crescer.</p>
+    </div>
+    <span class="badge bg-primary text-white border-0 px-3 py-1 rounded-pill small fw-bold shadow-sm">Campanha Beta</span>
+</div>
+
+<div class="card border-0 text-white rounded-4 mb-3 shadow-sm mx-auto" style="max-width: 1000px; background-color: #1e3c72;">
+    <div class="card-body p-4">
+        <div class="d-flex align-items-center">
+            <div class="bg-white rounded-circle p-3 me-3 d-flex align-items-center justify-content-center shadow-sm" style="width: 60px; height: 60px; min-width: 60px;">
+                <i class="bi bi-patch-check-fill text-primary fs-2"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-1">Torne-se um Pioneiro Vitalício</h5>
+                <p class="mb-0 opacity-90">Participe do resgate da nossa memória social. Usuários que trouxerem 10 novos membros ativos ganharão reconhecimento exclusivo e permanente no FeedIn.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 bg-success text-white rounded-4 mb-3 shadow-sm mx-auto" style="max-width: 1000px;">
+    <div class="card-body py-4 text-center">
+        <p class="small fw-bold mb-2 text-uppercase" style="letter-spacing: 1px;">
+            <i class="bi bi-people-fill me-2"></i> Usuários confirmados em sua rede
+        </p>
+
+        <div class="display-5 fw-bold mb-2">
+            {{ current_user.convites_aceitos|default(0) }} <span class="fs-4 opacity-75">/ 10</span>
+        </div>
+
+        <div>
+            <span class="badge bg-white text-success rounded-pill px-4 py-2 shadow-sm" style="font-size: 0.8rem; letter-spacing: 0.5px;">
+                META: SELO VITALÍCIO PIONEIRO
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="mx-auto mb-4" style="max-width: 1000px;">
+    <p class="text-muted" style="font-size: 0.75rem; line-height: 1.4;">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>Nota:</strong> O progresso é contabilizado quando o seu convidado **conclui o cadastro** no FeedIn.
+    </p>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 bg-light mx-auto" style="max-width: 1000px; width: 100%;">
+    <div class="card-body p-4 p-md-5">
+        <form action="{{ url_for('gerar_convite') }}" method="POST">
+            {{ form_convite.csrf_token }}
+
+            <div class="row">
+                <div class="col-12 mb-4">
+                    <label class="form-label small fw-bold text-muted text-uppercase ms-2" style="font-size: 0.75rem;">WhatsApp (com DDD)</label>
+                    {{ form_convite.whatsapp(class="form-control form-control-lg rounded-pill border shadow-sm px-4 py-3",
+                        style="border-color: #dee2e6 !important; transition: all 0.3s ease; font-size: 1.1rem; width: 100%;",
+                        placeholder="19999999999")
+                    }}
+                </div>
+
+                <div class="col-12 mb-4">
+                    <label class="form-label small fw-bold text-muted text-uppercase ms-2" style="font-size: 0.75rem;">Nome do Convidado (Opcional)</label>
+                    {{ form_convite.nome_convidado(class="form-control form-control-lg rounded-pill border shadow-sm px-4 py-3",
+                        style="border-color: #dee2e6 !important; transition: all 0.3s ease; font-size: 1.1rem; width: 100%;",
+                        placeholder="Ex: João Silva")
+                    }}
+                </div>
+
+                <div class="col-12 mb-4">
+                    <label class="form-label small fw-bold text-muted text-uppercase ms-2">O que conecta vocês?</label>
+                    <select name="contexto_convite" class="form-select form-select-lg rounded-pill border shadow-sm px-4">
+                        <optgroup label="Nossos Lugares">
+                            {% for vinculo in current_user.vinculos_recebidos %}
+                                <option value="local_{{ vinculo.local.id }}">Frenquentamos o(a) {{ vinculo.local.nome }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        <optgroup label="Nossos Gostos">
+                            {% for gosto in current_user.minhas_atividades %}
+                                <option value="gosto_{{ gosto.id }}">Gostamos de {{ gosto.nome }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-success btn-lg rounded-pill w-100 py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center border-0">
+                        <span class="fs-5">Convidar</span>
+                        <i class="bi bi-whatsapp ms-2 fs-4"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

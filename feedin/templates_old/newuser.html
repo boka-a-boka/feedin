@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block titulo %}FeedIn! - Novo Usuário{% endblock titulo %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Criação de Usuário</h2>
+        <p class="text-muted">Junte-se à nossa rede em Piracicaba.</p>
+    </div>
+
+    {% if request.args.get('indicado_por') %}
+        <div class="alert alert-info py-2 text-center shadow-sm rounded-pill mx-auto mb-4" style="max-width: 500px; font-size: 0.9rem;">
+            ✨ Convite especial ativado!
+        </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 550px;">
+        <form method="POST">
+            {{ form.csrf_token }}
+            <input type="hidden" name="indicado_por" value="{{ request.args.get('indicado_por', '') }}">
+
+            <div class="form-floating mb-3">
+                {{ form.email(class="form-control", placeholder="E-mail", style="height: 55px;") }}
+                {{ form.email.label }}
+                {% for error in form.email.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="form-floating mb-3">
+                {{ form.usuario(class="form-control", placeholder="Nickname", style="height: 55px;") }}
+                {{ form.usuario.label }}
+                {% for error in form.usuario.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="form-floating mb-3">
+                {{ form.senha(class="form-control", placeholder="Senha", style="height: 55px;") }}
+                {{ form.senha.label }}
+                {% for error in form.senha.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="form-floating mb-4">
+                {{ form.confirmar_senha(class="form-control", placeholder="Confirmar Senha", style="height: 55px;") }}
+                {{ form.confirmar_senha.label }}
+                {% for error in form.confirmar_senha.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="d-grid gap-2">
+                {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
+                <a href="{{ url_for('login') }}" class="btn btn-link text-decoration-none">Já tenho conta</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock content %}

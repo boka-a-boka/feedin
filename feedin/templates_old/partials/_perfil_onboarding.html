@@ -1,0 +1,165 @@
+{# FASE 1: FOTO (Bloqueio Total) #}
+{% if not current_user.foto_perfil or current_user.foto_perfil == 'default.jpg' %}
+    <section id="fase-foto" class="card border-0 shadow-lg rounded-4 p-5 text-center animate__animated animate__fadeIn">
+        <div class="mb-4">
+            <h3 class="fw-bold text-primary">Sua Identidade no FeedIn 📸</h3>
+            <p class="text-muted">Para começar, escolha sua melhor foto de perfil.</p>
+        </div>
+        <form action="{{ url_for('upload_foto_perfil') }}" method="POST" enctype="multipart/form-data" onsubmit="disableButton()">
+            {{ form.csrf_token }}
+            <div class="position-relative d-inline-block">
+                <img src="{{ url_for('servir_foto_perfil', usuario_id=current_user.id) }}"
+                     id="foto-preview-form" class="shadow-lg mb-3 rounded-circle"
+                     style="width: 180px; height: 180px; object-fit: cover; border: 4px solid #0d6efd; padding: 3px;">
+                <label for="input-foto" class="btn btn-primary position-absolute bottom-0 end-0 rounded-circle shadow-sm p-2" style="cursor: pointer;">
+                    <i class="bi bi-camera-fill fs-5"></i>
+                </label>
+            </div>
+            <div class="mt-3 mx-auto" style="max-width: 300px;">
+                <input type="file" id="input-foto" name="foto_perfil" class="d-none" accept="image/*" onchange="previewImage(event)">
+                <button type="submit" id="btn-upload-foto" class="btn btn-success w-100 fw-bold mt-2 d-none py-2 rounded-3 shadow">
+                    Confirmar Foto <i class="bi bi-check-lg ms-2"></i>
+                </button>
+            </div>
+        </form>
+    </section>
+
+{# FASE 2: IDENTIDADE COMPLETA (Dados + Apelidos) #}
+{% elif not current_user.perfil or not current_user.perfil.nome_completo %}
+    <div class="card border-0 shadow-lg rounded-4 p-4 mb-4 animate__animated animate__fadeIn">
+        <h3 class="fw-bold mb-4"><i class="bi bi-person-badge me-2 text-primary"></i>Sua Identidade</h3>
+
+        <form id="form-perfil-dados" method="POST" action="{{ url_for('editar_perfil') }}" enctype="multipart/form-data">
+            {{ form.csrf_token }}
+                <div class="row-striped p-3 d-md-flex align-items-center">
+                    {{ form.nome_completo.label(class="col-md-3 fw-bold mb-0") }}
+                    <div class="col-md-9">{{ form.nome_completo(class="form-control border-0") }}</div>
+                </div>
+
+                <div class="col-md-4">
+                    {{ form.data_nascimento(class="form-control border-0 JSON-data-mascara", type="tel", placeholder="dd/mm/aaaa", maxlength="10", autocomplete="off") }}
+                </div>
+
+                <div class="row-striped p-3 d-md-flex align-items-center">
+                    {{ form.genero.label(class="col-md-3 fw-bold mb-0") }}
+                    <div class="col-md-4">{{ form.genero(class="form-select border-0") }}</div>
+                </div>
+
+                <div class="row-striped p-3 d-md-flex align-items-center">
+                    {{ form.estado_civil.label(class="col-md-3 fw-bold mb-0") }}
+                    <div class="col-md-4">{{ form.estado_civil(class="form-select border-0") }}</div>
+                </div>
+
+                <div class="row-striped p-3 d-md-flex align-items-center">
+                    {{ form.cidade_natal.label(class="col-md-3 fw-bold mb-0") }}
+                    <div class="col-md-6">{{ form.cidade_natal(class="form-control border-0") }}</div>
+                </div>
+
+                <div class="row-striped p-3 d-md-flex align-items-start border-bottom">
+                    <label class="col-md-3 fw-bold mb-0 mt-2">Sua História (Bio)</label>
+                    <div class="col-md-9">
+                        {{ form.biografia(class="form-control border-0", rows="7", id="bio-field", placeholder="Conte sua trajetória...") }}
+                        <div class="text-end mt-1">
+                            <small id="bio-counter" class="text-muted" style="font-size: 0.75rem;">0 / 500</small>
+                        </div>
+                    </div>
+                </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-3 fw-bold rounded-pill shadow mt-4">
+                Salvar Identidade e Continuar <i class="bi bi-save ms-2"></i>
+            </button>
+        </form>
+
+        <hr class="my-4">
+
+        {# APELIDOS: Integrados mas fora do form principal para evitar conflito de POST #}
+        <h5 class="fw-bold mb-3">Como as pessoas te conhecem? (Apelidos)</h5>
+        {% include "partials/_form_apelidos.html" %}
+    </div>
+
+{# FASE 3: LIBERADO PARA AS MEMÓRIAS #}
+{% else %}
+    <div class="card border-0 shadow-none bg-transparent text-center p-5 animate__animated animate__fadeIn">
+        <div class="mb-4">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+            <h2 class="fw-bold">Tudo pronto, {{ current_user.primeiro_nome }}!</h2>
+            <p class="text-muted text-center">Sua identidade foi preservada. Agora vamos resgatar suas memórias.</p>
+        </div>
+
+        <a href="{{ url_for('dashboard', aba='memorias') }}" class="btn btn-dark btn-lg rounded-pill px-5 shadow-lg">
+            Acessar Mapa de Memórias <i class="bi bi-arrow-right ms-2"></i>
+        </a>
+    </div>
+{% endif %}
+
+<script>
+// Mantive suas funções originais, apenas limpei o escopo
+function previewImage(event) {
+    const reader = new FileReader();
+    const file = event.target.files[0];
+    const previewForm = document.getElementById('foto-preview-form');
+    const btn = document.getElementById('btn-upload-foto');
+
+    reader.onload = function() {
+        if (reader.readyState === 2) {
+            if (previewForm) previewForm.src = reader.result;
+            if (btn) btn.classList.remove('d-none');
+        }
+    }
+    if (file) reader.readAsDataURL(file);
+}
+
+function ajustarAltura(el) {
+    el.style.height = "auto";
+    el.style.height = (el.scrollHeight) + "px";
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const textareas = document.querySelectorAll('textarea');
+    textareas.forEach(textarea => {
+        ajustarAltura(textarea);
+        textarea.addEventListener('input', function() { ajustarAltura(this); });
+    });
+});
+
+function disableButton() {
+    const btn = document.getElementById('btn-upload-foto');
+    btn.disabled = true;
+    btn.innerHTML = 'Enviando... <span class="spinner-border spinner-border-sm"></span>';
+}
+
+// Adicione este bloco dentro do seu bloco <script> existente
+document.addEventListener('DOMContentLoaded', function() {
+    const dataInput = document.querySelector('.JSON-data-mascara');
+
+    if (dataInput) {
+        dataInput.addEventListener('input', function(e) {
+            // Remove tudo o que não for número
+            let v = e.target.value.replace(/\D/g, '');
+
+            // Se passar do tamanho de uma data, corta
+            if (v.length > 8) v = v.substring(0, 8);
+
+            // Aplica a máscara de barras conforme a digitação
+            if (v.length > 2 && v.length <= 4) {
+                v = v.replace(/^(\d{2})(\d+)/, '$1/$2');
+            } else if (v.length > 4) {
+                v = v.replace(/^(\d{2})(\d{2})(\d+)/, '$1/$2/$3');
+            }
+
+            e.target.value = v;
+        });
+
+        // Validação visual rápida ao perder o foco (opcional)
+        dataInput.addEventListener('blur', function(e) {
+            const val = e.target.value;
+            if (val && val.length < 10) {
+                // Se a data estiver incompleta, dá um aviso visual discreto do Bootstrap
+                dataInput.classList.add('is-invalid');
+            } else {
+                dataInput.classList.remove('is-invalid');
+            }
+        });
+    }
+});
+</script>

@@ -1,0 +1,536 @@
+<style>
+.card-clicavel {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.card-clicavel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+}
+</style>
+
+<div class="mb-4">
+    <h4 class="fw-bold text-dark mb-1">
+        <i class="bi bi-people-fill text-primary me-2"></i>
+        Conexões e Relacionamentos
+    </h4>
+    <p class="text-muted small">Gerencie sua rede de confiança e resgate memórias sociais.</p>
+</div>
+
+<div class="row g-2 mb-4">
+    <div class="col-6">
+        <div class="p-3 border-0 shadow-sm rounded-4 bg-primary text-white text-center">
+            <h4 class="fw-bold mb-0">{{ total_conexoes }}</h4>
+            <small class="text-uppercase opacity-75" style="font-size: 0.65rem; letter-spacing: 1px;">Conexões Reais</small>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="p-3 border-0 shadow-sm rounded-4 bg-warning text-dark text-center">
+            <h4 class="fw-bold mb-0">{{ total_pendentes }}</h4>
+            <small class="text-uppercase opacity-75" style="font-size: 0.65rem; letter-spacing: 1px;">Aguardando</small>
+        </div>
+    </div>
+</div>
+
+<ul class="nav nav-pills nav-fill bg-white p-1 rounded-4 shadow-sm mb-4" id="conexaoTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active rounded-4 py-2" id="pendentes-tab" data-bs-toggle="tab" data-bs-target="#pendentes" type="button" role="tab">
+            <i class="bi bi-envelope-paper"></i> <span class="d-none d-md-inline">Convites</span>
+            {% if convites %}<span class="badge rounded-pill bg-danger ms-1">{{ convites|length }}</span>{% endif %}
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link rounded-4 py-2" id="sugestoes-tab" data-bs-toggle="tab" data-bs-target="#sugestoes" type="button" role="tab">
+            <i class="bi bi-stars"></i> <span class="d-none d-md-inline">Sugestões</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link rounded-4 py-2" id="rede-tab" data-bs-toggle="tab" data-bs-target="#rede" type="button" role="tab">
+            <i class="bi bi-person-check"></i> <span class="d-none d-md-inline">Minha Rede</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link rounded-4 py-2" id="pioneiro-tab" data-bs-toggle="tab" data-bs-target="#pioneiro" type="button" role="tab">
+            <i class="bi bi-patch-check"></i> <span class="d-none d-md-inline">Seja Pioneiro</span>
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="conexaoTabsContent">
+
+    {# --- TAB: CONVITES (CORRIGIDA) --- #}
+    <div class="tab-pane fade show active" id="pendentes" role="tabpanel">
+        <div class="card border-0 shadow-sm rounded-4 bg-transparent">
+            <div class="card-body p-0">
+                {% if convites %}
+                    {% for c in convites %}
+                    <div class="card border-0 shadow-sm rounded-4 mb-3 bg-white overflow-hidden card-clicavel"
+                         onclick="window.location.href='{{ url_for('ver_perfil', usuario_id=c.remetente.id) }}'">
+                        <div class="card-body p-3">
+                            <div class="row g-3 align-items-center">
+                                <div class="col-4 col-md-3">
+                                    <div class="ratio ratio-1x1 shadow-sm rounded-3 overflow-hidden border">
+                                        <img src="{{ url_for('servir_foto_perfil', usuario_id=c.remetente.id) }}"
+                                             class="img-fluid" style="object-fit: cover;" alt="Perfil">
+                                    </div>
+                                </div>
+                                <div class="col-8 col-md-10">
+                                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                                        <div>
+                                            <h6 class="fw-bold text-dark mb-0">{{ c.remetente.perfil.nome_completo if c.remetente.perfil else c.remetente.username }}</h6>
+                                            <small class="text-muted">Pediu conexão há {{ c.data_solicitacao|tempo_atras }}</small>
+                                        </div>
+                                        <div class="d-flex gap-2 mt-2 mt-md-0">
+                                            <form action="{{ url_for('aceitar_conexao', conexao_id=c.id) }}" method="POST" onclick="event.stopPropagation();">
+                                                {{ form_convite.csrf_token }}
+                                                <button type="submit" class="btn btn-success btn-sm rounded-pill px-3 fw-bold">Aceitar</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center py-4 bg-white rounded-4 shadow-sm">
+                        <p class="text-muted fst-italic mb-0 small">Nenhum convite pendente.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# --- TAB: SEJA PIONEIRO (CONVITES WHATSAPP) --- #}
+    <div class="tab-pane fade" id="pioneiro" role="tabpanel">
+
+    {# 1. Card de Progresso e Meta - Foco em Conexões Reais #}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <!-- Linha decorativa sutil para indicar conquista -->
+        <div class="bg-primary" style="height: 4px;"></div>
+
+        <div class="card-body p-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
+                <div class="text-center text-md-start">
+                    <h5 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-patch-check-fill text-primary me-2"></i>Campanha Pioneiros do FeedIn
+                    </h5>
+                    <p class="text-muted small mb-0" style="max-width: 500px;">
+                        Nossa missão é resgatar a memória social de Piracicaba. Convide seus amigos do WhatsApp: quando **10 ou mais** concluírem o cadastro, seu perfil receberá automaticamente o selo de **Pioneiro Vitalício**.
+                    </p>
+                </div>
+
+                <!-- Contador de Impacto Real -->
+                <div class="text-center bg-light p-3 rounded-4 border" style="min-width: 160px;">
+                    {% set total_aceitos = current_user.convites_enviados_whats | selectattr('status_onboarding', 'equalto', True) | list | length %}
+
+                    <span class="text-uppercase text-muted fw-bold d-block mb-1" style="font-size: 0.6rem; letter-spacing: 1px;">Convites Aceitos</span>
+                    <h2 class="fw-black text-primary mb-0 lh-1">{{ total_aceitos }}</h2>
+
+                    <div class="mt-2">
+                        {% if total_aceitos >= 10 %}
+                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2" style="font-size: 0.65rem;">
+                                <i class="bi bi-award-fill me-1"></i>Selo Ativado
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2" style="font-size: 0.65rem;">
+                                Meta: 10 amigos
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        {# 2. Formulário de Disparo #}
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="fw-bold mb-3"><i class="bi bi-whatsapp text-success me-2"></i>Novo Convite via WhatsApp</h6>
+
+                <form action="{{ url_for('gerar_convite') }}" method="POST">
+                    {{ form_convite.csrf_token }}
+
+                    <div class="row g-2">
+                        <div class="col-12 col-md-5">
+                            <div class="form-floating">
+                                <input type="text" name="nome_convidado" class="form-control rounded-3" id="id_nome_amigo" placeholder="Nome do Amigo" required>
+                                <label for="id_nome_amigo" class="small text-muted">Nome do amigo(a)</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <div class="form-floating">
+                                <input type="tel" name="whatsapp" class="form-control rounded-3" id="id_whats_amigo" placeholder="(19) 99999-9999" required>
+                                <label for="id_whats_amigo" class="small text-muted">WhatsApp com DDD</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-2 d-grid">
+                            <button type="submit" class="btn btn-success rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2">
+                                <i class="bi bi-send-fill"></i> Convidar
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# 3. Gestão de Convites Enviados #}
+        <div class="px-1">
+            <h6 class="text-uppercase text-muted fw-bold mb-3" style="font-size: 0.7rem; letter-spacing: 1px;">
+                <i class="bi bi-list-check me-1"></i> Gerenciar Convites Enviados
+            </h6>
+
+            <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="border-0 px-3 py-3">Convidado</th>
+                                <th class="border-0 py-3 text-center">Status</th>
+                                <th class="border-0 py-3 text-end px-3">Ação</th>
+                            </tr>
+                        </thead>
+                            <tbody>
+                                {% for conv in lista_de_convites %}
+                                    <tr>
+                                        <td class="px-3">
+                                            <span class="fw-bold text-dark">{{ conv.whatsapp_destino }}</span>
+                                            <!-- Se você salvar uma data de envio na model, pode exibir aqui sutilmente -->
+                                        </td>
+                                        <td class="text-center">
+                                            {% if conv.status_onboarding %}
+                                                <span class="badge bg-success-subtle text-success rounded-pill px-2.5 py-1" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Cadastrado
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-warning-subtle text-warning rounded-pill px-2.5 py-1" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-clock-history me-1"></i>Pendente
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end px-3">
+                                            {% if not conv.status_onboarding %}
+                                                {# Só mostra o botão de reenvio se o amigo ainda não tiver entrado na rede #}
+                                                <form action="{{ url_for('gerar_convite') }}" method="POST" class="d-inline" onclick="event.stopPropagation();">
+                                                    {{ form_convite.csrf_token }}
+                                                    <input type="hidden" name="whatsapp" value="{{ conv.whatsapp_destino }}">
+                                                    <button type="submit" class="btn btn-outline-primary btn-sm rounded-circle" title="Reenviar Mensagem">
+                                                        <i class="bi bi-arrow-repeat"></i>
+                                                    </button>
+                                                </form>
+                                            {% else %}
+                                                {# Ícone discreto de sucesso se já concluiu #}
+                                                <i class="bi bi-person-check-fill text-success fs-5 me-2" title="Conexão Estabelecida"></i>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# --- TAB: SUGESTÕES (CORRIGIDA) --- #}
+    <div class="tab-pane fade" id="sugestoes" role="tabpanel">
+        <div class="card border-0 shadow-sm rounded-4 bg-transparent">
+            <div class="card-body p-0">
+                {% if sugestoes %}
+                    {% for s in sugestoes %}
+                        <div class="card border-0 shadow-sm rounded-4 mb-3 bg-white overflow-hidden card-clicavel"
+                             onclick="window.location.href='{{ url_for('ver_perfil', usuario_id=s.usuario.id) }}'">
+                            <div class="card-body p-3">
+                                <div class="row g-3 align-items-start">
+                                    {# FOTO #}
+                                    <div class="col-auto col-foto-lista">
+                                        <img src="{{ url_for('servir_foto_perfil', usuario_id=s.usuario.id) }}"
+                                             class="foto-pioneiro-quadrada shadow-sm border"
+                                             alt="{{ s.usuario.username }}">
+                                    </div>
+
+                                    {# CONTEÚDO #}
+                                    <div class="col-8 col-md-9">
+                                        <div class="mb-1">
+                                            <h6 class="fw-bold text-dark mb-0 text-truncate">
+                                                {{ s.usuario.perfil.nome_completo if s.usuario.perfil else s.usuario.username }}
+                                            </h6>
+                                            <small class="text-muted d-block">@{{ s.usuario.username }}</small>
+                                        </div>
+
+                                        {# LOCAIS #}
+                                        <div class="my-2">
+                                            <div class="d-flex flex-wrap gap-1">
+                                                {% if s.locais %}
+                                                    {% for local_str in s.locais %}
+                                                        <span class="badge bg-light text-dark border-0 fw-normal py-1 px-2 rounded-2" style="font-size: 0.7rem;">
+                                                            <i class="bi bi-geo-alt-fill text-danger me-1"></i>{{ local_str }}
+                                                        </span>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                        {# PREFERÊNCIAS #}
+                                        <div class="mt-1 mb-2">
+                                            <div class="d-flex flex-wrap gap-1 align-items-center">
+                                                {% if s.preferencias %}
+                                                    {% for pref in s.preferencias %}
+                                                        <span class="badge bg-primary-subtle text-primary border-0 fw-medium py-1.5 px-2.5 rounded-2" style="font-size: 0.7rem;">
+                                                            <i class="bi bi-tag-fill me-1" style="font-size: 0.6rem;"></i>{{ pref }}
+                                                        </span>
+                                                    {% endfor %}
+                                                    {% if s.total_restante_prefs|default(0) > 0 %}
+                                                        <span class="text-muted fw-bold ms-1" style="font-size: 0.65rem;">+{{ s.total_restante_prefs }}</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <small class="text-muted" style="font-size: 0.65rem;">Interesses variados</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                        {# BOTÃO #}
+                                        <div class="mt-2">
+                                            <form action="{{ url_for('conectar_pioneiro', id_destinatario=s.usuario.id) }}" method="POST">
+                                                {{ form_convite.csrf_token }}
+                                                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
+                                                    Reconhecer
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div> {# Fim col-8 #}
+                                </div> {# Fim row #}
+                            </div> {# Fim card-body interno #}
+                        </div> {# Fim card do usuário #}
+                    {% endfor %}
+                {% else %}
+                    {# ESTADO VAZIO #}
+                    <div class="col-12 text-center py-5 bg-white rounded-4 shadow-sm">
+                        <div class="mb-3">
+                            <i class="bi bi-search text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
+                        </div>
+                        <h5 class="text-secondary">Ainda não encontramos conexões</h5>
+                        <p class="text-muted mx-auto px-3" style="max-width: 400px;">
+                            Que tal adicionar novos locais para aumentarmos as chances de um encontro?
+                        </p>
+                        <a href="{{ url_for('dashboard', aba='memorias') }}" class="btn btn-primary btn-sm rounded-pill px-4">
+                            <i class="bi bi-geo-alt-fill me-1"></i>Adicionar Locais
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# --- TAB: REDE --- #}
+    <div class="tab-pane fade" id="rede" role="tabpanel" aria-labelledby="rede-tab">
+        <div class="card border-0 bg-transparent">
+            <div class="card-body p-0">
+
+                {# SEÇÃO A: SOLICITAÇÕES QUE EU ENVIEI #}
+                {% if enviados_pendentes %}
+                <div class="mb-4 px-1">
+                    <h6 class="text-uppercase text-muted fw-bold mb-3" style="font-size: 0.7rem; letter-spacing: 1px;">
+                        <i class="bi bi-send-fill me-1"></i> Aguardando Confirmação ({{ enviados_pendentes|length }})
+                    </h6>
+                    <div class="row g-2">
+                        {% for env in enviados_pendentes %}
+                        <div class="col-12 col-md-6">
+                            <div class="card border-0 shadow-sm rounded-4 bg-white border-start border-4 border-warning">
+                                <div class="card-body p-2">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <img src="{{ url_for('servir_foto_perfil', usuario_id=env.id_destinatario) }}"
+                                                 class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
+                                            <div>
+                                                <p class="mb-0 fw-bold small text-dark lh-1">{{ env.destinatario.perfil.nome_completo or env.destinatario.username }}</p>
+                                                <small class="text-muted" style="font-size: 0.65rem;">
+                                                    Enviado há {{ env.data_solicitacao | tempo_atras }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        {# Botão para cancelar a solicitação #}
+                                        <form action="{{ url_for('cancelar_convite', id_conexao=env.id) }}" method="POST" class="m-0">
+                                            {{ form_convite.csrf_token }}
+                                            <button type="submit" class="btn btn-link text-danger p-1" title="Cancelar solicitação">
+                                                <i class="bi bi-x-circle-fill"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <hr class="opacity-10 mb-4">
+                {% endif %}
+
+                {# SEÇÃO B: CONEXÕES REAIS (Amigos confirmados) #}
+                <div class="px-1">
+                    <h6 class="text-uppercase text-muted fw-bold mb-3" style="font-size: 0.7rem; letter-spacing: 1px;">
+                        <i class="bi bi-person-check-fill me-1"></i> Sua Rede de Confiança
+                    </h6>
+
+                    {% if meus_amigos %}
+                        <div class="row g-3">
+                            {% for amigo in meus_amigos %}
+                                <div class="col-12 col-lg-6">
+                                    <div class="card border-0 shadow-sm rounded-4 bg-white mb-2 card-clicavel"
+                                    onclick="window.location.href='{{ url_for('ver_perfil', usuario_id=amigo.id) }}'">
+                                        <div class="card-body p-3">
+                                            <div class="row g-3 align-items-center">
+                                                {# Lado Esquerdo: Identidade #}
+                                                <div class="col-auto">
+                                                    <div class="position-relative">
+                                                        <img src="{{ url_for('servir_foto_perfil', usuario_id=amigo.id) }}"
+                                                             class="rounded-circle border border-2 border-primary-subtle shadow-sm"
+                                                             style="width: 60px; height: 60px; object-fit: cover;">
+                                                        {% if amigo.nivel_acesso >= 10 %}
+                                                        <span class="position-absolute bottom-0 end-0 badge rounded-pill bg-primary border border-2 border-white p-1">
+                                                            <i class="bi bi-patch-check-fill" style="font-size: 0.6rem;"></i>
+                                                        </span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+
+                                                {# Centro: Afinidade #}
+                                                <div class="col">
+                                                    <h6 class="fw-bold text-dark mb-0 text-truncate" style="max-width: 150px;">
+                                                        {{ amigo.perfil.nome_completo if amigo.perfil else amigo.username }}
+                                                    </h6>
+                                                    <div class="d-flex align-items-center mt-1">
+                                                        <i class="bi bi-geo-alt-fill text-danger me-1" style="font-size: 0.7rem;"></i>
+                                                        <small class="text-muted" style="font-size: 0.7rem;">
+                                                            {{ amigo.total_locais_comum|default(0) }} em comum
+                                                        </small>
+                                                    </div>
+                                                </div>
+
+                                                {# Lado Direito: Ação de Bloqueio Executiva #}
+                                                <div class="col-auto" onclick="event.stopPropagation();">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm rounded-circle shadow-sm"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#modalBloqueio"
+                                                            data-id="{{ amigo.id }}"
+                                                            data-nome="{{ amigo.perfil.nome_completo if amigo.perfil else amigo.username }}"
+                                                            title="Bloquear Usuário">
+                                                        <i class="bi bi-shield-slash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {# Estado Vazio #}
+                        <div class="text-center py-5 bg-white rounded-4 shadow-sm border">
+                            <i class="bi bi-person-plus text-muted mb-3 d-block" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                            <h6 class="text-secondary fw-bold">Sua rede ainda está crescendo</h6>
+                            <p class="text-muted small px-4 mb-3">Aceite convites ou explore sugestões para encontrar conhecidos.</p>
+                            <button class="btn btn-primary btn-sm rounded-pill px-4" onclick="document.getElementById('sugestoes-tab').click()">
+                                Explore Sugestões
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ==========================================
+     MODAL DE BLOQUEIO IRREVERSÍVEL (PREVENTIVO)
+     ========================================== -->
+<div class="modal fade" id="modalBloqueio" tabindex="-1" aria-labelledby="modalBloqueioLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header bg-danger text-white rounded-top-4 border-0 py-3">
+                <h5 class="modal-title fw-bold" id="modalBloqueioLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Ação Irreversível
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-close="modal" aria-label="Close"></button>
+            </div>
+
+            <form id="formBloqueio" action="" method="POST">
+                {{ form_convite.csrf_token }}
+                <!-- Contexto oculto opcional caso o bloqueio ocorra dentro de um local específico -->
+                <input type="hidden" name="id_local_contexto" value="{{ local_atual_id|default('') }}">
+
+                <div class="modal-body p-4">
+                    <p class="text-dark mb-3">
+                        Você está prestes a bloquear permanentemente <strong id="nomeUsuarioBloqueio"></strong>.
+                    </p>
+                    <div class="alert alert-warning rounded-3 small mb-3 text-dark">
+                        <ul class="mb-0 ps-3">
+                            <li>Seus vínculos e status mudarão para sempre.</li>
+                            <li>Vocês deixarão de existir um para o outro no Feed e buscas.</li>
+                            <li>Esta ação é definitiva para segurança da sua memória social.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Coleta de Inteligência para Monitoramento de Stalkers/Importunadores -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Motivo do Bloqueio (Uso da Plataforma):</label>
+                        <select name="categoria_motivo" class="form-select rounded-3 small" required>
+                            <option value="outros" selected>Outros motivos / Particular</option>
+                            <option value="importunacao">Importunação / Stalking</option>
+                            <option value="perfil_falso">Perfil Falso / Suspeito</option>
+                            <option value="comportamento_abusivo">Comportamento Inadequado</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label small fw-bold text-muted">Relato Adicional (Opcional/Confidencial):</label>
+                        <textarea name="relato_usuario" class="form-control rounded-3 small" rows="2" placeholder="Detalhes que ajudem a administração a auditar este perfil..."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-0 p-3 bg-light rounded-bottom-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-light rounded-pill px-3 small fw-bold" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 small fw-bold">Confirmar Bloqueio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. Controle das Abas via Parâmetros de URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const activeTab = urlParams.get('tab');
+
+    if (activeTab) {
+        const tabButton = document.querySelector(`#${activeTab}-tab`);
+        if (tabButton) {
+            document.querySelectorAll('#conexaoTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('show', 'active'));
+
+            const targetPane = document.querySelector(`#${activeTab}`);
+            tabButton.classList.add('active');
+            targetPane.classList.add('show', 'active');
+        }
+    }
+
+    // 2. Escuta a abertura do modal de bloqueio para injetar os dados dinamicamente
+    const modalBloqueio = document.getElementById('modalBloqueio');
+    if (modalBloqueio) {
+        modalBloqueio.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const usuarioId = button.getAttribute('data-id');
+            const usuarioNome = button.getAttribute('data-nome');
+
+            const nomeSpan = modalBloqueio.querySelector('#nomeUsuarioBloqueio');
+            nomeSpan.textContent = usuarioNome;
+
+            const form = modalBloqueio.querySelector('#formBloqueio');
+            form.action = `/bloquear_usuario/${usuarioId}`;
+        });
+    }
+});
+</script>

@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .admin-title { color: #000000 !important; font-weight: bold; }
+
+    /* Ajustes do Accordion para não perder cores */
+    .accordion-button:not(.collapsed) {
+        background-color: #2c3034 !important;
+        color: #ffc107 !important;
+        box-shadow: none !important;
+    }
+    .accordion-button {
+        background-color: #212529 !important;
+        color: #ffc107 !important;
+    }
+    .accordion-button::after {
+        filter: invert(1) grayscale(100%) brightness(200%);
+    }
+    .user-row:hover { background-color: #323539 !important; }
+    .ui-autocomplete {
+        z-index: 9999 !important; /* Joga a lista para a frente de tudo */
+        background-color: #343a40 !important; /* Fundo escuro idêntico ao painel */
+        color: #ffffff !important;
+        border: 1px solid #ffc107 !important; /* Bordinha amarela dos seus blocos */
+        max-height: 250px;
+        overflow-y: auto;
+        font-size: 0.9rem;
+    }
+    .ui-menu-item {
+        padding: 6px 12px !important;
+    }
+    .ui-menu-item .ui-state-active {
+        background-color: #ffc107 !important; /* Destaque amarelo ao passar o mouse */
+        color: #000000 !important;
+        border: none !important;
+        margin: 0 !important;
+    }
+</style>
+
+<div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="admin-title">Central do Administrador</h2>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar para o FeedIn
+            </a>
+        </div>
+
+        <div class="ms-auto me-3">
+            <input type="text" id="userSearch" class="form-control" placeholder="🔍 Buscar usuário..." style="min-width: 250px;">
+        </div>
+
+        <div class="btn-group">
+            <a href="{{ url_for('admin_novo_local') }}" class="btn btn-success">
+                <i class="fas fa-plus"></i> Novo Local
+            </a>
+            <a href="{{ url_for('admin_exportar_locais') }}" class="btn btn-outline-dark">
+                <i class="fas fa-file-csv"></i> Exportar CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- CARDS DE ESTATÍSTICAS -->
+    <div class="row mb-5">
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-primary p-3">
+                <small class="text-white-50">USUÁRIOS TOTAIS</small>
+                <h3>{{ stats.usuarios }}</h3>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-warning p-3 h-100">
+                <small class="text-warning text-uppercase fw-bold">Pioneiros</small>
+                <div class="d-flex align-items-baseline">
+                    <h3 class="mb-0">{{ stats.pioneiros }}</h3>
+                    <span class="ms-2 small text-muted">/ 100</span>
+                </div>
+                <hr class="my-2 opacity-25">
+                <span class="badge {% if stats.pioneiros < 100 %}bg-warning text-dark{% else %}bg-primary{% endif %} w-100 py-2">
+                    {% if stats.pioneiros < 100 %}MODO BETA ATIVO{% else %}MODO PRODUÇÃO{% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-dark text-white border-info p-3">
+                <small class="text-info">TAXONOMIA</small>
+                <h3>{{ stats.taxonomia }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- BLOCO DE GESTÃO DE TAXONOMIA (ESQUERDA VS DIREITA) -->
+    <div class="row g-4 mb-5">
+
+        <!-- COLUNA DA ESQUERDA: TRATAMENTO DO PAI -->
+        <div class="col-lg-5">
+            <div class="card bg-dark text-white border-secondary h-100">
+                <div class="card-header border-secondary d-flex justify-content-between align-items-center py-3">
+                    <span class="fw-bold text-uppercase text-warning" style="letter-spacing: 1px;">
+                        <i class="fas fa-sitemap"></i> 1. Consultar Termo Pai
+                    </span>
+                </div>
+                <div class="card-body">
+                    <!-- Form de Busca do Pai com Autocomplete -->
+                    <form method="POST" action="{{ url_for('admin_processar_pai') }}" class="mb-4" autocomplete="off">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="input-group">
+                            <input type="text"
+                                   id="input-termo-pai"
+                                   name="termo_pai"
+                                   list="taxonomia-sugestoes"
+                                   class="form-control bg-secondary text-white border-0"
+                                   placeholder="Digite o termo pai..."
+                                   required>
+
+                            <datalist id="taxonomia-sugestoes"></datalist>
+                            <button class="btn btn-warning fw-bold text-dark" type="submit">Buscar / Ajustar</button>
+                        </div>
+                    </form>
+
+                    <!-- Feedback do Pai Selecionado e Múltiplos Avôs -->
+                    {% if pai_selecionado %}
+                    <div class="p-3 rounded border border-warning mb-3" style="background-color: #2c3034;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="text-warning mb-0">Termo Carregado: <strong>{{ pai_selecionado.nome }}</strong></h5>
+                            <small class="text-muted">ID: {{ pai_selecionado.id }}</small>
+                        </div>
+
+                        <p class="small text-white-50 mb-3">Status atual no banco de dados. Clique para alternar:</p>
+
+                        <!-- BOTÃO DE ALTERNÂNCIA DE ESTADO -->
+                        <div class="mb-3">
+                            {% if pai_selecionado.visivel_usuario == False %}
+                                <a href="{{ url_for('admin_alternar_visibilidade_pai', pai_id=pai_selecionado.id) }}" class="btn btn-danger w-100 fw-bold py-2">
+                                    <i class="fas fa-child"></i> Definido como Filho
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('admin_alternar_visibilidade_pai', pai_id=pai_selecionado.id) }}" class="btn btn-warning text-dark w-100 fw-bold py-2">
+                                    <i class="fas fa-sitemap"></i> Definido como Pai
+                                </a>
+                            {% endif %}
+                        </div>
+
+                        {# GESTÃO MULTIPLA DE AVÔS #}
+                        {% if pai_selecionado.visivel_usuario == True %}
+                            <hr class="border-secondary my-3">
+
+                            <!-- EXIBIÇÃO DOS AVÔS ATUAIS -->
+                            <div class="mb-3">
+                                <span class="small d-block text-white-50 mb-1"><i class="fas fa-layer-group"></i> Grupos Superiores Vinculados:</span>
+                                {% if avos %}
+                                    <div id="container-avos">
+                                        {% for avo in avos %}
+                                            <span id="badge-avo-{{ avo.id }}" class="badge bg-secondary border border-light-subtle text-light me-1 mb-1 p-2" style="font-size: 0.8rem; cursor: pointer;"
+                                                  title="Clique no X para desvincular"
+                                                  onclick="removerVinculoSuperior({{ pai_selecionado.id }}, {{ avo.id }}, '{{ avo.nome }}')">
+                                                {{ avo.nome }} <i class="fas fa-times ms-2 text-danger fw-bold"></i>
+                                            </span>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted small d-block italic">Nenhum grupo superior atrelado ainda.</span>
+                                {% endif %}
+                            </div>
+
+                            <!-- FORMULÁRIO PARA ADICIONAR NOVO AVÔ -->
+                            <form method="POST" action="{{ url_for('admin_vincular_pai_raiz', pai_id=pai_selecionado.id) }}" class="mt-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label small text-info fw-bold">Atrelar a mais um Grupo Superior:</label>
+
+                                <div class="input-group input-group-sm">
+                                    <select name="raiz_nome" class="form-select bg-secondary text-white border-0" required>
+                                        <option value="" selected disabled>Escolha a Raiz de Tela...</option>
+                                        <option value="Estilos e Marcas">Estilos e Marcas</option>
+                                        <option value="Alimentação e Bebidas">Alimentação e Bebidas</option>
+                                        <option value="Atendimento e Ambiente">Atendimento e Ambiente</option>
+                                        <option value="Moda e Acessórios">Moda e Acessórios</option>
+                                        <option value="Saúde e Bem-estar">Saúde e Bem-estar</option>
+                                    </select>
+                                    <button class="btn btn-info text-dark fw-bold" type="submit">Atrelar</button>
+                                </div>
+                            </form>
+                        {% endif %}
+
+                        <hr class="border-secondary my-2">
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <span class="small"><i class="fas fa-project-diagram text-info"></i> Qtd de Filhos Vinculados:</span>
+                            <span class="badge bg-info rounded-pill fs-6">{{ qtd_filhos }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUNA DA DIREITA: TRATAMENTO DOS FILHOS -->
+        <div class="col-lg-7">
+            <div class="card bg-dark text-white border-secondary h-100">
+                <div class="card-header border-secondary py-3">
+                    <span class="fw-bold text-uppercase text-info" style="letter-spacing: 1px;">
+                        <i class="fas fa-project-diagram"></i> 2. Tratamento dos Filhos (Dependentes)
+                    </span>
+                </div>
+                <div class="card-body">
+
+                    {% if pai_selecionado and pai_selecionado.visivel_usuario == True %}
+
+                        <!-- Caixa de Seleção do Comportamento da Tela -->
+                        <div class="mb-4">
+                            <label class="form-label text-info small fw-bold">Selecione o Tipo de Operação dos Filhos:</label>
+                            <select id="selectOperacaoFilho" class="form-select bg-secondary text-white border-0">
+                                <option value="" selected disabled>Escolha o próximo passo...</option>
+                                <option value="pesquisa">🔍 Adequar Termo Já Existente (Pesquisa)</option>
+                                <option value="manual">✍️ Inserção Manual (Termo Único)</option>
+                                <option value="automatica">⚡ Inserção Automática (Importar Lista .CSV)</option>
+                            </select>
+                        </div>
+
+                        <!-- FORMULÁRIO 1: VINCULAR EXISTENTE -->
+                        <div id="sectionPesquisa" class="filho-section d-none p-3 rounded mb-3" style="background-color: #212529;">
+                            <form method="POST" action="{{ url_for('admin_vincular_filho_existente', pai_id=pai_selecionado.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label small text-white-50">Vincular Termo Existente na Base:</label>
+                                <div class="input-group">
+                                    <input type="text" name="termo_child_existe" class="form-control bg-secondary text-white border-0" placeholder="Busque o filho existente..." required>
+                                    <button class="btn btn-info text-dark fw-bold" type="submit">Vincular</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- FORMULÁRIO 2: INSERÇÃO MANUAL -->
+                        <div id="sectionManual" class="filho-section d-none p-3 rounded mb-3" style="background-color: #212529;">
+                            <form method="POST" action="{{ url_for('admin_inserir_filho_manual', pai_id=pai_selecionado.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label small text-white-50">Cadastrar e Vincular Novo Filho:</label>
+                                <div class="input-group">
+                                    <input type="text" name="termo_filho_manual" class="form-control bg-secondary text-white border-0" placeholder="Nome do novo subitem..." required>
+                                    <button class="btn btn-warning text-dark fw-bold" type="submit">Gravar Novo</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- FORMULÁRIO 3: IMPORTAÇÃO CSV -->
+                        <div id="sectionAutomatica" class="filho-section d-none p-3 rounded mb-3" style="background-color: #212529;">
+                            <form method="POST" action="{{ url_for('admin_importar_filhos_csv', pai_id=pai_selecionado.id) }}" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label small text-white-50">Importação em Massa via Lista (.CSV):</label>
+                                <div class="input-group">
+                                    <input type="file" name="arquivo_csv" class="form-control bg-secondary text-white border-0" accept=".csv" required>
+                                    <button class="btn btn-success fw-bold" type="submit">Processar CSV</button>
+                                </div>
+                            </form>
+                        </div>
+
+                    {% else %}
+                        <!-- TELA DE BLOQUEIO / ALERTA DE CONFIGURAÇÃO -->
+                        <div class="d-flex flex-column align-items-center justify-content-center text-center h-100 py-5 px-3">
+                            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mb-3" style="width: 70px; height: 70px; background-color: rgba(255,193,7,0.1) !important;">
+                                <i class="fas fa-lock text-warning fs-3"></i>
+                            </div>
+                            <h6 class="text-warning fw-bold">Painel de Vínculos Bloqueado</h6>
+                            <p class="small text-white-50" style="max-width: 320px;">
+                                Para gerenciar subitens, primeiro consulte um termo na coluna da esquerda e certifique-se de mantê-lo
+                                <span class="text-warning fw-bold">Definido como Pai</span>.
+                            </p>
+                        </div>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- DEVOLUÇÃO DO AJUSTE PONTUAL SOLICITADO: NOVO BLOCO 3 ADAPTADO COM INTELIGÊNCIA COMERCIAL -->
+    {% if pai_selecionado %}
+    <div class="row mb-5">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-warning">
+                <div class="card-header border-warning py-3">
+                    <span class="fw-bold text-uppercase text-warning" style="letter-spacing: 1px;">
+                        <i class="fas fa-ad"></i> 3. Publicidade Contextual Avançada (Motor Comercial Beta)
+                    </span>
+                </div>
+                <div class="card-body">
+                    <!-- Rota apontando dinamicamente para o ID da Taxonomia ativa -->
+                    <form method="POST" action="{{ url_for('admin_configurar_anuncio', taxonomia_id=pai_selecionado.id) }}" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Empresa Proprietária do Anúncio (Digite o nome):</label>
+
+                                <input type="text" id="busca_local_autocomplete" class="form-control bg-secondary text-white border-0"
+                                       placeholder="Comece a digitar o nome..." required>
+
+                                <input type="hidden" id="local_id_hidden" name="local_id" required>
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label small text-white-50">Link de Destino do Botão (Ex: WhatsApp ou Instagram):</label>
+                                <input type="url" name="url_destino" class="form-control bg-secondary text-white border-0"
+                                       placeholder="https://wa.me/5519..." required>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Upload da Arte do Flyer (Proporção 1:1 - Saída WebP):</label>
+                                <input type="file" name="flyer_arte" class="form-control bg-secondary text-white border-0" accept="image/*">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small text-white-50">Data de Expiração da Divulgação (Janela de Avaliação):</label>
+                                <input type="date" name="data_expiracao" class="form-control bg-secondary text-white border-0" required>
+                            </div>
+                        </div>
+
+                        {# Se o termo já possuir campanhas ativas mapeadas em nosso novo relacionamento #}
+                        {% if pai_selecionado.anuncios %}
+                        <div class="mb-4 p-3 rounded border border-secondary text-center" style="background-color: #212529;">
+                            <div class="row align-items-center">
+                                <div class="col-md-4 text-md-start">
+                                    <small class="text-success fw-bold d-block mb-1"><i class="fas fa-check-circle"></i> Campanha Ativa no Contexto:</small>
+                                    <span class="small text-white-50 d-block">Termo: {{ pai_selecionado.nome }}</span>
+                                    <span class="small text-warning d-block mt-2">
+                                        <i class="fas fa-eye"></i> Exibições Computadas: <strong>{{ pai_selecionado.anuncios[0].visualizacoes }}</strong>
+                                    </span>
+                                </div>
+                                <div class="col-md-8 text-md-end">
+                                    <img src="{{ url_for('static', filename='uploads/flyers/' ~ pai_selecionado.anuncios[0].url_flyer) }}"
+                                         class="img-fluid rounded border border-secondary"
+                                         style="max-height: 120px; object-fit: contain;"
+                                         alt="Flyer Ativo">
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <button type="submit" class="btn btn-warning text-dark fw-bold w-100 py-2">
+                            <i class="fas fa-rocket"></i> Validar e Injetar Publicidade no Feed
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- SEÇÃO ACCORDION: GESTÃO DE USUÁRIOS -->
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-secondary">
+                <div class="card-header border-secondary py-3">
+                    <span class="fw-bold text-uppercase" style="letter-spacing: 1px;">Gestão de Níveis e Pioneirismo</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="accordion accordion-flush" id="accordionUsuarios">
+                        {% for letra, lista_usuarios in usuarios_agrupados.items() %}
+                        <div class="accordion-item bg-dark text-white border-secondary user-group-container">
+                            <h2 class="accordion-header" id="heading-{{ letra }}">
+                                <button class="accordion-button collapsed fw-bold"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#collapse-{{ letra }}"
+                                        aria-expanded="false"
+                                        aria-controls="collapse-{{ letra }}"
+                                        style="color: #ffc107; background-color: #212529;">
+                                    <span style="font-size: 1.2rem;">{{ letra }}</span>
+                                    <span class="badge rounded-pill bg-secondary ms-2">{{ lista_usuarios|length }}</span>
+                                </button>
+                            </h2>
+
+                            <div id="collapse-{{ letra }}"
+                                 class="accordion-collapse collapse"
+                                 aria-labelledby="heading-{{ letra }}"
+                                 data-bs-parent="#accordionUsuarios">
+
+                                <div class="accordion-body p-0">
+                                    <table class="table table-dark table-hover mb-0">
+                                        <thead>
+                                            <tr class="small text-muted border-secondary">
+                                                <th class="ps-3">Usuário</th>
+                                                <th>Nível</th>
+                                                <th>Status</th>
+                                                <th class="text-end pe-3">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for u in lista_usuarios %}
+                                            <tr class="user-row align-middle border-secondary">
+                                                <td class="ps-3">
+                                                    <strong class="user-name">{{ u.username }}</strong><br>
+                                                    <small class="text-muted user-email">{{ u.email }}</small>
+                                                </td>
+                                                <td><span class="badge bg-info">{{ u.nivel_acesso }}</span></td>
+                                                <td>
+                                                    {% if u.is_pioneiro %}
+                                                        <span class="badge bg-success text-white fw-bold"><i class="fas fa-star"></i> Pioneiro</span>
+                                                    {% elif u.nivel_acesso == 1 %}
+                                                        <span class="badge bg-danger text-white fw-bold" style="border: 1px solid #ff6b6b;">
+                                                            <i class="fas fa-exclamation-triangle"></i> Inativo (Nível 1)
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary text-light border border-light-subtle">Comum</span>
+                                                    {% endif %}
+                                                </td>
+
+                                                <td class="text-end pe-3">
+                                                    <div class="btn-group">
+                                                        {% if u.nivel_acesso == 1 %}
+                                                        <a href="{{ url_for('admin_reenviar_confirmacao', usuario_id=u.id) }}"
+                                                           class="btn btn-sm btn-info text-dark me-2 fw-bold"
+                                                           title="Reenviar e-mail de confirmação">
+                                                            <i class="fas fa-paper-plane"></i> Reenviar Link
+                                                        </a>
+                                                        {% endif %}
+
+                                                        {% if not u.is_pioneiro %}
+                                                        <a href="{{ url_for('promover_pioneiro', usuario_id=u.id) }}" class="btn btn-sm btn-warning text-dark me-2 fw-bold">
+                                                            <i class="fas fa-medal"></i>
+                                                        </a>
+                                                        {% endif %}
+
+                                                        <button type="button" class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown">
+                                                            Nível
+                                                        </button>
+                                                        <ul class="dropdown-menu dropdown-menu-dark shadow">
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=9999) }}">Admin (9999)</a></li>
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=999) }}">Empreendedor (999)</a></li>
+                                                            <li><a class="dropdown-item small" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=100) }}">Cliente (100)</a></li>
+                                                            <li><hr class="dropdown-divider border-secondary"></li>
+                                                            <li><a class="dropdown-item small text-success" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=10) }}">Usuário (10)</a></li>
+                                                            <li><a class="dropdown-item small text-danger" href="{{ url_for('mudar_nivel', id_alvo=u.id, novo_nivel=0) }}">Banir (0)</a></li>
+                                                        </ul>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
+<!-- SCRIPTS JAVASCRIPT COMPLETOS -->
+<script>
+// Controle do Dropdown de Seleção de Operação de Filhos
+document.getElementById('selectOperacaoFilho')?.addEventListener('change', function() {
+    document.querySelectorAll('.filho-section').forEach(section => {
+        section.classList.add('d-none');
+    });
+
+    const valor = this.value;
+    if (valor === 'pesquisa') document.getElementById('sectionPesquisa')?.classList.remove('d-none');
+    if (valor === 'automatica') document.getElementById('sectionAutomatica')?.classList.remove('d-none');
+    if (valor === 'manual') document.getElementById('sectionManual')?.classList.remove('d-none');
+});
+
+// Sistema Integrado de Busca Alfabética de Usuários
+document.getElementById('userSearch').addEventListener('input', function() {
+    let filter = this.value.toLowerCase();
+    let groups = document.querySelectorAll('.user-group-container');
+
+    groups.forEach(group => {
+        let rows = group.querySelectorAll('.user-row');
+        let hasVisibleRow = false;
+
+        rows.forEach(row => {
+            let name = row.querySelector('.user-name').innerText.toLowerCase();
+            let email = row.querySelector('.user-email').innerText.toLowerCase();
+
+            if (name.includes(filter) || email.includes(filter)) {
+                row.style.display = '';
+                hasVisibleRow = true;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (hasVisibleRow) {
+            group.style.display = '';
+            if (filter.length > 0) {
+                let collapseElement = group.querySelector('.accordion-collapse');
+                if (!collapseElement.classList.contains('show')) {
+                    new bootstrap.Collapse(collapseElement, { show: true });
+                }
+            }
+        } else {
+            group.style.display = 'none';
+        }
+    });
+});
+
+// Mecanismo de Autocomplete Baseado em Debounce
+document.addEventListener('DOMContentLoaded', function() {
+    const inputPai = document.getElementById('input-termo-pai');
+    const dataList = document.getElementById('taxonomia-sugestoes');
+    let timeoutId = null;
+
+    if (inputPai && dataList) {
+        inputPai.addEventListener('input', function() {
+            const query = this.value.trim();
+
+            clearTimeout(timeoutId);
+
+            if (query.length < 2) {
+                dataList.innerHTML = '';
+                return;
+            }
+
+            timeoutId = setTimeout(() => {
+                fetch(`/admin/taxonomia/autocomplete?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(dados => {
+                        dataList.innerHTML = '';
+                        dados.forEach(nome => {
+                            const option = document.createElement('option');
+                            option.value = nome;
+                            dataList.appendChild(option);
+                        });
+                    })
+                    .catch(err => console.error('Erro no autocomplete de taxonomia:', err));
+            }, 300);
+        });
+    }
+});
+
+function removerVinculoSuperior(paiId, raizId, nomeRaiz) {
+    if (!confirm(`Deseja remover o vínculo com o grupo superior "${nomeRaiz}"?`)) {
+        return;
+    }
+
+    fetch(`/admin/taxonomia/remover_raiz/${paiId}/${raizId}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token() }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const badge = document.getElementById(`badge-avo-${raizId}`);
+            if (badge) {
+                badge.remove();
+            }
+
+            const container = document.getElementById('container-avos');
+            if (container && container.children.length === 0) {
+                container.innerHTML = '<span class="text-muted small d-block italic">Nenhum grupo superior atrelado ainda.</span>';
+            }
+        } else {
+            alert('Erro ao remover vínculo: ' + (data.error || 'Erro desconhecido'));
+        }
+    })
+    .catch(err => {
+        console.error('Erro na requisição:', err);
+        alert('Erro de comunicação com o servidor.');
+    });
+}
+
+// Usamos o padrão nativo do jQuery para garantir que ele espere tudo carregar na tela
+jQuery(document).ready(function($) {
+    console.log("Motor de busca ativo e ouvindo no painel!");
+
+    $("#busca_local_autocomplete").autocomplete({
+        source: function(request, response) {
+            $.ajax({
+                url: "/buscar_locais",
+                dataType: "json",
+                data: {
+                    q: request.term
+                },
+                success: function(data) {
+                    response($.map(data, function(item) {
+                        return {
+                            label: item.nome + " - " + item.info_exibicao,
+                            value: item.id,
+                            nome_puro: item.nome
+                        };
+                    }));
+                },
+                error: function(err) {
+                    console.error("Erro na comunicação AJAX:", err);
+                }
+            });
+        },
+        minLength: 2,
+        select: function(event, ui) {
+            // Preenche o campo de texto com o nome limpo e o input oculto com o ID real
+            $("#busca_local_autocomplete").val(ui.item.nome_puro);
+            $("#local_id_hidden").val(ui.item.value);
+            return false;
+        },
+        focus: function(event, ui) {
+            $("#busca_local_autocomplete").val(ui.item.nome_puro);
+            return false;
+        }
+    });
+});
+
+</script>
+{% endblock %}

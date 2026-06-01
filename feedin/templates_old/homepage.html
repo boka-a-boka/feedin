@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid p-0 bg-light min-vh-100">
+
+    {# --- NAVBAR (Apenas Navegação) --- #}
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-3 py-4" style="min-height: 100px; z-index: 1050;">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+
+            <div class="d-flex align-items-center gap-4">
+                <a class="navbar-brand fw-bold text-primary fs-4"
+                   href="{{ url_for('dashboard', aba='feed') if current_user.nivel_acesso >= 10 else '#' }}">
+                    FeedIn!
+                </a>
+
+                <!-- Menus de Rotina (Desktop) -->
+                <div class="d-none d-md-flex gap-3 align-items-center">
+                    <a href="{{ url_for('dashboard', aba='feed') }}"
+                       class="nav-link {{ 'text-primary fw-bold border-bottom border-2 border-primary' if aba == 'feed' else 'text-muted' }}
+                       {{ 'disabled opacity-50' if current_user.nivel_acesso < 10 }}">
+                        <i class="bi bi-house-door me-1"></i> Início
+                    </a>
+
+                    <a href="{{ url_for('dashboard', aba='conexoes') }}"
+                       class="nav-link {{ 'text-primary fw-bold border-bottom border-2 border-primary' if aba == 'conexoes' else 'text-muted' }}
+                       {{ 'disabled opacity-50' if current_user.nivel_acesso < 10 }}">
+                        <i class="bi bi-people me-1"></i> Conexões
+                    </a>
+
+                    <a href="{{ url_for('get_perfil', id_usuario=current_user.id) if current_user.nivel_acesso < 10 else url_for('ver_perfil', usuario_id=current_user.id) }}"
+                       class="nav-link {{ 'text-primary fw-bold border-bottom border-2 border-primary' if (aba in ['perfil', 'memorias', 'preferencias'] or request.endpoint == 'ver_perfil') else 'text-muted' }}">
+                        <i class="bi bi-person-vcard me-1"></i> Perfil
+                    </a>
+
+                    <a href="{{ url_for('dashboard', aba='locais') }} "
+                       class="nav-link {{ 'text-primary fw-bold border-bottom border-2 border-primary' if aba == 'locais' else 'text-muted' }}
+                       {{ 'disabled opacity-50' if current_user.nivel_acesso < 10 }}">
+                       <i class="bi bi-geo-alt-fill me-1"></i> Locais
+                    </a>
+
+                    {# BOTÃO ADMIN #}
+                    {% if current_user.nivel_acesso == 9999 %}
+                        <a href="{{ url_for('admin_sistema') }}" class="nav-link text-danger fw-bold">
+                            <i class="bi bi-shield-lock-fill me-1"></i> ADMIN
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# --- ÁREA DE NOTIFICAÇÕES E SAIR (Lado Direito) --- #}
+            <div class="d-flex align-items-center gap-3">
+                <div class="dropdown">
+                    <button class="btn btn-white btn-sm rounded-pill px-3 shadow-sm position-relative border"
+                            type="button" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-bell-fill text-primary"></i>
+                        <span id="badge-notificacao" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger {{ 'd-none' if not notificacoes|length > 0 }}" style="font-size: 0.65rem;">
+                            {{ notificacoes|length }}
+                        </span>
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-3 mt-2" aria-labelledby="notifDropdown" style="width: 300px;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold small">Notificações</span>
+                        </div>
+                        <div id="lista-notificacoes">
+                            {% for notif in notificacoes %}
+                                <div class="notificacao-item p-2 border-bottom small">
+                                    <strong>{{ notif.origem.username }}</strong> {{ notif.mensagem }}
+                                </div>
+                            {% else %}
+                                <p class="text-muted text-center small my-3">Nenhuma novidade.</p>
+                            {% endfor %}
+                        </div>
+                    </ul>
+                </div>
+
+                {# BOTÃO SAIR #}
+                <a href="{{ url_for('realizar_logout') }}"
+                   class="btn btn-sm rounded-pill px-3 shadow-sm fw-bold btn-sair-custom"
+                   style="background-color: #dc3545; color: #ffffff; border: none; transition: 0.3s;">
+                    <i class="bi bi-box-arrow-right me-1"></i> Sair
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    {# --- TRAVA DA ALFÂNDEGA --- #}
+    {% if not current_user.aceite_lgpd %}
+        {% include "/partials/_modal_alfandega.html" %}
+    {% endif %}
+
+    <main class="container py-4 pb-5 mb-5">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-10 col-lg-8">
+
+                {# 1. SEÇÃO DE BOAS-VINDAS (Só para quem já passou da triagem e tem sugestões) #}
+                {% if aba == 'feed' and sugestoes %}
+                    <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
+                        <div class="card-body p-4 p-md-5">
+                            <div class="text-center mb-4">
+                                <h3 class="fw-bold text-primary">🎉 Bem-vindo, Pioneiro!</h3>
+                                <p class="text-muted">Conexões sugeridas em Piracicaba:</p>
+                            </div>
+                            <div id="carrosselPioneiros" class="carousel slide">
+                                <div class="carousel-inner">
+                                    {% for item in sugestoes %}
+                                    <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                        <div class="text-center px-md-5">
+                                            <img src="{{ url_for('static', filename='fotos_perfil/' + (item.usuario.foto_perfil or 'default.jpg')) }}"
+                                                 class="shadow mb-3 border border-2 border-primary"
+                                                 style="width: 70px; height: 70px; object-fit: cover; border-radius: 50%;">
+                                            <h5 class="fw-bold mb-1">{{ item.usuario.username }}</h5>
+                                            <form action="{{ url_for('conectar_pioneiro', id_destinatario=item.usuario.id) }}" method="POST">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold mt-3">Brindar Conexão</button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <button class="carousel-control-prev" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="prev" style="filter: invert(1);"><span class="carousel-control-prev-icon"></span></button>
+                                <button class="carousel-control-next" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="next" style="filter: invert(1);"><span class="carousel-control-next-icon"></span></button>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# 2. CONTEÚDO DINÂMICO (Onde a mágica acontece) #}
+                <div id="content-area">
+                    {% if current_user.nivel_acesso < 10 %}
+                        {# FORÇA O FLUXO DE TRIAGEM #}
+                        {% if aba == 'preferencias' %} {% include "partials/_painel_interesses.html" %}
+                        {% elif aba == 'locais' %} {% include "partials/_explorar_locais.html" %}
+                        {% else %} {% include "partials/_perfil_unificado.html" %}
+                        {% endif %}
+                    {% else %}
+                        {% if aba == 'feed' %}
+                            {% for atividade in atividades_recentes %}
+                                {% with atividade=atividade, aba=aba %} {% include "partials/_feed_atividades.html" %} {% endwith %}
+                            {% else %}
+                                <div class="text-center py-5">
+                                    <p class="text-muted">Nenhuma memória ainda. Explore os locais!</p>
+                                </div>
+                            {% endfor %}
+                        {% elif aba == 'conexoes' %} {% include "partials/_conexoes.html" %}
+                        {% elif aba == 'locais' %} {% include "partials/_explorar_locais.html" %}
+                        {% elif aba in ['perfil', 'memorias', 'preferencias'] %} {% include "partials/_perfil_unificado.html" %}
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </main>
+
+        {# NAVEGAÇÃO MOBILE #}
+    {% if current_user.nivel_acesso >= 10 %}
+        <nav class="d-md-none fixed-bottom bg-white border-top d-flex justify-content-around py-3 shadow-lg rounded-top-4" style="z-index: 1040;">
+            <a href="{{ url_for('dashboard', aba='feed') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'feed' else 'text-muted' }}">
+                <i class="bi bi-house-door{{ '-fill' if aba == 'feed' }} fs-4"></i>
+            </a>
+            <a href="{{ url_for('dashboard', aba='locais') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'locais' else 'text-muted' }}">
+                <i class="bi bi-geo-alt{{ '-fill' if aba == 'locais' }} fs-4"></i>
+            </a>
+            <a href="{{ url_for('dashboard', aba='conexoes') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'conexoes' else 'text-muted' }}">
+                <i class="bi bi-people{{ '-fill' if aba == 'conexoes' }} fs-4"></i>
+            </a>
+            <a href="{{ url_for('ver_perfil', usuario_id=current_user.id) }}" class="text-center text-decoration-none {{ 'text-primary' if aba in ['perfil', 'memorias', 'preferencias'] else 'text-muted' }}">
+                <i class="bi bi-person{{ '-fill' if aba in ['perfil', 'memorias', 'preferencias'] }} fs-4"></i>
+            </a>
+        </nav>
+    {% endif %}
+</div>
+{% endblock %}

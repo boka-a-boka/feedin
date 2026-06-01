@@ -423,13 +423,13 @@
         </div>
     </div>
 
-    {# BOTÃO FLUTUANTE VOLTAR AO TOPO: Disponível para todos se a tela tiver rolagem (mínimo 3 posts) #}
-    {% if postagens|length >= 3 %}
+    {# BOTÃO FLUTUANTE VOLTAR AO TOPO: Fixo, centralizado e flutuando no rodapé #}
+    {% if current_user.is_authenticated and user_alvo and current_user.id != user_alvo.id %}
         <div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1040;">
-            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap text-white"
+            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap"
                     onclick="voltarAoTopo()"
                     style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
-                <i class="bi bi-arrow-up-circle-fill me-2 text-white"></i>Voltar ao Topo
+                <i class="bi bi-arrow-up-circle-fill me-2"></i>Voltar ao Topo
             </button>
         </div>
     {% endif %}

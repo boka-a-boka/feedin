@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow-sm mx-auto" style="max-width: 500px;">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Cadastrar Apelidos</h5>
+        </div>
+
+        <div class="card-body">
+            <form method="POST">
+                {{ form.csrf_token }}
+
+                <div class="mb-3">
+                    {{ form.apelido.label(class="form-label fw-bold") }}
+                    {{ form.apelido(class="form-control", placeholder="Como seus amigos te chamam?") }}
+                    {% if form.apelido.errors %}
+                        <div class="text-danger small">{{ form.apelido.errors[0] }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="d-grid">
+                    {{ form.botao_confirmar(class="btn btn-success") }}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Opcional: Listar apelidos já cadastrados abaixo -->
+    <div class="mt-4 mx-auto" style="max-width: 500px;">
+        <h6>Seus apelidos atuais:</h6>
+        <ul class="list-group">
+            {% for item in current_user.apelidos %} <!-- Supondo que você tenha o 'relationship' no model Usuario -->
+                <li class="list-group-item list-group-item-light">{{ item.apelido }}</li>
+            {% else %}
+                <li class="list-group-item text-muted small">Nenhum apelido cadastrado.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

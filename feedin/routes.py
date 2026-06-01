@@ -923,190 +923,178 @@ def upload_capa():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    # --- 1. INICIALIZAÇÃO UNIVERSAL ---
-    aba_solicitada = request.args.get('aba')
-    atividades_recentes, meus_grupos = [], []
-    convites_pendentes, meus_amigos = [], []
-    total_pendentes = 0
-    enviados_pendentes = []
-    locais_populares = []
-    total_conexoes = 0
-    lista_sugestoes = []  # Inicializa vazia
+    # Engloba TODA a execução da rota para impedir o interceptador de barrar a tela
+    with database.session.no_autoflush:
+        # --- 1. INICIALIZAÇÃO UNIVERSAL ---
+        aba_solicitada = request.args.get('aba')
+        atividades_recentes, meus_grupos = [], []
+        convites_pendentes, meus_amigos = [], []
+        total_pendentes = 0
+        enviados_pendentes = []
+        locais_populares = []
+        total_conexoes = 0
+        lista_sugestoes = []
 
-    # --- 2. COLETA DE DADOS INICIAIS ---
-    perfil_usuario = current_user.perfil
-    memorias_usuario = VinculoUsuarioLocal.query.filter_by(usuario_id=current_user.id).all()
-    contagem_memorias = len(memorias_usuario)
-    contagem_preferencias = current_user.interesses.count()
+        # --- 2. COLETA DE DADOS INICIAIS ---
+        perfil_usuario = current_user.perfil
+        memorias_usuario = VinculoUsuarioLocal.query.filter_by(usuario_id=current_user.id).all()
+        contagem_memorias = len(memorias_usuario)
+        contagem_preferencias = current_user.interesses.count()
 
-    categorias = Taxonomia.query.filter(~Taxonomia.contextos.any()).order_by(Taxonomia.nome).all()
-    minhas_prefs_ids = [p.id for p in current_user.interesses]
+        categorias = Taxonomia.query.filter(~Taxonomia.contextos.any()).order_by(Taxonomia.nome).all()
+        minhas_prefs_ids = [p.id for p in current_user.interesses]
 
-    prefs_atuais_data = [
-        {
-            "id": p.id,
-            "nome": p.nome,
-            "contagem": p.contagem_uso or 0,
-            'v_usu': bool(p.visivel_usuario),
-            'v_neg': bool(p.visivel_negocio),
-            "tipo": "empresa" if any(c.visivel_negocio for c in p.contextos) else "pessoa"
-        } for p in current_user.interesses
-    ]
+        prefs_atuais_data = [
+            {
+                "id": p.id,
+                "nome": p.nome,
+                "contagem": p.contagem_uso or 0,
+                'v_usu': bool(p.visivel_usuario),
+                'v_neg': bool(p.visivel_negocio),
+                "tipo": "empresa" if any(c.visivel_negocio for c in p.contextos) else "pessoa"
+            } for p in current_user.interesses
+        ]
 
-    onboarding_completo = (
-            perfil_usuario is not None and
-            perfil_usuario.nome_completo is not None and
-            contagem_memorias >= 1 and
-            contagem_preferencias >= 10
-    )
+        onboarding_completo = (
+                perfil_usuario is not None and
+                perfil_usuario.nome_completo is not None and
+                contagem_memorias >= 1 and
+                contagem_preferencias >= 10
+        )
 
-    notificacoes_sino = Notificacao.query.filter_by(
-        id_usuario_destino=current_user.id,
-        lida=False
-    ).order_by(Notificacao.data_criacao.desc()).all()
+        notificacoes_sino = Notificacao.query.filter_by(
+            id_usuario_destino=current_user.id,
+            lida=False
+        ).order_by(Notificacao.data_criacao.desc()).all()
 
-    # --- 3. LÓGICA DE DIRECIONAMENTO ---
-    if current_user.nivel_acesso >= 10:
-        aba = aba_solicitada if aba_solicitada else 'feed'
-    else:
-        if not perfil_usuario or not perfil_usuario.nome_completo:
-            aba = 'perfil'
-        elif contagem_memorias < 1:
-            aba = 'memorias'
-        elif contagem_preferencias < 10:
-            aba = 'preferencias'
+        # --- 3. LÓGICA DE DIRECIONAMENTO ---
+        if current_user.nivel_acesso >= 10:
+            aba = aba_solicitada if aba_solicitada else 'feed'
         else:
-            aba = 'perfil'
+            if not perfil_usuario or not perfil_usuario.nome_completo:
+                aba = 'perfil'
+            elif contagem_memorias < 1:
+                aba = 'memorias'
+            elif contagem_preferencias < 10:
+                aba = 'preferencias'
+            else:
+                aba = 'perfil'
 
-    # --- 4. BUSCA DE DADOS SOCIAIS ---
-    if onboarding_completo or current_user.nivel_acesso >= 10:
-        meus_grupos = MembroGrupo.query.filter_by(id_usuario=current_user.id).all()
-        convites_pendentes = Conexoes.query.filter_by(id_destinatario=current_user.id, status='pendente').all()
-        total_pendentes = len(convites_pendentes)
+        # --- 4. FLUXO DE DADOS DE ABAS ---
+        if onboarding_completo or current_user.nivel_acesso >= 10:
+            meus_grupos = MembroGrupo.query.filter_by(id_usuario=current_user.id).all()
+            convites_pendentes = Conexoes.query.filter_by(id_destinatario=current_user.id, status='pendente').all()
+            total_pendentes = len(convites_pendentes)
 
-        enviados_pendentes = Conexoes.query.filter_by(
-            id_remetente=current_user.id,
-            status='pendente'
-        ).order_by(Conexoes.data_solicitacao.desc()).all()
+            enviados_pendentes = Conexoes.query.filter_by(
+                id_remetente=current_user.id,
+                status='pendente'
+            ).order_by(Conexoes.data_solicitacao.desc()).all()
 
-        if aba == 'feed':
-            # 1. Recupera as atividades normais do feed
-            atividades_normais = obter_atividades_feed(current_user)
+            if aba == 'feed':
+                atividades_normais = obter_atividades_feed(current_user)
 
-            # 2. Busca apenas alertas de marcações já resolvidas direcionadas a mim
-            alertas_confirmacao = Notificacao.query.filter_by(
-                id_usuario_destino=current_user.id,
-                tipo='marcacao',
-                lida=False
-            ).order_by(Notificacao.data_criacao.desc()).all()
+                alertas_confirmacao = Notificacao.query.filter_by(
+                    id_usuario_destino=current_user.id,
+                    tipo='marcacao',
+                    lida=False
+                ).order_by(Notificacao.data_criacao.desc()).all()
 
-            # 3. Unifica no topo do feed.
-            atividades_recentes = alertas_confirmacao + atividades_normais
+                atividades_recentes = alertas_confirmacao + atividades_normais
 
-            # 🎯 ALINHAMENTO DO TIME DOS PROIBIDOS: Sistema de respiro igual ao da rota /feed
-            proximo_gatilho = random.randint(1, 4)
-            contador_respiro = 0
+                proximo_gatilho = random.randint(1, 4)
+                contador_respiro = 0
 
-            for atividade in atividades_recentes:
-                contador_respiro += 1
+                for atividade in atividades_recentes:
+                    contador_respiro += 1
+                    if contador_respiro >= proximo_gatilho:
+                        atividade.anuncio = obter_publicidade_contextual(atividade)
+                        if atividade.anuncio:
+                            contador_respiro = 0
+                            proximo_gatilho = random.randint(1, 6)
+                    else:
+                        atividade.anuncio = None
 
-                # Se a atividade atingiu o número do sorteio, tenta injetar o anúncio
-                if contador_respiro >= proximo_gatilho:
-                    atividade.anuncio = obter_publicidade_contextual(atividade)
+                lista_sugestoes = obter_sugestoes_carrossel(current_user)
 
-                    # Se o anúncio foi injetado com sucesso, reinicia o respiro dinâmico
-                    if atividade.anuncio:
-                        contador_respiro = 0
-                        proximo_gatilho = random.randint(1, 6)
-                else:
-                    # Garante que a atividade está limpa de anúncios
-                    atividade.anuncio = None
+            if aba == 'conexoes':
+                conexoes_aceitas = Conexoes.query.filter(
+                    ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)),
+                    (Conexoes.status == 'aceito')
+                ).all()
 
-            # Mantém o carregamento do carrossel
-            lista_sugestoes = obter_sugestoes_carrossel(current_user)
+                meus_locais_ids = [m.local_id for m in memorias_usuario]
 
-        if aba == 'conexoes':
-            # 1. PARTE: MINHA REDE (Amigos Atuais)
-            conexoes_aceitas = Conexoes.query.filter(
-                ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)),
-                (Conexoes.status == 'aceito')
-            ).all()
+                for c in conexoes_aceitas:
+                    amigo = c.destinatario if c.id_remetente == current_user.id else c.remetente
+                    amigo.total_prefs_comum = len([t for t in amigo.interesses if t.id in minhas_prefs_ids])
+                    locais_amigo = [m.local_id for m in VinculoUsuarioLocal.query.filter_by(usuario_id=amigo.id).all()]
+                    amigo.total_locais_comum = len(set(meus_locais_ids) & set(locais_amigo))
+                    amigo.data_conexao = c.data_aceite.strftime('%m/%Y') if c.data_aceite else "Recente"
+                    meus_amigos.append(amigo)
 
-            meus_locais_ids = [m.local_id for m in memorias_usuario]
+                total_conexoes = len(meus_amigos)
+                lista_sugestoes = obter_todas_sugestoes_aba(current_user)
 
-            for c in conexoes_aceitas:
-                amigo = c.destinatario if c.id_remetente == current_user.id else c.remetente
-                # Afinidade calculada apenas para quem já é amigo
-                amigo.total_prefs_comum = len([t for t in amigo.interesses if t.id in minhas_prefs_ids])
-                locais_amigo = [m.local_id for m in VinculoUsuarioLocal.query.filter_by(usuario_id=amigo.id).all()]
-                amigo.total_locais_comum = len(set(meus_locais_ids) & set(locais_amigo))
-                amigo.data_conexao = c.data_aceite.strftime('%m/%Y') if c.data_aceite else "Recente"
-                meus_amigos.append(amigo)
+            if aba != 'conexoes':
+                total_conexoes = Conexoes.query.filter(
+                    ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)),
+                    (Conexoes.status == 'aceito')
+                ).count()
 
-            total_conexoes = len(meus_amigos)
+            if aba == 'locais':
+                locais_populares = database.session.query(
+                    Local,
+                    func.count(VinculoUsuarioLocal.id).label('total')
+                ).join(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id) \
+                    .group_by(Local.id) \
+                    .having(func.count(VinculoUsuarioLocal.id) > 0) \
+                    .order_by(func.count(VinculoUsuarioLocal.id).desc(), Local.nome.asc()) \
+                    .all()
 
-            # 2. PARTE: SUGESTÕES (Aba Completa - Profundo)
-            lista_sugestoes = obter_todas_sugestoes_aba(current_user)
+        publicacoes_banco = Publicacao.query.order_by(Publicacao.data_cadastro.desc()).all()
+        for pub in publicacoes_banco:
+            pub.anuncio = obter_publicidade_contextual(pub)
 
-        # Cálculo do total para os cards do topo (Se não estiver na aba conexões)
-        if aba != 'conexoes':
-            total_conexoes = Conexoes.query.filter(
-                ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)),
-                (Conexoes.status == 'aceito')
-            ).count()
+        # --- 5. FORMULÁRIOS UNIVERSAIS ---
+        form_p = FormPerfil(obj=perfil_usuario)
+        form_a = FormApelido()
+        form_convite = FormConvite()
+        lista_de_convites = current_user.convites_enviados_whats
 
-        if aba == 'locais':
-            locais_populares = database.session.query(
-                Local,
-                func.count(VinculoUsuarioLocal.id).label('total')
-            ).join(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id) \
-                .group_by(Local.id) \
-                .having(func.count(VinculoUsuarioLocal.id) > 0) \
-                .order_by(func.count(VinculoUsuarioLocal.id).desc(), Local.nome.asc()) \
-                .all()
+        try:
+            form_p.genero.choices = [(g.id, g.genero) for g in Generos.query.all()]
+            form_p.estado_civil.choices = [(e.id, e.estado_civil) for e in EstadoCivil.query.all()]
+        except Exception:
+            form_p.genero.choices = []
+            form_p.estado_civil.choices = []
 
-    publicacoes_banco = Publicacao.query.order_by(Publicacao.data_cadastro.desc()).all()
-    for pub in publicacoes_banco:
-        pub.anuncio = obter_publicidade_contextual(pub)
-
-    # --- 5. FORMULÁRIOS ---
-    form_p = FormPerfil(obj=perfil_usuario)
-    form_a = FormApelido()
-    form_convite = FormConvite()
-    lista_de_convites = current_user.convites_enviados_whats
-
-    try:
-        form_p.genero.choices = [(g.id, g.genero) for g in Generos.query.all()]
-        form_p.estado_civil.choices = [(e.id, e.estado_civil) for e in EstadoCivil.query.all()]
-    except Exception:
-        form_p.genero.choices = []
-        form_p.estado_civil.choices = []
-
-    return render_template("homepage.html",
-                           aba=aba,
-                           perfil=perfil_usuario,
-                           contagem_memorias=contagem_memorias,
-                           contagem_preferencias=contagem_preferencias,
-                           memorias_usuario=memorias_usuario,
-                           sugestoes=lista_sugestoes,
-                           atividades_recentes=atividades_recentes,
-                           meus_grupos=meus_grupos,
-                           convites=convites_pendentes,
-                           enviados_pendentes=enviados_pendentes,
-                           meus_amigos=meus_amigos,
-                           total_pendentes=total_pendentes,
-                           total_conexoes=total_conexoes,
-                           form=form_p,
-                           form_apelido=form_a,
-                           form_convite=form_convite,
-                           usuario=current_user,
-                           categorias=categorias,
-                           minhas_prefs_ids=minhas_prefs_ids,
-                           notificacoes=notificacoes_sino,
-                           locais_populares=locais_populares,
-                           lista_de_convites=lista_de_convites,
-                           publicacoes=publicacoes_banco,
-                           minhas_prefs_json=json.dumps(prefs_atuais_data))
+        # --- 6. RETORNO DA VIEW (DENTRO DO WITH GLOBAL) ---
+        return render_template("homepage.html",
+                               aba=aba,
+                               perfil=perfil_usuario,
+                               contagem_memorias=contagem_memorias,
+                               contagem_preferencias=contagem_preferencias,
+                               memorias_usuario=memorias_usuario,
+                               sugestoes=lista_sugestoes,
+                               atividades_recentes=atividades_recentes,
+                               meus_grupos=meus_grupos,
+                               convites=convites_pendentes,
+                               enviados_pendentes=enviados_pendentes,
+                               meus_amigos=meus_amigos,
+                               total_pendentes=total_pendentes,
+                               total_conexoes=total_conexoes,
+                               form=form_p,
+                               form_apelido=form_a,
+                               form_convite=form_convite,
+                               usuario=current_user,
+                               categorias=categorias,
+                               minhas_prefs_ids=minhas_prefs_ids,
+                               notificacoes=notificacoes_sino,
+                               locais_populares=locais_populares,
+                               lista_de_convites=lista_de_convites,
+                               publicacoes=publicacoes_banco,
+                               minhas_prefs_json=json.dumps(prefs_atuais_data))
 
 
 @app.route('/promover_pioneiro/<int:usuario_id>')
@@ -1657,14 +1645,14 @@ def get_perfil(id_usuario):
 
         # ESTE BLOCO É O RAIO-X: Se o formulário falhar, ele dirá o porquê no terminal
     elif request.method == 'POST':
-        print(f"ERROS DE VALIDAÇÃO DETECTADOS: {form_perfil.errors}")
+#        print(f"ERROS DE VALIDAÇÃO DETECTADOS: {form_perfil.errors}")
         for campo, erros in form_perfil.errors.items():
             for erro in erros:
                 flash(f"Erro no campo {campo}: {erro}", "danger")
 
     # Debug de erros no terminal (ajuda muito agora)
-    elif request.method == 'POST':
-        print(f"ERROS NO FORMULÁRIO: {form_perfil.errors}")
+    #elif request.method == 'POST':
+    #     print(f"ERROS NO FORMULÁRIO: {form_perfil.errors}")
 
     return render_template(
         'homepage.html',
@@ -2841,9 +2829,9 @@ def obter_atividades_feed(usuario):
         )
 
         # --- O SEU RAIO-X DO SQL NO TERMINAL ---
-        print("\n=== RAIO-X: SQL GERADO PELO SQLALCHEMY ===")
-        print(query_postagens)
-        print("===========================================\n")
+        #print("\n=== RAIO-X: SQL GERADO PELO SQLALCHEMY ===")
+        #print(query_postagens)
+        #print("===========================================\n")
 
         lista_postagens = query_postagens.all()
 
@@ -4066,162 +4054,176 @@ def ver_perfil(usuario_id):
     user_alvo = Usuario.query.get_or_404(usuario_id)
     e_o_proprio = (current_user.id == user_alvo.id)
 
-    # Chamada dedicada à lógica de locais populares do usuário
-    locais_seguidos = Local.get_locais_populares_por_usuario(user_alvo.id)
+    # 1. BLINDAGEM TOTAL CONTRA AUTOFLUSH
+    with database.session.no_autoflush:
 
-    relacao = Conexoes.query.filter(
-        ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == user_alvo.id)) |
-        ((Conexoes.id_remetente == user_alvo.id) & (Conexoes.id_destinatario == current_user.id))
-    ).first()
+        # Chamada dedicada à lógica de locais populares do usuário
+        locais_seguidos = Local.get_locais_populares_por_usuario(user_alvo.id)
 
-    status_conexao = relacao.status if relacao else "nenhuma"
-    sou_remetente = (relacao.id_remetente == current_user.id) if relacao else False
+        # UNIFAÇÃO DE QUERY: Uma única consulta resolve relacao e conexao_atual
+        conexao_atual = Conexoes.query.filter(
+            ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == user_alvo.id)) |
+            ((Conexoes.id_remetente == user_alvo.id) & (Conexoes.id_destinatario == current_user.id))
+        ).first()
 
-    # 1. Memórias (Vínculos Usuario-Local antigos)
-    memorias_alvo = VinculoUsuarioLocal.query.filter_by(usuario_id=usuario_id).order_by(
-        VinculoUsuarioLocal.id.desc()).all()
+        status_conexao = conexao_atual.status if conexao_atual else "nenhuma"
+        sou_remetente = (conexao_atual.id_remetente == current_user.id) if conexao_atual else False
 
-    # 2. Conexões Confirmadas (Amizades)
-    conexoes_confirmadas = Conexoes.query.join(
-        Usuario,
-        or_(Usuario.id == Conexoes.id_remetente, Usuario.id == Conexoes.id_destinatario)
-    ).join(
-        Perfil, Usuario.id == Perfil.id_usuario
-    ).filter(
-        ((Conexoes.id_remetente == user_alvo.id) | (Conexoes.id_destinatario == user_alvo.id)),
-        (Conexoes.status == 'aceito'),
-        Usuario.id != user_alvo.id
-    ).order_by(asc(Perfil.nome_completo)).all()
+        # Memórias (Vínculos Usuario-Local antigos)
+        memorias_alvo = VinculoUsuarioLocal.query.filter_by(usuario_id=usuario_id).order_by(
+            VinculoUsuarioLocal.id.desc()).all()
 
-    # 3. Conexão Existente entre Você (Dono da sessão) e o Alvo
-    conexao_atual = Conexoes.query.filter(
-        ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == user_alvo.id)) |
-        ((Conexoes.id_remetente == user_alvo.id) & (Conexoes.id_destinatario == current_user.id))
-    ).first()
+        # Conexões Confirmadas (Amizades)
+        conexoes_confirmadas = Conexoes.query.join(
+            Usuario,
+            or_(Usuario.id == Conexoes.id_remetente, Usuario.id == Conexoes.id_destinatario)
+        ).join(
+            Perfil, Usuario.id == Perfil.id_usuario
+        ).filter(
+            ((Conexoes.id_remetente == user_alvo.id) | (Conexoes.id_destinatario == user_alvo.id)),
+            (Conexoes.status == 'aceito'),
+            Usuario.id != user_alvo.id
+        ).order_by(asc(Perfil.nome_completo)).all()
 
-    # 4. Afinidades (Tags e Locais em comum)
-    minhas_tags_ids = [t.id for t in current_user.interesses]
-    tags_em_comum = [t for t in user_alvo.interesses if t.id in minhas_tags_ids]
+        # Afinidades de tags otimizada (Usa conjuntos de IDs rápidos em vez de objetos)
+        minhas_tags_ids = [t.id for t in current_user.interesses]
+        tags_em_comum = [t for t in user_alvo.interesses if t.id in minhas_tags_ids]
 
-    # Mapeamento completo dos locais do VISITANTE (Frequenta, gerencia ou indica)
-    memorias_locais_vis = [m.local_id for m in VinculoUsuarioLocal.query.filter_by(usuario_id=current_user.id).all()]
-    grupos_ids_vis = [m.id_grupo for m in MembroGrupo.query.filter_by(id_usuario=current_user.id).all()]
-    locais_negocio_vis = [l.id for l in Local.query.filter(
-        (Local.id_empreendedor == current_user.id) | (Local.id_indicador == current_user.id)).all()]
-    meus_locais_ids = list(set(memorias_locais_vis + grupos_ids_vis + locais_negocio_vis))
+        # Mapeamento completo dos locais do VISITANTE
+        memorias_locais_vis = [m.local_id for m in
+                               VinculoUsuarioLocal.query.filter_by(usuario_id=current_user.id).all()]
+        grupos_ids_vis = [m.id_grupo for m in MembroGrupo.query.filter_by(id_usuario=current_user.id).all()]
+        locais_negocio_vis = [l.id for l in Local.query.filter(
+            (Local.id_empreendedor == current_user.id) | (Local.id_indicador == current_user.id)).all()]
+        meus_locais_ids = list(set(memorias_locais_vis + grupos_ids_vis + locais_negocio_vis))
 
-    locais_alvo_ids = [m.local_id for m in memorias_alvo]
-    locais_comum_ids = set(meus_locais_ids) & set(locais_alvo_ids)
+        locais_alvo_ids = [m.local_id for m in memorias_alvo]
+        locais_comum_ids = set(meus_locais_ids) & set(locais_alvo_ids)
 
-    # 5. Signo (Ajustado para não engolir o escopo da rota)
-    s_nome, s_icone = (None, None)
-    if user_alvo.perfil.data_nascimento:
-        res = obter_signo(user_alvo.perfil.data_nascimento)
-        s_nome, s_icone = res if res else (None, None)
+        # Signo
+        s_nome, s_icone = (None, None)
+        if user_alvo.perfil.data_nascimento:
+            res = obter_signo(user_alvo.perfil.data_nascimento)
+            s_nome, s_icone = res if res else (None, None)
 
-    # =========================================================================
-    # 6. MOTOR DO MURAL DE POSTAGENS (TRAVA DE PRIVACIDADE COMPLETA)
-    # =========================================================================
-    total_mural_bruto = Postagem.query.filter_by(id_usuario=usuario_id, ativo=True).count()
-    tem_conexao_confirmada = (status_conexao == 'aceito')
+        # =========================================================================
+        # MOTOR DO MURAL DE POSTAGENS (CORRIGIDO: LIBERA SE SEGUIR QUALQUER UMA)
+        # =========================================================================
+        total_mural_bruto = Postagem.query.filter_by(id_usuario=usuario_id, ativo=True).count()
+        tem_conexao_confirmada = (status_conexao == 'aceito')
 
-    if e_o_proprio:
-        postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
-            .filter_by(id_usuario=usuario_id, ativo=True) \
-            .order_by(Postagem.data_criacao.desc()).all()
+        if e_o_proprio:
+            postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
+                .filter_by(id_usuario=usuario_id, ativo=True) \
+                .order_by(Postagem.data_criacao.desc()).all()
 
-    elif not tem_conexao_confirmada:
-        postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
-            .filter_by(id_usuario=usuario_id, ativo=True) \
-            .order_by(Postagem.data_criacao.desc()).limit(2).all()
+        elif not tem_conexao_confirmada:
+            postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)) \
+                .filter_by(id_usuario=usuario_id, ativo=True) \
+                .order_by(Postagem.data_criacao.desc()).limit(2).all()
 
-    else:
-        post_sem_tag = and_(
-            ~Postagem.tags_afinidade.any(),
-            or_(
-                Postagem.id_local == None,
-                Postagem.id_local.in_(meus_locais_ids) if meus_locais_ids else False
+        else:
+            # Post sem tags: vê se é livre ou se pertence a um local que o visitante tem vínculo
+            post_sem_tag = and_(
+                ~Postagem.tags_afinidade.any(),
+                or_(
+                    Postagem.id_local == None,
+                    Postagem.id_local.in_(meus_locais_ids) if meus_locais_ids else False
+                )
             )
-        )
 
-        post_com_tag = and_(
-            Postagem.tags_afinidade.any(),
-            Postagem.tags_afinidade.any(Taxonomia.id.in_(minhas_tags_ids)) if minhas_tags_ids else False
-        )
+            # CORREÇÃO DA TRAVA: Se o post tem tags, o visitante precisa ter pelo menos UMA delas em seus interesses
+            post_com_tag = Postagem.tags_afinidade.any(
+                Taxonomia.id.in_(minhas_tags_ids)) if minhas_tags_ids else False
 
-        postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)).filter(
+            postagens_permitidas = Postagem.query.options(joinedload(Postagem.autor)).filter(
+                Postagem.id_usuario == usuario_id,
+                Postagem.ativo == True,
+                or_(post_sem_tag, post_com_tag)
+            ).order_by(Postagem.data_criacao.desc()).all()
+
+        # [BLINDAGEM] CONGELAMENTO IMEDIATO DOS IDs ANTES DA PUBLICIDADE MEXER NA SESSÃO
+        locais_congelados = {p.id: p.id_local for p in postagens_permitidas if p.id_local}
+
+        # =========================================================================
+        # LÓGICA DE FILTRAGEM VIA TABELAS FÍSICAS (BLINDADA CONTRA AUTOFLUSH)
+        # =========================================================================
+        ids_posts_visiveis = [p.id for p in postagens_permitidas]
+
+        posts_barrados_ids = [resultado[0] for resultado in database.session.query(Postagem.id).filter(
             Postagem.id_usuario == usuario_id,
             Postagem.ativo == True,
-            or_(post_sem_tag, post_com_tag)
-        ).order_by(Postagem.data_criacao.desc()).all()
-    # =========================================================================
+            ~Postagem.id.in_(ids_posts_visiveis) if ids_posts_visiveis else True
+        ).all()]
 
-    # =========================================================================
-    # LÓGICA DE FILTRAGEM VIA TABELAS FÍSICAS (O PENSAMENTO DO CARLOS)
-    # =========================================================================
-    # A) Coletamos o ID real de todas as postagens visíveis e localizamos os bloqueados
-    ids_posts_visiveis = [p.id for p in postagens_permitidas]
-
-    posts_barrados_ids = [resultado[0] for resultado in database.session.query(Postagem.id).filter(
-        Postagem.id_usuario == usuario_id,
-        Postagem.ativo == True,
-        ~Postagem.id.in_(ids_posts_visiveis) if ids_posts_visiveis else True
-    ).all()]
-
-    # B) Buscamos na tabela intermediária bruta o que o VISITANTE já segue
-    tags_do_visitante = [resultado[0] for resultado in database.session.query(
-        usuarios_interesses.c.taxonomia_id
-    ).filter(
-        usuarios_interesses.c.usuario_id == current_user.id
-    ).all()]
-
-    # C) Cruzamos com a tabela física 'postagem_tags' capturando o que está oculto e ele não segue
-    if posts_barrados_ids:
-        tags_nao_seguidas_ids = [resultado[0] for resultado in database.session.query(
-            postagem_tags.c.taxonomia_id
+        tags_do_visitante = [resultado[0] for resultado in database.session.query(
+            usuarios_interesses.c.taxonomia_id
         ).filter(
-            postagem_tags.c.postagem_id.in_(posts_barrados_ids),
-            ~postagem_tags.c.taxonomia_id.in_(tags_do_visitante) if tags_do_visitante else True
-        ).distinct().all()]
-    else:
-        tags_nao_seguidas_ids = []
+            usuarios_interesses.c.usuario_id == current_user.id
+        ).all()]
 
-    # D) Resolvemos em objetos reais da Taxonomia ordenados de A a Z para o Modal
-    if tags_nao_seguidas_ids:
-        tags_nao_seguidas = (
-            Taxonomia.query
-            .filter(Taxonomia.id.in_(tags_nao_seguidas_ids))
-            .order_by(Taxonomia.nome.asc())
-            .all()
-        )
-    else:
-        tags_nao_seguidas = []
-    # =========================================================================
+        if posts_barrados_ids:
+            tags_nao_seguidas_ids = [resultado[0] for resultado in database.session.query(
+                postagem_tags.c.taxonomia_id
+            ).filter(
+                postagem_tags.c.postagem_id.in_(posts_barrados_ids),
+                ~postagem_tags.c.taxonomia_id.in_(tags_do_visitante) if tags_do_visitante else True
+            ).distinct().all()]
+        else:
+            tags_nao_seguidas_ids = []
 
-    # 7. Postagens onde o USER_ALVO FOI MARCADO
-    if e_o_proprio or tem_conexao_confirmada:
-        fotos_com_alvo = Postagem.query.join(Postagem.pessoas_marcadas) \
-            .filter(Usuario.id == usuario_id, Postagem.ativo == True) \
-            .order_by(Postagem.data_criacao.desc()).all()
-    else:
-        fotos_com_alvo = []
+        if tags_nao_seguidas_ids:
+            tags_nao_seguidas = (
+                Taxonomia.query
+                .filter(Taxonomia.id.in_(tags_nao_seguidas_ids))
+                .order_by(Taxonomia.nome.asc())
+                .all()
+            )
+        else:
+            tags_nao_seguidas = []
 
-    # =========================================================================
-    # ACOPLAMENTO DO MOTOR DE PUBLICIDADE NO PERFIL DO USUÁRIO
-    # =========================================================================
-    for post in postagens_permitidas:
-        # Passamos o post pelo motor para achar o parceiro ideal baseado nas tags dele
-        post.anuncio = obter_publicidade_contextual(post)
-    # =========================================================================
+        # Postagens com marcação
+        if e_o_proprio or tem_conexao_confirmada:
+            fotos_com_alvo = Postagem.query.join(Postagem.pessoas_marcadas) \
+                .filter(Usuario.id == usuario_id, Postagem.ativo == True) \
+                .order_by(Postagem.data_criacao.desc()).all()
+        else:
+            fotos_com_alvo = []
 
-    form_convite = FormConexao()
+        # =========================================================================
+        # MOTOR DE PUBLICIDADE CONTEXTUAL COM RESPIRO ORGÂNICO (PERFIL PÚBLICO)
+        # =========================================================================
+        import random
+        anuncio_exibido_no_anterior = False
 
+        for post in postagens_permitidas:
+            # Garante que todo post comece sem anúncio residual
+            post.anuncio = None
+
+            if anuncio_exibido_no_anterior:
+                anuncio_exibido_no_anterior = False
+            else:
+                # 35% de chance de exibição randômica
+                if random.random() < 0.35:
+                    # Passamos local_contexto_id=None para desarmar a trava de concorrência comercial
+                    anuncio_gerado = obter_publicidade_contextual(post, local_contexto_id=None)
+
+                    if anuncio_gerado:
+                        post.anuncio = anuncio_gerado
+                        anuncio_exibido_no_anterior = True
+        # =========================================================================
+
+        # 2. PREPARAÇÃO DO FORMULÁRIO (Mantido original)
+        form_convite = FormConexao()
+
+    # 3. RETORNO DA ROTA (Adicionando a permissão do flyer)
     return render_template("perfil_publico.html",
                            user_alvo=user_alvo,
                            status_conexao=status_conexao,
                            sou_remetente=sou_remetente,
                            e_o_proprio=e_o_proprio,
                            postagens=postagens_permitidas,
+                           exibir_como_flyer=True,  # 🌟 Libera a exibição dos Flyers no card universal
                            total_postagens=total_mural_bruto,
                            fotos_com_voce=fotos_com_alvo,
                            memorias=memorias_alvo,
@@ -4229,7 +4231,7 @@ def ver_perfil(usuario_id):
                            conexoes_confirmadas=conexoes_confirmadas,
                            tags_comum_ids=[t.id for t in tags_em_comum],
                            tags_nao_seguidas=tags_nao_seguidas,
-                           meus_interesses_ids=set(tags_do_visitante),  # Atualizado para usar a lista limpa da tabela
+                           meus_interesses_ids=set(tags_do_visitante),
                            locais_comum_ids=locais_comum_ids,
                            locais_seguidos=locais_seguidos,
                            signo_nome=s_nome,
@@ -4237,216 +4239,160 @@ def ver_perfil(usuario_id):
                            form_convite=form_convite)
 
 
-# Rotas para o tratamento dos locais sem reivindicação
+from sqlalchemy.orm import joinedload
+
 @app.route('/local/<int:local_id>')
 @login_required
 def perfil_local(local_id):
+    database.session.rollback()
+
+    # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos para evitar fadiga na VPS
     local = Local.query.get_or_404(local_id)
 
-    # 1. GARANTIA DE VARIÁVEIS (Inicializadas no escopo principal da função)
-    atividades = []
+    # 1. GARANTIA DE VARIÁVEIS
     tags_dos_amigos = []
     atividades_formatadas = []
 
-    # 2. VERIFICAÇÃO DE VÍNCULO
+    # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO
     vinculo = VinculoUsuarioLocal.query.filter_by(
         usuario_id=current_user.id,
         local_id=local_id
     ).first()
     usuario_segue = True if vinculo else False
 
-    # 3. TAGS DOS AMIGOS (Processamos antes para garantir a existência da variável)
+    # 3. CAPTURA DE TAGS DE AFINIDADE DO PERÍMETRO
     try:
-        lista_ids_amigos = [amigo.id for amigo in current_user.amigos]
-        if lista_ids_amigos:
-            tags_dos_amigos = database.session.query(Taxonomia).join(postagem_tags) \
-                .join(Postagem).filter(
-                Postagem.id_local == local_id,
-                Postagem.id_usuario.in_(lista_ids_amigos)
-            ).distinct().all()
+        lista_ids_interesse = [amigo.id for amigo in current_user.amigos]
+        lista_ids_interesse.append(current_user.id)
+
+        tags_dos_amigos = database.session.query(Taxonomia).join(postagem_tags) \
+            .join(Postagem).filter(
+            Postagem.id_local == local_id,
+            Postagem.id_usuario.in_(lista_ids_interesse)
+        ).distinct().all()
     except Exception as e:
-        print(f"Erro ao buscar tags de amigos: {e}")
-        tags_dos_amigos = []
+        print(f"Erro ao buscar tags: {e}")
 
-    # 4. BUSCA E NORMALIZAÇÃO DE POSTAGENS
-    postagens_publicas = Postagem.query.filter_by(id_local=local_id, ativo=True) \
-        .options(joinedload(Postagem.autor).joinedload(Usuario.perfil)) \
-        .order_by(Postagem.data_criacao.desc()).all()
+    # 4. CAPTURA E FILTRAGEM DAS POSTAGENS REAIS com Otimização de Performance (joinedload)
+    postagens_totais_local = Postagem.query.filter(
+        Postagem.id_local == local_id,
+        Postagem.ativo == True
+    ).options(
+        joinedload(Postagem.autor),
+        joinedload(Postagem.tags_afinidade)
+    ).all()
 
-    for p in postagens_publicas:
-        atividades_formatadas.append({
-            'id': p.id,
-            'tipo_card': 'postagem',
-            'data_criacao': p.data_criacao,
-            'autor_objeto': p.autor,
-            'conteudo_exibicao': p.conteudo,
-            'objeto_original': p
-        })
+    total_posts_reais = len(postagens_totais_local)
+    posts_exibidos_contador = 0
 
-    # 5. BUSCA E NORMALIZAÇÃO DE VÍNCULOS
-    if local.atividades:
-        for ativ in local.atividades:
-            atividades_formatadas.append({
-                'id': ativ.id,
-                'tipo_card': 'conexao',
-                'data_criacao': ativ.data_criacao,
-                'autor_objeto': ativ.criador,
-                'conteudo_exibicao': ativ.descricao or "Começou a seguir este local.",
-                'objeto_original': ativ
-            })
+    # Captura prévia dos interesses do usuário para o Card Universal
+    meus_interesses_ids = []
+    if current_user.is_authenticated and hasattr(current_user.perfil, 'tags_seguidas'):
+        meus_interesses_ids = [t.id for t in current_user.perfil.tags_seguidas]
 
-    # 6. UNIFICAÇÃO E ORDENAÇÃO
-    if atividades_formatadas:
-        atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
+    anuncio_exibido_no_anterior = False
 
-        # =========================================================================
-        # ACOPLAMENTO DO MOTOR NO PERFIL DO LOCAL (Regra de Exclusividade da Casa)
-        # =========================================================================
-        # Buscamos se o próprio local possui algum anúncio ativo cadastrado
-        from feedin.models import LocalAnuncio  # Garanta a importação se necessário
-        anuncio_do_local = LocalAnuncio.query.filter_by(local_id=local_id, status='ativo').first()
+    for p in postagens_totais_local:
+        e_o_autor = (current_user.is_authenticated and p.id_usuario == current_user.id)
 
-        if anuncio_do_local:
-            # Injeta uma frase personalizada da própria casa
-            anuncio_do_local.texto_formatado = f"Você está visitando nossa página! Apoie quem mantém viva a história de Piracicaba."
-            anuncio_do_local.mais_x = 0  # Força modo SOLO absoluto (sem carona para concorrentes aqui dentro)
-            anuncio_do_local.tag_referencia_nome = "Página Oficial"
+        if e_o_autor or usuario_segue:
+            tags_da_postagem = set(t.id for t in p.tags_afinidade)
+            tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
 
-            # Colamos esse anúncio em todas as atividades da timeline do próprio local
-            for atividade in atividades:
-                atividade['anuncio'] = anuncio_do_local
-        # =========================================================================
-        
-    # 7. RENDERIZAÇÃO FINAL (Todas as variáveis aqui foram garantidas no Passo 1)
+            liberado_por_vinculo = e_o_autor or usuario_segue
+
+            # CORREÇÃO AQUI: Se o post não tem tags, libera. Se tem, vê se a intersecção não é vazia (basta 1 em comum)
+            liberado_por_tag = not tags_da_postagem or bool(tags_da_postagem & tags_usuario_segue)
+
+            if liberado_por_vinculo or liberado_por_tag:
+                posts_exibidos_contador += 1
+
+                # =========================================================================
+                # 🎲 CADÊNCIA FLUIDA E IMPREVISÍVEL DE PUBLICIDADE
+                # =========================================================================
+                anuncio_gerado = None
+
+                # 1. Se o post anterior teve anúncio, este obrigatoriamente NÃO TERÁ (Garante o respiro)
+                if anuncio_exibido_no_anterior:
+                    anuncio_exibido_no_anterior = False
+                else:
+                    # 2. Se o caminho estiver livre, jogamos um dado (35% de chance de exibir neste post)
+                    # Isso distribui os anúncios de forma totalmente aleatória na timeline
+                    if random.random() < 0.35:
+                        anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
+
+                        # Se o motor de fato encontrou um anúncio ativo para a tag, ativamos a trava
+                        if anuncio_gerado:
+                            anuncio_exibido_no_anterior = True
+                # =========================================================================
+
+                atividades_formatadas.append({
+                    'id': p.id,
+                    'tipo_card': 'postagem',
+                    'tipo': 'postagem',
+                    'data_criacao': p.data_criacao,
+                    'data_comentario': p.data_criacao,
+                    'autor_objeto': p.autor,
+                    'autor': p.autor,
+                    'usuario': p.autor,
+                    'conteudo_exibicao': p.conteudo,
+                    'conteudo': p.conteudo,
+                    'mensagem': p.conteudo,
+                    'objeto_original': p,
+                    'anuncio': anuncio_gerado,
+                    'pessoas_marcadas': p.pessoas_marcadas_confirmadas,
+                    'id_usuario': p.id_usuario
+                })
+    # Ordenação cronológica reversa estrita das postagens
+    atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
+
+    # 5. RENDERIZAÇÃO NO TEMPLATE DE ENGAJAMENTO SOCIAL (perfil_local.html)
     return render_template('locais/perfil_local.html',
                            local=local,
                            atividades=atividades,
+                           posts_exibidos_contador=posts_exibidos_contador,
+                           total_posts_reais=total_posts_reais,
+                           total_atividades=total_posts_reais,  # Alinha com a verificação de tags ocultas do HTML
                            sugestoes_nicho=tags_dos_amigos,
                            usuario_segue=usuario_segue,
+                           context_origem='perfil_local',
+                           exibir_como_flyer=True,
+                           meus_interesses_ids=meus_interesses_ids,  # Injetado para o funcionamento das tags no card
                            rating_data=local.get_rating_data())
-
 
 @app.route('/local_v2/<int:local_id>')
 @login_required
 def perfil_local_v2(local_id):
-    local = Local.query.get_or_404(local_id)
-
-    # 1. GARANTIA DE VARIÁVEIS
-    usuario_segue = False
-    atividades_formatadas = []
-    minhas_tags_ids = [t.id for t in current_user.interesses]
-
-    # 2. VERIFICAÇÃO DE VÍNCULO
-    usuario_segue = database.session.query(VinculoUsuarioLocal).filter_by(
-        usuario_id=current_user.id, local_id=local_id
-    ).first() is not None
-
-    # 3. TAGS DOS AMIGOS
-    tags_dos_amigos = []
-    try:
-        lista_ids_amigos = [amigo.id for amigo in current_user.amigos]
-        if lista_ids_amigos:
-            tags_dos_amigos = database.session.query(Taxonomia).join(postagem_tags) \
-                .join(Postagem).filter(
-                Postagem.id_local == local_id,
-                Postagem.id_usuario.in_(lista_ids_amigos)
-            ).distinct().all()
-    except Exception as e:
-        print(f"Erro tags: {e}")
-
-    # =========================================================================
-    # 4. MOTOR DE POSTAGENS (O REAL MURAL DE HISTÓRIAS) - CORRIGIDO e ALINHADO
-    # =========================================================================
-    # Buscamos explicitamente os IDs das tags convertendo a query dinâmica em lista
-    minhas_tags_ids = [t.id for t in current_user.interesses.all()]
-
-    # Query base: Postagens ATIVAS deste local específico
-    query_base_posts = Postagem.query.filter_by(id_local=local_id, ativo=True)
-
-    # 1. TOTAL BRUTO DE POSTS REAIS DO LOCAL NO BANCO (Sem filtros de afinidade)
-    total_posts_existentes = query_base_posts.count()
-
-    # 2. SELEÇÃO DE POSTS COM FILTRO DE AFINIDADE (Garantindo que não duplique)
-    postagens_permitidas = []
-
-    # Buscamos todas as postagens ativas do local trazendo as tags em conjunto (Evita Lazy Loading)
-    todas_do_local = query_base_posts.options(
-        joinedload(Postagem.autor).joinedload(Usuario.perfil),
-        joinedload(Postagem.tags_afinidade)
-    ).all()
-
-    for p in todas_do_local:
-        # Se o post não tem nenhuma tag de afinidade, ele é público para todos neste local
-        if not p.tags_afinidade:
-            postagens_permitidas.append(p)
-        else:
-            # Se o post tem tags, checamos se o usuário possui pelo menos UMA delas
-            post_tags_ids = {tag.id for tag in p.tags_afinidade}
-            if post_tags_ids.intersection(minhas_tags_ids):
-                postagens_permitidas.append(p)
-
-    # 3. NORMALIZAÇÃO PARA A LINHA DO TEMPO (Apenas posts reais e filtrados)
-    for p in postagens_permitidas:
-        atividades_formatadas.append({
-            'id': p.id,
-            'tipo_card': 'postagem',
-            'data_criacao': p.data_criacao,
-            'autor_objeto': p.autor,
-            'conteudo_exibicao': p.conteudo,
-            'imagem_url': p.imagem_url,
-            'objeto_original': p,
-            'id_local': local.id,
-            'local': local
-        })
-
-    # Ordenação cronológica reversa
-    atividades_ordenadas = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
-
-    # PRINTS DE DEBUG PARA MONITORAR NO SEU TERMINAL:
-    print("\n=== DEBUG DE INTERESSES E POSTAGENS ===")
-    print(f"IDs das minhas tags ativas: {minhas_tags_ids}")
-    print(f"Total bruto de posts físicos no banco para este local: {total_posts_existentes}")
-    print(f"Total de posts que passaram no filtro de afinidade: {len(atividades_ordenadas)}")
-    print("=======================================\n")
-
-    return render_template('locais/perfil_local.html',
-                           local=local,
-                           atividades=atividades_ordenadas,  # Envia apenas o que deve ser exibido
-                           total_atividades=total_posts_existentes,  # O "Y" real da matemática (Total Bruto)
-                           sugestoes_nicho=tags_dos_amigos,
-                           usuario_segue=usuario_segue,
-                           rating_data=local.get_rating_data(),
-                           meus_interesses_ids=set(minhas_tags_ids))
+    from flask import redirect, url_for
+    return redirect(url_for('perfil_local', local_id=local_id))
 
 
-@app.route("/explorar-locais")
+@app.route('/locais')
+@login_required
 def lista_locais():
-    # AJUSTADO: Pegando o nome correto do campo que está no HTML ('busca_local')
-    termo_busca = request.args.get('busca_local', '').strip()
+    termo_busca = request.args.get('busca', '').strip()
 
+    # Usamos o outerjoin para que locais com 0 memórias também apareçam na lista e na busca
+    query = database.session.query(
+        Local,
+        func.count(Postagem.id).filter(Postagem.ativo == True).label('total_memorias')
+    ).outerjoin(Postagem, Local.id == Postagem.id_local)
+
+    # Aplica o filtro se o usuário digitou algo na barra de pesquisa
     if termo_busca:
-        # Busca Ampla: Outerjoin para achar locais mesmo sem seguidores
-        query = database.session.query(
-            Local,
-            func.count(VinculoUsuarioLocal.id).label('total_memorias')
-        ).outerjoin(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id) \
-         .filter(Local.nome.ilike(f'%{termo_busca}%')) \
-         .group_by(Local.id) # ESSENCIAL: Adicionado aqui também
-    else:
-        # Lista Padrão: Join simples para filtrar apenas quem já tem "vida"
-        query = database.session.query(
-            Local,
-            func.count(VinculoUsuarioLocal.id).label('total_memorias')
-        ).join(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id) \
-         .group_by(Local.id) \
-         .having(func.count(VinculoUsuarioLocal.id) > 0)
+        query = query.filter(
+            database.or_(
+                Local.nome.ilike(f"%{termo_busca}%"),
+                Local.logradouro.ilike(f"%{termo_busca}%"),
+                Local.bairro.ilike(f"%{termo_busca}%")
+            )
+        )
 
-    locais_resultados = query.order_by(func.count(VinculoUsuarioLocal.id).desc(), Local.nome.asc()).all()
+    # Agrupa pelo ID do local para garantir a integridade matemática da contagem
+    locais = query.group_by(Local.id).order_by(Local.nome).all()
 
-    # Importante: Verifique se o template esperado é 'publico/lista_locais.html'
-    # ou se deveria ser o dashboard com a aba locais.
-    return render_template("publico/lista_locais.html",
-                           locais=locais_resultados,
+    return render_template('locais/lista_locais.html',
+                           locais=locais,
                            termo_busca=termo_busca)
 
 
@@ -4664,7 +4610,7 @@ def criar_postagem():
         # 1. Instância da Postagem (O que vai para o Feed)
         nova_postagem = Postagem(
             id_usuario=current_user.id,
-            id_local=local.id if local else None,
+            id_local=local.id,
             conteudo=conteudo,
             imagem_url=nome_final,
             data_criacao=datetime.now(timezone.utc),
@@ -5282,14 +5228,14 @@ from flask import jsonify  # Certifique-se de que o jsonify está importado no t
 from flask_login import current_user
 
 
-def obter_publicidade_contextual(pub):
+def obter_publicidade_contextual(pub, local_contexto_id=None):
     """
     O Motor de Vanguarda do FeedIn: Cruza as tags do post com as tags que o
     usuário logado segue para entregar anúncios 100% personalizados e sem ofuscamento.
     """
     tags_do_post = []
 
-    # 1. CAPTURA AS TAGS DO POST (Seus mapeamentos de segurança mantidos)
+    # 1. CAPTURA AS TAGS DO POST
     if hasattr(pub, 'tags_afinidade') and pub.tags_afinidade is not None:
         tags_do_post = pub.tags_afinidade.all() if hasattr(pub.tags_afinidade, 'all') else pub.tags_afinidade
     elif hasattr(pub, 'tags') and pub.tags is not None:
@@ -5316,43 +5262,65 @@ def obter_publicidade_contextual(pub):
     import random
     from sqlalchemy import func
 
-    # Mapeia os IDs das tags que estão presentes nesta publicação
     ids_tags_post = [t.id for t in tags_do_post]
     tag_vencedora = None
 
-    # 2. O FILTRO DE AFINIDADE DO USUÁRIO (A mudança do jogo)
+    # 2. O FILTRO DE AFINIDADE DO USUÁRIO
     if current_user.is_authenticated:
-        # Pega as tags que o usuário logado de fato segue no FeedIn
-        # (Ajuste o termo 'tags_seguidas' para o nome exato da sua relação no model Usuário)
         if hasattr(current_user, 'tags_seguidas') and current_user.tags_seguidas:
             tags_usuario = current_user.tags_seguidas.all() if hasattr(current_user.tags_seguidas,
                                                                        'all') else current_user.tags_seguidas
             ids_tags_usuario = [t.id for t in tags_usuario]
-
-            # Descobre quais tags estão no post E o usuário segue ao mesmo tempo (Interseção)
             tags_em_comum = [t for t in tags_do_post if t.id in ids_tags_usuario]
 
             if tags_em_comum:
-                # Perfeito! Sorteia uma das tags que o usuário tem interesse real
                 tag_vencedora = random.choice(tags_em_comum)
 
-    # Contingência: Se o usuário não segue nenhuma tag dali ou não está logado, sorteia uma do post
     if not tag_vencedora:
         tag_vencedora = random.choice(tags_do_post)
 
-    # 3. BUSCA CIRÚRGICA BASEADA APENAS NA TAG VENCEDORA
-    anuncios_brutos = LocalAnuncio.query.filter(
+    # 3. BUSCA SELETIVA COM FILTRO DE CONCORRÊNCIA
+    from feedin.models import LocalAnuncio, Local
+
+    categoria_bloqueada_id = None
+    if local_contexto_id:
+        local_atual = Local.query.get(local_contexto_id)
+        if local_atual:
+            categoria_bloqueada_id = local_atual.id_categoria_principal
+
+    query_anuncios = LocalAnuncio.query.filter(
         LocalAnuncio.taxonomia_id == tag_vencedora.id,
         LocalAnuncio.status == 'ativo'
-    ).order_by(func.random()).all()
+    )
 
-    # Se a tag ultra-específica não tiver anúncios cadastrados, recorre ao bolo geral do post
+    if local_contexto_id and categoria_bloqueada_id:
+        query_anuncios = query_anuncios.join(Local, LocalAnuncio.local_id == Local.id).filter(
+            database.or_(
+                LocalAnuncio.local_id == local_contexto_id,
+                Local.id_categoria_principal != categoria_bloqueada_id
+            )
+        )
+
+    anuncios_brutos = query_anuncios.order_by(func.random()).all()
+
     if not anuncios_brutos:
         ids_restantes = [t.id for t in tags_do_post if t.id != tag_vencedora.id]
-        anuncios_brutos = LocalAnuncio.query.filter(
+
+        query_contingencia = LocalAnuncio.query.filter(
             LocalAnuncio.taxonomia_id.in_(ids_restantes),
             LocalAnuncio.status == 'ativo'
-        ).order_by(func.random()).all()
+        )
+
+        if local_contexto_id and categoria_bloqueada_id:
+            query_contingencia = query_contingencia.join(Local, LocalAnuncio.local_id == Local.id).filter(
+                database.or_(
+                    LocalAnuncio.local_id == local_contexto_id,
+                    Local.id_categoria_principal != categoria_bloqueada_id
+                )
+            )
+
+        anuncios_brutos = query_contingencia.order_by(func.random()).all()
+
         if anuncios_brutos:
             from feedin.models import Taxonomia
             tag_vencedora = Taxonomia.query.get(anuncios_brutos[0].taxonomia_id)
@@ -5360,19 +5328,15 @@ def obter_publicidade_contextual(pub):
     if not anuncios_brutos:
         return None
 
-    # Regra rígida de planos (Investidor premium sempre barra gratuito)
     anuncios_pagos = [a for a in anuncios_brutos if
                       hasattr(a, 'plano_marketing') and a.plano_marketing == 'patrocinado']
     anuncios_filtrados = anuncios_pagos if anuncios_pagos else anuncios_brutos
 
-    # Definição do Destaque da rodada
     anuncio_destaque = anuncios_filtrados[0]
     id_empresa_destaque = getattr(anuncio_destaque, 'local_id', None)
 
-    # Injeta o nome da tag que amarrou a ação para usarmos de justificativa no HTML
     anuncio_destaque.tag_referencia_nome = tag_vencedora.nome
 
-    # Frases informais rotativas e contextualizadas
     textos_parceria = (
         f"Esse lugar faz parte da história viva de Piracicaba e apoia o resgate de memórias sobre {tag_vencedora.nome}!",
         f"Quem é daqui conhece! Esse parceiro fecha com o FeedIn no segmento de {tag_vencedora.nome}.",
@@ -5381,7 +5345,6 @@ def obter_publicidade_contextual(pub):
     )
     anuncio_destaque.texto_formatado = random.choice(textos_parceria)
 
-    # 4. MAPEAMENTO DO ECOSSISTEMA REAL DA TAG SELECIONADA
     empresas_concorrentes = set()
     outros_parceiros_unicos = []
 
@@ -5395,13 +5358,23 @@ def obter_publicidade_contextual(pub):
     anuncio_destaque.mais_x = len(empresas_concorrentes)
     anuncio_destaque.outros_parceiros = outros_parceiros_unicos
 
-    # 5. COMPUTA VISUALIZAÇÃO
+    # =========================================================================
+    # 💥 CORREÇÃO CIRÚRGICA: ATUALIZAÇÃO ATÔMICA SEM QUEBRAR A SESSÃO
+    # =========================================================================
+    # Alteramos em memória para exibição imediata na tela corrente
     anuncio_destaque.visualizacoes += 1
+
+    # Fazemos um update cirúrgico direto via conexão SQL para não disparar o Flush do ORM
     try:
-        database.session.commit()
+        database.session.query(LocalAnuncio).filter(LocalAnuncio.id == anuncio_destaque.id).update(
+            {LocalAnuncio.visualizacoes: LocalAnuncio.visualizacoes + 1},
+            synchronize_session=False
+        )
+        # NÃO DAMOS COMMIT AQUI! Deixamos o commit para quando a requisição terminar de forma natural
+        # ou quando uma ação de escrita real do usuário acontecer.
     except Exception as e:
-        database.session.rollback()
         print(f"Erro silencioso ao computar visualização: {e}")
+    # =========================================================================
 
     return anuncio_destaque
 
@@ -5526,3 +5499,46 @@ def registrar_clique(anuncio_id):
 
     # Fallback de segurança original que você já tinha estruturado
     return redirect(url_for('ver_perfil', usuario_id=anuncio.local_id))
+
+
+@app.route("/consertar-banco")
+@login_required
+def consertar_banco_seguro():
+    # Garante que só você (Carlos) tenha acesso, baseado no seu nível de admin
+    if current_user.nivel_acesso < 10:
+        return "Acesso negado", 403
+
+    from feedin.models import Postagem, database
+
+    regras = [
+        {"ids": range(1, 13), "local": 362},
+        {"ids": range(13, 19), "local": 500},
+        {"ids": range(19, 29), "local": 668},
+        {"ids": range(31, 68), "local": 669},
+        {"ids": range(68, 81), "local": 672},
+        {"ids": range(81, 90), "local": 670},
+        {"ids": range(90, 96), "local": 474},
+        {"ids": [96], "local": 670},
+        {"ids": range(97, 107), "local": 669},
+        {"ids": range(107, 124), "local": 671}
+    ]
+
+    linhas_alteradas = 0
+
+    try:
+        for regra in regras:
+            # O .update(..., synchronize_session=False) é ultra veloz e ignora o autoflush
+            linhas = database.session.query(Postagem).filter(
+                Postagem.id.in_(list(regra["ids"]))
+            ).update(
+                {Postagem.id_local: regra["local"]},
+                synchronize_session=False
+            )
+            linhas_alteradas += linhas
+
+        database.session.commit()
+        return f"Sucesso total! {linhas_alteradas} postagens foram devidamente salvas diretamente via navegador."
+
+    except Exception as e:
+        database.session.rollback()
+        return f"Erro crítico durante a atualização: {e}", 500

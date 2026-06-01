@@ -1,0 +1,49 @@
+<div class="d-flex align-items-center gap-3">
+
+    {# Captura os estados de reação baseados no usuário atual #}
+    {% set ja_curtiu = post_obj.usuario_ja_curtiu(current_user.id) %}
+    {% set ja_rejeitou = post_obj.usuario_ja_deu_nao_curti(current_user.id) %}
+
+    {# Identifica se existem interações globais para ativar as cores de fundo #}
+    {% set tem_curtidas = post_obj.total_curtidas > 0 %}
+    {% set tem_nao_curtidas = post_obj.total_nao_curtidas > 0 %}
+    {% set tem_comentarios = post_obj.total_comentarios > 0 %}
+
+    {# 1. BOTÃO: CURTIR (Verde se ativo / Sutil com contador Verde se houver votos) #}
+    <button class="btn btn-sm group-reaction border-0 rounded-pill px-2.5 d-flex align-items-center {{ 'bg-success text-white' if ja_curtiu else ('bg-success-subtle text-success' if tem_curtidas else 'text-muted') }}"
+            onclick="reagirPostagem('{{ post_obj.id }}', 'curti')"
+            style="transition: all 0.2s ease; {% if not ja_curtiu and not tem_curtidas %}background-color: transparent;{% endif %}">
+        <i class="bi bi-hand-thumbs-up-fill me-1" style="transition: transform 0.2s;"></i>
+        <span id="contagem-curti-{{ post_obj.id }}" class="fw-bold small">{{ post_obj.total_curtidas }}</span>
+    </button>
+
+    {# 2. BOTÃO: NÃO CURTIR (Vermelho se ativo / Sutil com contador Vermelho se houver votos) #}
+    <button class="btn btn-sm group-reaction border-0 rounded-pill px-2.5 d-flex align-items-center {{ 'bg-danger text-white' if ja_rejeitou else ('bg-danger-subtle text-danger' if tem_nao_curtidas else 'text-muted') }}"
+            onclick="reagirPostagem('{{ post_obj.id }}', 'nao_curti')"
+            style="transition: all 0.2s ease; {% if not ja_rejeitou and not tem_nao_curtidas %}background-color: transparent;{% endif %}">
+        <i class="bi bi-hand-thumbs-down-fill me-1" style="transition: transform 0.2s;"></i>
+        <span id="contagem-nao-curti-{{ post_obj.id }}" class="fw-bold small">{{ post_obj.total_nao_curtidas }}</span>
+    </button>
+
+    {# 3. BOTÃO: RESPONDER COMENTÁRIO (Laranja se houver comentários / Transparente se zerado) #}
+    <span class="btn btn-sm group-reaction border-0 rounded-pill px-2.5 d-flex align-items-center cursor-pointer {{ 'bg-warning-subtle text-warning-emphasis' if tem_comentarios else 'text-muted' }}"
+          onclick="abrirComentarios('{{ post_obj.id }}')"
+          style="transition: all 0.2s ease; {% if not tem_comentarios %}background-color: transparent;{% endif %}">
+        <i class="bi bi-chat-left-text-fill me-1" style="transition: transform 0.2s;"></i>
+        <small id="contagem-comentarios-{{ post_obj.id }}" class="fw-bold">{{ post_obj.total_comentarios }}</small>
+    </span>
+
+</div>
+
+<style>
+    /* Transições suaves e efeitos para dar vida ao Beta */
+    .group-reaction {
+        cursor: pointer;
+    }
+    .group-reaction:hover i {
+        transform: scale(1.2) translateY(-1px);
+    }
+    .group-reaction:active i {
+        transform: scale(0.9);
+    }
+</style>
