@@ -37,7 +37,6 @@
 </style>
 
 {# --- DETERMINAÇÃO DE FORMATO: FLYER VS POST NORMAL --- #}
-{# O Flyer vira um card próprio se houver imagem cadastrada e o back-end der o comando de exibição #}
 {% set renderizar_como_flyer = (atividade.anuncio is defined and atividade.anuncio and atividade.anuncio.url_flyer and exibir_como_flyer) %}
 
 {% if renderizar_como_flyer %}
@@ -57,7 +56,6 @@
                 </div>
             </div>
 
-            {# 🏷️ SELO DE CONTEXTO: Trazendo a tag de referência para dentro do Flyer #}
             {% if atividade.anuncio.tag_referencia_nome %}
                 <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.65rem; text-transform: uppercase;">
                     <i class="bi bi-tag-fill me-1"></i> {{ atividade.anuncio.tag_referencia_nome }}
@@ -65,22 +63,20 @@
             {% endif %}
         </div>
 
-        {# CORPO DO FLYER: Imagem de Destaque + Frase de Impacto Unificada #}
+        {# CORPO DO FLYER #}
         <div class="position-relative container-memoria">
-            {# O link do Flyer inteiro agora passa pelo registrador interno na mesma janela #}
             <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='flyer', tag_id=atividade.anuncio.taxonomia_id) }}" class="w-100 d-block">
                 <img src="{{ url_for('static', filename='uploads/anuncios/' ~ atividade.anuncio.url_flyer) }}" class="img-respeitosa w-100">
             </a>
         </div>
 
-        {# TEXTO DE APOIO: A mesma essência de mensagem que roda no feed #}
+        {# TEXTO DE APOIO #}
         <div class="p-3 bg-white border-top">
             <p class="text-dark mb-0 fw-medium card-text style-postagem" style="font-size: 0.95rem; line-height: 1.4;">
                 <i class="bi bi-chat-quote-fill text-primary-subtle me-1"></i>
                 {{ atividade.anuncio.texto_formatado }}
             </p>
 
-            {# Botão de Ação Direta sob o Flyer #}
             <div class="mt-3">
                 <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='flyer', tag_id=atividade.anuncio.taxonomia_id) }}"
                    class="btn btn-sm btn-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
@@ -88,7 +84,7 @@
                 </a>
             </div>
         </div>
-    </div> {# 💥 FIX: Fechamento da div do Card do Flyer que estava faltando aqui! #}
+    </div>
 
 {% else %}
 
@@ -107,13 +103,11 @@
         {% set texto_exibicao = atividade.texto %}
         {% set autor_acao = atividade.usuario if atividade.usuario is defined else (Usuario.query.get(atividade.id_usuario) if Usuario is defined else none) %}
     {% else %}
-        {# GUARDA DE SEGURANÇA: Se o pai já definiu o post_obj, nós o preservamos intacto #}
         {% set post_obj = post_obj if post_obj is defined else (atividade.objeto_original if atividade.objeto_original else atividade) %}
         {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo or (post_obj.conteudo if post_obj) %}
         {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario or (post_obj.autor if post_obj) %}
     {% endif %}
 
-    {# 💥 FIX DA BORDA FANTASMA: Adicionado inline 'border-left: 0 !important;' para impedir a linha vertical de vazar na exibição normal #}
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}" style="border-left: 0 !important;">
         <div class="card-body">
 
@@ -122,8 +116,18 @@
                 <div class="d-flex align-items-center mb-3">
                     <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40" onerror="this.src='/static/fotos_perfil/default.jpg'">
                     <div class="ms-2">
-                        <span class="text-dark fw-bold d-block" style="font-size: 0.95rem;">{{ autor_acao.username }}</span>
-                        <small class="text-muted" style="font-size: 0.78rem;">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
+                        <span class="text-dark fw-bold d-inline-block" style="font-size: 0.95rem;">
+                            {{ autor_acao.username }}
+
+                            {# Pequena indicação discreta se quem está lendo foi incluído nesta memória #}
+                            {% if current_user.is_authenticated and post_obj and post_obj.todas_as_marcacoes %}
+                                {% set vc_marcado = post_obj.todas_as_marcacoes | selectattr("usuario_id", "equalto", current_user.id) | selectattr("status", "equalto", "aceito") | list %}
+                                {% if vc_marcado %}
+                                    <small class="text-muted fw-normal" style="font-size: 0.8rem;"> (com <span class="fw-bold" style="color: #a06a42;">Você</span>)</small>
+                                {% endif %}
+                            {% endif %}
+                        </span>
+                        <small class="text-muted d-block" style="font-size: 0.78rem;">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
                     </div>
                 </div>
             {% endif %}
@@ -152,20 +156,26 @@
                     {% endif %}
                 </div>
 
-                {# LINHA 1: PESSOAS MARCADAS ANTIGAS #}
-                {% if atividade and atividade.pessoas_marcadas %}
-                    <div class="mb-2">
-                        <div class="d-flex flex-wrap gap-1 align-items-center">
-                            <i class="bi bi-people text-muted small me-1"></i>
-                            {% for pessoa in atividade.pessoas_marcadas %}
-                                <a href="{{ url_for('ver_perfil', usuario_id=pessoa.id) }}" class="text-decoration-none">
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-normal" style="font-size: 0.7rem;">
-                                        @{{ pessoa.username }}
+                <div style="clear: both;"></div>
+
+                {# 👥 NOVA EXIBIÇÃO TRATADA: QUEM APARECE NA PUBLICAÇÃO (@nickname) #}
+                {% if post_obj and post_obj.todas_as_marcacoes %}
+                    {% set aprovados = post_obj.todas_as_marcacoes | selectattr("status", "equalto", "aceito") | list %}
+                    {% if aprovados | length > 0 %}
+                        <div class="mt-2 mb-3 pt-2 border-top border-light-subtle d-flex align-items-center flex-wrap gap-2">
+                            <small class="text-muted fw-medium" style="font-size: 0.78rem;">
+                                <i class="bi bi-people-fill me-1" style="color: #a06a42;"></i> Presentes na foto/relato:
+                            </small>
+                            {% for marc in aprovados %}
+                                <a href="{{ url_for('ver_perfil', usuario_id=marc.usuario_id) }}" class="text-decoration-none">
+                                    <span class="badge bg-light text-dark border rounded-pill px-2 py-1 d-inline-flex align-items-center gap-1 btn-fluxo-silencioso" style="font-size: 0.72rem;">
+                                        <img src="{{ url_for('servir_foto_perfil', usuario_id=marc.usuario_id) }}" class="rounded-circle" width="14" height="14" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                                        <strong style="color: #a06a42;">@{{ marc.usuario.username if marc.usuario else 'Usuário' }}</strong>
                                     </span>
                                 </a>
                             {% endfor %}
                         </div>
-                    </div>
+                    {% endif %}
                 {% endif %}
 
                 {# LINHA 2: TAGS DE AFINIDADE #}
@@ -221,10 +231,11 @@
             {% endif %}
         </div>
 
-        {# RODAPÉ: LOCAL E REAÇÕES #}
+        {# RODAPÉ: LOCAL, GATILHO SOCIAL E REAÇÕES #}
         <div class="px-3 pb-2 border-top bg-light bg-opacity-25">
-            <div class="pt-2 d-flex justify-content-between align-items-center">
-                <div>
+            <div class="pt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+                <div class="d-flex align-items-center gap-2">
                     {% if post_obj.id_local and context_origem != 'perfil_local' %}
                         <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
                             <span class="badge rounded-pill bg-white text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
@@ -233,6 +244,41 @@
                             </span>
                         </a>
                     {% endif %}
+
+                    {# 🚀 NOVO GATILHO SOCIAL ASSÍNCRONO: "Olha eu ali!" #}
+                    <div id="universal-container-olha-{{ post_obj.id }}">
+                        {% if current_user.is_authenticated %}
+                            {% if post_obj.id_usuario == current_user.id %}
+                                <span class="badge bg-light text-muted border rounded-pill px-2 py-1.5 fs-xs fw-normal" style="font-size: 0.72rem;">Sua Memória</span>
+                            {% else %}
+                                {# Varre as marcações vigentes para saber se exibe o botão ou o status atual do leitor #}
+                                {% set vinculo_do_leitor = namespace(status='nenhum') %}
+                                {% for m_check in post_obj.todas_as_marcacoes %}
+                                    {% if m_check.usuario_id == current_user.id %}
+                                        {% set vinculo_do_leitor.status = m_check.status %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if vinculo_do_leitor.status == 'aceito' %}
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold" style="font-size: 0.75rem;">
+                                        <i class="bi bi-check-circle-fill me-1"></i> Você está aqui!
+                                    </span>
+                                {% elif vinculo_do_leitor.status == 'pendente' %}
+                                    <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
+                                        <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold text-decoration-none btn-fluxo-silencioso"
+                                            style="font-size: 0.75rem; border-color: #d4a373; color: #a06a42; background-color: #fffaf0;"
+                                            onclick="solicitarOlhaEuAliUniversal('{{ post_obj.id }}')">
+                                        <i class="bi bi-geo-fill me-1"></i> Olha eu ali!
+                                    </button>
+                                {% endif %}
+                            {% endif %}
+                        {% else %}
+                            <small class="text-muted" style="font-size: 0.72rem;"><i class="bi bi-lock-fill me-1"></i> Entre para se identificar</small>
+                        {% endif %}
+                    </div>
                 </div>
 
                 {# GERENCIAMENTO DE EDIÇÃO/EXCLUSÃO DO USUÁRIO #}
@@ -268,18 +314,16 @@
         </div>
 
         {# ======================================================================= #}
-        {# 🎯 SUBSOLO DO CARD: FORMATAÇÃO DO BOTÃO ATUALIZADA (MODELO FEED)       #}
+        {# SUBSOLO DO CARD: APOIO COMERCIAL                                        #}
         {# ======================================================================= #}
         {% if atividade.anuncio and not atividade.anuncio.url_flyer and not (context_origem == 'perfil_local' and atividade.anuncio.local_id == local.id) %}
             <div class="feed-ad-inline-wrapper my-2 border-top pt-2" style="width: 100%; display: block;">
 
-                {# GATILHO COMPACTO IDENTADO AO GABARITO DO FEED #}
                 <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 500px;">
                     <span class="text-dark small fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.2px;">
                         <i class="bi bi-heart-fill text-danger me-1"></i> Apoio:
                     </span>
 
-                    {# Botão acionador do colapso identado ao modelo verificado #}
                     <button class="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm"
                             type="button"
                             data-bs-toggle="collapse"
@@ -297,7 +341,6 @@
                     </button>
                 </div>
 
-                {# CAIXA EXPANSÍVEL (Contendo a Frase Rotativa e a Tag de Referência) #}
                 <div class="collapse" id="ad-universal-collapse-{{ post_obj.id }}">
                     <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3 text-center" style="max-width: 500px;">
 
@@ -312,12 +355,10 @@
 
                             <h6 class="fw-bold text-dark mb-1">{{ atividade.anuncio.local.nome }}</h6>
 
-                            {# Exibição da Frase Dinâmica #}
                             <p class="card-text text-muted small mb-3" style="line-height: 1.4; font-size: 0.82rem;">
                                 {{ atividade.anuncio.texto_formatado }}
                             </p>
 
-                            {# link de clique sem target="_blank" para respeitar a navegação fluida interna #}
                             <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
                                class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
                                 <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
@@ -371,4 +412,49 @@ window.confirmarExclusaoPost = function(postId) {
         if (formExcluir) formExcluir.submit();
     }
 };
+
+function solicitarOlhaEuAliUniversal(postId) {
+    const url = `/postagem/${postId}/solicitar_marcacao`;
+    const container = document.getElementById(`universal-container-olha-${postId}`);
+
+    // Captura o CSRF Token tentando o Meta Tag ou buscando qualquer input csrf_token da página
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                      document.querySelector('meta[name="csrf_token"]')?.getAttribute('content') ||
+                      document.querySelector('input[name="csrf_token"]')?.value || '';
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            // Enviamos as duas variações comuns de cabeçalho para garantir compatibilidade com o Flask-WTF
+            'X-CSRFToken': csrfToken,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ post_id: postId }) // Garante um corpo estruturado caso a rota exija
+    })
+    .then(response => {
+        // Se der erro 400 ou qualquer outro, lança um erro com o status para não quebrar no .json()
+        if (!response.ok) {
+            throw new Error(`Servidor retornou status ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            if (container) {
+                container.innerHTML = `
+                    <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
+                        <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
+                    </button>
+                `;
+            }
+        } else {
+            alert(data.message || 'Erro ao submeter pedido.');
+        }
+    })
+    .catch(error => {
+        console.error('Erro na requisição da marcação universal:', error);
+        alert('Não foi possível completar a ação. Verifique se você está logado ou a segurança da sessão.');
+    });
+}
 </script>

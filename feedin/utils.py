@@ -178,8 +178,8 @@ def obter_signo(data):
     if (mes == 9 and dia >= 23) or (mes == 10 and dia <= 22): return ("Libra", "bi-scales")
     if (mes == 10 and dia >= 23) or (mes == 11 and dia <= 21): return ("Escorpião", "bi-bug")
     if (mes == 11 and dia >= 22) or (mes == 12 and dia <= 21): return ("Sagitário", "bi-compass")
-    if (mes == 12 and dia >= 22) or (mes == 1 and dia <= 19): return ("Capricórnio", "bi-mountains")
-    if (mes == 1 and dia >= 20) or (mes == 2 and dia <= 18): return ("Aquário", "bi-droplet")
+    if (mes == 12 and dia >= 22) or (mes == 1 and dia <= 20): return ("Capricórnio", "bi-mountains")
+    if (mes == 1 and dia >= 21) or (mes == 2 and dia <= 18): return ("Aquário", "bi-droplet")
     return ("Peixes", "bi-water")
 
 

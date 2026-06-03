@@ -30,6 +30,14 @@ class FormLogin(FlaskForm):
     senha = PasswordField("Senha", validators=[DataRequired(), Length(6, 20)])
     botao_confirmacao = SubmitField("Entrar")
 
+class FormEsqueceuSenha(FlaskForm):
+    email = StringField("E-mail Cadastrado", validators=[DataRequired(), Email()])
+    botao_confirmacao = SubmitField("Enviar Instruções")
+
+class FormResetarSenha(FlaskForm):
+    senha = PasswordField("Nova Senha", validators=[DataRequired(), Length(6, 20)])
+    confirmacao_senha = PasswordField("Confirme a Nova Senha", validators=[DataRequired(), EqualTo('senha', message='As senhas devem ser iguais.')])
+    botao_confirmacao = SubmitField("Alterar Senha")
 
 class FormPerfil(FlaskForm):
     # O único campo estritamente obrigatório para o Flask não barrar o envio

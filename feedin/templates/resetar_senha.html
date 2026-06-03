@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titulo %}Definir Nova Senha - FeedIn!{% endblock %}
+
+{% block content %}
+<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Nova Senha</h2>
+        <p class="text-muted">Escolha uma nova senha de acesso.</p>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 450px;">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="input-group mb-3">
+                <div class="form-floating flex-grow-1">
+                    <input type="password" name="senha" class="form-control" id="senha" placeholder="Nova Senha" style="height: 60px; border-top-right-radius: 0; border-bottom-right-radius: 0;" required>
+                    <label for="senha">Nova Senha</label>
+                </div>
+                <button class="btn btn-outline-secondary" type="button" onclick="alternarVisibilidade('senha', 'icone_senha')" style="border-top-right-radius: 1rem; border-bottom-right-radius: 1rem; border-color: #ced4da;">
+                    <svg id="icone_senha" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="input-group mb-4">
+                <div class="form-floating flex-grow-1">
+                    <input type="password" name="confirmacao_senha" class="form-control" id="confirmacao_senha" placeholder="Confirme a Senha" style="height: 60px; border-top-right-radius: 0; border-bottom-right-radius: 0;" required>
+                    <label for="confirmacao_senha">Confirme a Nova Senha</label>
+                </div>
+                <button class="btn btn-outline-secondary" type="button" onclick="alternarVisibilidade('confirmacao_senha', 'icone_confirma')" style="border-top-right-radius: 1rem; border-bottom-right-radius: 1rem; border-color: #ced4da;">
+                    <svg id="icone_confirma" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-primary btn-lg rounded-pill fw-bold py-3">Alterar Senha</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function alternarVisibilidade(idInput, idIcone) {
+    const input = document.getElementById(idInput);
+    const icone = document.getElementById(idIcone);
+
+    if (input.type === "password") {
+        input.type = "text";
+        // Altera o desenho do SVG para o olho cortado (ocultar)
+        icone.innerHTML = `<path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829z"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8q.086.13.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12z"/>`;
+    } else {
+        input.type = "password";
+        // Volta para o desenho do olho aberto (mostrar)
+        icone.innerHTML = `<path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>`;
+    }
+}
+</script>
+
+{% endblock %}

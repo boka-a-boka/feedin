@@ -1,43 +1,27 @@
 {% extends "base.html" %}
+{% block titulo %}Recuperar Senha - FeedIn!{% endblock %}
 
 {% block content %}
-<div class="container d-flex align-items-center justify-content-center" style="min-height: 80vh;">
-    <div class="row justify-content-center w-100">
-        <div class="col-md-5">
-            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
-                <div class="p-4 bg-primary text-white text-center">
-                    <i class="bi bi-shield-lock fs-1"></i>
-                    <h3 class="fw-bold mt-2">Recuperar Senha</h3>
-                    <p class="small mb-0 opacity-75">Enviaremos as instruções para o seu e-mail</p>
-                </div>
+<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">Recuperação de Senha</h2>
+        <p class="text-muted">Digite seu e-mail cadastrado para receber as instruções.</p>
+    </div>
 
-                <div class="card-body p-4 p-md-5 bg-white">
-                    <form method="POST" action="{{ url_for('esqueci_senha') }}">
-                        <div class="mb-4">
-                            <label for="email" class="form-label fw-bold text-dark">E-mail Cadastrado</label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-primary"></i></span>
-                                <input type="email" name="email" id="email" class="form-control bg-light border-start-0"
-                                       placeholder="exemplo@email.com" required>
-                            </div>
-                        </div>
+    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 450px;">
+        <form method="POST">
+            {{ form.csrf_token }}
 
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary btn-lg rounded-pill fw-bold shadow-sm">
-                                Enviar Link de Recuperação
-                            </button>
-                            <a href="{{ url_for('login') }}" class="btn btn-link text-decoration-none text-muted small">
-                                Voltar para o Login
-                            </a>
-                        </div>
-                    </form>
-                </div>
+            <div class="form-floating mb-4">
+                {{ form.email(class="form-control", placeholder="nome@exemplo.com", style="height: 60px;") }}
+                {{ form.email.label }}
             </div>
 
-            <div class="text-center mt-4">
-                <p class="text-muted small">© 2026 FeedIn - Piracicaba Memória Viva</p>
+            <div class="d-grid gap-2">
+                {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
+                <a href="{{ url_for('login') }}" class="btn btn-link text-decoration-none text-muted small mt-2">Voltar para o Login</a>
             </div>
-        </div>
+        </form>
     </div>
 </div>
 {% endblock %}

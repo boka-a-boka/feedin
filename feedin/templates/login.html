@@ -4,110 +4,6 @@
 
 {% block content %}
 
-<style>
-/* Estilização moderna e limpa para o botão */
-.btn-biometria-moderno {
-    background-color: #ffffff;
-    color: #495057;
-    border: 1px solid #ced4da;
-    padding: 12px 20px;
-    font-size: 15px;
-    font-weight: 500;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease-in-out;
-    width: 100%;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-
-/* Efeito sutil ao passar o mouse */
-.btn-biometria-moderno:hover {
-    background-color: #f8f9fa;
-    border-color: #adb5bd;
-    color: #212529;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
-}
-
-/* Efeito de clique */
-.btn-biometria-moderno:active {
-    background-color: #e9ecef;
-    transform: scale(0.98);
-}
-
-/* Estilo do ícone SVG */
-.btn-biometria-moderno svg {
-    color: #0d6efd; /* Azul padrão do Bootstrap */
-}
-</style>
-
-<hr class="text-muted opacity-25">
-
-<!-- O CONTAINER E O CARD AGORA FICAM LIVRES (APARECEM PARA TODO MUNDO) -->
-<div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
-    <div class="text-center mb-4">
-        <h2 class="fw-bold text-primary">Acesso à plataforma</h2>
-        <p class="text-muted">Bem-vindo de volta!</p>
-    </div>
-
-    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 450px;">
-        <form method="POST">
-            {{ form.csrf_token }}
-
-            <div class="form-floating mb-3">
-                {{ form.email(class="form-control", placeholder="nome@exemplo.com", style="height: 60px;") }}
-                {{ form.email.label }}
-            </div>
-
-            <div class="form-floating mb-4">
-                {{ form.senha(class="form-control", placeholder="Senha", style="height: 60px;") }}
-                {{ form.senha.label }}
-            </div>
-
-            <div class="d-grid">
-                {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
-            </div>
-
-            <div class="text-center mt-3 mb-2">
-                <a href="{{ url_for('esqueci_senha') }}" class="small text-muted text-decoration-none">
-                    Esqueceu sua senha? Clique aqui.
-                </a>
-            </div>
-
-            {# APENAS O BLOCO DE BIOMETRIA FICA CONDICIONAL AGORA, INSERIDO DENTRO DO CARD #}
-            {% if tem_biometria %}
-                <hr class="text-muted opacity-25">
-
-                <div class="d-grid gap-2 mt-3">
-                    <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
-                            <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
-                            <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
-                            <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
-                            <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
-                        </svg>
-                        Entrar com Face ID / Biometria
-                    </button>
-                </div>
-            {% endif %}
-        </form>
-    </div>
-</div>
-
-<style>
-.btn-biometria-moderno {
-    background-color: #ffffff; color: #495057; border: 1px solid #ced4da; padding: 12px 20px;
-    font-size: 15px; font-weight: 500; border-radius: 8px; display: flex; align-items: center;
-    justify-content: center; transition: all 0.2s ease-in-out; width: 100%; cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-.btn-biometria-moderno:hover { background-color: #f8f9fa; border-color: #adb5bd; color: #212529; box-shadow: 0 4px 6px rgba(0,0,0,0.08); }
-.btn-biometria-moderno:active { background-color: #e9ecef; transform: scale(0.98); }
-.btn-biometria-moderno svg { color: #0d6efd; }
-</style>
-
 <hr class="text-muted opacity-25">
 
 <div class="container d-flex flex-column align-items-center justify-content-center" style="min-height: 70vh;">
@@ -125,107 +21,48 @@
                 {{ form.email.label }}
             </div>
 
-            <div class="form-floating mb-4">
-                {{ form.senha(class="form-control", placeholder="Senha", style="height: 60px;") }}
-                {{ form.senha.label }}
+            <div class="input-group mb-4">
+                <div class="form-floating flex-grow-1">
+                    {{ form.senha(class="form-control", placeholder="Senha", style="height: 60px; border-top-right-radius: 0; border-bottom-right-radius: 0;", id="senha_login") }}
+                    {{ form.senha.label }}
+                </div>
+                <button class="btn btn-outline-secondary" type="button" onclick="alternarVisibilidade('senha_login', 'icone_login')" style="border-top-right-radius: 1rem; border-bottom-right-radius: 1rem; border-color: #ced4da;">
+                    <svg id="icone_login" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+                        <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                    </svg>
+                </button>
             </div>
 
             <div class="d-grid">
                 {{ form.botao_confirmacao(class="btn btn-primary btn-lg rounded-pill fw-bold py-3") }}
             </div>
 
-            <div class="text-center mt-3 mb-2">
+            <div class="text-center mt-3">
                 <a href="{{ url_for('esqueci_senha') }}" class="small text-muted text-decoration-none">
                     Esqueceu sua senha? Clique aqui.
                 </a>
             </div>
-
-            {% if tem_biometria %}
-                <hr class="text-muted opacity-25">
-                <div class="d-grid gap-2 mt-3">
-                    <button type="button" onclick="entrarComBiometria()" class="btn-biometria-moderno">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-fingerprint me-2" viewBox="0 0 16 16">
-                            <path d="M8.015 12.19c-.183 0-.366-.012-.547-.038-.76-.108-1.41-.497-1.894-1.121a.5.5 0 0 1 .788-.617c.366.467.863.757 1.448.84a4.5 4.5 0 0 0 1.387-.043.5.5 0 0 1 .29.958c-.482.145-.994.221-1.482.221z"/>
-                            <path d="M14.09 6.221a.5.5 0 0 1 .188.682A7 7 0 0 1 8.005 14.5a.5.5 0 1 1 0-1 6 6 0 0 0 5.404-6.59.5.5 0 0 1 .682-.189zM1.057 7.025a.5.5 0 0 1 .707-.062 6 6 0 0 0 9.875 1.95a.5.5 0 0 1 .752.66 7 7 0 0 1-11.272-2.228.5.5 0 0 1 .038-.32z"/>
-                            <path d="M11.603 3.999a.5.5 0 0 1 .496.536 5 5 0 0 1-4.086 4.435.5.5 0 1 1-.19-.982 4 4 0 0 0 3.242-3.493.5.5 0 0 1 .534-.496zM4.394 6.345a.5.5 0 0 1 .68-.193 3 3 0 0 0 4.14 1.173.5.5 0 1 1-.505.864 4 4 0 0 1-5.52-1.564.5.5 0 0 1 .197-.68z"/>
-                            <path d="M8 .5c-.35 0-.7.013-1.044.04a.5.5 0 0 1-.077-.997 8 8 0 0 1 2.242.04.5.5 0 1 1-.154.988A7 7 0 0 0 8 .5z"/>
-                        </svg>
-                        Entrar com Face ID / Biometria
-                    </button>
-                </div>
-            {% endif %}
         </form>
     </div>
 </div>
 
 <script>
-function ueb64ParaBytes(strBase64Url) {
-    let base64 = strBase64Url.replace(/-/g, '+').replace(/_/g, '/');
-    while (base64.length % 4) { base64 += '='; }
-    const binario = window.atob(base64);
-    const bytes = new Uint8Array(binario.length);
-    for (let i = 0; i < binario.length; i++) { bytes[i] = binario.charCodeAt(i); }
-    return bytes.buffer;
-}
+function alternarVisibilidade(idInput, idIcone) {
+    const input = document.getElementById(idInput);
+    const icone = document.getElementById(idIcone);
 
-function bytesParaUeb64(arrayBuffer) {
-    const bytes = new Uint8Array(arrayBuffer);
-    let binario = '';
-    for (let i = 0; i < bytes.byteLength; i++) { binario += String.fromCharCode(bytes[i]); }
-    return window.btoa(binario).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function entrarComBiometria() {
-    try {
-        const respostaDesafio = await fetch('/login-biometria-challenge', { method: 'POST' });
-        if (!respostaDesafio.ok) throw new Error("Falha ao iniciar o fluxo biométrico.");
-
-        const dadosDesafio = await respostaDesafio.json();
-        if (dadosDesafio.status === 'erro') { alert(dadosDesafio.mensagem); return; }
-
-        const options = {
-            publicKey: {
-                challenge: ueb64ParaBytes(dadosDesafio.challenge),
-                rpId: dadosDesafio.rpId,
-                allowCredentials: dadosDesafio.credential_ids.map(id => ({
-                    type: 'public-key',
-                    id: ueb64ParaBytes(id)
-                })),
-                userVerification: "required",
-                timeout: 60000
-            }
-        };
-
-        const assertCredencial = await navigator.credentials.get(options);
-
-        const dadosAutenticacao = {
-            id: assertCredencial.id,
-            rawId: assertCredencial.id,
-            response: {
-                clientDataJSON: bytesParaUeb64(assertCredencial.response.clientDataJSON),
-                authenticatorData: bytesParaUeb64(assertCredencial.response.authenticatorData),
-                signature: bytesParaUeb64(assertCredencial.response.signature),
-                userHandle: assertCredencial.response.userHandle ? bytesParaUeb64(assertCredencial.response.userHandle) : null
-            }
-        };
-
-        const respostaLogin = await fetch('/verificar-login-biometria', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dadosAutenticacao)
-        });
-
-        const resultadoFinal = await respostaLogin.json();
-        if (resultadoFinal.status === 'sucesso') {
-            window.location.href = resultadoFinal.redirect || '/feed';
-        } else {
-            alert("Falha na autenticação: " + resultadoFinal.mensagem);
-        }
-
-    } catch (erro) {
-        console.error("Erro no processo de biometria:", erro);
-        alert("O processo de biometria foi cancelado.");
+    if (input.type === "password") {
+        input.type = "text";
+        // Altera o desenho do SVG para o olho cortado (ocultar)
+        icone.innerHTML = `<path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829z"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8q.086.13.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12z"/>`;
+    } else {
+        input.type = "password";
+        // Volta para o desenho do olho aberto (mostrar)
+        icone.innerHTML = `<path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>`;
     }
 }
 </script>
+
 {% endblock content %}
+

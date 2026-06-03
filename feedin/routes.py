@@ -3,8 +3,10 @@ from flask import (url_for, redirect, render_template, flash, session, request,
 from feedin import app, database, bcrypt, csrf
 from flask_mail import Mail, Message
 from flask_login import login_required, login_user, logout_user, current_user
-from feedin.forms import FormLogin, FormNewUser, FormPerfil, FormApelido, FormConvite, FormConexao
-from itsdangerous import URLSafeTimedSerializer
+from flask_wtf import FlaskForm
+from feedin.forms import (FormLogin, FormNewUser, FormPerfil, FormApelido, FormConvite, FormConexao, FormEsqueceuSenha,
+                          FormResetarSenha)
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from datetime import datetime, timezone, date, timedelta
 from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Parentesco,
                            GrauParentesco, MembroGrupo, GrupoSocial, Local, Conexoes, Memoria,
@@ -20,6 +22,8 @@ from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, v
 from webauthn import (generate_registration_options, verify_registration_response, options_to_json,
                       generate_authentication_options, verify_authentication_response)
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+
+from werkzeug.security import generate_password_hash
 
 from flask_wtf.csrf import validate_csrf
 
@@ -157,6 +161,90 @@ def alterar_senha():
     # Este último return deve estar alinhado com o primeiro 'if'
     # Ele garante que se for um 'GET', o usuário volta para a tela certa
     return redirect(url_for('configuracoes', aba='seguranca'))
+
+
+try:
+    from feedin import csrf
+
+    isencao_csrf = csrf.exempt
+except ImportError:
+    # Se você não usa um objeto CSRF global, cria um decorador fantasma
+    def isencao_csrf(f):
+        return f
+
+
+def obter_serializador():
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+
+@app.route('/esqueci-senha', methods=['GET', 'POST'])
+def esqueci_senha():
+    # 1. Instanciamos o formulário oficial do WTForms
+    form = FormEsqueceuSenha()
+
+    # 2. O Flask-WTF valida o POST e o CSRF automaticamente aqui
+    if form.validate_on_submit():
+        email = form.email.data
+        user = Usuario.query.filter_by(email=email).first()
+
+        flash('Se o e-mail existir em nossa base, as instruções de recuperação foram enviadas.', 'info')
+
+        if user:
+            s = obter_serializador()
+            token = s.dumps(user.email, salt='recuperacao-senha-salt')
+            link_recuperacao = url_for('resetar_senha', token=token, _external=True)
+
+            print("\n" + "=" * 60)
+            print("📬 [SIMULAÇÃO DE E-MAIL DE RECUPERAÇÃO]")
+            print(f"Para: {user.email}")
+            print(f"Clique no link para resetar a senha:\n{link_recuperacao}")
+            print("=" * 60 + "\n")
+
+        return redirect(url_for('login'))
+
+    # 3. Passamos o 'form' explicitamente para o Jinja não dar erro de 'undefined'
+    return render_template('esqueci_senha.html', form=form)
+
+
+@app.route('/resetar-senha/<token>', methods=['GET', 'POST'])
+def resetar_senha(token):
+    s = obter_serializador()
+    try:
+        # Valida se o token é bom e tem menos de 30 minutos
+        email = s.loads(token, salt='recuperacao-senha-salt', max_age=1800)
+    except Exception:
+        flash('O link de recuperação é inválido ou expirou.', 'danger')
+        return redirect(url_for('esqueci_senha'))
+
+    # Busca o usuário dono do token
+    user = Usuario.query.filter_by(email=email).first_or_404()
+
+    if request.method == 'POST':
+        nova_senha = request.form.get('senha')
+        confirmacao = request.form.get('confirmacao_senha')
+
+        # Validações idênticas às que você já usa
+        if nova_senha != confirmacao:
+            flash('As novas senhas não coincidem.', 'danger')
+            return render_template('resetar_senha.html', token=token)
+
+        if len(nova_senha) < 6:
+            flash('A nova senha deve ter pelo menos 6 caracteres.', 'danger')
+            return render_template('resetar_senha.html', token=token)
+
+        # Processo de salvamento idêntico ao seu 'alterar_senha'
+        try:
+            hashed_password = bcrypt.generate_password_hash(nova_senha).decode('utf-8')
+            user.senha = hashed_password
+            database.session.commit()
+            flash('Sua senha foi atualizada com sucesso! Já pode acessar a plataforma.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            database.session.rollback()
+            print(f"Erro ao salvar nova senha no banco: {e}")
+            flash('Erro interno ao atualizar a senha.', 'danger')
+
+    return render_template('resetar_senha.html', token=token)
 
 
 @app.route('/confirmar-email/<token>')
@@ -590,21 +678,6 @@ def login_biometrico():
         database.session.rollback()
         print(f"Erro no login biometrico: {str(e)}")
         return jsonify({'status': 'erro', 'mensagem': f'Erro interno no servidor: {str(e)}'}), 500
-
-
-@app.route('/esqueci-senha', methods=['GET', 'POST'])
-def esqueci_senha():
-    if request.method == 'POST':
-        email = request.form.get('email')
-        user = Usuario.query.filter_by(email=email).first()
-        if user:
-            # Aqui no futuro entra o disparo de e-mail real.
-            # Por ora, você pode redirecionar para uma página de sucesso
-            # ou validar o fluxo.
-            flash('Se o e-mail existir em nossa base, as instruções foram enviadas.', 'info')
-            return redirect(url_for('login'))
-        flash('E-mail não encontrado.', 'danger')
-    return render_template('esqueci_senha.html')
 
 
 @app.route("/newuser", methods=["GET", "POST"])
@@ -1535,47 +1608,58 @@ def adicionar_local_novo():
 @app.route('/seguir_local/<int:local_id>', methods=['POST'])
 @login_required
 def seguir_local(local_id):
-    # Importamos as duas para garantir o registro completo
     from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal
     local = Local.query.get_or_404(local_id)
 
-    # 1. Verificamos a tabela que MANDA no botão (Passo 2 da sua perfil_local)
+    # Verifica se já existe o vínculo de seguidor
     vinculo = VinculoUsuarioLocal.query.filter_by(
         usuario_id=current_user.id,
         local_id=local_id
     ).first()
 
-    if vinculo:
-        # Se existe, removemos o vínculo do botão
-        database.session.delete(vinculo)
+    try:
+        if vinculo:
+            # Remove o vínculo principal
+            database.session.delete(vinculo)
 
-        # Opcional: Remover também a AtividadeLocal se quiser limpar a linha do tempo
-        ativ = AtividadeLocal.query.filter_by(id_local=local_id, id_criador=current_user.id).first()
-        if ativ:
-            database.session.delete(ativ)
+            # Deleta APENAS a atividade de entrada na linha do tempo para evitar órfãos
+            texto_atividade = f"Novo seguidor: {current_user.username}"
+            ativ = AtividadeLocal.query.filter_by(
+                id_local=local_id,
+                id_criador=current_user.id,
+                nome=texto_atividade
+            ).first()
 
-        database.session.commit()
-        return jsonify({"status": "success", "message": "Parou de seguir"})
+            if ativ:
+                database.session.delete(ativ)
 
-    else:
-        # 1. Criamos o Vínculo que faz o botão mudar para "Seguindo"
-        novo_vinculo = VinculoUsuarioLocal(
-            usuario_id=current_user.id,
-            local_id=local_id
-        )
-        database.session.add(novo_vinculo)
+            database.session.commit()
+            return jsonify({"status": "success", "sucesso": True, "message": "Parou de seguir"})
 
-        # 2. Criamos a AtividadeLocal para aparecer na Linha do Tempo (Passo 5 da sua perfil_local)
-        nova_atividade = AtividadeLocal(
-            nome=f"Novo seguidor: {current_user.username}",
-            id_local=local.id,
-            id_criador=current_user.id,
-            descricao=f"Adicionou {local.nome} às suas memórias."
-        )
-        database.session.add(nova_atividade)
+        else:
+            # Criamos o Vínculo do botão
+            novo_vinculo = VinculoUsuarioLocal(
+                usuario_id=current_user.id,
+                local_id=local_id
+            )
+            database.session.add(novo_vinculo)
 
-        database.session.commit()
-        return jsonify({"status": "success", "message": "Seguindo"})
+            # Criamos a atividade específica de novo seguidor
+            nova_atividade = AtividadeLocal(
+                nome=f"Novo seguidor: {current_user.username}",
+                id_local=local.id,
+                id_criador=current_user.id,
+                descricao=f"Adicionou {local.nome} às suas memórias."
+            )
+            database.session.add(nova_atividade)
+
+            database.session.commit()
+            return jsonify({"status": "success", "sucesso": True, "message": "Seguindo"})
+
+    except Exception as e:
+        database.session.rollback()
+        # Se der erro no banco, o JS vai te avisar o motivo real no console log
+        return jsonify({"status": "error", "sucesso": False, "message": str(e)}), 500
 
 
 @app.route('/get_perfil/<int:id_usuario>', methods=['GET', 'POST'])
@@ -3412,13 +3496,14 @@ def feed():
         # Se a atividade atingiu o número do sorteio, ela ganha o direito ao anúncio
         if contador_respiro >= proximo_gatilho:
             # Passamos a atividade (post) para a função correta mapeada para o Beta do FeedIn
-            atividade.anuncio = obter_publicidade_contextual(atividade)
+            with database.session.no_autoflush:
+                atividade.anuncio = obter_publicidade_contextual(atividade)
 
-            # Zera o contador e sorteia o próximo respiro dinâmico (de 1 a 6 posts livres)
-            # Se a função retornar None (ex: uma conexão automática), o respiro continua correndo
-            if atividade.anuncio:
-                contador_respiro = 0
-                proximo_gatilho = random.randint(1, 6)
+                # Zera o contador e sorteia o próximo respiro dinâmico (de 1 a 6 posts livres)
+                # Se a função retornar None (ex: uma conexão automática), o respiro continua correndo
+                if atividade.anuncio:
+                    contador_respiro = 0
+                    proximo_gatilho = random.randint(1, 6)
         else:
             # Garante que a atividade está 100% limpa de anúncios
             atividade.anuncio = None
@@ -5078,41 +5163,44 @@ def registrar_reivindicacao(local_id):
 
 @app.route('/postagem/<int:id_postagem>/solicitar_marcacao', methods=['POST'])
 @login_required
+@csrf.exempt
 def solicitar_marcacao(id_postagem):
-    # 1. Busca a postagem alvo
-    post = Postagem.query.get_or_404(id_postagem)
+    postagem = Postagem.query.get_or_404(id_postagem)
 
-    # 2. Segurança: Verifica se o usuário já não está marcado ou pendente para evitar duplicidade
     ja_existe = MarcacaoPostagem.query.filter_by(
-        postagem_id=post.id,
+        postagem_id=postagem.id,
         usuario_id=current_user.id
     ).first()
 
     if not ja_existe:
-        # --- PASSO CRÍTICO AQUI: Inserir na tabela de controle de estados ---
         nova_marcacao = MarcacaoPostagem(
-            postagem_id=post.id,
-            usuario_id=current_user.id,  # Quem está sendo marcado
-            solicitante_id=current_user.id,  # Quem tomou a iniciativa (neste caso, ele mesmo)
-            status='pendente'  # Aguardando o dono do post aprovar
+            postagem_id=postagem.id,
+            usuario_id=current_user.id,
+            solicitante_id=current_user.id,
+            status='pendente'
         )
         database.session.add(nova_marcacao)
 
-        # --- PASSO 2: Inserir na tabela de notificações para gerar o alerta visual ---
         nova_notificacao = Notificacao(
-            id_usuario_destino=post.id_usuario,  # Dono do post (quem vai receber)
-            id_usuario_origem=current_user.id,  # Quem gerou (quem quer ser marcado)
-            id_postagem_referencia=post.id,
-            mensagem=f"@{current_user.username} solicitou identificação em sua memória.",
-            tipo='marcacao',
+            id_usuario_destino=postagem.id_usuario,  # Dono do post (quem aprova)
+            id_usuario_origem=current_user.id,  # O solicitante (quem quer aparecer)
+            id_postagem_referencia=postagem.id,
+            # Garantimos dinamicamente a string com o username de quem tomou a iniciativa
+            mensagem=f"@{current_user.username} solicitou identificação em sua publicação.",
+            tipo='solicitacao_marcacao',  # Um tipo específico ajuda o HTML a renderizar melhor
             lida=False
         )
         database.session.add(nova_notificacao)
 
-        # Salva ambas as operações no banco de dados de forma atômica
+        # Grava de forma definitiva no banco
         database.session.commit()
 
-    return redirect(request.referrer or url_for('dashboard'))
+        # 🧹 LIMPEZA DE SESSÃO: Remove os objetos da memória ativa do ORM
+        # para que o Autoflush de outras rotas não tente reavaliá-los
+        database.session.refresh(nova_marcacao)
+        database.session.refresh(nova_notificacao)
+
+    return jsonify({'status': 'success', 'message': 'Solicitação enviada!'})
 
 
 @app.route('/remover_minha_marcacao/<int:id_post>', methods=['POST'])
@@ -5147,48 +5235,58 @@ def remover_minha_marcacao(id_post):
 @login_required
 def aceitar_marcacao(id_marcacao):
     """O dono da postagem aprova a marcação solicitada por outro usuário."""
+    from feedin import database
     from feedin.models import MarcacaoPostagem, Postagem, Notificacao
+    from datetime import datetime
 
-    marcacao = MarcacaoPostagem.query.get_or_404(id_marcacao)
-    post = Postagem.query.get_or_404(marcacao.postagem_id)
+    marcacao = database.get_or_404(MarcacaoPostagem, id_marcacao)
+    post = database.get_or_404(Postagem, marcacao.postagem_id)
 
     if post.id_usuario != current_user.id:
         flash("Você não tem permissão para gerenciar marcações nesta publicação.", "danger")
         return redirect(url_for('dashboard'))
 
     try:
-        # 1. Atualiza o status para ativo
+        # 1. Atualiza o status da marcação para ativo (Isso DEVE salvar)
         marcacao.status = 'aceito'
 
-        # 2. Marca a notificação de SOLICITAÇÃO como lida (para sumir do feed do dono do post)
+        # 2. Tenta dar baixa na notificação de solicitação antiga, se ela existir
         notif_solicitacao = Notificacao.query.filter_by(
-            id_usuario_destino=current_user.id,  # Dono do post
-            id_usuario_origem=marcacao.usuario_id,  # Quem pediu
+            id_usuario_destino=current_user.id,
+            id_usuario_origem=marcacao.usuario_id,
             id_postagem_referencia=marcacao.postagem_id,
             tipo='marcacao',
-            lida=False  # Apenas as que ainda estavam pendentes
+            lida=False
         ).first()
 
         if notif_solicitacao:
             notif_solicitacao.lida = True
 
-        # --- O PULO DO GATO: GERAR A NOTIFICAÇÃO DE CONFIRMAÇÃO ---
-        # Agora o destino é quem solicitou, e a origem é o dono do post (current_user)
+        # 3. Gerar a nova notificação de confirmação (Fora do IF anterior)
+        username_marcado = marcacao.usuario.username if hasattr(marcacao, 'usuario') and marcacao.usuario else 'usuário'
+
+        # Criamos o objeto sem passar NENHUM campo de data explicitamente.
+        # Deixamos o banco usar o 'default=datetime.utcnow' que está no seu models.py
         notif_confirmacao = Notificacao(
-            id_usuario_destino=marcacao.usuario_id,  # O solicitante (vai receber o aviso)
-            id_usuario_origem=current_user.id,  # O dono do post (quem aceitou)
+            id_usuario_destino=current_user.id,
+            id_usuario_origem=marcacao.usuario_id,
             id_postagem_referencia=post.id,
-            mensagem=f"@{current_user.username} aceitou sua identificação na memória dele.",
+            mensagem=f"aceitou a identificação de @{username_marcado} nesta memória.",
             tipo='marcacao',
-            lida=False  # Entra como não lida para aparecer no feed dele
+            lida=True
         )
         database.session.add(notif_confirmacao)
 
+        # 🔄 Força a gravação isolada dos estados
+        database.session.flush()
         database.session.commit()
+
         flash("A marcação foi aceita e integrada à história desta memória!", "success")
+
     except Exception as e:
         database.session.rollback()
-        print(f"Erro ao aceitar marcação: {e}")
+        database.session.remove()
+        print(f"\n🚨 [ERRO NO COMMIT DA MARCAÇÃO]: {e}")
         flash("Erro ao processar a aprovação.", "danger")
 
     return redirect(request.referrer or url_for('dashboard'))
@@ -5197,198 +5295,195 @@ def aceitar_marcacao(id_marcacao):
 @app.route('/marcacao/<int:id_marcacao>/recusar', methods=['POST'])
 @login_required
 def recusar_marcacao(id_marcacao):
-    """O dono da postagem rejeita a solicitação de marcação."""
-    from feedin.models import MarcacaoPostagem, Postagem
+    """O dono da postagem rejeita a solicitação de marcação.
+    Apenas limpa o post, SEM quebrar a conexão (amizade) deles na Teia!"""
+    from feedin import database
+    from feedin.models import MarcacaoPostagem, Notificacao
 
-    # 1. Busca o registro na tabela de controle
-    marcacao = MarcacaoPostagem.query.get_or_404(id_marcacao)
+    marcacao = database.get_or_404(MarcacaoPostagem, id_marcacao)
 
-    # 2. Busca a postagem correspondente usando o postagem_id direto
-    post = Postagem.query.get_or_404(marcacao.postagem_id)
+    # 1. Atualiza o status da marcação para recusado (ou deleta, se preferir)
+    marcacao.status = 'recusado'
 
-    # 3. Segurança: Apenas o dono da postagem original pode recusar
-    if post.id_usuario != current_user.id:
-        flash("Você não tem permissão para gerenciar marcações nesta publicação.", "danger")
-        return redirect(url_for('dashboard'))
+    # 2. Localiza e marca a notificação de solicitação como lida para sumir do painel
+    notif_solicitacao = Notificacao.query.filter_by(
+        id_usuario_destino=current_user.id,
+        id_usuario_origem=marcacao.usuario_id,
+        id_postagem_referencia=marcacao.postagem_id,
+        tipo='marcacao',
+        lida=False
+    ).first()
+
+    if notif_solicitacao:
+        notif_solicitacao.lida = True
 
     try:
-        # Remove a solicitação pendente do banco de dados
-        database.session.delete(marcacao)
-
-        # Localiza a notificação do feed e também a remove
-        notif = Notificacao.query.filter_by(
-            id_usuario_destino=current_user.id,
-            id_usuario_origem=marcacao.usuario_id,
-            id_postagem_referencia=marcacao.postagem_id,
-            tipo='marcacao'
-        ).first()
-        if notif:
-            database.session.delete(notif)
-
+        database.session.flush()
         database.session.commit()
         flash("A solicitação de marcação foi recusada.", "info")
     except Exception as e:
         database.session.rollback()
-        print(f"Erro ao recusar marcação: {e}")
+        database.session.remove()
+        print(f"🚨 [ERRO AO RECUSAR MARCAÇÃO]: {e}")
         flash("Erro ao processar a recusa.", "danger")
 
     return redirect(request.referrer or url_for('dashboard'))
 
 
 from flask import jsonify  # Certifique-se de que o jsonify está importado no topo do arquivo
-
 from flask_login import current_user
-
 
 def obter_publicidade_contextual(pub, local_contexto_id=None):
     """
     O Motor de Vanguarda do FeedIn: Cruza as tags do post com as tags que o
     usuário logado segue para entregar anúncios 100% personalizados e sem ofuscamento.
     """
-    tags_do_post = []
+    with database.session.no_autoflush:
+        tags_do_post = []
 
-    # 1. CAPTURA AS TAGS DO POST
-    if hasattr(pub, 'tags_afinidade') and pub.tags_afinidade is not None:
-        tags_do_post = pub.tags_afinidade.all() if hasattr(pub.tags_afinidade, 'all') else pub.tags_afinidade
-    elif hasattr(pub, 'tags') and pub.tags is not None:
-        tags_do_post = pub.tags.all() if hasattr(pub.tags, 'all') else pub.tags
-    elif hasattr(pub, 'postagem') and hasattr(pub.postagem,
-                                              'tags_afinidade') and pub.postagem.tags_afinidade is not None:
-        tags_do_post = pub.postagem.tags_afinidade.all() if hasattr(pub.postagem.tags_afinidade,
-                                                                    'all') else pub.postagem.tags_afinidade
-    elif hasattr(pub, 'objeto_original') and hasattr(pub.objeto_original,
-                                                     'tags_afinidade') and pub.objeto_original.tags_afinidade is not None:
-        tags_do_post = pub.objeto_original.tags_afinidade.all() if hasattr(pub.objeto_original.tags_afinidade,
-                                                                           'all') else pub.objeto_original.tags_afinidade
+        # 1. CAPTURA AS TAGS DO POST
+        if hasattr(pub, 'tags_afinidade') and pub.tags_afinidade is not None:
+            tags_do_post = pub.tags_afinidade.all() if hasattr(pub.tags_afinidade, 'all') else pub.tags_afinidade
+        elif hasattr(pub, 'tags') and pub.tags is not None:
+            tags_do_post = pub.tags.all() if hasattr(pub.tags, 'all') else pub.tags
+        elif hasattr(pub, 'postagem') and hasattr(pub.postagem, 'tags_afinidade') and pub.postagem.tags_afinidade is not None:
+            tags_do_post = pub.postagem.tags_afinidade.all() if hasattr(pub.postagem.tags_afinidade, 'all') else pub.postagem.tags_afinidade
+        elif hasattr(pub, 'objeto_original') and hasattr(pub.objeto_original, 'tags_afinidade') and pub.objeto_original.tags_afinidade is not None:
+            tags_do_post = pub.objeto_original.tags_afinidade.all() if hasattr(pub.objeto_original.tags_afinidade, 'all') else pub.objeto_original.tags_afinidade
 
-    if not tags_do_post and hasattr(pub, 'id_postagem'):
-        from feedin.models import Postagem
-        post_real = Postagem.query.get(pub.id_postagem)
-        if post_real and post_real.tags_afinidade:
-            tags_do_post = post_real.tags_afinidade.all() if hasattr(post_real.tags_afinidade,
-                                                                     'all') else post_real.tags_afinidade
+        if not tags_do_post and hasattr(pub, 'id_postagem'):
+            from feedin.models import Postagem
+            post_real = Postagem.query.get(pub.id_postagem)
+            if post_real and post_real.tags_afinidade:
+                tags_do_post = post_real.tags_afinidade.all() if hasattr(post_real.tags_afinidade, 'all') else post_real.tags_afinidade
 
-    if not tags_do_post:
-        return None
+        if not tags_do_post:
+            return None
 
-    import random
-    from sqlalchemy import func
+        import random
+        from sqlalchemy import func
 
-    ids_tags_post = [t.id for t in tags_do_post]
-    tag_vencedora = None
+        tag_vencedora = None
 
-    # 2. O FILTRO DE AFINIDADE DO USUÁRIO
-    if current_user.is_authenticated:
-        if hasattr(current_user, 'tags_seguidas') and current_user.tags_seguidas:
-            tags_usuario = current_user.tags_seguidas.all() if hasattr(current_user.tags_seguidas,
-                                                                       'all') else current_user.tags_seguidas
-            ids_tags_usuario = [t.id for t in tags_usuario]
-            tags_em_comum = [t for t in tags_do_post if t.id in ids_tags_usuario]
+        # 2. O FILTRO DE AFINIDADE DO USUÁRIO
+        try:
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated:
+                if hasattr(current_user, 'tags_seguidas') and current_user.tags_seguidas:
+                    tags_usuario = current_user.tags_seguidas.all() if hasattr(current_user.tags_seguidas, 'all') else current_user.tags_seguidas
+                    ids_tags_usuario = [t.id for t in tags_usuario if t is not None]
+                    tags_em_comum = [t for t in tags_do_post if t and t.id in ids_tags_usuario]
 
-            if tags_em_comum:
-                tag_vencedora = random.choice(tags_em_comum)
+                    if tags_em_comum:
+                        tag_vencedora = random.choice(tags_em_comum)
+        except Exception:
+            pass
 
-    if not tag_vencedora:
-        tag_vencedora = random.choice(tags_do_post)
+        if not tag_vencedora and tags_do_post:
+            tag_vencedora = random.choice([t for t in tags_do_post if t is not None])
 
-    # 3. BUSCA SELETIVA COM FILTRO DE CONCORRÊNCIA
-    from feedin.models import LocalAnuncio, Local
+        if not tag_vencedora:
+            return None
 
-    categoria_bloqueada_id = None
-    if local_contexto_id:
-        local_atual = Local.query.get(local_contexto_id)
-        if local_atual:
-            categoria_bloqueada_id = local_atual.id_categoria_principal
+        # 3. BUSCA SELETIVA COM FILTRO DE CONCORRÊNCIA
+        from feedin.models import LocalAnuncio, Local
 
-    query_anuncios = LocalAnuncio.query.filter(
-        LocalAnuncio.taxonomia_id == tag_vencedora.id,
-        LocalAnuncio.status == 'ativo'
-    )
+        categoria_bloqueada_id = None
+        if local_contexto_id:
+            local_atual = Local.query.get(local_contexto_id)
+            if local_atual:
+                categoria_bloqueada_id = local_atual.id_categoria_principal
 
-    if local_contexto_id and categoria_bloqueada_id:
-        query_anuncios = query_anuncios.join(Local, LocalAnuncio.local_id == Local.id).filter(
-            database.or_(
-                LocalAnuncio.local_id == local_contexto_id,
-                Local.id_categoria_principal != categoria_bloqueada_id
-            )
-        )
-
-    anuncios_brutos = query_anuncios.order_by(func.random()).all()
-
-    if not anuncios_brutos:
-        ids_restantes = [t.id for t in tags_do_post if t.id != tag_vencedora.id]
-
-        query_contingencia = LocalAnuncio.query.filter(
-            LocalAnuncio.taxonomia_id.in_(ids_restantes),
+        query_anuncios = LocalAnuncio.query.filter(
+            LocalAnuncio.taxonomia_id == tag_vencedora.id,
             LocalAnuncio.status == 'ativo'
         )
 
         if local_contexto_id and categoria_bloqueada_id:
-            query_contingencia = query_contingencia.join(Local, LocalAnuncio.local_id == Local.id).filter(
+            query_anuncios = query_anuncios.join(Local, LocalAnuncio.local_id == Local.id).filter(
                 database.or_(
                     LocalAnuncio.local_id == local_contexto_id,
                     Local.id_categoria_principal != categoria_bloqueada_id
                 )
             )
 
-        anuncios_brutos = query_contingencia.order_by(func.random()).all()
+        anuncios_brutos = query_anuncios.order_by(func.random()).all()
 
-        if anuncios_brutos:
-            from feedin.models import Taxonomia
-            tag_vencedora = Taxonomia.query.get(anuncios_brutos[0].taxonomia_id)
+        if not anuncios_brutos:
+            ids_restantes = [t.id for t in tags_do_post if t and t.id != tag_vencedora.id]
 
-    if not anuncios_brutos:
-        return None
+            if ids_restantes:
+                query_contingencia = LocalAnuncio.query.filter(
+                    LocalAnuncio.taxonomia_id.in_(ids_restantes),
+                    LocalAnuncio.status == 'ativo'
+                )
 
-    anuncios_pagos = [a for a in anuncios_brutos if
-                      hasattr(a, 'plano_marketing') and a.plano_marketing == 'patrocinado']
-    anuncios_filtrados = anuncios_pagos if anuncios_pagos else anuncios_brutos
+                if local_contexto_id and categoria_bloqueada_id:
+                    query_contingencia = query_contingencia.join(Local, LocalAnuncio.local_id == Local.id).filter(
+                        database.or_(
+                            LocalAnuncio.local_id == local_contexto_id,
+                            Local.id_categoria_principal != categoria_bloqueada_id
+                        )
+                    )
 
-    anuncio_destaque = anuncios_filtrados[0]
-    id_empresa_destaque = getattr(anuncio_destaque, 'local_id', None)
+                anuncios_brutos = query_contingencia.order_by(func.random()).all()
 
-    anuncio_destaque.tag_referencia_nome = tag_vencedora.nome
+                if anuncios_brutos:
+                    from feedin.models import Taxonomia
+                    tag_vencedora = Taxonomia.query.get(anuncios_brutos[0].taxonomia_id)
 
-    textos_parceria = (
-        f"Esse lugar faz parte da história viva de Piracicaba e apoia o resgate de memórias sobre {tag_vencedora.nome}!",
-        f"Quem é daqui conhece! Esse parceiro fecha com o FeedIn no segmento de {tag_vencedora.nome}.",
-        f"Tradicional em nossa região, este local apoia a salvaguarda das nossas histórias de {tag_vencedora.nome}!",
-        f"Valorize o comércio local! Esse parceiro apoia a nossa comunidade e se destaca em {tag_vencedora.nome}."
-    )
-    anuncio_destaque.texto_formatado = random.choice(textos_parceria)
+        if not anuncios_brutos:
+            return None
 
-    empresas_concorrentes = set()
-    outros_parceiros_unicos = []
+        # FILTRAGEM PATROCINADOS VS BRUTOS
+        anuncios_pagos = [a for a in anuncios_brutos if hasattr(a, 'plano_marketing') and a.plano_marketing == 'patrocinado']
+        anuncios_filtrados = anuncios_pagos if anuncios_pagos else anuncios_brutos
 
-    for a in anuncios_filtrados:
-        id_empresa_atual = getattr(a, 'local_id', None)
-        if id_empresa_atual and id_empresa_atual != id_empresa_destaque:
-            if id_empresa_atual not in empresas_concorrentes:
-                empresas_concorrentes.add(id_empresa_atual)
-                outros_parceiros_unicos.append(a)
+        anuncio_destaque = anuncios_filtrados[0]
+        id_empresa_destaque = getattr(anuncio_destaque, 'local_id', None)
 
-    anuncio_destaque.mais_x = len(empresas_concorrentes)
-    anuncio_destaque.outros_parceiros = outros_parceiros_unicos
+        anuncio_destaque.tag_referencia_nome = tag_vencedora.nome if tag_vencedora else "Memória"
 
-    # =========================================================================
-    # 💥 CORREÇÃO CIRÚRGICA: ATUALIZAÇÃO ATÔMICA SEM QUEBRAR A SESSÃO
-    # =========================================================================
-    # Alteramos em memória para exibição imediata na tela corrente
-    anuncio_destaque.visualizacoes += 1
-
-    # Fazemos um update cirúrgico direto via conexão SQL para não disparar o Flush do ORM
-    try:
-        database.session.query(LocalAnuncio).filter(LocalAnuncio.id == anuncio_destaque.id).update(
-            {LocalAnuncio.visualizacoes: LocalAnuncio.visualizacoes + 1},
-            synchronize_session=False
+        textos_parceria = (
+            f"Esse lugar faz parte da história viva de Piracicaba e apoia o resgate de memórias sobre {anuncio_destaque.tag_referencia_nome}!",
+            f"Quem é daqui conhece! Esse parceiro fecha com o FeedIn no segmento de {anuncio_destaque.tag_referencia_nome}.",
+            f"Tradicional em nossa região, este local apoia a salvaguarda das nossas histórias de {anuncio_destaque.tag_referencia_nome}!",
+            f"Valorize o comércio local! Esse parceiro apoia a nossa comunidade e se destaca em {anuncio_destaque.tag_referencia_nome}."
         )
-        # NÃO DAMOS COMMIT AQUI! Deixamos o commit para quando a requisição terminar de forma natural
-        # ou quando uma ação de escrita real do usuário acontecer.
-    except Exception as e:
-        print(f"Erro silencioso ao computar visualização: {e}")
-    # =========================================================================
+        anuncio_destaque.texto_formatado = random.choice(textos_parceria)
 
-    return anuncio_destaque
+        # SEPARAÇÃO DE CONCORRENTES DISCRETOS
+        empresas_concorrentes = set()
+        outros_parceiros_unicos = []
+
+        for a in anuncios_filtrados:
+            id_empresa_atual = getattr(a, 'local_id', None)
+            if id_empresa_atual and id_empresa_atual != id_empresa_destaque:
+                if id_empresa_atual not in empresas_concorrentes:
+                    empresas_concorrentes.add(id_empresa_atual)
+                    outros_parceiros_unicos.append(a)
+
+        anuncio_destaque.mais_x = len(empresas_concorrentes)
+        anuncio_destaque.outros_parceiros = outros_parceiros_unicos
+
+        # =========================================================================
+        # 🚀 ATUALIZAÇÃO ATÔMICA REAL (CORRIGIDA E DENTRO DO FLUXO)
+        # =========================================================================
+        try:
+            # 1. Atualiza em memória para exibição imediata no front-end atual
+            anuncio_destaque.visualizacoes += 1
+
+            # 2. Executa a query de update direto na conexão SQL, ignorando o mapa de sessão (Evita o Autoflush)
+            database.session.query(LocalAnuncio).filter(LocalAnuncio.id == anuncio_destaque.id).update(
+                {"visualizacoes": LocalAnuncio.visualizacoes + 1},
+                synchronize_session=False
+            )
+        except Exception as e:
+            # Silencioso no ambiente de produção, mas visível no console do PyCharm
+            print(f"Erro ao computar visualização de forma assíncrona: {e}")
+        # =========================================================================
+
+        return anuncio_destaque
 
 
 @app.route('/feed')

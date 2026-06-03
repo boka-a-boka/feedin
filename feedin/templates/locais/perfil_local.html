@@ -107,17 +107,16 @@
                         <button type="button" onclick="enviarAvaliacaoCompleta()" class="btn btn-sm btn-warning fw-bold">Salvar Memória</button>
                     </div>
                 </div>
-
                 <div>
                     {% if not usuario_segue %}
                         <button type="button"
-                                onclick="prepararSeguirDireto('{{ local.id }}', '{{ local.nome }}', event)"
+                                onclick="prepararSeguirDireto('{{ local.id }}', event)"
                                 class="btn btn-light btn-lg rounded-pill px-4 shadow fw-bold text-primary">
                             <i class="fas fa-plus me-2"></i>Seguir Local
                         </button>
                     {% else %}
                         <button type="button"
-                                onclick="prepararSeguirDireto('{{ local.id }}', '{{ local.nome }}', event)"
+                                onclick="prepararSeguirDireto('{{ local.id }}', event)"
                                 class="btn btn-outline-light btn-lg rounded-pill px-4 fw-bold">
                             <i class="fas fa-check me-2"></i>Seguindo
                         </button>
@@ -276,12 +275,18 @@ function reagirPostagem(postId, tipoReacao) {
                 window.location.reload();
             }
         },
-        error: function(xhr) { console.error("Erro ao registrar reação:", xhr.responseText); },
-        complete: function() { $(`#contagem-curti-${postId}`).parent().data('loading', false); }
+        error: function(xhr) {
+            console.error("Erro ao registrar reação:", xhr.responseText);
+        },
+        complete: function() {
+            $(`#contagem-curti-${postId}`).parent().data('loading', false);
+        }
     });
 }
 
-function registrarReacaoSocial(postId, tipoReacao) { reagirPostagem(postId, tipoReacao); }
+function registrarReacaoSocial(postId, tipoReacao) {
+    reagirPostagem(postId, tipoReacao);
+}
 
 function abrirComentarios(postId) {
     $('#modalPostId').val(postId);
@@ -296,12 +301,17 @@ function abrirComentarios(postId) {
     }
 }
 
-function enviarComentarioPeloModal() { enviarComentarioModal(); }
+function enviarComentarioPeloModal() {
+    enviarComentarioModal();
+}
 
 function enviarComentarioModal() {
     const postId = $('#modalPostId').val();
     const texto = $('#textoComentario').val().trim();
-    if (!texto) { alert("Por favor, escreva algo para comentar."); return; }
+    if (!texto) {
+        alert("Por favor, escreva algo para comentar.");
+        return;
+    }
 
     $.ajax({
         url: "/comentar_post/" + postId,
@@ -310,19 +320,28 @@ function enviarComentarioModal() {
         success: function(response) {
             if (response.status === "success") {
                 const modalElement = document.getElementById('modalComentario');
-                if (bootstrap.Modal.getInstance(modalElement)) { bootstrap.Modal.getInstance(modalElement).hide(); }
+                if (bootstrap.Modal.getInstance(modalElement)) {
+                    bootstrap.Modal.getInstance(modalElement).hide();
+                }
                 location.reload();
-            } else { alert("Erro ao publicar comentário: " + response.message); }
+            } else {
+                alert("Erro ao publicar comentário: " + response.message);
+            }
         },
-        error: function(xhr) { alert("Erro ao enviar comentário para o servidor."); }
+        error: function(xhr) {
+            alert("Erro ao enviar comentário para o servidor.");
+        }
     });
 }
 
 let notaSelecionada = 0;
 $(document).ready(function() {
     $(document).on('click', '#rating-container i', function() {
-        const podeAvaliar = $('#rating-container').data('pode-avaliar') === true;
-        if (!podeAvaliar) { alert("Você precisa seguir este local para poder avaliar!"); return; }
+        const podeAvaliar = $('#rating-container').data('pode-avaliarem') === true || $('#rating-container').data('pode-avaliar') === "true";
+        if (!podeAvaliar) {
+            alert("Você precisa seguir este local para poder avaliar!");
+            return;
+        }
         notaSelecionada = $(this).data('value');
         $('#rating-container i').each(function(index) {
             $(this).toggleClass('fas', index < notaSelecionada).toggleClass('far', index >= notaSelecionada);
@@ -333,26 +352,50 @@ $(document).ready(function() {
 
 function enviarAvaliacaoCompleta() {
     const texto = $('#feedback-texto').val().trim();
-    if (texto.length < 5) { alert("Conte um pouco mais sobre sua experiência (mínimo 5 caracteres)."); return; }
+    if (texto.length < 5) {
+        alert("Conte um pouco mais sobre sua experiência (mínimo 5 caracteres).");
+        return;
+    }
     fetch(`/local/avaliar/{{ local.id }}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': "{{ csrf_token() }}" },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': "{{ csrf_token() }}"
+        },
         body: JSON.stringify({ nota: notaSelecionada, feedback: texto })
     })
     .then(r => r.json())
-    .then(data => { alert(data.mensagem); if (data.sucesso) location.reload(); });
+    .then(data => {
+        alert(data.mensagem);
+        if (data.sucesso) location.reload();
+    });
 }
 
-function cancelarAvaliacao() { $('#feedback-container').fadeOut(); }
+function cancelarAvaliacao() {
+    $('#feedback-container').fadeOut();
+}
 
 function prepararSeguirDireto(localId, localNome, evt) {
     if (evt) evt.preventDefault();
+
+    // Garante a captura do CSRF dinamicamente caso o Jinja falhe de forma isolada
+    const token = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
+
     $.ajax({
         url: "/seguir_local/" + localId,
         method: 'POST',
-        data: { csrf_token: "{{ csrf_token() }}" || $('input[name=csrf_token]').val() },
-        success: function(response) { if (response.status === "success" || response.sucesso) { window.location.reload(); } else { alert("Aviso: " + (response.message || "Não foi possível alterar o vínculo.")); } },
-        error: function(xhr) { alert("Erro de comunicação com o servidor ao tentar seguir o local."); }
+        data: { csrf_token: token },
+        success: function(response) {
+            if (response.status === "success" || response.sucesso) {
+                window.location.reload();
+            } else {
+                alert("Aviso: " + (response.message || "Não foi possível alterar o vínculo."));
+            }
+        },
+        error: function(xhr) {
+            console.error("Erro na rota do VPS:", xhr.responseText);
+            alert("Erro de comunicação com o servidor ao tentar seguir o local.");
+        }
     });
 }
 
@@ -364,7 +407,10 @@ function abrirModalTagsOcultas(localId) {
     meuModal.show();
 
     $.getJSON(`/api/local/${localId}/tags_ocultas`, function(tags) {
-        if (!tags.length) { $lista.html('<p class="text-muted text-center small my-2">Nenhum tema oculto restante!</p>'); return; }
+        if (!tags.length) {
+            $lista.html('<p class="text-muted text-center small my-2">Nenhum tema oculto restante!</p>');
+            return;
+        }
         $lista.empty();
         tags.forEach(function(tag) {
             const itemHtml = `
@@ -376,7 +422,9 @@ function abrirModalTagsOcultas(localId) {
                 </button>`;
             $lista.append(itemHtml);
         });
-    }).fail(function() { $lista.html('<p class="text-danger text-center small my-2">Erro ao carregar temas.</p>'); });
+    }).fail(function() {
+        $lista.html('<p class="text-danger text-center small my-2">Erro ao carregar temas.</p>');
+    });
 }
 
 window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
@@ -392,20 +440,20 @@ window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
             if (response.sucesso) {
                 $(elementoBotao).removeClass('btn-outline-secondary border-dashed').addClass('btn-success text-white').html('<span><i class="bi bi-check-lg me-1"></i> Tema Adicionado!</span>');
                 setTimeout(function() { location.reload(); }, 600);
-            } else { alert(response.mensagem || "Não foi possível seguir este tema."); $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50'); }
+            } else {
+                alert(response.mensagem || "Não foi possível seguir este tema.");
+                $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
+            }
         },
-        error: function(xhr) { $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50'); }
+        error: function(xhr) {
+            $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
+        }
     });
 };
 
-function voltarAoTopo() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function volverAoTopo() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 </script>
 
-<div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999;">
-    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap"
-            onclick="voltarAoTopo()"
-            style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;">
-        <i class="bi bi-arrow-up-circle-fill me-2"></i>Voltar ao Topo
-    </button>
-</div>
 {% endblock %}

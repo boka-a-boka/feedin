@@ -9,26 +9,32 @@
     float: left;
     margin-right: 15px;
     margin-bottom: 5px;
-    margin-top: 5px; /* Ajuste fino para alinhar com a primeira linha do texto */
+    margin-top: 5px;
     border: 2px solid #fff;
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-/* Remove a margem superior do texto para ele "subir" e alinhar com a imagem */
+.img-notification-thumb {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
 .texto-postagem {
     margin-top: 0 !important;
     padding-top: 0 !important;
-    display: inline; /* Ajuda a eliminar blocos de parágrafo que criam quebras */
+    display: inline;
 }
 
-/* O container mantém a altura máxima, mas a imagem se adapta */
 .container-memoria {
-    background-color: #f8f9fa; /* Um cinza bem claro para o fundo */
+    background-color: #f8f9fa;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    max-height: 500px; /* Sua altura limite atual */
+    max-height: 500px;
     overflow: hidden;
     border-radius: 12px;
 }
@@ -38,11 +44,10 @@
     max-height: 500px;
     width: auto;
     height: auto;
-    /* O segredo: contain garante que 100% da foto apareça */
     object-fit: contain;
 }
 
-/* --- ESTILOS DE NOTIFICAÇÃO (Padrão Desktop) --- */
+/* --- ESTILOS DE NOTIFICAÇÃO --- */
 .notification-item {
     display: flex;
     justify-content: space-between;
@@ -53,19 +58,17 @@
     background-color: #f9f9f9;
 }
 
-/* Cor especial para a Notificação de Conexão - Força o fundo azul e remove bordas padrão */
 .card.notification-item.notification-conexao {
-    background-color: #e6f7ff !important; /* Azul celeste suave */
-    border-left: 5px solid #1890ff !important; /* Barrinha lateral esquerda destacada */
+    background-color: #e6f7ff !important;
+    border-left: 5px solid #1890ff !important;
     border-top: 0 !important;
     border-right: 0 !important;
     border-bottom: 0 !important;
 }
 
-/* NOVO: Matiz discreta e acolhedora para Gerenciamento de Memória/Marcações (Tom Amendoado/Dourado Histórico Suave) */
 .card.notification-item.notification-marcacao {
-    background-color: #fffaf0 !important; /* Marfim quente, remete a papel antigo/resgate */
-    border-left: 5px solid #d4a373 !important; /* Linha de tom couro/madeira confortável */
+    background-color: #fffaf0 !important;
+    border-left: 5px solid #d4a373 !important;
     border-top: 0 !important;
     border-right: 0 !important;
     border-bottom: 0 !important;
@@ -74,20 +77,19 @@
 .notification-content {
     display: flex;
     flex-wrap: wrap;
-    gap: 5px; /* Mantém na mesma linha no desktop */
+    align-items: center;
+    gap: 5px;
 }
 
 .notification-users {
     font-weight: 700;
-    color: #0050b3; /* Tom azul escuro elegante para destacar os @usernames */
+    color: #0050b3;
 }
 
-/* NOVO: Cor alternativa de destaque para os usuários na linha do tempo de memória */
 .notification-marcacao .notification-users {
-    color: #a06a42; /* Castanho profundo elegante */
+    color: #a06a42;
 }
 
-/* O "Botão" identificador de tipo */
 .badge-conexao {
     background-color: #1890ff !important;
     color: white !important;
@@ -96,7 +98,6 @@
     font-size: 0.8rem;
 }
 
-/* NOVO: Badge específico do selo de marcação */
 .badge-marcacao {
     background-color: #d4a373 !important;
     color: white !important;
@@ -105,9 +106,7 @@
     font-size: 0.8rem;
 }
 
-/* --- Ajuste Crítico para Smartphone --- */
 @media (max-width: 480px) {
-    /* Reestrutura as caixas internas do card para alinhar tudo à esquerda no mobile */
     .card.notification-item.notification-conexao .card-body,
     .card.notification-item.notification-marcacao .card-body {
         flex-direction: column !important;
@@ -124,18 +123,18 @@
     }
 
     .notification-content {
-        display: block !important; /* Força os elementos a quebrarem de linha de verdade */
+        display: block !important;
         width: 100%;
     }
 
     .notification-users {
         display: block !important;
-        margin-bottom: 3px; /* Espacinho sutil abaixo dos nomes */
+        margin-bottom: 3px;
     }
 
     .notification-action {
         display: block !important;
-        font-size: 0.9rem; /* Um tiquinho menor para garantir o encaixe */
+        font-size: 0.9rem;
         color: #555;
     }
 
@@ -147,21 +146,23 @@
 }
 </style>
 
-{# 1. LÓGICA DE DADOS (Com interceptor de segurança para strings estáticas) #}
+{# 1. LÓGICA DE DADOS SEGUROS #}
 {% set id_post = atividade.id or atividade['id'] %}
-
-{# Pegamos o texto que veio do banco para checar o conteúdo #}
 {% set texto_verificacao = atividade.descricao or atividade.conteudo_exibicao or atividade.mensagem or atividade.conteudo or "" %}
 
-{% if (atividade.tipo is defined and atividade.tipo == 'marcacao') or "marcou você" in texto_verificacao %}
-    {# Forçamos o mapeamento para o Layout C se a frase de marcação for detectada #}
+{% if (atividade.tipo is defined and atividade.tipo == 'marcacao') or "marcou você" in texto_verificacao or "solicitou" in texto_verificacao or "Recusou" in texto_verificacao %}
+    {% set remetente_objeto = atividade.usuario_origem or atividade.remetente or atividade.solicitante or atividade.origem %}
+    {% set m_origem_id = atividade.id_usuario_origem or (remetente_objeto.id if remetente_objeto and remetente_objeto.id is defined else 1) %}
+
+    {% set m_origem_username = remetente_objeto.username if (remetente_objeto and remetente_objeto.username is defined) else (atividade.autor.username if atividade.autor else 'usuario') %}
+
     {% set m = {
         'id': atividade.id,
-        'usuario_origem_id': atividade.id_usuario_origem or (atividade.autor.id if atividade.autor else 1),
-        'usuario_origem_username': atividade.origem.username if atividade.origem else (atividade.autor.username if atividade.autor else 'Usuário'),
+        'usuario_origem_id': m_origem_id,
+        'usuario_origem_username': m_origem_username,
         'mensagem': texto_verificacao,
         'postagem_id': atividade.id_postagem_referencia or atividade.id,
-        'lida': activity.lida if atividade.lida is defined else True
+        'lida': atividade.lida if atividade.lida is defined else True
     } %}
     {% set c = None %}
 {% else %}
@@ -169,44 +170,32 @@
     {% set m = atividade.dados_marcacao if atividade.dados_marcacao is defined else None %}
 {% endif %}
 
-{# 2. A MÁGICA DA DECISÃO #}
+{# 2. RENDERIZAÇÃO DOS CARDS #}
 
 {% if atividade.id_conexao and c %}
-    {# --- LAYOUT A: REDE FORTALECIDA --- #}
+    {# --- LAYOUT A: CONEXÕES DA TEIA --- #}
     <div class="card border-0 shadow-sm rounded-3 mb-3 border-start border-primary border-3 notification-item notification-conexao" style="padding: 0;">
         <div class="card-body p-2 px-3 d-flex align-items-center justify-content-between">
-
             <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
                 <div class="d-flex align-items-center me-3" style="min-width: 50px; position: relative; height: 32px; flex-shrink: 0;">
-                    <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_remetente) }}"
-                         class="rounded-circle border border-2 border-white"
-                         style="width: 28px; height: 28px; object-fit: cover; position: absolute; left: 0; z-index: 2;"
-                         onerror="this.src='/static/fotos_perfil/default.jpg'">
-
-                    <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_destinatario) }}"
-                         class="rounded-circle border border-2 border-white"
-                         style="width: 28px; height: 28px; object-fit: cover; position: absolute; left: 16px; z-index: 1;"
-                         onerror="this.src='/static/fotos_perfil/default.jpg'">
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_remetente) }}" class="rounded-circle border border-2 border-white" style="width: 28px; height: 28px; object-fit: cover; position: absolute; left: 0; z-index: 2;" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=c.id_destinatario) }}" class="rounded-circle border border-2 border-white" style="width: 28px; height: 28px; object-fit: cover; position: absolute; left: 16px; z-index: 1;" onerror="this.src='/static/fotos_perfil/default.jpg'">
                 </div>
-
                 <div class="notification-content">
-                    <span class="notification-users">
-                        @{{ c.remetente.username or c.usuario_remetente.username or 'Alguém' }} e @{{ c.destinatario.username or c.usuario_destinatario.username or 'Alguém' }}</span>
+                    <span class="notification-users">@{{ c.remetente.username or c.usuario_remetente.username or 'Alguém' }} e @{{ c.destinatario.username or c.usuario_destinatario.username or 'Alguém' }}</span>
                     <span class="notification-action">agora estão conectados na teia!</span>
                 </div>
             </div>
-
             <div class="flex-shrink-0">
                 <span class="badge badge-conexao rounded-pill fw-bold" style="font-size: 0.65rem; padding: 4px 8px;">
                     <i class="bi bi-link-45deg"></i> Conexão
                 </span>
             </div>
-
         </div>
     </div>
 
 {% elif m %}
-    {# --- LAYOUT C: NOTIFICAÇÃO INTELIGENTE DE MARCAÇÃO --- #}
+    {# --- LAYOUT C: NOTIFICAÇÕES DE RETORNO (ACEITO OU RECUSADO) --- #}
     {% set postagem_mae = atividade.postagem_referencia or atividade.postagem %}
 
     {% if m.postagem_id %}
@@ -215,58 +204,28 @@
 
     <div class="card border-0 shadow-sm rounded-3 mb-3 notification-item notification-marcacao" style="padding: 0; transition: transform 0.2s; cursor: pointer;" onmouseover="this.style.transform='scale(1.005)'" onmouseout="this.style.transform='scale(1)'">
         <div class="card-body p-2 px-3 d-flex align-items-center justify-content-between">
-
             <div class="d-flex align-items-center flex-grow-1 overflow-hidden me-2">
                 <div class="me-3" style="flex-shrink: 0;">
-                    <img src="{{ url_for('servir_foto_perfil', usuario_id=m.usuario_origem_id) }}"
-                         class="rounded-circle border border-2 border-white"
-                         style="width: 36px; height: 36px; object-fit: cover;"
-                         onerror="this.src='/static/fotos_perfil/default.jpg'">
+                    <img src="{{ url_for('servir_foto_perfil', usuario_id=m.usuario_origem_id) }}" class="rounded-circle border border-2 border-white" style="width: 36px; height: 36px; object-fit: cover;" onerror="this.src='/static/fotos_perfil/default.jpg'">
                 </div>
 
                 <div class="notification-content text-dark fw-medium" style="font-size: 0.95rem;">
                     <span class="notification-users">@{{ m.usuario_origem_username }}</span>
 
-                    <span>marcou </span>
-                    <span class="fw-bold" style="color: #a06a42;">Você</span>
-
-                    {% if postagem_mae and postagem_mae.marcacoes %}
-                        {% set outros_marcados = postagem_mae.marcacoes | rejectattr("usuario_id", "equalto", current_user.id) | list %}
-                        {% if outros_marcados | length > 0 %}, {% endif %}
-                        {% for outra_marcacao in outros_marcados %}
-                            <span class="text-secondary">@{{ outra_marcacao.usuario.username }}</span>
-                            {%- if not loop.last and loop.revindex0 == 1 %} e
-                            {%- elif not loop.last %}, {% endif %}
-                        {% endfor %}
+                    {# ALTERAÇÃO COMPORTAMENTAL: Analisa o texto salvo para exibir o alerta final customizado de aceite ou recusa #}
+                    {% if "recusou" in m.mensagem.lower() or "recusou" in texto_verificacao.lower() %}
+                        <span class="notification-action">"Recusou o seu pedido de marcação na postagem"</span>
+                    {% else %}
+                        <span class="notification-action">"Marcou você em uma publicação"</span>
                     {% endif %}
-
-                    <span> em uma publicação.</span>
                 </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2 botoes-acao-marcacao flex-shrink-0" onclick="event.stopPropagation();">
-                {% if not m.lida and "aceitou" not in m.mensagem %}
-                    <div class="d-flex gap-1">
-                        <form action="{{ url_for('recusar_marcacao', id_marcacao=m.id) }}" method="POST" class="m-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-link text-muted text-decoration-none py-0 px-2" style="font-size: 0.75rem;">
-                                Recusar
-                            </button>
-                        </form>
-                        <form action="{{ url_for('aceitar_marcacao', id_marcacao=m.id) }}" method="POST" class="m-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" style="font-size: 0.75rem; border-color: #d4a373; color: #a06a42;">
-                                Aceitar
-                            </button>
-                        </form>
-                    </div>
-                {% else %}
-                    <span class="badge badge-marcacao rounded-pill fw-bold" style="font-size: 0.65rem; padding: 4px 8px;">
-                        <i class="bi bi-eye-fill me-1"></i> Ver Registro
-                    </span>
-                {% endif %}
+            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                <span class="badge badge-marcacao rounded-pill fw-bold" style="font-size: 0.65rem; padding: 4px 8px;">
+                    <i class="bi bi-eye-fill me-1"></i> Ver Registro
+                </span>
             </div>
-
         </div>
     </div>
 
@@ -275,43 +234,106 @@
     {% endif %}
 
 {% else %}
-    {# --- LAYOUT B: PUBLICAÇÃO ORIGINAL --- #}
+    {# --- LAYOUT B: TIMELINE CENTRAL / MODERAÇÃO DO DONO COM THUMBNAIL --- #}
     {% set autor = atividade.autor_objeto or atividade.autor or atividade['autor'] %}
-    {% set texto = atividade.descricao or atividade.conteudo_exibicao or broomstick_mensagem or atividade.mensagem or atividade.conteudo or "Uma nova memória foi resgatada!" %}
+    {% set texto = atividade.descricao or atividade.conteudo_exibicao or atividade.mensagem or atividade.conteudo or "Uma nova memória foi resgatada!" %}
     {% set imagem = atividade.imagem_url or atividade['imagem_url'] %}
+    {% set post_obj = atividade.objeto_original if (atividade.objeto_original is defined and atividade.objeto_original) else atividade %}
 
     <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final" id="post-{{ id_post }}">
 
-        {# CABEÇALHO COM MINIATURA #}
+        {# CABEÇALHO DO POST #}
         <div class="p-3 d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
                 {% if autor %}
-                    <img src="{{ url_for('static', filename='fotos_perfil/' + (autor.foto_perfil or 'default.jpg')) }}"
-                         width="42" height="42" class="rounded-circle me-3 border shadow-sm" style="object-fit: cover;">
+                    <img src="{{ url_for('static', filename='fotos_perfil/' + (autor.foto_perfil or 'default.jpg')) }}" width="42" height="42" class="rounded-circle me-3 border shadow-sm" style="object-fit: cover;">
                     <div>
                         <span class="text-dark fw-bold d-inline-block">
                             <strong>{{ autor.username or autor['username'] }}</strong>
-
-                            {% if atividade.marcacoes %}
-                                {% set marcacao_pessoal = atividade.marcacoes | selectattr("usuario_id", "equalto", current_user.id) | selectattr("status", "equalto", "aceito") | list %}
-                                {% if marcacao_pessoal %}
-                                    <span class="text-muted fw-normal" style="font-size: 0.85rem;">
-                                        com <span class="fw-bold" style="color: #a06a42;">Você</span>
-                                    </span>
-                                {% endif %}
-                            {% endif %}
                         </span>
-
-                        <small class="text-muted small d-block" style="margin-top: 1px;">
-                            {{ atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao is defined else "Recente" }}
+                        {# Teste seguro de data no Layout C #}
+                        <small class="text-muted d-block small w-100" style="font-size: 0.75rem; margin-top: 2px;">
+                            <i class="bi bi-clock me-1"></i>
+                            {% if atividade.data_criacao is defined and atividade.data_criacao %}
+                                {{ atividade.data_criacao.strftime('%d/%m/%Y às %H:%M') }}
+                            {% else %}
+                                Agora
+                            {% endif %}
                         </small>
-
                     </div>
                 {% endif %}
             </div>
         </div>
 
-        {# CORPO DO TEXTO #}
+        {# 🛎️ ALERTA 1: PAINEL DE MODERAÇÃO DE IDENTIFICAÇÃO COM THUMBNAIL DA IMAGEM #}
+        {% if current_user.is_authenticated and post_obj and post_obj.id_usuario == current_user.id %}
+            {% if post_obj.solicitantes_pendentes_ids %}
+                <div class="card notification-item notification-marcacao mx-4 mt-0 mb-3 shadow-sm border-0">
+                    <div class="card-body p-3 w-100">
+                        <div class="d-flex flex-column gap-2">
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-marcacao me-2" style="font-size: 0.65rem;">
+                                    <i class="bi bi-person-plus-fill"></i> SOLICITAÇÃO
+                                </span>
+                                <small class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.3px;">
+                                    Identificações aguardando sua decisão nesta memória:
+                                </small>
+                            </div>
+
+                            <div class="d-flex flex-column gap-2 bg-white bg-opacity-75 p-2 rounded border border-light mt-1">
+                                {% for vinculo in post_obj.todas_as_marcacoes %}
+                                    {% if vinculo.status == 'pendente' %}
+                                        <div class="d-flex align-items-center justify-content-between p-1" id="painel-solicitacao-timeline-{{ vinculo.id }}">
+
+                                            <div class="d-flex align-items-center flex-grow-1 me-2">
+                                                {% set solicitante_vinculo = vinculo.usuario_origem if vinculo.usuario_origem is defined else (vinculo.solicitante if vinculo.solicitante is defined else vinculo.usuario) %}
+                                                <img src="{{ url_for('servir_foto_perfil', usuario_id=solicitante_vinculo.id) }}" class="rounded-circle border me-2" width="24" height="24" onerror="this.src='/static/fotos_perfil/default.jpg'">
+
+                                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                    <span class="notification-users" style="font-size: 0.85rem;">
+                                                        @{{ solicitante_vinculo.username if solicitante_vinculo else "Usuário" }}
+                                                    </span>
+                                                    <span class="text-dark small style-msg-solicitacao" style="font-size: 0.8rem;">
+                                                        solicitou ser marcado nessa publicação
+                                                    </span>
+
+                                                    {# Teste seguro de data no Layout B #}
+                                                    <small class="text-muted fw-normal ms-1 bg-light px-1 rounded" style="font-size: 0.72rem;">
+                                                        ({% if vinculo.data_criacao is defined and vinculo.data_criacao %}
+                                                            {{ vinculo.data_criacao.strftime('%d/%m/%Y às %H:%M') }}
+                                                        {% elif vinculo.data is defined and vinculo.data %}
+                                                            {{ vinculo.data.strftime('%d/%m/%Y às %H:%M') }}
+                                                        {% else %}
+                                                            Pendente
+                                                        {% endif %})
+                                                    </small>
+
+                                                    {% if imagem %}
+                                                        <img src="{{ url_for('static', filename='uploads/posts/' ~ imagem) }}" class="img-notification-thumb ms-1 shadow-sm">
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex gap-2 flex-shrink-0">
+                                                <button class="btn btn-xs btn-success py-1 px-2 d-flex align-items-center gap-1" style="font-size: 0.72rem; border-radius: 6px;" onclick="gerenciarMarcacaoTimeline('{{ vinculo.id }}', 'aprovar')">
+                                                    <i class="bi bi-check-lg"></i> Aprovar
+                                                </button>
+                                                <button class="btn btn-xs btn-outline-danger py-1 px-2 d-flex align-items-center gap-1" style="font-size: 0.72rem; border-radius: 6px; background-color: #fff;" onclick="gerenciarMarcacaoTimeline('{{ vinculo.id }}', 'recusar')">
+                                                    <i class="bi bi-x-lg"></i> Recusar
+                                                </button>
+                                            </div>
+
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endif %}
+
+        {# CORPO PRINCIPAL DA HISTÓRIA #}
         <div class="p-4 pt-2" style="display: block; overflow: hidden;">
             {% if imagem -%}
                 <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}">
@@ -320,93 +342,18 @@
             {%- endif -%}
 
             <p class="text-dark mb-0 texto-postagem" style="white-space: pre-line; font-size: 1.1rem; line-height: 1.4; font-weight: 500; margin: 0; padding: 0;">{{- texto.strip() | safe -}}</p>
-
             <div style="clear: both;"></div>
 
-            {# ======================================================================= #}
-            {# COMPONENTE VISUAL COMPACTO - COM GATILHO DE CURIOSIDADE                #}
-            {# ======================================================================= #}
             {% if atividade.anuncio %}
                 <div class="feed-ad-inline-wrapper my-2" style="width: 100%; display: block;">
-
-                    {# 1. GATILHO COMPACTO (Trocado de "Resgate" para "Apoio:" indutor de clique) #}
                     <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 540px;">
                         <span class="text-dark small fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.2px;">
                             <i class="bi bi-heart-fill text-danger me-1"></i> Apoio:
                         </span>
-
-                        {# Botão com o nome da empresa + indicador dinâmico +X #}
-                        <button class="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#ad-collapse-{{ atividade.id }}"
-                                aria-expanded="false"
-                                style="font-size: 0.75rem; letter-spacing: 0.3px;">
-
+                        <button class="btn btn-sm btn-primary rounded-pill fw-bold px-3 shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#ad-collapse-{{ atividade.id }}" aria-expanded="false" style="font-size: 0.75rem;">
                             {{ atividade.anuncio.local.nome }}
-
-                            {% if atividade.anuncio.mais_x > 0 %}
-                                <span class="badge bg-white text-primary ms-1" style="font-size: 0.7rem; padding: 2px 5px;">
-                                    +{{ atividade.anuncio.mais_x }}
-                                </span>
-                            {% else %}
-                                <i class="bi bi-plus-lg ms-1"></i>
-                            {% endif %}
                         </button>
                     </div>
-
-                    {# 2. A CAIXA EXPANSÍVEL (Com exibição explícita da Tag de Referência) #}
-                    <div class="collapse" id="ad-collapse-{{ atividade.id }}">
-                        <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3 text-center" style="max-width: 540px;">
-
-                            <div class="parceiro-destaque-bloco mb-3 pb-3 {% if atividade.anuncio.mais_x > 0 %}border-bottom{% endif %}">
-
-                                {# 🏷️ SELO DE REFERÊNCIA: Mostra a tag que o usuário segue ou que venceu o sorteio #}
-                                {% if atividade.anuncio.tag_referencia_nome %}
-                                    <div class="mb-2">
-                                        <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.3px; text-transform: uppercase;">
-                                            <i class="bi bi-tag-fill me-1"></i> Conteúdo relacionado: {{ atividade.anuncio.tag_referencia_nome }}
-                                        </span>
-                                    </div>
-                                {% endif %}
-
-                                <h6 class="fw-bold text-dark mb-1">{{ atividade.anuncio.local.nome }}</h6>
-
-                                {# A frase rotativa informal que já usa o nome da tag internamente #}
-                                <p class="card-text text-muted small mb-3" style="line-height: 1.4; font-size: 0.82rem;">
-                                    {{ atividade.anuncio.texto_formatado }}
-                                </p>
-
-                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
-                                   class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
-                                    <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
-                                </a>
-                            </div>
-
-                            {% if atividade.anuncio.mais_x > 0 %}
-                                <div class="outros-parceiros-bloco text-start mt-2">
-                                    <small class="text-muted fw-bold d-block mb-2" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">
-                                        Também apoiam histórias de {{ atividade.anuncio.tag_referencia_nome }}:
-                                    </small>
-
-                                    {% for outro in atividade.anuncio.outros_parceiros %}
-                                        <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded-2 mb-2 border border-light-subtle">
-                                            <div style="max-width: 70%;">
-                                                <span class="fw-bold text-dark d-block" style="font-size: 0.8rem;">{{ outro.local.nome }}</span>
-                                                <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Parceiro Comercial</small>
-                                            </div>
-                                            <a href="{{ url_for('registrar_clique', anuncio_id=outro.id, origem='botao', tag_id=outro.taxonomia_id) }}"
-                                               class="btn btn-xs btn-primary rounded-pill fw-bold px-3" style="font-size: 0.7rem; padding: 3px 10px;">
-                                                Visitar
-                                            </a>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-
-                        </div>
-                    </div>
-
                 </div>
             {% endif %}
         </div>
@@ -414,19 +361,41 @@
         {# RODAPÉ #}
         <div class="px-4 pb-3 border-top pt-2 text-end">
             <div class="d-flex justify-content-between align-items-center w-100 py-2">
-
                 <span class="text-muted small fw-medium">
-                    Publicou uma nova memória
+                    Gerenciou uma atividade de memória
                 </span>
-
                 {% if autor %}
-                    <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}"
-                       class="btn btn-sm btn-outline-info rounded-pill fw-bold px-3 shadow-sm text-decoration-none">
+                    <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}" class="btn btn-sm btn-outline-info rounded-pill fw-bold px-3 shadow-sm text-decoration-none">
                        @{{ autor.username }}
                     </a>
                 {% endif %}
-
             </div>
         </div>
     </div>
 {% endif %}
+
+<script>
+function gerenciarMarcacaoTimeline(marcacaoId, acao) {
+    // 1. Traduz 'aprovar' para 'aceitar' para casar exatamente com a sua rota Flask
+    const acaoCorreta = acao === 'aprovar' ? 'aceitar' : 'recusar';
+    const url = `/marcacao/${marcacaoId}/${acaoCorreta}`;
+
+    // 2. Cria um formulário oculto para disparar o POST tradicional que o Flask espera
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+
+    // 3. Injeta o token CSRF necessário para segurança
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrf_token';
+    csrfInput.value = csrfToken;
+
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+
+    // 4. Envia e deixa o Flask assumir o controle e dar o redirect
+    form.submit();
+}
+</script>

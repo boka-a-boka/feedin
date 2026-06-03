@@ -275,3 +275,4 @@ async function iniciarCadastroBiometrico(email, senha) {
         alert("O processo de biometria foi cancelado ou não é suportado neste navegador.");
     }
 }
+

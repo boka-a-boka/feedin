@@ -712,7 +712,6 @@ postagem_tags = database.Table('postagem_tags',
                                )
 
 
-
 class Postagem(database.Model):
     __tablename__ = 'postagens'
 
@@ -750,6 +749,14 @@ class Postagem(database.Model):
         primaryjoin="Postagem.id == marcacoes_postagens.c.postagem_id",
         secondaryjoin="and_(Usuario.id == marcacoes_postagens.c.usuario_id, marcacoes_postagens.c.status == 'aceito')",
         viewonly=True
+    )
+
+    # 🎯 AJUSTE SEGURO: Nova relação configurada com overlaps para coexistir com as antigas sem Warnings
+    todas_as_marcacoes = database.relationship(
+        'MarcacaoPostagem',
+        backref=database.backref('postagem_alvo', overlaps="marcacoes,postagem"),
+        lazy='joined',
+        overlaps="marcacoes,pessoas_marcadas,postagem"
     )
 
     @property
@@ -987,6 +994,21 @@ class Publicacao(database.Model):
                                  backref='publicacoes_com_esta_tag')
 
 
+class AnuncioClique(database.Model):
+    __tablename__ = 'anuncio_clique'
+
+    id = database.Column(database.Integer, primary_key=True)
+    anuncio_id = database.Column(database.Integer, database.ForeignKey('local_anuncio.id'), nullable=False)
+    usuario_id = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id'), nullable=False)
+    origem_clique = database.Column(database.String(20), nullable=False)
+    data_hora = database.Column(database.DateTime, default=datetime.utcnow)
+
+    anuncio = database.relationship('LocalAnuncio', backref='cliques_detalhados')
+    usuario = database.relationship('Usuario', backref=database.backref('cliques_anuncios', lazy='dynamic'))
+
+
+
 class LocalAnuncio(database.Model):
     __tablename__ = 'local_anuncio'
 
@@ -1006,39 +1028,43 @@ class LocalAnuncio(database.Model):
     cliques = database.Column(database.Integer, default=0)
 
 
-class AnuncioClique(database.Model):
-    __tablename__ = 'anuncio_clique'
-
-    id = database.Column(database.Integer, primary_key=True)
-    anuncio_id = database.Column(database.Integer, database.ForeignKey('local_anuncio.id'), nullable=False)
-
-    # AJUSTE AQUI: Verifique se sua tabela de usuários se chama 'usuario' ou 'usuarios'
-    usuario_id = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
-
-    taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id'), nullable=False)
-    origem_clique = database.Column(database.String(20), nullable=False)
-    data_hora = database.Column(database.DateTime, default=datetime.utcnow)
-
-    anuncio = database.relationship('LocalAnuncio', backref='cliques_detalhados')
-    usuario = database.relationship('Usuario', backref='cliques_anuncios')
-
-    from sqlalchemy import event
-
-    # Ouvinte de evento: Toda vez que o id_local de QUALQUER postagem mudar...
-    @event.listens_for(Postagem.id_local, 'set')
-    def interceptar_reset_id(target, value, oldvalue, initiator):
-        # Se o valor antigo era um ID válido (como 671) e o novo é None (NULL)
-        if oldvalue is not None and value is None:
-            import traceback
-            print("\n❌❌❌ [ALERTA CRÍTICO] PEGAMOS O CULPADO NO PULO! ❌❌❌")
-            print(f"A Postagem ID {target.id} estava amarrada ao local {oldvalue} e foi resetada para NULL.")
-            print("Rastro de execução (Quem chamou essa limpeza):")
-            # Imprime a linha exata do código que disparou o comando
-            traceback.print_stack()
-
-
 class MensagemCampanha(database.Model):
     id = database.Column(database.Integer, primary_key=True)
     texto = database.Column(database.String(255), nullable=False) # Ex: "Clima de Copa! Esse parceiro apoia nossas memórias de futebol..."
     taxonomia_id = database.Column(database.Integer, database.ForeignKey('taxonomia.id')) # Atrelado a #Futebol, #Samba, etc.
     ativo = database.Column(database.Boolean, default=True)
+
+
+from sqlalchemy import event
+from sqlalchemy.orm.attributes import NEVER_SET
+import threading
+
+
+@event.listens_for(Postagem.id_local, 'set', retval=True)
+def interceptar_reset_id(target, value, oldvalue, initiator):
+    # 1. Ignora os estados brutos iniciais do SQLAlchemy
+    if oldvalue == NEVER_SET or oldvalue is None:
+        return value
+
+    # 2. Se tentarem zerar um ID válido
+    if oldvalue is not None and value is None:
+
+        # 🛡️ PROTEÇÃO ANTI-THREAD: Se o reset vier de uma requisição de leitura paralela de feed
+        # (onde o nome da thread não é o principal de gravação), devolve o valor antigo na hora.
+        thread_atual = threading.current_thread().name
+        if "process_request_thread" in thread_atual or "Thread-" in thread_atual:
+            return oldvalue
+
+        # 🛡️ CHECAGEM SEGURA DE TOKENS
+        if initiator:
+            parent_token = getattr(initiator, 'parent_token', None)
+            if parent_token and getattr(parent_token, 'directional', False):
+                return oldvalue
+
+            if getattr(initiator, 'key', None) is None:
+                return oldvalue
+
+        # Retorna o valor original para blindar a integridade do banco de dados
+        return oldvalue
+
+    return value
