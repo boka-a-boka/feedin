@@ -6,6 +6,7 @@ from flask_login import login_required, login_user, logout_user, current_user
 from flask_wtf import FlaskForm
 from feedin.forms import (FormLogin, FormNewUser, FormPerfil, FormApelido, FormConvite, FormConexao, FormEsqueceuSenha,
                           FormResetarSenha)
+from feedin.modules.agenda.models import ModHomologacaoEmpresa
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from datetime import datetime, timezone, date, timedelta
 from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Parentesco,
@@ -14,7 +15,8 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
                            AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
-                           CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio)
+                           CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio, HistoricoOcupacaoLocal,
+                           Cargo, ColaboradorContrato)
 
 from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa,
                           salvar_imagem_postagem, salvar_imagem_anuncio)
@@ -22,9 +24,7 @@ from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, v
 from webauthn import (generate_registration_options, verify_registration_response, options_to_json,
                       generate_authentication_options, verify_authentication_response)
 from webauthn.helpers.structs import PublicKeyCredentialDescriptor
-
 from werkzeug.security import generate_password_hash
-
 from flask_wtf.csrf import validate_csrf
 
 biometria_bp = Blueprint('biometria', __name__)
@@ -35,7 +35,7 @@ RP_NAME = "FeedIn"
 
 from urllib.parse import quote
 from functools import wraps
-from sqlalchemy import or_, func, asc, and_, not_
+from sqlalchemy import or_, func, asc, desc, and_, not_
 from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
 from markupsafe import escape
@@ -795,100 +795,147 @@ def formatar_postagem(texto):
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    # 1. LÓGICA PARA USUÁRIOS LOGADOS (O Onboarding)
+    # 1. LÓGICA PARA USUÁRIOS LOGADOS
     if current_user.is_authenticated:
         if current_user.nivel_acesso < 10:
-            # Direciona para completar o perfil (Abas: perfil, memorias, preferencias)
             return redirect(url_for('get_perfil', id_usuario=current_user.id))
         return redirect(url_for('dashboard'))
 
-    # 2. LÓGICA PARA VISITANTES (O Funil de Interesse - POST)
+    # 2. LÓGICA PARA VISITANTES (POST - Funil)
     if request.method == "POST":
         nome_lead = request.form.get("nome")
         email_lead = request.form.get("email")
         interesse = request.form.get("interesse")
 
-        # Dispara o e-mail de nutrição sem papas na língua
         sucesso = enviar_email_nutricao(nome_lead, email_lead, interesse)
 
         if sucesso:
-            flash(
-                f"Olá {nome_lead}! Verifique seu e-mail. Enviamos detalhes exclusivos sobre os {interesse} no FeedIn!.",
-                "success")
+            flash(f"Olá {nome_lead}! Verifique seu e-mail sobre {interesse}.", "success")
         else:
-            flash("Ocorreu um problema ao enviar o e-mail, mas não se preocupe, estamos trabalhando nisso!", "danger")
+            flash("Ocorreu um problema no envio, mas estamos trabalhando nisso!", "danger")
 
         return redirect(url_for('index'))
 
-    # 3. LÓGICA PARA VISITANTES (Visualização da Landing Page - GET)
-    return render_template('index.html')
+    # 3. LÓGICA PARA VISITANTES (GET - Landing Page)
+    import random
+    from feedin.models import Postagem, Usuario, Local, Taxonomia
+
+    # Inicialização segura
+    usuarios_reais = []
+    locais_reais_ativos = []
+    locais_reais_aguardando = []
+    tags_reais = []
+
+    # 3.1 Últimas postagens ativas (Unificamos a query aqui!)
+    posts_base = Postagem.query.filter_by(ativo=True).order_by(Postagem.data_criacao.desc()).limit(50).all()
+    posts_aleatorios = random.sample(posts_base, min(len(posts_base), 12))
+
+    # 3.2 Curadores com foto (evitando 'default.jpg')
+    usuarios_reais = Usuario.query.filter(Usuario.foto_perfil != None, Usuario.foto_perfil != 'default.jpg').limit(10).all()
+
+    # 3.3 Locais ativos e verificados (Destaques - Top 10)
+    locais_reais_ativos = database.session.query(
+        Local,
+        func.count(VinculoUsuarioLocal.id).label('seguidores_count')
+    ) \
+        .select_from(Local) \
+        .outerjoin(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id) \
+        .outerjoin(Usuario, VinculoUsuarioLocal.usuario_id == Usuario.id) \
+        .filter((Usuario.nivel_acesso >= 10) | (Usuario.id == None)) \
+        .group_by(Local.id) \
+        .order_by(desc('seguidores_count')) \
+        .limit(10) \
+        .all()
+
+    # Extraímos apenas os IDs dos locais que entraram nos destaques
+    ids_ativos = [item[0].id for item in locais_reais_ativos]
+
+    # 3.4 Locais novos (Aguardando - Sorteados e excluindo os que já estão no Top 10)
+    # Usamos o filter(~Local.id.in_(ids_ativos)) para garantir a exclusão
+    locais_reais_aguardando = Local.query.filter(
+        Local.esta_ativo == True,
+        ~Local.id.in_(ids_ativos)
+    ).order_by(func.random()).limit(10).all()
+
+    # 3.5 Tags: Buscando as 20 mais utilizadas e visíveis
+    # O .filter() garante que ignoramos as ocultas
+    # O .order_by() coloca as mais usadas no topo
+    # O .limit(20) garante que o banco retorne apenas o volume solicitado
+
+    tags_reais = Taxonomia.query \
+        .filter_by(visivel_usuario=True) \
+        .order_by(Taxonomia.contagem_uso.desc()) \
+        .limit(20) \
+        .all()
+
+    # NOTA: O resultado virá como (objeto_taxonomia, total_uso)
+
+    # 1. Coletar IDs das tags presentes nas postagens da vitrine
+    ids_tags_na_vitrine = {tag.id for pub in posts_aleatorios if pub.tags for tag in pub.tags}
+
+    # 2. Lógica do Anúncio (Motor Polimórfico na origem)
+    anuncio_vitrine = None
+    if ids_tags_na_vitrine:
+        anuncio_vitrine = LocalAnuncio.query.join(Taxonomia, LocalAnuncio.taxonomia_id == Taxonomia.id) \
+            .filter(
+            Taxonomia.id.in_(ids_tags_na_vitrine),
+            LocalAnuncio.url_flyer != None,
+            LocalAnuncio.status == 'ativo'
+        ).order_by(func.random()).first()
+
+    # 3. Retornar o objeto original do banco
+    return render_template(
+        'index.html',
+        publicacoes_aleatorias=posts_aleatorios,
+        usuarios_reais=usuarios_reais,
+        locais_reais_ativos=locais_reais_ativos,
+        anuncio_vitrine=anuncio_vitrine,  # Passamos o objeto puro
+        locais_reais_aguardando=locais_reais_aguardando,
+        tags_reais=tags_reais
+    )
 
 
 @app.route('/editar_perfil', methods=['POST'])
 @login_required
 def editar_perfil():
     form = FormPerfil()
-
-    # Carregar choices
-    form.genero.choices = [(g.id, str(g.id)) for g in Generos.query.all()]
     form.estado_civil.choices = [(e.id, str(e.id)) for e in EstadoCivil.query.all()]
 
     if request.method == 'POST':
         try:
-            nome = request.form.get('nome_completo')
-
-            # 1. BUSCAR OU CRIAR O PERFIL (Usando variável local 'perfil_obj')
+            # 1. BUSCAR O PERFIL EXISTENTE
             from feedin.models import Perfil
             perfil_obj = Perfil.query.filter_by(id_usuario=current_user.id).first()
 
             if not perfil_obj:
-                print("Criando novo objeto de perfil...")
-                perfil_obj = Perfil(id_usuario=current_user.id, nome_completo=nome)
+                perfil_obj = Perfil(id_usuario=current_user.id)
                 database.session.add(perfil_obj)
-            else:
-                print("Atualizando perfil existente...")
-                perfil_obj.nome_completo = nome
 
-            # 2. CAPTURAR OS VALORES DO FORM
-            id_gen = request.form.get('genero')
+            # 2. CAPTURAR OS DADOS OBRIGATÓRIOS DO FORMULÁRIO COMPLEMENTAR
+            cidade_natal = request.form.get('cidade_natal', '').strip()
             id_civ = request.form.get('estado_civil')
+            biografia = request.form.get('biografia', '').strip()
 
-            # 3. ATRIBUIR DIRETAMENTE AO OBJETO LOCAL
+            if not cidade_natal or not id_civ or not biografia:
+                flash("Por favor, preencha sua Cidade Natal, Estado Civil e Biografia.", "warning")
+                return redirect(url_for('get_perfil', id_usuario=current_user.id))
 
-            # Buscamos a string do input direto do request
-            data_nascimento_str = request.form.get('data_nascimento')
-
-            # Só atualizamos a data se o campo veio preenchido no POST
-            if data_nascimento_str:
-                from datetime import datetime
-                try:
-                    # Converte a string do input (formato HTML padrão: YYYY-MM-DD) para objeto date do Python
-                    perfil_obj.data_nascimento = datetime.strptime(data_nascimento_str, '%Y-%m-%d').date()
-                except ValueError:
-                    # Caso a data venha em um formato inesperado, evita quebrar o sistema
-                    print("Formato de data inválido recebido.")
-            # Se 'data_nascimento_str' for vazio ou None (usuário só mudou a foto),
-            # nós NÃO entramos no IF. O banco mantém a data antiga intacta!
-
-            perfil_obj.cidade_natal = request.form.get('cidade_natal')
-            perfil_obj.biografia = request.form.get('biografia')
+            perfil_obj.cidade_natal = cidade_natal
+            perfil_obj.estado_civil = int(id_civ)
+            perfil_obj.biografia = biografia
 
             # =================================================================
-            # AJUSTE PONTUAL: CAPTURA E PROCESSAMENTO DA FOTO DE PERFIL
+            # PROCESSAMENTO DA FOTO DE PERFIL (Se enviada via formulário unificado)
             # =================================================================
             file = request.files.get('foto_perfil')
             if file and file.filename != '':
                 nome_da_foto_para_deletar = current_user.foto_perfil
-
-                # Processa e salva a imagem no disco usando sua função existente
                 novo_nome = salvar_imagem(file)
 
                 if novo_nome:
-                    # Atualiza o nome da foto no objeto do usuário
                     current_user.foto_perfil = novo_nome
-                    print(f"DEBUG [editar_perfil]: Banco atualizado com a nova foto: {novo_nome}")
+                    print(f"DEBUG [editar_perfil]: Foto atualizada: {novo_nome}")
 
-                    # Lógica de exclusão física do arquivo antigo (idêntica à sua)
                     if nome_da_foto_para_deletar and \
                             nome_da_foto_para_deletar != 'default.jpg' and \
                             nome_da_foto_para_deletar != novo_nome:
@@ -901,29 +948,35 @@ def editar_perfil():
                         if os.path.exists(caminho_completo_antigo):
                             try:
                                 os.remove(caminho_completo_antigo)
-                                print(f"SUCESSO: Arquivo antigo {nome_da_foto_para_deletar} removido.")
                             except Exception as e:
                                 print(f"ERRO AO DELETAR FOTO ANTIGA: {e}")
-            # =================================================================
 
-            # 4. COMMIT
+            # Salva o estado dos dados preenchidos até aqui
             database.session.commit()
-            print("Sucesso: Perfil gravado no banco!")
 
-            # 5. DIRECIONAMENTO
-            if current_user.nivel_acesso < 10:
-                flash("Identidade salva com sucesso!", "success")
-                return redirect(url_for('dashboard', aba='preferencias'))
+            # =================================================================
+            # 3. SALVAR E PROMOVER (Apenas se clicou no botão correto!)
+            # =================================================================
+            # Mudança aqui: Verificamos se o 'gatilho' de encerramento foi enviado no POST
+            if current_user.nivel_acesso < 10 and 'concluir_onboarding' in request.form:
+                sucesso_nivel, msg_nivel = processar_mudanca_nivel(current_user, novo_nivel=10)
 
-            return redirect(url_for('ver_perfil', usuario_id=current_user.id))
+                if sucesso_nivel:
+                    database.session.commit()
+                    flash("Parabéns! Seu cadastro foi concluído e seu acesso está liberado. 🎉", "success")
+                    return redirect(url_for('dashboard'))
+                else:
+                    flash(f"Houve um problema na ativação da conta: {msg_nivel}", "danger")
+
+            # Se não veio a confirmação ou a promoção falhou, apenas mantém o usuário salvando o rascunho
+            flash("Informações salvas temporariamente.", "info")
+            return redirect(url_for('get_perfil', id_usuario=current_user.id))
 
         except Exception as e:
             database.session.rollback()
-            print(f"ERRO AO SALVAR PERFIL: {e}")
-            flash(f"Erro técnico: {e}", "danger")
-            return redirect(url_for('dashboard', aba='perfil'))
-
-    return redirect(url_for('dashboard', aba='perfil'))
+            print(f"ERRO AO SALVAR PERFIL COMPLEMENTAR: {e}")
+            flash(f"Erro técnico ao salvar o perfil: {e}", "danger")
+            return redirect(url_for('get_perfil', id_usuario=current_user.id))
 
 
 @app.route('/upload-foto-perfil', methods=['POST'])
@@ -932,31 +985,33 @@ def upload_foto_perfil():
     file = request.files.get('foto_perfil')
 
     if file:
-        # 1. PEGA O NOME ANTES DE QUALQUER COISA
-        # Usamos uma variável bem específica para não confundir
         nome_da_foto_para_deletar = current_user.foto_perfil
         print(f"DEBUG: Foto que estava no banco antes: {nome_da_foto_para_deletar}")
 
-        # 2. Processa a nova imagem
+        # Processa e salva a nova imagem no disco
         novo_nome = salvar_imagem(file)
 
         if novo_nome:
-            # 3. Atualiza o banco
+            # Atualiza o campo do usuário
             current_user.foto_perfil = novo_nome
-            database.session.commit()
-            print(f"DEBUG: Banco atualizado com o novo nome: {novo_nome}")
 
-            # 4. LÓGICA DE EXCLUSÃO
-            # Verificamos se o nome antigo existe, se não é o padrão e se mudou de fato
+            # --- O PULO DO GATO ---
+            # Marcamos o objeto como modificado e forçamos a expiração para que o
+            # SQLAlchemy releia o banco de dados na próxima requisição sem usar cache.
+            database.session.add(current_user)
+            database.session.commit()
+            database.session.refresh(current_user)  # Força o reload imediato do objeto
+
+            print(f"DEBUG: Banco atualizado e atualizado com o novo nome: {current_user.foto_perfil}")
+            flash("Foto de perfil enviada com sucesso! Agora, complete seus dados.", "success")
+
+            # LÓGICA DE EXCLUSÃO (Preservada)
             if nome_da_foto_para_deletar and \
                     nome_da_foto_para_deletar != 'default.jpg' and \
                     nome_da_foto_para_deletar != novo_nome:
 
-                # Construa o caminho exatamente como na salvar_imagem
                 pasta_fotos = os.path.join(current_app.root_path, 'static', 'fotos_perfil')
                 caminho_completo_antigo = os.path.join(pasta_fotos, nome_da_foto_para_deletar)
-
-                print(f"DEBUG: Tentando deletar no caminho: {caminho_completo_antigo}")
 
                 if os.path.exists(caminho_completo_antigo):
                     try:
@@ -964,11 +1019,13 @@ def upload_foto_perfil():
                         print(f"SUCESSO: Arquivo {nome_da_foto_para_deletar} removido.")
                     except Exception as e:
                         print(f"ERRO AO DELETAR: {e}")
-                else:
-                    print(f"AVISO: O arquivo {nome_da_foto_para_deletar} não foi encontrado no disco.")
         else:
-            print("ERRO: A função salvar_imagem falhou.")
+            print("ERRO: A função salvar_imagem falhou ou retornou None.")
+            flash("Não foi possível processar sua imagem. Tente outro formato.", "danger")
+    else:
+        flash("Nenhum arquivo de imagem foi detectado no envio.", "warning")
 
+    # Força o redirecionamento explícito passando o ID para garantir consistência
     return redirect(url_for("get_perfil", id_usuario=current_user.id))
 
 
@@ -1662,7 +1719,7 @@ def seguir_local(local_id):
         return jsonify({"status": "error", "sucesso": False, "message": str(e)}), 500
 
 
-@app.route('/get_perfil/<int:id_usuario>', methods=['GET', 'POST'])
+@app.route('/get_perfil/<int:id_usuario>', methods=['GET'])
 @login_required
 def get_perfil(id_usuario):
     if current_user.id != id_usuario:
@@ -1670,111 +1727,114 @@ def get_perfil(id_usuario):
 
     database.session.refresh(current_user)
     usuario = Usuario.query.get_or_404(id_usuario)
-    perfil_usuario = Perfil.query.filter_by(id_usuario=usuario.id).first()
 
-    # --- 1. GARANTIA DE DADOS INICIAIS (EVITA NONETYPE) ---
+    # 1. Busca o perfil real no banco
+    perfil_usuario = database.session.query(Perfil).filter_by(id_usuario=usuario.id).first()
+
+    # --- 2. GARANTIA EM MEMÓRIA (Sem dar commit no banco!) ---
     if not perfil_usuario:
+        # Criamos o objeto apenas na memória do Python para o formulário funcionar.
+        # SEM database.session.add() e SEM database.session.commit() aqui!
         perfil_usuario = Perfil(
             id_usuario=usuario.id,
             nome_completo="",
-            data_nascimento=date(1900, 1, 1),  # Data padrão para não ser None
             cidade_natal="",
             biografia=""
         )
-        database.session.add(perfil_usuario)
-        database.session.commit()
 
-    # --- 2. LÓGICA DE ABAS ---
+    # --- 3. CONTROLADOR DO FLUXO DE ONBOARDING ---
     solicitada = request.args.get('aba')
-    contagem_memorias = VinculoUsuarioLocal.query.filter_by(usuario_id=id_usuario).count()
 
     if current_user.nivel_acesso < 10:
-        if not usuario.foto_perfil or usuario.foto_perfil == 'default.jpg' or not perfil_usuario.nome_completo:
-            aba_atual = 'perfil'
-        elif contagem_memorias < 1:
-            aba_atual = 'memorias'
-        else:
-            aba_atual = solicitada or 'preferencias'
+        aba_atual = 'perfil'
     else:
         aba_atual = solicitada or 'perfil'
 
-    # --- 3. INICIALIZAÇÃO DO FORMULÁRIO ---
+    # --- 4. PREPARAÇÃO DO WTFORMS E DROPDOWNS ---
     form_perfil = FormPerfil(obj=perfil_usuario)
-    form_perfil.genero.choices = [(g.id, g.genero) for g in Generos.query.all()]
     form_perfil.estado_civil.choices = [(e.id, e.estado_civil) for e in EstadoCivil.query.all()]
+    form_perfil.genero.choices = [(g.id, g.genero) for g in Generos.query.all()]
 
-    # Bloqueio de nome para usuários já cadastrados
-    if current_user.nivel_acesso < 10 and perfil_usuario.nome_completo:
-        form_perfil.nome_completo.render_kw = {'readonly': True, 'style': 'background-color: #e9ecef;'}
+    lista_generos = Generos.query.all()
+    contagem_memorias = VinculoUsuarioLocal.query.filter_by(usuario_id=id_usuario).count()
 
-    # --- 4. PROCESSAMENTO ---
-    if form_perfil.validate_on_submit():
-        try:
-            # Atribuição manual para garantir que nenhum None quebre o código
-            perfil_usuario.nome_completo = form_perfil.nome_completo.data
-            perfil_usuario.data_nascimento = form_perfil.data_nascimento.data or date(1900, 1, 1)
-            perfil_usuario.cidade_natal = form_perfil.cidade_natal.data or ""
-            perfil_usuario.genero = form_perfil.genero.data
-            perfil_usuario.estado_civil = form_perfil.estado_civil.data
-            perfil_usuario.biografia = form_perfil.biografia.data or ""
-
-            database.session.commit()
-            flash('Dados básicos salvos! Agora, conte-nos suas memórias.', 'success')
-            return redirect(url_for('get_perfil', id_usuario=id_usuario, aba='memorias'))
-
-        except Exception as e:
-            database.session.rollback()
-            print(f"ERRO DE BANCO: {e}")
-            flash('Erro ao salvar no banco de dados.', 'danger')
-
-        # ESTE BLOCO É O RAIO-X: Se o formulário falhar, ele dirá o porquê no terminal
-    elif request.method == 'POST':
-#        print(f"ERROS DE VALIDAÇÃO DETECTADOS: {form_perfil.errors}")
-        for campo, erros in form_perfil.errors.items():
-            for erro in erros:
-                flash(f"Erro no campo {campo}: {erro}", "danger")
-
-    # Debug de erros no terminal (ajuda muito agora)
-    #elif request.method == 'POST':
-    #     print(f"ERROS NO FORMULÁRIO: {form_perfil.errors}")
-
+    # --- 5. RENDERIZAÇÃO PURA ---
     return render_template(
         'homepage.html',
         aba=aba_atual,
         usuario=usuario,
         perfil=perfil_usuario,
         form=form_perfil,
+        generos=lista_generos,
         form_apelido=FormApelido(),
         form_convite=FormConvite(),
         meus_locais=VinculoUsuarioLocal.query.filter_by(usuario_id=id_usuario).all(),
         contagem_memorias=contagem_memorias,
         edicao_livre=(current_user.nivel_acesso >= 10),
-        contagem_preferencias = usuario.interesses.count()
+        contagem_preferencias=usuario.interesses.count() if hasattr(usuario, 'interesses') else 0
     )
 
 
 @app.route('/adicionar_apelido', methods=['POST'])
 @login_required
 def adicionar_apelido():
-    form_apelido = FormApelido()
-    if form_apelido.validate_on_submit():
-        perfil = Perfil.query.filter_by(id_usuario=current_user.id).first()
-        if not perfil:
-            flash("Complete seus dados básicos primeiro.", "warning")
-            return redirect(url_for('get_perfil', id_usuario=current_user.id))
+    try:
+        from feedin.forms import FormApelido
+        form_a = FormApelido()
 
-        novo = Apelidos(apelido=form_apelido.apelido.data, id_perfil=perfil.id)
-        database.session.add(novo)
-        database.session.commit()
-        flash("Apelido registrado!", "success")
+        if form_a.validate_on_submit():
+            from feedin.models import Apelidos
+            novo_apelido = form_a.apelido.data.strip()
 
-    # A LÓGICA DE RETORNO BASEADA NA SUA TRAVA:
-    if current_user.nivel_acesso >= 10:
-        # Se ele já é veterano/validado, volta para o Dashboard na aba correta
-        return redirect(request.referrer or url_for('get_perfil', id_usuario=current_user.id))
-    else:
-        # Se ele está no Onboarding (Fase 3), volta para a tela unificada
-        return redirect(url_for('get_perfil', id_usuario=current_user.id))
+            apelido_existente = Apelidos.query.filter_by(
+                id_perfil=current_user.perfil.id,
+                apelido=novo_apelido
+            ).first()
+
+            if not apelido_existente:
+                item = Apelidos(id_perfil=current_user.perfil.id, apelido=novo_apelido)
+                database.session.add(item)
+                database.session.commit()
+                flash("Apelido adicionado com sucesso!", "success")
+            else:
+                flash("Você já adicionou esse apelido.", "warning")
+        else:
+            flash("Formato de apelido inválido.", "danger")
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"❌ ERRO AO INSERIR APELIDO: {e}")
+        flash("Erro técnico ao salvar apelido.", "danger")
+
+    # =================================================================
+    # RETORNO CORRETO: Devolve para a tela de Configurações na aba Dados
+    # =================================================================
+    return redirect(url_for('configuracoes', aba='perfil'))
+
+
+@app.route('/excluir_apelido/<int:id_apelido>', methods=['GET', 'POST'])
+@login_required
+def excluir_apelido(id_apelido):
+    try:
+        from feedin.models import Apelidos
+        apelido_obj = Apelidos.query.get_or_404(id_apelido)
+
+        if apelido_obj.perfil.id_usuario == current_user.id:
+            database.session.delete(apelido_obj)
+            database.session.commit()
+            flash("Apelido removido com sucesso!", "success")
+        else:
+            flash("Ação não autorizada.", "danger")
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"❌ ERRO AO EXCLUIR APELIDO: {e}")
+        flash("Erro ao tentar remover o apelido.", "danger")
+
+    # =================================================================
+    # RETORNO CORRETO: Devolve para a tela de Configurações na aba Dados
+    # =================================================================
+    return redirect(url_for('configuracoes', aba='perfil'))
 
 
 @app.route('/editar_apelido/<int:id_apelido>', methods=['POST'])
@@ -1791,32 +1851,6 @@ def editar_apelido(id_apelido):
         apelido_obj.apelido = novo_valor
         database.session.commit()
         flash("Apelido atualizado!", "success")
-
-        # ... (lógica de banco de dados anterior) ...
-        database.session.commit()
-        flash("Atualizado com sucesso!", "success")
-
-        # O SEGREDO ESTÁ AQUI:
-        # Redireciona para a página de perfil completa, sem especificar abas que podem virar fragmentos.
-        return redirect(request.referrer or url_for('get_perfil', id_usuario=current_user.id))
-
-
-
-@app.route('/excluir_apelido/<int:id_apelido>', methods=['GET', 'POST'])
-@login_required
-def excluir_apelido(id_apelido):
-    apelido_obj = Apelidos.query.get_or_404(id_apelido)
-    perfil_vinculado = Perfil.query.get(apelido_obj.id_perfil)
-
-    if not perfil_vinculado or current_user.id != perfil_vinculado.id_usuario:
-        abort(403)
-
-    database.session.delete(apelido_obj)
-    database.session.commit()
-    flash('Apelido removido!', 'info')
-
-    # Retorno inteligente igual ao da adição
-    if current_user.nivel_acesso >= 10:
 
         # ... (lógica de banco de dados anterior) ...
         database.session.commit()
@@ -3171,18 +3205,28 @@ def declinar_conexao(id_conexao):
 
 
 def obter_sugestoes_pioneiras(usuario_atual):
+    # =================================================================
+    # BARREIRA DE ENTRADA: Se o usuário for totalmente novo e zerado,
+    # não há chaves de afinidade. Retorna vazio imediatamente!
+    # =================================================================
+    meus_grupos_ids = [m.id_grupo for m in usuario_atual.membros_grupos]
+    minhas_prefs = usuario_atual.interesses.all()
+    meus_locais_ids = [v.local_id for v in usuario_atual.vinculos]
+
+    if not meus_grupos_ids and not minhas_prefs and not meus_locais_ids:
+        print(f"📌 [MOTOR SUGESTÕES] Usuário {usuario_atual.id} está zerado. Nenhuma sugestão gerada.")
+        return [] # Retorno limpo e seguro
+
     # 1. Automação de Rigor (Mantido)
     total_pioneiros = Usuario.query.filter(Usuario.nivel_acesso >= 10).count()
     modo_rigoroso = app.config.get('MODO_PRODUCAO') or (total_pioneiros > 100)
 
-    # 2. Lista de Exclusão (Corrigido para ser mais performático)
-    # No passo 2 da sua função obter_sugestoes_pioneiras:
+    # 2. Lista de Exclusão (Mantido performático)
     relacoes_existentes = Conexoes.query.filter(
         (Conexoes.id_remetente == usuario_atual.id) |
         (Conexoes.id_destinatario == usuario_atual.id)
     ).all()
 
-    # Certifique-se de que esta lista pegue o "outro lado" de cada conexão
     ids_bloqueados = []
     for c in relacoes_existentes:
         if c.id_remetente != usuario_atual.id:
@@ -3191,68 +3235,66 @@ def obter_sugestoes_pioneiras(usuario_atual):
             ids_bloqueados.append(c.id_destinatario)
 
     ids_bloqueados.append(usuario_atual.id)
-    ids_bloqueados = list(set(ids_bloqueados))  # Remove duplicatas
+    ids_bloqueados = list(set(ids_bloqueados))
 
     # 3. Coleta de IDs (Interesses e seus Pais)
-    minhas_prefs = usuario_atual.interesses.all()
     minhas_prefs_ids = [int(p.id) for p in minhas_prefs]
 
     ids_meus_pais = []
     for p in minhas_prefs:
-        # Pega os IDs dos pais para aumentar o espectro de match
         ids_meus_pais.extend([int(pai.id) for pai in p.contextos])
 
     busca_total_ids = list(set(minhas_prefs_ids + ids_meus_pais))
-    meus_grupos_ids = [m.id_grupo for m in usuario_atual.membros_grupos]
 
-    # 4. A QUERY (AJUSTADA)
+    # 4. A QUERY (Protegida contra listas vazias)
     possiveis_conexoes = (Usuario.query
                           .outerjoin(MembroGrupo)
                           .options(
-        database.joinedload(Usuario.perfil),
-        database.joinedload(Usuario.membros_grupos)
-    )
-                          # AJUSTE: Buscamos por nível_acesso >= 10 OU is_pioneiro
+                                database.joinedload(Usuario.perfil),
+                                database.joinedload(Usuario.membros_grupos)
+                          )
                           .filter(or_(Usuario.nivel_acesso >= 10, Usuario.is_pioneiro == True))
                           .filter(~Usuario.id.in_(ids_bloqueados))
                           .filter(
-        or_(
-            Usuario.membros_grupos.any(MembroGrupo.id_grupo.in_(meus_grupos_ids)) if meus_grupos_ids else False,
-            Usuario.interesses.any(Taxonomia.id.in_(busca_total_ids))
-        )
-    )
+                                or_(
+                                    Usuario.membros_grupos.any(MembroGrupo.id_grupo.in_(meus_grupos_ids)) if meus_grupos_ids else False,
+                                    Usuario.interesses.any(Taxonomia.id.in_(busca_total_ids)) if busca_total_ids else False
+                                )
+                          )
                           .distinct()
-                          .limit(15)  # Aumentamos o limite antes do filtro de rigor
+                          .limit(15)
                           .all())
 
-    # 5. Processamento dos Cards (Mantido com melhorias de segurança)
+    # 5. Processamento dos Cards (Com validação estrita de afinidade)
     sugestoes_finais = []
-    meus_locais_ids = [v.local_id for v in usuario_atual.vinculos]
 
     for outro in possiveis_conexoes:
         amigo_ponte = usuario_atual.get_amigo_em_comum(outro)
 
         if modo_rigoroso and not amigo_ponte:
-            # Se tiver poucos usuários no sistema, o modo rigoroso pode esvaziar o carrossel
             if total_pioneiros > 20:
                 continue
 
         # Lógica de Interesses em Comum
-        # Como 'outro.interesses' é dinâmico, filtramos via Python para o Card
-        interesses_outro_ids = [p.id for p in outro.interesses.all()]
         interesses_comum_nomes = [p.nome for p in outro.interesses.all() if p.id in minhas_prefs_ids]
 
         # Lógica de Locais
         locais_comum = [v.local.nome for v in outro.vinculos if v.local_id in meus_locais_ids]
         locais_unicos = list(set(locais_comum))
 
+        # Se a query trouxe o usuário por causa de um grupo em comum, mas ele não tem
+        # nem amigo_ponte, nem interesses e nem locais comuns, avaliamos se vale sugerir
+        if not amigo_ponte and not interesses_comum_nomes and not locais_unicos:
+            continue
+
         # Cálculo de Peso para o Ranking
         calculo_peso = (len(locais_unicos) * 10) + (len(interesses_comum_nomes) * 5)
-        if amigo_ponte: calculo_peso += 20
+        if amigo_ponte:
+            calculo_peso += 20
 
         sugestoes_finais.append({
             'usuario': outro,
-            'motivo': f"Conhece {amigo_ponte.username}" if amigo_ponte else "Interesses em comum",
+            'motivo': f"Conhece {amigo_ponte.username}" if amigo_ponte else ("Locais em comum" if locais_unicos else "Interesses em comum"),
             'amigo_ponte': amigo_ponte,
             'preferencias': interesses_comum_nomes[:3],
             'total_restante_prefs': max(0, len(interesses_comum_nomes) - 3),
@@ -3265,7 +3307,21 @@ def obter_sugestoes_pioneiras(usuario_atual):
 
 
 def obter_sugestoes_carrossel(usuario_atual):
+    # =================================================================
+    # TRAVA DE RELEVÂNCIA: Se o usuário não pontuou NADA, o carrossel
+    # fica estritamente vazio para disparar a experiência do Tour Guiado.
+    # =================================================================
+    contagem_preferencias = usuario_atual.interesses.count()
+    # Ajuste o nome do relacionamento de vínculos/memórias se for diferente no seu model
+    contagem_memorias = len(usuario_atual.vinculos) if hasattr(usuario_atual, 'vinculos') else 0
+
+    if contagem_preferencias == 0 and contagem_memorias == 0:
+        print(f"📌 [CARROSSEL] Usuário {usuario_atual.id} sem chaves de afinidade. Retornando lista vazia.")
+        return []
+
+    # --- FLUXO NORMAL (Se o usuário já tiver dados cadastrados) ---
     bloqueados = ids_bloqueados_pelo_usuario(usuario_atual)
+
     # Pega 15 candidatos para filtrar os 10 melhores
     possiveis = Usuario.query.filter(or_(Usuario.nivel_acesso >= 10, Usuario.is_pioneiro == True)) \
         .filter(~Usuario.id.in_(bloqueados)) \
@@ -4121,8 +4177,11 @@ def configuracoes():
     todas_tags = Taxonomia.query.filter_by(visivel_usuario=True).order_by(Taxonomia.nome.asc()).all()
     meus_interesses_ids = [t.id for t in interesses_atuais]
 
-    return render_template(
-        'configuracoes.html',
+    # Dentro da sua rota def configuracoes():
+    perfil_usuario = current_user.perfil
+
+    return render_template("configuracoes.html",
+        perfil=perfil_usuario,
         aba_ativa=aba_ativa,
         form=form,
         form_apelido=form_apelido,
@@ -4560,14 +4619,17 @@ def admin_reenviar_confirmacao(usuario_id):
 @app.route('/processar_identidade', methods=['POST'])
 @login_required
 def processar_identidade():
+    # Para evitar UnboundLocalError com modelos em importações circulares
+    from feedin.models import IdentidadeCivil, Perfil
+
     # 1. Captura e Limpeza Rigorosa
-    # Importante: Verifique se no seu HTML o campo de nome é 'nome_real' ou 'nome_completo'
     nome_real = request.form.get('nome_real', '').strip().upper()
     cpf_digitado = re.sub(r'\D', '', request.form.get('cpf', ''))
     data_nasc_str = request.form.get('data_nascimento')
+    genero_id = request.form.get("genero")
 
-    # Validação de campos vazios
-    if not nome_real or not cpf_digitado or not data_nasc_str:
+    # Validação rigorosa de campos vazios
+    if not nome_real or not cpf_digitado or not data_nasc_str or not genero_id:
         flash("Todos os campos de identidade são obrigatórios para a validação.", "warning")
         return redirect(url_for('get_perfil', id_usuario=current_user.id, aba='perfil'))
 
@@ -4590,9 +4652,10 @@ def processar_identidade():
 
     # 4. Encriptação e Gravação
     try:
+        # Conversão segura da string de data para objeto date do Python
         data_nasc_obj = datetime.strptime(data_nasc_str, '%Y-%m-%d').date()
 
-        # Usamos o app.fernet ou o seu cipher_suite
+        # Encriptação usando a chave da aplicação (Fernet)
         cpf_protegido = app.fernet.encrypt(cpf_digitado.encode())
 
         nova_identidade = IdentidadeCivil(
@@ -4604,29 +4667,40 @@ def processar_identidade():
             ip_origem=request.remote_addr,
             versao_termos_aceita="1.0-BETA"
         )
-
-        # Sincroniza os dados da identidade com o perfil social automaticamente
-        perfil = current_user.perfil
-        if perfil:
-            perfil.nome_completo = nome_real
-            perfil.data_nascimento = data_nasc_obj
-
-            # Captura gênero e estado civil se vierem do form_alfandega
-            genero_id = request.form.get("genero")
-            if genero_id: perfil.genero = int(genero_id)
-
-            ec_id = request.form.get("estado_civil")
-            if ec_id: perfil.estado_civil = int(ec_id)
-
-        current_user.aceite_lgpd = True
         database.session.add(nova_identidade)
+
+        # 5. SINCRONIZAÇÃO DA ALFÂNDEGA COM O PERFIL
+        perfil_existente = Perfil.query.filter_by(id_usuario=current_user.id).first()
+
+        if not perfil_existente:
+            # Cria o perfil mapeando as variáveis corretas da função
+            novo_perfil = Perfil(
+                id_usuario=current_user.id,
+                nome_completo=nome_real,
+                data_nascimento=data_nasc_obj,
+                genero=int(genero_id),
+                cidade_natal="",
+                biografia=""
+            )
+            database.session.add(novo_perfil)
+        else:
+            # Se o perfil fantasma já existia na memória/banco, atualizamos com os dados oficiais
+            perfil_existente.nome_completo = nome_real
+            perfil_existente.data_nascimento = data_nasc_obj
+            perfil_existente.genero = int(genero_id)
+
+        # Define o flag que desarma o modal da LGPD no HTML/Front
+        current_user.aceite_lgpd = True
+
+        # Um único commit consolida a Identidade, o Perfil e o status do Usuário
         database.session.commit()
 
-        flash("Identidade verificada com sucesso! Bem-vindo(a) oficial ao FeedIn.", "success")
+        flash("Identidade verificada com sucesso! Prossiga para definir sua foto de perfil.", "success")
 
-        # Redireciona para memórias se for onboarding (nível baixo)
+        # Mantém no fluxo de onboarding se o nível for menor que 10
         if current_user.nivel_acesso < 10:
-            return redirect(url_for('get_perfil', id_usuario=current_user.id, aba='memorias'))
+            return redirect(url_for('get_perfil', id_usuario=current_user.id))
+
         return redirect(url_for('dashboard', aba='perfil'))
 
     except Exception as e:
@@ -4634,7 +4708,6 @@ def processar_identidade():
         print(f"Erro Crítico na Alfândega: {e}")
         flash("Houve um problema técnico ao salvar seus dados. Tente novamente.", "danger")
         return redirect(url_for('get_perfil', id_usuario=current_user.id, aba='perfil'))
-
 
 # As rotas abaixo tratam o processo de publicação de conteúdos
 
@@ -4772,6 +4845,32 @@ def criar_postagem():
         flash("Houve um erro técnico ao salvar.", "danger")
 
     return redirect(request.referrer)
+
+
+@app.before_request
+def bloquear_usuarios_incompletos():
+    if current_user and current_user.is_authenticated:
+
+        rotas_permitidas = [
+            'get_perfil',
+            'processar_identidade',
+            'editar_perfil',
+            'upload_foto_perfil',
+            'servir_foto_perfil',
+            'realizar_logout',
+            'logout',
+            'adicionar_apelido',
+            'editar_apelido',
+            'excluir_apelido',
+            'favicon',    # <-- ADICIONADO (Culpado 1)
+            'serve_sw',   # <-- ADICIONADO (Culpado 2)
+            'static'
+        ]
+
+        if current_user.nivel_acesso < 10 and request.endpoint not in rotas_permitidas:
+            print(f"DEBUG ALFÂNDEGA: Rota bloqueada detectada -> '{request.endpoint}'")
+            flash("Por favor, conclua a validação do seu perfil para acessar os recursos da plataforma.", "warning")
+            return redirect(url_for('get_perfil', id_usuario=current_user.id))
 
 
 @app.route("/editar_post/<int:post_id>", methods=['POST'])
@@ -5360,9 +5459,6 @@ def obter_publicidade_contextual(pub, local_contexto_id=None):
         if not tags_do_post:
             return None
 
-        import random
-        from sqlalchemy import func
-
         tag_vencedora = None
 
         # 2. O FILTRO DE AFINIDADE DO USUÁRIO
@@ -5649,3 +5745,81 @@ def consertar_banco_seguro():
     except Exception as e:
         database.session.rollback()
         return f"Erro crítico durante a atualização: {e}", 500
+
+
+# feedin/routes/locais.py (ou no seu módulo correspondente)
+from flask import render_template, redirect, url_for, flash, request
+from flask_login import login_required, current_user
+from feedin.models import database, Local
+from werkzeug.utils import secure_filename
+from datetime import datetime, timezone
+import os
+
+# Pasta protegida na raiz da VPS
+UPLOAD_COMPLIANCE_DIR = os.path.join(os.getcwd(), 'storage', 'compliance')
+os.makedirs(UPLOAD_COMPLIANCE_DIR, exist_ok=True)
+
+
+@app.route('/local/<int:id_local>/reivindicar/enviar', methods=['POST'])
+@login_required
+def enviar_documentos_homologacao(id_local):
+    local = Local.query.get_or_404(id_local)
+
+    # 🚨 SEGURANÇA 1: Trava de nível. Apenas usuário comum (Nível 10) faz o pleito
+    if current_user.nivel_acesso != 10:
+        flash("Seu nível de acesso atual não permite realizar esta ação.", "warning")
+        return redirect(url_for('detalhe_local', id_local=local.id))
+
+    # 🚨 SEGURANÇA 2: Se já tiver dono, bloqueia
+    if local.id_empreendedor is not None:
+        flash("Este estabelecimento já possui um administrador validado.", "danger")
+        return redirect(url_for('detalhe_local', id_local=local.id))
+
+    # Captura os arquivos do formulário HTML
+    file_endereco = request.files.get('comprovante_endereco')
+    file_cnpj = request.files.get('cnpj_social')
+
+    if not file_endereco or not file_cnpj:
+        flash("É obrigatório enviar ambos os documentos para análise.", "danger")
+        return redirect(url_for('detalhe_local', id_local=local.id))
+
+    # Define extensões e renomeia os arquivos para evitar conflitos no Linux/VPS
+    ext_end = os.path.splitext(secure_filename(file_endereco.filename))[1]
+    ext_cnpj = os.path.splitext(secure_filename(file_cnpj.filename))[1]
+
+    nome_end = f"local_{local.id}_endereco_{int(datetime.now().timestamp())}{ext_end}"
+    nome_cnpj = f"local_{local.id}_cnpj_{int(datetime.now().timestamp())}{ext_cnpj}"
+
+    # Caminho final absoluto na VPS
+    path_end = os.path.join(UPLOAD_COMPLIANCE_DIR, nome_end)
+    path_cnpj = os.path.join(UPLOAD_COMPLIANCE_DIR, nome_cnpj)
+
+    try:
+        # Salva fisicamente na pasta privada
+        file_endereco.save(path_end)
+        file_cnpj.save(path_cnpj)
+
+        # Registra o trâmite na nova tabela física que criamos
+        novo_tramite = ModHomologacaoEmpresa(
+            id_local=local.id,
+            path_comprovante_endereco=nome_end,
+            path_cartao_cnpj_ou_social=nome_cnpj,  # Batido com seu modelo!
+            status_auditoria='pendente'
+        )
+        database.session.add(novo_tramite)
+
+        # 🏗️ ATIVA O PRÉDIO EM CONSTRUÇÃO: Muda o status operacional do Local
+        local.status_operacional = 'em_construcao'
+
+        database.session.commit()
+        flash("Documentação enviada com sucesso! Aguarde a validação interna.", "success")
+
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao salvar documentos: {e}", "danger")
+        return redirect(url_for('main.reivindicar_local', id_local=local.id))
+
+    # Redireciona o usuário para a tela de espera "24h" na área pública
+    return redirect(url_for('main.status_reivindicacao', id_local=local.id))
+
+

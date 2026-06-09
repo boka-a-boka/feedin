@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}{{ empresa.nome }} | FeedIn{% endblock %}
+
+<style>
+    :root {
+        --cor-marca-primaria: {{ empresa.cor_primaria or '#111827' }};
+        --cor-marca-secundaria: {{ empresa.cor_secundaria or '#6B7280' }};
+    }
+
+    .btn-marca {
+        background-color: var(--cor-marca-primaria) !important;
+        color: #ffffff !important;
+        border: none;
+    }
+    .btn-marca:hover {
+        filter: brightness(0.9);
+    }
+    .text-marca {
+        color: var(--cor-marca-primaria) !important;
+    }
+    .badge-marca {
+        background-color: var(--cor-marca-secundaria) !important;
+        color: white;
+    }
+    .border-marca-foco {
+        border-color: var(--cor-marca-primaria) !important;
+    }
+</style>
+
+{% block content %}
+<!-- Dentro de templates/agenda/detalhe_empresa.html -->
+
+{% if is_colaborador %}
+<div class="my-3 animate__animated animate__fadeIn px-3">
+    <div class="card border-primary bg-light rounded-4 p-3 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <span class="badge bg-primary text-uppercase px-2 py-1 rounded-pill fw-bold mb-1" style="font-size: 0.6rem;">
+                    Posto de Trabalho Detectado
+                </span>
+                <h6 class="m-0 fw-bold text-dark">Nível de Acesso: {{ nivel_neste_local }}</h6>
+            </div>
+            <a href="{{ url_for('agenda.entrar_modo_balcao', empresa_id=empresa.id) }}" class="btn btn-primary rounded-pill px-4 btn-sm fw-bold shadow-sm">
+                Abrir Balcão <i class="bi bi-box-arrow-in-right ms-1"></i>
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <a href="/negocios" class="text-decoration-none text-muted small d-inline-flex align-items-center mb-3">
+        <i class="bi bi-arrow-left me-2"></i> Voltar para a Central
+    </a>
+
+    <div class="card border-0 shadow-sm rounded-4 p-3 mb-4 bg-white">
+        <div class="d-flex align-items-center gap-3">
+            <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 75px; height: 75px; overflow: hidden; border: 3px solid var(--cor-marca-primaria); flex-shrink: 0;">
+                <img src="{{ empresa.logomarca or '/static/logos/default_empresa.png' }}" alt="Logo {{ empresa.nome }}" class="img-fluid object-fit-cover h-100 w-100">
+            </div>
+            <div class="text-truncate">
+                <span class="badge badge-marca text-uppercase mb-1" style="font-size: 0.65rem;">{{ empresa.categoria or 'Parceiro Beta' }}</span>
+                <h4 class="fw-bold text-dark m-0 text-truncate" style="font-size: 1.3rem;">{{ empresa.nome }}</h4>
+                <small class="text-muted"><i class="bi bi-geo-alt-fill text-danger"></i> Piracicaba, SP</small>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills nav-fill bg-light p-1 rounded-pill mb-4 border" id="pills-tab" role="tablist">
+        <li class="nav-pills-item" role="presentation" style="width: 50%;">
+            <button class="nav-link active rounded-pill fw-bold py-2 small shadow-none border-0 w-100 text-dark" id="pills-servicos-tab" data-bs-toggle="pill" data-bs-target="#pills-servicos" type="button" role="tab">
+                <i class="bi bi-scissors me-2 text-marca"></i>Serviços
+            </button>
+        </li>
+        <li class="nav-pills-item" role="presentation" style="width: 50%;">
+            <button class="nav-link rounded-pill fw-bold py-2 small shadow-none border-0 w-100 text-dark" id="pills-equipe-tab" data-bs-toggle="pill" data-bs-target="#pills-equipe" type="button" role="tab">
+                <i class="bi bi-people me-2 text-marca"></i>Nossa Equipe
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="pills-tabContent">
+        
+        <div class="tab-pane fade show active" id="pills-servicos" role="tabpanel">
+            <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Escolha um serviço para agendar:</h6>
+            <div class="d-flex flex-column gap-2">
+                {% for servico in servicos %}
+                <div class="card p-3 bg-white border rounded-4 shadow-sm d-flex justify-content-between align-items-center flex-row gap-2 transition-hover">
+                    <div class="text-truncate" style="line-height: 1.3;">
+                        <strong class="text-dark d-block" style="font-size: 0.95rem;">{{ servico.nome }}</strong>
+                        <span class="text-muted small d-inline-flex align-items-center gap-2" style="font-size: 0.8rem;">
+                            <i class="bi bi-clock"></i> {{ servico.duracao_minutos }} min
+                        </span>
+                        {% if servico.exibir_descricao_pwa and servico.descricao %}
+                        <p class="text-muted m-0 mt-1 text-truncate small fw-light" style="font-size: 0.75rem; white-space: normal;">
+                            {{ servico.descricao }}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="text-end flex-shrink-0">
+                        <span class="text-dark fw-bold d-block mb-2" style="font-size: 1rem;">R$ {{ "%.2f"|format(servico.preco)|replace('.', ',') }}</span>
+                        <button class="btn btn-sm btn-marca rounded-pill px-3 fw-bold shadow-sm" style="font-size: 0.75rem;">Reservar</button>
+                    </div>
+                </div>
+                {% else %}
+                <div class="p-4 bg-light rounded-4 text-center border border-dashed">
+                    <p class="text-muted small m-0"><i class="bi bi-folder-x me-2"></i>Nenhum serviço disponível no catálogo no momento.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="pills-equipe" role="tabpanel">
+            <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Nossos Profissionais de Atendimento:</h6>
+            <div class="row g-2">
+                {% for prof in colaboradores %}
+                <div class="col-6">
+                    <div class="card p-3 bg-white border rounded-4 text-center h-100 shadow-sm">
+                        <div class="mx-auto mb-2 bg-light rounded-circle d-flex align-items-center justify-content-center text-secondary fw-bold shadow-inner" style="width: 55px; height: 55px; font-size: 1.2rem; border: 2px solid var(--cor-marca-primaria);">
+                            {{ prof.nome[:2]|upper }}
+                        </div>
+                        <strong class="text-dark d-block text-truncate small">{{ prof.nome }}</strong>
+                        <span class="text-muted d-block text-truncate mt-1" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            {{ prof.cargo_especialidade or 'Especialista' }}
+                        </span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12">
+                    <div class="p-4 bg-light rounded-4 text-center border border-dashed">
+                        <p class="text-muted small m-0"><i class="bi bi-person-x me-2"></i>Nenhum profissional listado para este estabelecimento.</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var triggerTabList = [].slice.call(document.querySelectorAll('#pills-tab button'))
+    triggerTabList.forEach(function (triggerEl) {
+        var tabTrigger = new bootstrap.Tab(triggerEl)
+        triggerEl.addEventListener('click', function (event) {
+            event.preventDefault()
+            tabTrigger.show()
+        })
+    })
+});
+</script>
+{% endblock %}

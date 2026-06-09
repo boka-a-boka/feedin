@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Credenciamento de Balcão | FeedIn{% endblock %}
+{% block content %}
+<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <div class="text-center mb-4">
+            <span class="badge bg-dark text-white text-uppercase px-3 py-2 rounded-pill fw-bold" style="font-size: 0.65rem;">Módulo Administrativo</span>
+            <h4 class="fw-bold text-dark mt-2 mb-1">Localização do seu Negócio</h4>
+            <p class="text-muted small">O FeedIn preserva a memória urbana. Vamos verificar se o ponto físico do seu estabelecimento já possui história em nossa base.</p>
+        </div>
+
+        <!-- 🔍 CAMPO DE PESQUISA COM O SEU AUTOCOMPLETE NATIVO -->
+        <div class="mb-4 position-relative">
+            <label class="form-label small fw-bold text-dark">Nome do seu Estabelecimento:</label>
+            <div class="input-group">
+                <span class="input-group-text bg-light border-end-0 rounded-start-3"><i class="bi bi-shop text-muted"></i></span>
+                <!-- O próprio input de busca já é o campo 'Nome' do formulário -->
+                {{ form.nome(class="form-control bg-light border-start-0 rounded-end-3 shadow-none", id="busca-local-credenciamento", placeholder="Ex: Barbearia Central, Antiga Padaria do Zé...") }}
+            </div>
+            <!-- Lista Flutuante de Resultados (Só aparece se houver match histórico) -->
+            <ul id="lista-resultados-credenciamento" class="list-group position-absolute w-100 mt-1 shadow d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></ul>
+        </div>
+
+        <!-- O FORMULÁRIO COMPLEMENTAR CONTINUA ABAIXO -->
+        <form method="POST" action="" id="form-cadastro-local">
+            {{ form.hidden_tag() }}
+            {{ form.id_local_existente(id="id_local_existente") }} <!-- Se continuar vazio, o controller sabe que é INÉDITO -->
+
+            <div class="alert alert-success py-2 px-3 rounded-3 small border-0 d-none" id="aviso-match-historico">
+                <i class="bi bi-balloon-heart-fill me-1"></i> <strong>Memória Encontrada!</strong> Vinculamos o histórico deste ponto ao seu novo balcão.
+            </div>
+
+            <!-- Campos de Endereço e Contato normais aqui... -->
+            <div class="row g-2 mb-3">
+                <div class="col-4">
+                    <label class="form-label small fw-bold text-secondary">CEP</label>
+                    {{ form.cep(class="form-control rounded-3 shadow-none", id="field-cep") }}
+                </div>
+                <div class="col-8">
+                    <label class="form-label small fw-bold text-secondary">Logradouro</label>
+                    {{ form.logradouro(class="form-control rounded-3 shadow-none", id="field-logradouro") }}
+                </div>
+            </div>
+            <!-- ... Restante dos campos do formulário ... -->
+        </form>
+
+    </div>
+</div>
+
+<!-- ⚡ JAVASCRIPT DE INTEGRAÇÃO COM A SUA FUNÇÃO /buscar_locais -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBusca = document.getElementById('busca-local-credenciamento');
+    const listaResultados = document.getElementById('lista-resultados-credenciamento');
+    const idExistenteHidden = document.getElementById('id_local_existente');
+    const avisoMatch = document.getElementById('aviso-match-historico');
+
+    inputBusca.addEventListener('input', function() {
+        const termo = this.value.strip ? this.value.trim() : this.value;
+
+        // Se o usuário alterar o nome após ter selecionado um histórico, desvincula o ID
+        // Isso garante que se ele mudar o nome para algo totalmente diferente, vira Inédito.
+        if (idExistenteHidden.value !== '') {
+            idExistenteHidden.value = '';
+            avisoMatch.classList.add('d-none');
+        }
+
+        if (termo.length < 2) {
+            listaResultados.classList.add('d-none');
+            return;
+        }
+
+        fetch(`/buscar_locais?q=${encodeURIComponent(termo)}`)
+            .then(res => res.json())
+            .then(dados => {
+                listaResultados.innerHTML = '';
+                if (dados.length === 0) {
+                    listaResultados.classList.add('d-none'); // Esconde pacificamente se não achar nada
+                    return;
+                }
+
+                dados.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-action small py-2';
+                    li.style.cursor = 'pointer';
+                    li.innerHTML = `<strong>${item.nome}</strong> <small class="text-muted">${item.info_exibicao}</small>`;
+
+                    li.addEventListener('click', function() {
+                        // Força o preenchimento dos dados salvos no banco
+                        fetch(`/api/local/${item.id}`)
+                            .then(res => res.json())
+                            .then(local => {
+                                idExistenteHidden.value = local.id;
+                                inputBusca.value = local.nome; // Alinha o nome exato
+                                document.getElementById('field-cep').value = local.cep;
+                                document.getElementById('field-logradouro').value = local.logradouro;
+                                document.getElementById('field-bairro').value = local.bairro;
+                                document.getElementById('field-telefone').value = local.telefone;
+
+                                listaResultados.classList.add('d-none');
+                                avisoMatch.classList.remove('d-none');
+                            });
+                    });
+                    listaResultados.appendChild(li);
+                });
+                listaResultados.classList.remove('d-none');
+            });
+    });
+});
+</script>
+{% endblock %}

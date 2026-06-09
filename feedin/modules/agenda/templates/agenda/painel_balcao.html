@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0 bg-dark text-white">
+                <div class="card-header bg-secondary border-0">
+                    <h5 class="mb-0"><i class="fas fa-calendar-plus me-2"></i>Agendamento de Balcão</h5>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form action="{{ url_for('agenda.criar_agendamento_balcao') }}" method="POST">
+                        <input type="hidden" name="id_local" value="{{ local.id }}">
+
+                        <div class="mb-3">
+                            <label for="id_cliente" class="form-label text-light">Cliente</label>
+                            <select class="form-select bg-light" name="id_cliente" required>
+                                <option value="" selected disabled>Selecione o Cliente...</option>
+                                {% for cliente in clientes_cadastrados %}
+                                    <option value="{{ cliente.id }}">{{ cliente.nome }} ({{ cliente.cpf }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_profissional" class="form-label text-light">Profissional (Cadeira Original)</label>
+                            <select class="form-select bg-light" name="id_profissional" required>
+                                <option value="" selected disabled>Selecione o Profissional...</option>
+                                {% for colaborador in equipe %}
+                                    <option value="{{ colaborador.id_usuario }}">{{ colaborador.usuario.username }} - {{ colaborador.cargo.nome_cargo }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_servico" class="form-label text-light">Serviço / Procedimento</label>
+                            <select class="form-select bg-light" name="id_servico" required>
+                                <option value="" selected disabled>Selecione o Serviço...</option>
+                                {% for servico in servicos_disponiveis %}
+                                    <option value="{{ servico.id }}">{{ servico.nome_servico }} - R$ {{ servico.preco }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="data_hora_atendimento" class="form-label text-light">Data e Horário</label>
+                            <input type="datetime-local" class="form-control" name="data_hora_atendimento" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="preco_cobrado" class="form-label text-light">Valor a Cobrar (R$)</label>
+                            <input type="number" step="0.01" class="form-control" name="preco_cobrado" placeholder="0.00" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100 py-2 fw-bold">
+                            <i class="fas fa-check-circle me-2"></i>Verificar e Agendar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Agendamentos sob Análise / Remanejados</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover table-striped mb-0 align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Profissional Atual</th>
+                                <th>Horário</th>
+                                <th>Status Interno</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for agendamento in agendamentos_remanejados %}
+                            <tr>
+                                <td><strong>{{ agendamento.cliente.nome }}</strong></td>
+                                <td><span class="badge bg-secondary">{{ agendamento.profissional.username }}</span></td>
+                                <td>{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
+                                <td>
+                                    {% if agendamento.status == 'reagendamento_pendente' %}
+                                        <span class="badge bg-warning text-dark animate-pulse">
+                                            <i class="fas fa-exchange-alt me-1"></i> Aguardando Cliente Aceitar
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4 text-muted">Nenhum conflito pendente na retaguarda neste momento.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

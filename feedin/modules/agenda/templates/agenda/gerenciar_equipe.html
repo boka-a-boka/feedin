@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Gerenciar Equipe | Painel FeedIn{% endblock %}
+{% block content %}
+<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
+    <a href="/negocios" class="text-decoration-none text-muted small d-inline-flex align-items-center mb-3">
+        <i class="bi bi-arrow-left me-2"></i> Voltar para a Central
+    </a>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
+        <h5 class="fw-bold text-dark mb-1">Adicionar Colaborador</h5>
+        <p class="text-muted small mb-4">Cadastre os profissionais que prestam serviços no seu balcão.</p>
+
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Nome do Profissional</label>
+                {{ form.nome(class="form-control rounded-3 shadow-none", placeholder="Ex: Roberto Silva") }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Especialidade / Cargo</label>
+                {{ form.cargo_especialidade(class="form-control rounded-3 shadow-none", placeholder="Ex: Barbeiro Visagista, Colorista") }}
+            </div>
+            {{ form.submit(class="btn btn-dark w-100 rounded-pill fw-bold py-2 shadow-sm") }}
+        </form>
+    </div>
+
+    <h6 class="fw-bold text-dark mb-3">Equipe Cadastrada ({{ equipe|length }})</h6>
+    <div class="d-flex flex-column gap-2">
+        {% for prof in equipe %}
+        <div class="card p-3 bg-white border rounded-4 shadow-sm d-flex justify-content-between align-items-center flex-row">
+            <div class="d-flex align-items-center gap-3 text-truncate">
+                <div class="bg-dark text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 40px; height: 40px; flex-shrink: 0;">
+                    {{ prof.nome[:2]|upper }}
+                </div>
+                <div class="text-truncate" style="line-height: 1.2;">
+                    <strong class="text-dark d-block text-truncate" style="font-size: 0.9rem;">{{ prof.nome }}</strong>
+                    <span class="text-muted small" style="font-size: 0.75rem;">{{ prof.cargo_especialidade }}</span>
+                </div>
+            </div>
+            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2" style="font-size: 0.65rem;">Ativo</span>
+        </div>
+        {% else %}
+        <div class="p-4 bg-light rounded-4 text-center border border-dashed">
+            <p class="text-muted small m-0"><i class="bi bi-people-fill me-2"></i>Nenhum colaborador cadastrado ainda.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

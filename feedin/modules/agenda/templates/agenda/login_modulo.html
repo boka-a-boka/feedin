@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5 px-4" style="max-width: 480px; font-family: system-ui, sans-serif;">
+    
+    <div class="text-center mb-5 animate__animated animate__fadeIn">
+        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-sm" style="width: 70px; height: 70px;">
+            <i class="bi bi-calendar3 fs-2"></i>
+        </div>
+        <h4 class="fw-bold text-dark m-0">Agendamentos FeedIn</h4>
+        <p class="text-muted small">Sua cidade, seus horários, sem complicação.</p>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <form action="{{ url_for('identificar_usuario') }}" method="POST">
+
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="mb-4">
+                <label for="email_login" class="form-label fw-bold text-secondary small">Para começar, digite seu E-mail:</label>
+                <div class="input-group bg-light rounded-3 p-1 border">
+                    <span class="input-group-text bg-transparent border-0 text-muted"><i class="bi bi-envelope-fill fs-5"></i></span>
+                    <input type="email" id="email_login" name="email_login" class="form-control bg-transparent border-0 shadow-none" placeholder="exemplo@email.com" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 rounded-pill py-2.5 fw-bold shadow-sm">
+                Avançar <i class="bi bi-arrow-right ms-2"></i>
+            </button>
+        </form>
+    </div>
+
+    <div class="text-center mt-5">
+        <a href="/ajuda" class="text-decoration-none text-muted small"><i class="bi bi-question-circle me-1"></i>Precisa de ajuda para acessar?</a>
+    </div>
+
+</div>
+{% endblock %}

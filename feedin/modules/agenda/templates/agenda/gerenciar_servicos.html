@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block title %}Gerenciar Serviços - Agenda{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        
+        <div class="col-md-5 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white py-3">
+                    <h5 class="mb-0">Cadastrar Novo Serviço</h5>
+                </div>
+                <div class="card-body p-4">
+                    {{ render_form(form) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="mb-0">Serviços Oferecidos na Casa</h5>
+                </div>
+                <div class="card-body p-4">
+                    
+                    {% if not servicos %}
+                        <p class="text-muted text-center my-4">Nenhum serviço cadastrado ainda. Use o formulário ao lado para começar!</p>
+                    {% else %}
+                        
+                        <div class="list-group">
+                            {% for servico in servicos %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center p-3 mb-2 rounded border shadow-sm">
+                                <div>
+                                    <h6 class="mb-1 fw-bold text-dark">{{ servico.nome }}</h6>
+                                    <span class="badge bg-success">R$ {{ "%.2f"|format(servico.preco) }}</span>
+                                    <span class="badge bg-light text-muted border">{{ servico.duracao_minutos }} min</span>
+                                    
+                                    {% if servico.descricao %}
+                                    <div class="mt-2">
+                                        <button class="btn btn-sm btn-link p-0 text-decoration-none text-primary" 
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#desc-{{ servico.id }}">
+                                            <i class="bi bi-info-circle"></i> Ver diferenciais cadastrados
+                                        </button>
+                                        
+                                        <div class="collapse mt-2 text-muted small bg-light p-2 rounded border-start border-primary border-3" id="desc-{{ servico.id }}">
+                                            {{ servico.descricao }}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <span class="text-muted small">
+                                    {% if servico.exibir_descricao_pwa %}
+                                        <i class="text-success">● Visível no PWA</i>
+                                    {% else %}
+                                        <i class="text-warning">○ Oculto</i>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                    {% endif %}
+                    
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

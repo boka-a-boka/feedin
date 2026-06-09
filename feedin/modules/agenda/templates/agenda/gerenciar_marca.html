@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Configurar Marca | Painel FeedIn{% endblock %}
+{% block content %}
+<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
+    <a href="/negocios" class="text-decoration-none text-muted small d-inline-flex align-items-center mb-3">
+        <i class="bi bi-arrow-left me-2"></i> Voltar para a Central
+    </a>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
+        <h5 class="fw-bold text-dark mb-1">Identidade Visual do Negócio</h5>
+        <p class="text-muted small mb-4">Molde o PWA com as cores oficiais do seu estabelecimento para atrair e encantar seus clientes.</p>
+
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Nome Fantasia da Empresa</label>
+                {{ form.nome(class="form-control rounded-3 shadow-none") }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-secondary">Categoria do Estabelecimento</label>
+                {{ form.categoria(class="form-control rounded-3 shadow-none", placeholder="Ex: Barbearia, Salão de Beleza, Padaria") }}
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-secondary">Cor Primária</label>
+                    <input type="color" name="cor_primaria" value="{{ empresa.cor_primaria or '#111827' }}" class="form-control form-control-color w-100 rounded-3 shadow-none p-1" style="height: 45px;">
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-bold text-secondary">Cor Secundária</label>
+                    <input type="color" name="cor_secundaria" value="{{ empresa.cor_secundaria or '#6B7280' }}" class="form-control form-control-color w-100 rounded-3 shadow-none p-1" style="height: 45px;">
+                </div>
+            </div>
+
+            {{ form.submit(class="btn btn-dark w-100 rounded-pill fw-bold py-2 shadow-sm") }}
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -38,14 +38,8 @@ if CHAVE_CPF:
 else:
     app.logger.warning("CHAVE_CRIPTOGRAFIA_CPF não encontrada no arquivo .env")
 
-# 3. Importamos o que depende do utils (Filtros de Template)
-from .utils import tempo_atras_filter
-app.template_filter('tempo_atras')(tempo_atras_filter)
-
 # --- CONFIGURAÇÕES DE BANCO DE DADOS (FOCO SQLITE) ---
-
 # Ajuste de Hierarquia: Subimos um nível para encontrar a 'instance' na raiz do projeto
-# Isso evita que o PyCharm/Flask crie uma pasta duplicada dentro de /feedin
 basedir = os.path.abspath(os.path.dirname(__file__))
 project_root = os.path.dirname(basedir)
 instance_path = os.path.join(project_root, 'instance')
@@ -95,6 +89,7 @@ app.config['MAIL_PASSWORD'] = 'osqo ohef suzl nree'
 mail = Mail(app)
 
 # --- INICIALIZAÇÃO DAS EXTENSÕES ---
+# (Agora o database nasce no momento correto do escopo)
 database = SQLAlchemy(app)
 migrate = Migrate(app, database, render_as_batch=True)
 bcrypt = Bcrypt(app)
@@ -106,5 +101,25 @@ login_manager.login_view = "login"
 login_manager.login_message = "Sua sessão expirou, por favor faça login novamente."
 login_manager.login_message_category = "info"
 
-# Importações de rotas e modelos
+# Define a pasta privada de conformidade fora do alcance do servidor web direto
+UPLOAD_COMPLIANCE_DIR = os.path.join(os.getcwd(), 'storage', 'compliance')
+os.makedirs(UPLOAD_COMPLIANCE_DIR, exist_ok=True)
+
+@login_manager.user_loader
+def load_user(user_id):
+    from feedin.models import Usuario # Import local seguro
+    return Usuario.query.get(int(user_id))
+
+# =====================================================================
+# INJEÇÃO PONTUAL: CARREGAMENTO DE ROTAS, FILTROS E MÓDULOS NO FINAL
+# =====================================================================
+# Importamos o que depende do utils (Filtros de Template) após o database criado
+from .utils import tempo_atras_filter
+app.template_filter('tempo_atras')(tempo_atras_filter)
+
+# Importações de rotas e modelos do Core
 from feedin import routes, models
+
+# Registro do Blueprint da Agenda e seus descendentes
+from feedin.modules.agenda.routes import agenda_bp
+app.register_blueprint(agenda_bp, url_prefix='/agenda')

@@ -1,0 +1,79 @@
+{% extends "base.html" %} {% from 'bootstrap5/form.html' import render_form %}
+
+{% block title %}Cadastro Rápido de Balcão - Agenda{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show" role="alert">
+                            <strong>{{ message }}</strong>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white py-3">
+                    <h4 class="mb-0">Cadastro de Balcão (Cliente Novo)</h4>
+                    <p class="mb-0 small text-white-50">Insira os dados essenciais. O sistema criará o acesso do PWA automaticamente.</p>
+                </div>
+                <div class="card-body p-4">
+                    
+                    <form method="POST" action="">
+                        {{ form.csrf_token }}
+
+                        <div class="mb-3">
+                            {{ form.nome.label(class="form-label") }}
+                            {{ form.nome(class="form-control") }}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.cpf.label(class="form-label") }}
+                                {{ form.cpf(class="form-control", placeholder="Apenas números") }}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                {{ form.whatsapp.label(class="form-label") }}
+                                {{ form.whatsapp(class="form-control", placeholder="(19) 99999-9999") }}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-8 mb-3">
+                                {{ form.email.label(class="form-label") }}
+                                {{ form.email(class="form-control", placeholder="exemplo@email.com") }}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                {{ form.data_nascimento.label(class="form-label") }}
+
+                                {{ form.data_nascimento(class="form-control JSON-data-mascara", type="tel", placeholder="dd/mm/aaaa", maxlength="10", autocomplete="off") }}
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            {{ form.botao_salvar(class="btn btn-primary w-100") }}
+                        </div>
+                    </form>
+
+                </div>
+                <div class="card-header bg-light text-muted small py-3" style="border-top: 1px solid #dee2e6;">
+                    <strong>Nota:</strong> Ao salvar, o usuário e a senha temporária serão exibidos no console do PyCharm para conferência técnica.
+                </div>
+            </div>
+
+            <div class="text-center mt-3">
+                <a href="/" class="text-decoration-none text-muted">
+                    Voltar para o painel principal
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

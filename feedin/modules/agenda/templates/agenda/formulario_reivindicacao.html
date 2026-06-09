@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+            <div class="card shadow border-0 bg-dark text-white rounded-4">
+                <div class="card-header bg-secondary border-0 text-center py-3">
+                    <h5 class="mb-0 text-warning"><i class="fas fa-file-signature me-2"></i>Reivindicação de Titularidade</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-bold">{{ local.nome }}</h4>
+                        <p class="text-muted small"><i class="fas fa-map-marker-alt me-1"></i> {{ local.logradouro }}, {{ local.numero }} - {{ local.bairro }}, Piracicaba-SP</p>
+                    </div>
+                    
+                    <div class="alert alert-info bg-opacity-10 text-light border-info small" role="alert">
+                        <i class="fas fa-info-circle text-info me-2"></i>
+                        Para assumir a gestão deste local e habilitar os recursos do painel e agenda de balcão, comprove seu vínculo comercial anexando a documentação fiscal e de localização.
+                    </div>
+
+                    <form action="{{ url_for('main.reivindicar_local', id_local=local.id) }}" method="POST" enctype="multipart/form-data" class="mt-4">
+                        
+                        <div class="mb-4">
+                            <label class="form-label text-warning fw-bold mb-1">1. Comprovante de Endereço Físico</label>
+                            <p class="text-muted style-disabled style='font-size: 12px;' mb-2">Contas de consumo (Luz, Água, Internet) emitidas nos últimos 90 dias em nome da empresa ou do sócio.</p>
+                            <input type="file" class="form-control" name="comprovante_endereco" accept=".pdf, .jpg, .jpeg, .png" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label text-warning fw-bold mb-1">2. Cartão CNPJ ou Contrato Social</label>
+                            <p class="text-muted style-disabled style='font-size: 12px;' mb-2">Documento oficial para validação da Receita Federal e cruzamento com as informações civis do perfil.</p>
+                            <input type="file" class="form-control" name="cnpj_social" accept=".pdf, .jpg, .jpeg, .png" required>
+                        </div>
+
+                        <hr class="border-secondary my-4">
+
+                        <button type="submit" class="btn btn-warning w-100 py-2 fw-bold text-dark">
+                            <i class="fas fa-shield-alt me-2"></i>Submeter para Auditoria Interna
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

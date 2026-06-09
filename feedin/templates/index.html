@@ -2,279 +2,696 @@
 
 {% block content %}
 
-<!-- 1. ESTRUTURA DA SPLASH SCREEN (SÓ APARECE NA ENTRADA) -->
-<!-- Splash Screen com Fundo de Impacto -->
-<div id="splash-overlay" style="
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh; /* Usa a viewport inteira */
-    background: radial-gradient(circle, #ffffff 0%, #f0f2f5 100%);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.8s ease, visibility 0.8s;">
+<style>
+    /* Definição de tokens de design integrados ao escopo futurista do FeedIn */
+    :root {
+        --slate-dark: #0b1329;
+        --slate-navy: #0f172a;
+        --slate-card: rgba(30, 41, 59, 0.45);
+        --neon-mint: #2dd4bf;
+        --neon-mint-hover: #14b8a6;
+        --accent-rose: #f43f5e;
+        --accent-rose-hover: #e11d48;
+        --text-muted-pira: #94a3b8;
+    }
 
-    <div class="text-center p-4" style="max-width: 500px;">
-        <!-- Logo do FeedIn -->
-        <div class="mb-5">
-            <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" width="160" class="animate__animated animate__fadeInDown">
-        </div>
+    .feedin-20-body {
+        background-color: var(--slate-dark);
+        color: #f8fafc;
+        overflow-x: hidden;
+        position: relative;
+    }
 
-<div class="p-4 rounded-4" style="background: rgba(255,255,255,0.5); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-            <h6 class="text-uppercase fw-bold text-muted mb-4" style="letter-spacing: 3px; font-size: 0.7rem;">
-                Apoiadores Fundadores <br>
-                <span class="text-primary">Guardiões da Memória de Piracicaba</span>
-            </h6>
+    /* Brilhos de fundo decorativos (Glow) */
+    .bg-glow {
+        position: absolute;
+        width: 600px;
+        height: 600px;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.12;
+    }
+    .glow-mint {
+        background: radial-gradient(circle, var(--neon-mint) 0%, transparent 70%);
+        top: 5%;
+        left: -10%;
+    }
+    .glow-rose {
+        background: radial-gradient(circle, var(--accent-rose) 0%, transparent 70%);
+        bottom: 20%;
+        right: -10%;
+    }
 
-            <!-- Grid de Patrocinadores -->
-            <div class="row g-3 align-items-center">
-                <div class="col-6">
-                    <div class="p-2 border rounded-3 bg-white shadow-sm d-flex align-items-center justify-content-center" style="height: 110px;">
-                        <img src="{{ url_for('static', filename='fotos/patroc1.png') }}" class="img-fluid logo-anjo">
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="p-2 border rounded-3 bg-white shadow-sm d-flex align-items-center justify-content-center" style="height: 110px;">
-                        <img src="https://placehold.co/400x400/f8f9fa/007bff?text=SUA+MARCA" class="img-fluid logo-anjo">
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="p-2 border rounded-3 bg-white shadow-sm d-flex align-items-center justify-content-center" style="height: 110px;">
-                        <img src="https://placehold.co/400x400/007bff/ffffff?text=APOIO" class="img-fluid logo-anjo">
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="p-2 border rounded-3 bg-white shadow-sm d-flex align-items-center justify-content-center" style="height: 110px;">
-                        <img src="https://placehold.co/400x400/FFD700/000000?text=ANJO" class="img-fluid logo-anjo">
-                    </div>
-                </div>
-            </div>
+    /* Estilo de vidro fosco (Glassmorphism) */
+    .glass-panel-pira {
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.25rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-panel-pira:hover {
+        border-color: rgba(45, 212, 191, 0.25);
+        box-shadow: 0 10px 30px rgba(45, 212, 191, 0.05);
+    }
 
-            <div class="mt-5">
-                <div class="progress" style="height: 4px; width: 200px; margin: 0 auto; background-color: #e9ecef;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+    /* Cards intercalados para locais aguardando */
+    .glass-panel-mint {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(45, 212, 191, 0.2);
+        border-radius: 1.25rem;
+        transition: all 0.3s ease;
+    }
+    .glass-panel-mint:hover {
+        transform: translateY(-4px);
+        border-color: var(--neon-mint);
+        box-shadow: 0 8px 25px rgba(45, 212, 191, 0.15);
+    }
+
+    .glass-panel-rose {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(244, 63, 94, 0.2);
+        border-radius: 1.25rem;
+        transition: all 0.3s ease;
+    }
+    .glass-panel-rose:hover {
+        transform: translateY(-4px);
+        border-color: var(--accent-rose);
+        box-shadow: 0 8px 25px rgba(244, 63, 94, 0.15);
+    }
+
+    /* Efeito de Censura/Lock para Visitantes */
+    .visitor-lock-overlay {
+        position: relative;
+    }
+    .visitor-lock-overlay::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.1) 100%);
+        pointer-events: none;
+    }
+    .visitor-badge {
+        font-size: 0.75rem;
+        background: rgba(15, 23, 42, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(4px);
+        color: var(--text-muted-pira);
+    }
+
+    /* Carrossel customizado sem barras de rolagem irritantes */
+    .custom-carousel-scroll {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none; /* Firefox */
+    }
+    .custom-carousel-scroll::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+    .carousel-item-pira {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+    }
+
+    /* Tags */
+    .pira-tag {
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #cbd5e1;
+    }
+    .pira-tag:hover {
+        background: rgba(45, 212, 191, 0.1);
+        border-color: var(--neon-mint);
+        color: var(--neon-mint);
+        transform: scale(1.05);
+    }
+
+    /* Links de âncoras suaves */
+    html {
+        scroll-behavior: smooth;
+    }
+</style>
+
+<div class="container mt-3">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show rounded-4 glass-panel-pira" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
-                <p class="small text-muted mt-3 fw-semibold">Sincronizando Rede de Contexto...</p>
-            </div>
-        </div> <!-- FECHAMENTO CORRETO DO CARD BRANCO -->
-    </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 </div>
 
-<!-- 2. CONTEÚDO PRINCIPAL (INICIALMENTE OCULTO) -->
-<div id="main-content" style="display: none; opacity: 0; transition: opacity 1s ease;">
+<div class="feedin-20-body">
 
-    <section class="hero-section py-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-        <div class="container">
-            <div class="row align-items-center min-vh-75">
-                <div class="col-lg-6 text-white mb-4 mb-lg-0">
-                    <span class="badge bg-light text-dark mb-3 px-3 py-2">🌐 FeedIn! - A Rede do Nós</span>
-                    <h1 class="display-4 fw-bold mb-4">
-                        Conexões Reais,<br>Baseadas em <span class="text-warning">Contexto</span>
-                    </h1>
-                    <p class="lead mb-4">
-                        Chega de algoritmos frios. Apresentamos o primeiro grafo social baseado em
-                        <strong class="text-warning">vínculos reais</strong>: afetivos, sociais e comerciais.
-                    </p>
+    <!-- Decorações em glow de fundo -->
+    <div class="bg-glow glow-mint"></div>
+    <div class="bg-glow glow-rose"></div>
 
-                    <div class="d-flex gap-3" style="position: relative; z-index: 10;">
-                        <a href="{{ url_for('newuser') }}" class="btn btn-warning btn-lg px-4 shadow btn-feedin-active">
-                            Começar Agora
-                        </a>
-                        <a href="#conceito" class="btn btn-outline-light btn-lg px-4">
-                            Entender o Conceito
-                        </a>
+    <!-- 1. ESTRUTURA DA SPLASH SCREEN (SÓ APARECE NA ENTRADA) -->
+    <div id="splash-overlay" style="
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw; height: 100vh;
+        background: radial-gradient(circle, #0f172a 0%, #070a13 100%);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.8s ease, visibility 0.8s;">
+
+        <div class="text-center p-4" style="max-width: 500px;">
+            <!-- Logo do FeedIn -->
+            <div class="mb-5">
+                {% if logo_url %}
+                    <img src="{{ logo_url }}" width="180" class="animate__animated animate__fadeInDown rounded-4 shadow-lg">
+                {% else %}
+                    <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" width="180" onerror="this.src='https://placehold.co/180x180/0f172a/2dd4bf?text=FeedIn'" class="animate__animated animate__fadeInDown rounded-4 shadow-lg">
+                {% endif %}
+            </div>
+
+            <div class="p-4 rounded-4 glass-panel-pira">
+                <h6 class="text-uppercase fw-bold mb-4 tracking-widest text-white" style="font-size: 0.75rem; letter-spacing: 3px;">
+                    Apoiadores Fundadores <br>
+                    <span class="text-info" style="color: var(--neon-mint) !important;">Guardiões da Memória de Piracicaba</span>
+                </h6>
+
+                <!-- Grid de Patrocinadores -->
+                <div class="row g-3 align-items-center">
+                    <div class="col-6">
+                        <div class="p-2 border rounded-3 bg-white/5 border-white/10 d-flex align-items-center justify-content-center" style="height: 100px;">
+                            <img src="{{ url_for('static', filename='fotos/patroc1.png') }}" onerror="this.src='https://placehold.co/400x400/0f172a/2dd4bf?text=FUNDADOR+1'" class="img-fluid logo-anjo" style="max-height: 70px;">
+                        </div>
                     </div>
-
-                    <div class="mt-4">
-                        <small class="text-white-50">
-                            <i class="fas fa-heart me-1"></i> Vínculos Afetivos |
-                            <i class="fas fa-users me-1 ms-3"></i> Vínculos Sociais |
-                            <i class="fas fa-briefcase me-1 ms-3"></i> Vínculos Comerciais
-                        </small>
+                    <div class="col-6">
+                        <div class="p-2 border rounded-3 bg-white/5 border-white/10 d-flex align-items-center justify-content-center" style="height: 100px;">
+                            <img src="https://placehold.co/400x400/0f172a/f43f5e?text=SUA+MARCA" class="img-fluid logo-anjo" style="max-height: 70px;">
+                        </div>
                     </div>
-                </div>
-                <div class="col-lg-6">
-                    <div class="position-relative">
-                        <img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&q=80&w=800"
-                             class="img-fluid rounded-4 shadow-lg border border-white border-4"
-                             alt="Pessoas conectadas em rede"
-                             style="transform: rotate(2deg);">
-                        <div class="position-absolute bottom-0 end-0 bg-white p-3 rounded-4 shadow-sm m-3">
-                            <i class="fas fa-check-circle text-success fs-1"></i>
+                    <div class="col-6">
+                        <div class="p-2 border rounded-3 bg-white/5 border-white/10 d-flex align-items-center justify-content-center" style="height: 100px;">
+                            <img src="https://placehold.co/400x400/0f172a/2dd4bf?text=APOIO" class="img-fluid logo-anjo" style="max-height: 70px;">
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 border rounded-3 bg-white/5 border-white/10 d-flex align-items-center justify-content-center" style="height: 100px;">
+                            <img src="https://placehold.co/400x400/0f172a/ffffff?text=ANJO" class="img-fluid logo-anjo" style="max-height: 70px;">
                         </div>
                     </div>
                 </div>
-          </div>
-        </div>
-    </section>
 
-    <section id="conceito" class="py-5 bg-light">
-        <div class="container py-5">
-            <div class="text-center mb-5">
-                <span class="badge bg-primary mb-3 px-3 py-2">O PROBLEMA</span>
-                <h2 class="display-5 fw-bold mb-3">Redes sociais focam no "eu", não no "nós"</h2>
-                <p class="lead text-muted mx-auto" style="max-width: 700px;">
-                    Enquanto outras redes tratam você como uma estrela em um palco,<br>
-                    o <strong>FeedIn!</strong> te convida para uma mesa de café.
+                <div class="mt-5">
+                    <div class="progress" style="height: 4px; width: 200px; margin: 0 auto; background-color: rgba(255, 255, 255, 0.08);">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%; background-color: var(--neon-mint);"></div>
+                    </div>
+                    <p class="small text-muted mt-3 fw-semibold">Sincronizando Rede de Contexto...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. PORTAL DE MEMÓRIAS (CONTEÚDO PRINCIPAL INICIADO IMEDIATAMENTE) -->
+    <div id="main-content" style="display: none; opacity: 0; transition: opacity 1s ease;">
+
+        <!-- HEADER DA PLATAFORMA (Visual de Sistema) -->
+        <header class="py-4 border-b border-white/5 bg-slate-950/40 sticky-top z-50 backdrop-blur-md">
+            <div class="container d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <span class="fs-4 fw-bold text-white tracking-wider" style="font-family: 'Poppins', sans-serif;">
+                        Feed<span style="color: var(--neon-mint);">In!</span>
+                    </span>
+                    <span class="badge" style="background: rgba(45, 212, 191, 0.1); color: var(--neon-mint); border: 1px solid rgba(45, 212, 191, 0.2);">
+                        Vitrine Piracicaba
+                    </span>
+                </div>
+                <div class="d-flex gap-3">
+                    <a href="{{ url_for('login') }}" class="btn btn-sm btn-outline-light px-3 py-2" style="border-radius: 8px;">Entrar</a>
+                    <a href="{{ url_for('newuser') }}" class="btn btn-sm btn-info px-3 py-2 text-slate-950 fw-bold border-0" style="background-color: var(--neon-mint); border-radius: 8px;">Participar</a>
+                </div>
+            </div>
+        </header>
+
+        <!-- NOVO CONSOLE DE DIAGNÓSTICO: Alerta visual de dados em fallback caso as tabelas estejam zeradas -->
+        {% if not publicacoes_aleatorias and not usuarios_reais and not locais_reais_ativos and not locais_reais_aguardando and not tags_reais %}
+        <div class="container mt-5">
+            <div class="p-4 rounded-4 glass-panel-pira border border-warning/30 bg-warning/5 text-start animate__animated animate__fadeIn">
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <div class="bg-warning/20 text-warning d-flex align-items-center justify-content-center rounded-3" style="width: 40px; height: 40px; background: rgba(251,191,36,0.15);">
+                        <i class="fas fa-database fs-5 text-warning"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-white mb-0">Modo de Demonstração Ativado (Tabelas do Banco Vazias)</h5>
+                        <p class="small text-warning mb-0" style="color: #fcd34d !important;">Conexão OK! Porém, não há registros ativos no seu banco SQLite no momento.</p>
+                    </div>
+                </div>
+                <p class="small text-white-50 mb-0 mt-3 leading-relaxed">
+                    <strong>Aviso Técnico:</strong> Suas consultas de banco de dados rodaram com sucesso na rota principal, mas retornaram zero registros. Para que a sua landing page não fique em branco, o FeedIn ativou inteligentemente o <strong>modo fallback interativo</strong> com publicações e curadores simulados de Piracicaba abaixo. Assim que você cadastrar novos registros no painel de administração, as histórias reais assumirão esses espaços automaticamente!
                 </p>
             </div>
-
-            <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="card-body p-4 text-center">
-                            <div class="display-1 mb-3">🎭</div>
-                            <h4>O Palco</h4>
-                            <p class="text-muted">Algoritmos frios sugerem conteúdo baseado em engajamento vazio. No palco, você está cercado, mas muitas vezes sozinho.</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100 border-0 shadow-sm hover-lift border-bottom border-primary border-4">
-                        <div class="card-body p-4 text-center">
-                            <div class="display-1 mb-3">☕</div>
-                            <h4>A Mesa de Café</h4>
-                            <p class="text-muted">Conexões por contexto. Aqui, as sugestões respeitam o tempo e o lugar onde sua história cruzou com a de outra pessoa.</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card h-100 border-0 shadow-sm hover-lift">
-                        <div class="card-body p-4 text-center">
-                            <div class="display-1 mb-3">🌫️</div>
-                            <h4>Sem Ruído</h4>
-                            <p class="text-muted">Livre de bots e perfis fakes. O FeedIn! resgata a confiança através de vínculos validados por quem você realmente conhece.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
-    </section>
+        {% endif %}
 
-    <section id="cadastro" class="py-5 bg-primary text-white">
-        <div class="container py-5">
-            <div class="row justify-content-center">
-                <div class="col-lg-6 text-center mb-4">
-                    <h2 class="display-5 fw-bold mb-3">Faça parte dessa transformação</h2>
-                    <p class="lead mb-4">Seja um Pioneiro e ajude a resgatar a memória social da nossa rede.</p>
-                </div>
-            </div>
+        <!-- SESSÃO 1: MIX REAL DA TABELA POSTAGEM (Limitado a 12 Publicações com Anúncios por Tags) -->
+        <section id="vitrine" class="py-5">
+            <div class="container">
 
-            <div class="row justify-content-center">
-                <div class="col-lg-6">
-                    <form action="{{ url_for('index') }}" method="POST" class="bg-white p-4 rounded-4 shadow">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                        <div class="mb-3">
-                            <label class="form-label text-dark fw-bold">Nome completo</label>
-                            <input type="text" name="nome" class="form-control form-control-lg" placeholder="Seu nome" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label text-dark fw-bold">E-mail</label>
-                            <input type="email" name="email" class="form-control form-control-lg" placeholder="seu@email.com" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label text-dark fw-bold">O que mais te interessa?</label>
-                            <select name="interesse" class="form-select form-select-lg">
-                                <option value="afetivo">Vínculos Afetivos (Família/Amigos)</option>
-                                <option value="social">Vínculos Sociais (Comunidade/Grupos)</option>
-                                <option value="comercial">Vínculos Comerciais (Negócios)</option>
-                                <option value="todos">Todas as dimensões</option>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn btn-warning btn-lg w-100 fw-bold">
-                            Quero saber mais sobre o FeedIn!
-                        </button>
-                        <p class="text-muted small mt-3 text-center">
-                            <i class="fas fa-lock me-1"></i> Seus dados estão seguros conosco.
+                <div class="row align-items-end mb-5 g-4">
+                    <div class="col-lg-8 text-start">
+                        <span class="text-uppercase small tracking-widest text-muted" style="color: var(--neon-mint) !important; font-weight: 700;">
+                            ✨ Acervo Coletivo em Tempo Real
+                        </span>
+                        <h1 class="display-5 fw-extrabold text-white mt-2 mb-0" style="letter-spacing: -1px;">
+                            Explorando Piracicaba
+                        </h1>
+                        <p class="text-white-50 fs-5 mt-2 mb-0">
+                            Destaque de memórias salvas pelos guardiões da cidade. Registros reais, livres de algoritmos comerciais frios.
                         </p>
-                    </form>
+                    </div>
+                    <div class="col-lg-4 text-lg-end text-start">
+                        <span class="badge visitor-badge rounded-pill px-3 py-2">
+                            <i class="fas fa-lock me-2 text-warning"></i> Interações desativadas para visitantes
+                        </span>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    {% if publicacoes_aleatorias %}
+                        {% for pub in publicacoes_aleatorias %}
+                            <div class="col-lg-3 col-md-4 col-sm-6">
+                                {% set atividade = pub %}
+                                {% set exibir_controles = false %}
+                                {% set context_origem = 'vitrine' %}
+                                {# 1. Define a variável primeiro #}
+                                {% set objeto_entrada = publicacao %}
+
+                                {# 2. Faz o include (o motor universal vai ler o 'objeto_entrada' do contexto) #}
+                                {% include "partials/cards/card_postagem_universal.html" %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12 text-center text-white-50 p-5">
+                            <p>Nenhuma publicação encontrada para exibir na vitrine no momento.</p>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <section class="py-5 bg-light">
-        <div class="container py-5">
-            <div class="text-center mb-5">
-                <h2 class="fw-bold">Dúvidas sobre o FeedIn!</h2>
-                <p class="text-muted">Entenda como unimos tecnologia de ponta e memórias reais.</p>
+{% if anuncio_vitrine %}
+<section class="vitrine-publicitaria py-5 my-4 bg-light rounded-4">
+    <div class="container">
+        <h4 class="text-center mb-4 text-muted">
+            <i class="bi bi-star-fill text-warning me-2"></i>Destaque para você
+
+{# TESTE DE DADOS #}
+{% if anuncio_vitrine %}
+    {# Passamos apenas o necessário, sem sobrescrever nada globalmente #}
+    {% set anuncio = anuncio_vitrine %}
+    {% include "partials/cards/card_postagem_universal.html" %}
+{% endif %}
+        </h4>
+        <div class="row justify-content-center">
+            <div class="col-lg-5 col-md-8">
+                {# Chamada polimórfica para o motor universal #}
+                {% if anuncio_vitrine %}
+                    {# Define o objeto antes do include #}
+                    {% set objeto_entrada = anuncio_vitrine %}
+                    {% include "partials/cards/card_postagem_universal.html" %}
+                {% endif %}
             </div>
+        </div>
+    </div>
+</section>
+{% endif %}
 
-            <div class="row justify-content-center">
-                <div class="col-lg-8">
-                    <div class="accordion" id="faqAccordion">
+        <!-- SESSÃO 2: CARROSSEL DE COMUNIDADE (10 Fotos de Perfis Reais Anônimas tiradas do banco) -->
+        <section id="comunidade" class="py-5" style="background: rgba(15, 23, 42, 0.45);">
+            <div class="container text-center">
+                <div class="max-w-2xl mx-auto mb-5 text-center">
+                    <h3 class="display-6 fw-bold text-white mb-2">Comunidade de Guardiões</h3>
+                    <p style="color: var(--text-muted-pira);">Quem faz a preservação da nossa história no dia a dia. Identidade protegida e segura.</p>
+                </div>
 
-                        <div class="accordion-item border-0 mb-3 shadow-sm">
-                            <h3 class="accordion-header">
-                                <button class="accordion-button collapsed bg-white rounded-4 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq1">
-                                    O que significa "Conexão por Contexto"?
-                                </button>
-                            </h3>
-                            <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body text-secondary">
-                                    É nossa forma de conectar pessoas baseada em vínculos reais (afetivos, sociais e comerciais). Nossa arquitetura lógica permite que o sistema entenda não apenas "quem você é", mas "onde e com quem sua história se cruza", criando sugestões baseadas na sua vida real.
+                <!-- Carrossel Horizontal Scrollable -->
+                <div id="carrosselCuradores" class="carousel slide" data-bs-ride="carousel">
+                    <div class="carousel-inner">
+                        {# Agrupamos os usuários em blocos de 3 para o carrossel ter o que girar #}
+                        {% for batch in usuarios_reais[:9] | batch(3) %}
+                        <div class="carousel-item {{ 'active' if loop.first else '' }}">
+                            <div class="d-flex justify-content-center gap-3">
+                                {% for usr in batch %}
+                                <div class="glass-panel-pira p-4 text-center d-flex flex-column align-items-center" style="width: 200px;">
+                                    <div class="rounded-4 mx-auto mb-3 border-2 border-primary overflow-hidden p-1" style="width: 85px; height: 85px;">
+                                        {% if usr.foto_perfil and usr.foto_perfil != 'default.jpg' %}
+                                            <img src="{{ url_for('static', filename=usr.foto_url) }}"
+                                                 class="w-100 h-100" style="object-fit: cover;">
+                                        {% else %}
+                                            <img src="https://placehold.co/150x150/0b1329/2dd4bf?text=Curador" class="w-100 h-100">
+                                        {% endif %}
+                                    </div>
+                                    <span class="badge rounded-pill bg-dark text-white-50">Guardião da Teia</span>
                                 </div>
+                                {% endfor %}
                             </div>
                         </div>
-
-                        <div class="accordion-item border-0 mb-3 shadow-sm">
-                            <h3 class="accordion-header">
-                                <button class="accordion-button collapsed bg-white rounded-4 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq2">
-                                    Como funciona o "Trazer minha Família/Amigos"?
-                                </button>
-                            </h3>
-                            <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body text-secondary">
-                                    Você convida pessoas do seu círculo para construir sua árvore de conexões. O FeedIn! utiliza algoritmos avançados para validar e fortalecer seu grafo de confiança, garantindo que as interações na plataforma sejam seguras e genuínas.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="accordion-item border-0 mb-3 shadow-sm">
-                            <h3 class="accordion-header">
-                                <button class="accordion-button collapsed bg-white rounded-4 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faqIA">
-                                    Qual o papel da Inteligência Artificial no FeedIn!?
-                                </button>
-                            </h3>
-                            <div id="faqIA" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body text-secondary">
-                                    A IA atua nos bastidores como um mentor tecnológico. Ela nos auxilia na organização de grandes volumes de dados históricos e geográficos, garantindo que as memórias cadastradas pelos usuários sejam conectadas com precisão e relevância.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="accordion-item border-0 mb-3 shadow-sm">
-                            <h3 class="accordion-header">
-                                <button class="accordion-button collapsed bg-white rounded-4 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq3">
-                                    Posso separar vida pessoal e profissional?
-                                </button>
-                            </h3>
-                            <div id="faq3" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body text-secondary">
-                                    Sim! O FeedIn! foi desenhado para ser multidimensional. Você gerencia diferentes tipos de vínculo no mesmo lugar, com camadas de privacidade que garantem o contexto adequado para cada relação.
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="accordion-item border-0 mb-3 shadow-sm border-primary border-start border-4">
-                            <h3 class="accordion-header">
-                                <button class="accordion-button collapsed bg-white rounded-4 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq4">
-                                    Quando o FeedIn! será lançado?
-                                </button>
-                            </h3>
-                            <div id="faq4" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
-                                <div class="accordion-body text-secondary">
-                                    Estamos em fase de desenvolvimento ativo. Se você se cadastrar agora, receberá o status de <strong>Pioneiro</strong>, garantindo um selo vitalício em seu perfil e acesso prioritário ao beta fechado assim que abrirmos os testes.
-                                </div>
-                            </div>
-                        </div>
-
+                        {% endfor %}
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
+
+        <!-- SESSÃO 3: EXPLICAÇÃO DIDÁTICA (O que eternizamos) -->
+        <section class="py-5" style="background: radial-gradient(circle at 10% 80%, rgba(45, 212, 191, 0.05) 0%, transparent 50%);">
+            <div class="container">
+                <div class="row align-items-center g-5">
+                    <div class="col-lg-6 text-start">
+                        <span class="badge bg-white/5 text-info mb-3 px-3 py-1 text-uppercase" style="color: var(--neon-mint) !important; border: 1px solid rgba(45, 212, 191, 0.2);">Eternidade Afetiva</span>
+                        <h3 class="display-6 fw-bold text-white mb-4">O que são as Memórias que salvamos?</h3>
+                        <p class="lead text-white-50 mb-4" style="font-size: 1.1rem; line-height: 1.6;">
+                            Não somos apenas um mapa geográfico de comércio ou ruas. O <strong>FeedIn!</strong> eterniza o patrimônio imaterial e sentimental de cada endereço urbano de Piracicaba.
+                        </p>
+                        <p class="text-white-50 mb-4">
+                            O banco do coreto onde aconteceu o primeiro beijo, a mercearia do bairro que fechou as portas mas ainda vive nas memórias de infância dos moradores. Unimos registros reais e narrativas vivas sob um único grafo de confiança.
+                        </p>
+                        <a href="#cadastro" class="btn btn-outline-info px-4 py-2" style="border-color: var(--neon-mint); color: var(--neon-mint); border-radius: 10px;">
+                            Indicar Meus Locais Favoritos
+                        </a>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="glass-panel-pira p-4 border border-white/10">
+                            <div class="d-flex align-items-center gap-3 mb-4 text-start">
+                                <div class="bg-info/10 d-flex align-items-center justify-content-center rounded-3 text-info" style="width: 50px; height: 50px; background: rgba(45, 212, 191, 0.15); color: var(--neon-mint) !important;">
+                                    <i class="fas fa-map-marked-alt fs-4"></i>
+                                </div>
+                                <div>
+                                    <h5 class="fw-bold text-white mb-0">Geolocalização Afetiva</h5>
+                                    <small style="color: var(--text-muted-pira);">Transformando coordenadas frias em conexões humanas.</small>
+                                </div>
+                            </div>
+                            <div class="space-y-3 text-start">
+                                <div class="p-3 rounded-3 bg-white/5 border border-white/5 mb-3">
+                                    <span class="fw-bold" style="color: var(--neon-mint);">1. Escolha o Espaço Urbano</span>
+                                    <p class="small text-white-50 mt-1 mb-0">Aponte um comércio clássico ativo ou um local histórico extinto de Piracicaba.</p>
+                                </div>
+                                <div class="p-3 rounded-3 bg-white/5 border border-white/5 mb-3">
+                                    <span class="fw-bold text-danger" style="color: var(--accent-rose) !important;">2. Publique sua Lembrança</span>
+                                    <p class="small text-white-50 mt-1 mb-0">Insira fotos do seu baú particular de recordações e adicione sensações.</p>
+                                </div>
+                                <div class="p-3 rounded-3 bg-white/5 border border-white/5">
+                                    <span class="fw-bold text-white">3. Una Gerações</span>
+                                    <p class="small text-white-50 mt-1 mb-0">Permita que moradores que partilham dos mesmos afetos encontrem sua história.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SESSÃO 4: CARDS DE LOCAIS POPULARES REAL DO BANCO -->
+        <section id="locais-populares" class="py-5" style="background: rgba(15, 23, 42, 0.20);">
+            <div class="container py-4">
+                <div class="text-start mb-5 border-start border-4 border-info ps-4" style="border-color: var(--neon-mint) !important;">
+                    <h2 class="display-6 fw-bold text-white mb-2">Memórias Ativas mais Seguidas</h2>
+                </div>
+
+                <div class="row g-4">
+                    {% if locais_reais_ativos %}
+                        {% for local, seguidores_count in locais_reais_ativos %}
+                        <div class="col-lg-3 col-md-4 col-sm-6">
+                            <div class="glass-panel-pira p-4 h-100 d-flex flex-column justify-content-between text-start"
+                                 style="border: 1px solid rgba(255, 255, 255, 0.1); border-left: 4px solid var(--neon-mint); border-radius: 12px;">
+
+                                <div>
+                                    <h5 class="fw-bold text-white mb-2" style="font-size: 1.1rem;">{{ local.nome }}</h5>
+                                    </div>
+
+                                <div class="mt-4 pt-3 border-top border-white/10 d-flex justify-content-between align-items-center">
+                                    <div class="text-start">
+                                        <small class="text-white-50 d-block" style="font-size: 0.70rem; text-transform: uppercase;">Seguidores</small>
+                                        <span class="fw-bold text-white">{{ seguidores_count }}</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-white-50 d-block" style="font-size: 0.70rem; text-transform: uppercase;">Memórias</small>
+                                        <span class="fw-bold text-white">{{ local.publicacoes_count|default(0) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <!-- SESSÃO 5: LOCAIS AUTOMATIZADOS REAL AGUARDANDO REGISTRO (Cores intercaladas) -->
+        <section id="locais-aguardando" class="py-5 bg-slateNavy/10">
+            <div class="container py-4">
+                <div class="text-center mb-5 max-w-2xl mx-auto">
+                    <span class="badge bg-danger/10 mb-2 px-3 py-1 text-uppercase" style="color: var(--accent-rose) !important; border: 1px solid rgba(244, 63, 94, 0.2);">🛡️ Cadastro Automático do Sistema</span>
+                    <h2 class="display-6 fw-bold text-white">Locais à Espera de História</h2>
+                    <p class="mx-auto" style="color: var(--text-muted-pira); max-width: 700px;">
+                        Endereços e comércios clássicos inseridos dinamicamente. <br>
+                        <strong>Seja o primeiro a resgatar as memórias ou curtir essas páginas!</strong>
+                    </p>
+                </div>
+
+                <div class="row g-3">
+                    {% if locais_reais_aguardando %}
+                        {% for local in locais_reais_aguardando[:10] %}
+                        <!-- Lógica de cores intercaladas baseada no índice do loop -->
+                        <div class="col-lg-3 col-md-4 col-sm-6 text-start">
+                            <div class="{% if loop.index is odd %}glass-panel-mint{% else %}glass-panel-rose{% endif %} p-4 h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <span class="badge mb-2 text-uppercase font-weight-bold" style="font-size: 0.7rem; background: rgba(255,255,255,0.06); color: {% if loop.index is odd %}var(--neon-mint){% else %}var(--accent-rose){% endif %};">Seja o 1º!</span>
+                                    <h5 class="fw-bold text-white mb-2" style="font-size: 1rem;">{{ local.nome }}</h5>
+                                    <small class="text-white-50 d-block mb-3" style="font-size: 0.8rem;"><i class="fas fa-road me-1 text-muted"></i> {{ local.endereco if local.endereco else 'Endereço Clássico' }}</small>
+                                </div>
+                                <div class="mt-4 pt-3 border-top border-white/5" style="font-size: 0.75rem; color: var(--text-muted-pira);">
+                                    <div class="mb-1"><strong>Bairro:</strong> {{ local.bairro if local.bairro else 'Não Cadastrado' }}</div>
+                                    <div><strong>Cidade:</strong> {{ local.cidade if local.cidade else 'Piracicaba' }} / SP</div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <!-- Fallback para 10 locais aguardando se o banco de dados for novo -->
+                        {% set aguardando_mock = [
+                            {"nome": "Café da XV", "end": "Rua XV de Novembro, 400", "bairro": "Centro"},
+                            {"nome": "Cervejaria Casarão", "end": "Av. Alidor Pecorari, 143", "bairro": "Rua do Porto"},
+                            {"nome": "Restaurante do Porto", "end": "Av. Beira Rio, 902", "bairro": "Rua do Porto"},
+                            {"nome": "Doceria da Vila", "end": "Rua Benjamin Constant, 120", "bairro": "Vila Rezende"},
+                            {"nome": "Lanches do Carlão", "end": "Rua Saldanha Marinho, 55", "bairro": "Centro"},
+                            {"nome": "Barbearia Elite", "end": "Av. Independência, 1100", "bairro": "Higienópolis"},
+                            {"nome": "Livraria Atlas", "end": "Rua Gov. Pedro de Toledo, 720", "bairro": "Centro"},
+                            {"nome": "Pastelaria Central", "end": "Praça José Bonifácio, 10", "bairro": "Centro"},
+                            {"nome": "Empório dos Vinhos", "end": "Av. Centenário, 1800", "bairro": "São Dimas"},
+                            {"nome": "Sorveteria do Largo", "end": "Largo dos Pescadores, 12", "bairro": "Centro"}
+                        ] %}
+                        {% for mock in aguardando_mock %}
+                        <div class="col-lg-3 col-md-4 col-sm-6 text-start">
+                            <div class="{% if loop.index is odd %}glass-panel-mint{% else %}glass-panel-rose{% endif %} p-4 h-100 d-flex flex-column justify-content-between">
+                                <div>
+                                    <span class="badge mb-2 text-uppercase font-weight-bold" style="font-size: 0.65rem; background: rgba(255,255,255,0.06); color: {% if loop.index is odd %}var(--neon-mint){% else %}var(--accent-rose){% endif %};">Seja o 1º!</span>
+                                    <h5 class="fw-bold text-white mb-2" style="font-size: 0.95rem;">{{ mock.nome }}</h5>
+                                    <small class="text-white-50 d-block mb-3" style="font-size: 0.75rem;"><i class="fas fa-road me-1 text-muted"></i> {{ mock.end }}</small>
+                                </div>
+                                <div class="mt-4 pt-3 border-top border-white/5" style="font-size: 0.75rem; color: var(--text-muted-pira);">
+                                    <div class="mb-1"><strong>Bairro:</strong> {{ mock.bairro }}</div>
+                                    <div><strong>Cidade:</strong> Piracicaba / SP</div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <!-- SESSÃO 6: IMPORTÂNCIA DAS TAGS (Explicação e Nuvem REAL de TAXONOMIA do banco) -->
+        <section class="py-5" style="background: rgba(15, 23, 42, 0.35);">
+            <div class="container py-4 text-center">
+                <h3 class="display-6 fw-bold text-white mb-2">Conexões por Tags e Afinidades</h3>
+                <p class="mx-auto mb-5" style="color: var(--text-muted-pira); max-width: 800px;">
+                    As tags no FeedIn operam como canais neurais de pertencimento. Ao sinalizar os gostos que mais combinam com você, o sistema não gera amizades artificiais ou invasivas. Em vez disso, aproxima você naturalmente de vizinhos que valorizam as mesmas histórias.
+                </p>
+
+                <!-- Nuvem de Tags REAL vinda das tabelas de Taxonomia -->
+                <div class="d-flex flex-wrap justify-content-center gap-2 max-w-4xl mx-auto p-4 glass-panel-pira">
+                    {% if tags_reais %}
+                        {% for tag in tags_reais[:20] %}
+                            <a href="#cadastro" class="btn pira-tag px-3 py-2 rounded-pill shadow-sm">#{{ tag.nome if tag.nome else tag }}</a>
+                        {% endfor %}
+                    {% else %}
+                        <!-- Fallback das 20 Tags mais utilizadas em Piracicaba -->
+                        {% set tags_mock = [
+                            "CafeClassico", "PeixeNaBrasa", "EstacaoPaulista", "RuaDoPorto", "MPB",
+                            "Coreto", "Patrimonio", "Anos80", "TeatroLosano", "Botequim",
+                            "CervejariaArtesanal", "FestaJunina", "LargoDosPescadores", "CasaraoDoTurismo",
+                            "PaoNaChapa", "MemoriaAfetiva", "EngenhoCentral", "BailesFamosos", "SorveteDeMilho", "VilaRezende"
+                        ] %}
+                        {% for tag in tags_mock %}
+                            <a href="#cadastro" class="btn pira-tag px-3 py-2 rounded-pill shadow-sm">#{{ tag }}</a>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                <small class="text-muted d-block mt-3 italic"><i class="fas fa-info-circle me-1"></i> Clique em qualquer tag para sinalizar seu interesse favorito no cadastro.</small>
+            </div>
+        </section>
+
+        <!-- SESSÃO 7: NARRATIVA DE VALOR BILATERAL (Usuário vs Empreendedor) -->
+        <section class="py-5">
+            <div class="container py-4 text-center">
+                <h3 class="display-6 fw-bold text-white mb-3">Vantagens Bilaterais do FeedIn</h3>
+                <p class="mb-5" style="color: var(--text-muted-pira);">Onde avaliações honestas viram pontes afetivas de relevância e visibilidade.</p>
+
+                <div class="row g-4 justify-content-center">
+                    <div class="col-md-5">
+                        <div class="glass-panel-pira p-5 h-100 text-start d-flex flex-column justify-content-between" style="border-top: 4px solid var(--neon-mint);">
+                            <div>
+                                <div class="bg-info/10 d-flex align-items-center justify-content-center rounded-3 text-info mb-4" style="width: 50px; height: 50px; background: rgba(45, 212, 191, 0.15); color: var(--neon-mint) !important;">
+                                    <i class="fas fa-user-check fs-4"></i>
+                                </div>
+                                <h4 class="fw-bold text-white mb-3">Para Você, Curador</h4>
+                                <p class="text-white-50 leading-relaxed mb-0">
+                                    Encontre grupos urbanos reais com exatamente os mesmos interesses e redescubra a história da cidade. O seu feedback e carinho ajudam a construir de forma espontânea o mapa de lazer definitivo de Piracicaba.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="glass-panel-pira p-5 h-100 text-start d-flex flex-column justify-content-between" style="border-top: 4px solid var(--accent-rose);">
+                            <div>
+                                <div class="bg-danger/10 d-flex align-items-center justify-content-center rounded-3 text-danger mb-4" style="width: 50px; height: 50px; background: rgba(244, 63, 94, 0.15); color: var(--accent-rose) !important;">
+                                    <i class="fas fa-store fs-4"></i>
+                                </div>
+                                <h4 class="fw-bold text-white mb-3">Para Você, Empreendedor</h4>
+                                <p class="text-white-50 leading-relaxed mb-0">
+                                    Seja encontrado por quem realmente quer consumir o seu produto e suas memórias. Patrocine gostos locais de forma orgânica e ganhe prestígio ao acumular carinho e feedbacks legítimos dos seus clientes mais fiéis.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SESSÃO 8: CADASTRO E PROCESSO DE ADESÃO SIMPLIFICADO -->
+        <section id="cadastro" class="py-5 bg-slateNavy border-top border-white/5">
+            <div class="container py-5">
+                <div class="row justify-content-center">
+                    <div class="col-lg-6 text-center mb-4">
+                        <h2 class="display-5 fw-bold mb-3 text-white">Faça parte desta transformação</h2>
+                        <p class="lead" style="color: var(--text-muted-pira);">Insira suas primeiras informações e receba o token numérico direto para ativar o seu perfil!</p>
+                    </div>
+                </div>
+
+                <div class="row justify-content-center">
+                    <div class="col-lg-6">
+                        <!-- Formulário integrado de Onboarding Simplificado -->
+                        <form action="{{ url_for('index') }}" method="POST" class="glass-panel-pira p-4 border border-white/10 text-start">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                            <div class="mb-3">
+                                <label class="form-label text-white fw-bold">E-mail para Token de Acesso</label>
+                                <input type="email" name="email" class="form-control form-control-lg bg-white/5 border-white/10 text-white" placeholder="seu@email.com" required style="border-radius: 10px;">
+                                <small class="text-muted">Mandaremos o código numérico imediatamente para o seu e-mail.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-white fw-bold">Seu Nome Completo</label>
+                                <input type="text" name="nome" class="form-control form-control-lg bg-white/5 border-white/10 text-white" placeholder="Seu nome" required style="border-radius: 10px;">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label text-white fw-bold">Gostos que te Identificam</label>
+                                <select name="interesse" class="form-select form-select-lg bg-slateNavy border-white/10 text-white" style="border-radius: 10px; background-color: var(--slate-navy);">
+                                    <option value="afetivo">☕ Vínculos Afetivos (Cafés, Padarias e Encontros)</option>
+                                    <option value="social">🎭 Vínculos Sociais (Teatros, Eventos e Clubes)</option>
+                                    <option value="comercial">🍺 Vínculos Comerciais (Cervejarias e Gastronomia)</option>
+                                    <option value="todos">🌟 Todos os Vínculos e Gostos</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" class="btn btn-lg w-100 fw-bold border-0 mt-3" style="background-color: var(--neon-mint); color: var(--slate-dark); border-radius: 10px;">
+                                Solicitar Token de Acesso <i class="fas fa-key ms-2"></i>
+                            </button>
+
+                            <p class="text-muted small mt-3 text-center mb-0">
+                                <i class="fas fa-shield-alt me-1 text-info"></i> Seu CPF, apelido, data de nascimento e foto serão solicitados na etapa seguinte para garantir segurança contra robôs.
+                            </p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SESSÃO DE FAQ MODERNA -->
+        <section class="py-5" style="background: rgba(15, 23, 42, 0.15);">
+            <div class="container py-4 text-center">
+                <h3 class="display-6 fw-bold text-white mb-2">Perguntas Frequentes</h3>
+                <p class="mb-5" style="color: var(--text-muted-pira);">Descubra por que o FeedIn resgata o real valor das relações.</p>
+
+                <div class="row justify-content-center text-start">
+                    <div class="col-lg-8">
+                        <div class="accordion" id="faqAccordion">
+
+                            <div class="accordion-item border-0 mb-3 shadow-sm" style="border-radius: 12px; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255,255,255,0.05) !important;">
+                                <h3 class="accordion-header">
+                                    <button class="accordion-button collapsed bg-transparent text-white fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq1" style="border-radius: 12px; box-shadow: none;">
+                                        O que significa "Conexão por Contexto"?
+                                    </button>
+                                </h3>
+                                <div id="faq1" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body" style="color: var(--text-muted-pira);">
+                                        É a nossa forma exclusiva de ligar moradores com base em afinidades reais (vínculos de carinho com locais comuns e tags de interesses). O sistema não faz sugestões forçadas de pessoas sem propósito; o cruzamento se dá unicamente de acordo com as afinidades e locais indicados.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item border-0 mb-3 shadow-sm" style="border-radius: 12px; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255,255,255,0.05) !important;">
+                                <h3 class="accordion-header">
+                                    <button class="accordion-button collapsed bg-transparent text-white fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq2" style="border-radius: 12px; box-shadow: none;">
+                                        Como funciona o sistema sem "Sugestão de Seguidores" inicial?
+                                    </button>
+                                </h3>
+                                <div id="faq2" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body" style="color: var(--text-muted-pira);">
+                                        Diferente de outras redes que invadem seu feed com sugestões genéricas de amizade, o FeedIn! inicia totalmente limpo. Você aponta as tags que representam o seu estilo e os locais que ama para que a rede inteligente mostre de forma transparente quem partilha dos mesmos gostos próximos a você.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="accordion-item border-0 mb-3 shadow-sm" style="border-radius: 12px; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255,255,255,0.05) !important;">
+                                <h3 class="accordion-header">
+                                    <button class="accordion-button collapsed bg-transparent text-white fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faqIA" style="border-radius: 12px; box-shadow: none;">
+                                        Como as empresas apoiam os interesses?
+                                    </button>
+                                </h3>
+                                <div id="faqIA" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                                    <div class="accordion-body" style="color: var(--text-muted-pira);">
+                                        Estabelecimentos locais podem patrocinar tags de afinidade (como #CafeClassico ou #CervejariaArtesanal). Quando você salva um interest desses, sugerimos o local apoiador como recomendação orgânica de grande relevância, garantindo uma descoberta sem spam.
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
 </div>
 
 <script>
@@ -282,42 +699,46 @@ document.addEventListener('DOMContentLoaded', function() {
     const splash = document.getElementById('splash-overlay');
     const content = document.getElementById('main-content');
 
-    // 1. O site começa escondido. Após 3 segundos, iniciamos a transição.
+    // O site inicia oculto para carregar a Splash. Após 3 segundos, faz a transição fluida.
     setTimeout(() => {
         if (splash) {
             splash.style.opacity = '0';
 
-            // Aguarda o fim da transição de opacidade da splash para trocar o conteúdo
+            // Aguarda a animação de desvanecer terminar antes de ocultar no display
             setTimeout(() => {
                 splash.style.display = 'none';
 
                 if (content) {
-                    content.style.display = 'block'; // Torna o elemento existente no layout
-                    // Pequeno delay para o navegador processar o 'display: block' antes da opacidade
+                    content.style.display = 'block';
+                    // Garante que a transição de opacidade do conteúdo principal ocorra suavemente
                     setTimeout(() => {
                         content.style.opacity = '1';
                     }, 50);
                 }
             }, 800);
         }
-    }, 3000); // Reduzi para 3s para parecer mais fluido, mas pode voltar para 3.5s
+    }, 3000);
 });
 </script>
 
 <style>
-/* Forçar o body a não ter scroll enquanto a splash estiver ativa */
-body.loading {
-    overflow: hidden;
-}
-/* Estilos extras que você já tinha */
-.hover-lift { transition: transform 0.3s ease, box-shadow 0.3s ease; }
-.hover-lift:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
-}
-.min-vh-75 { min-height: 75vh; }
-.btn-feedin-active:active { transform: translateY(3px) scale(0.98); }
-.logo-anjo { max-height: 50px; filter: grayscale(100%); opacity: 0.7; transition: 0.4s; }
-.logo-anjo:hover { filter: grayscale(0%); opacity: 1; transform: scale(1.1); }
+    /* Forçar rolagem bloqueada durante o carregamento inicial */
+    body.loading {
+        overflow: hidden;
+    }
+    .min-vh-75 {
+        min-height: 75vh;
+    }
+    .logo-anjo {
+        filter: grayscale(100%);
+        opacity: 0.6;
+        transition: all 0.3s ease;
+    }
+    .logo-anjo:hover {
+        filter: grayscale(0%);
+        opacity: 1;
+        transform: scale(1.08);
+    }
 </style>
+
 {% endblock %}

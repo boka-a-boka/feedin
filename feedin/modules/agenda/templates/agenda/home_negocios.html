@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}FeedIn Negócios{% endblock %}
+
+{% block content %}
+<style>
+    .sidebar-pwa {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 280px;
+        height: 100%;
+        background-color: #ffffff;
+        z-index: 1050;
+        transform: translateX(-100%); /* Mantém o menu escondido à esquerda por padrão */
+        transition: transform 0.3s ease-in-out;
+        box-shadow: 4px 0 12px rgba(0,0,0,0.1);
+    }
+    .sidebar-pwa.active {
+        transform: translateX(0); /* Desliza para a tela quando ativo */
+    }
+    .sidebar-overlay-pwa {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 1040;
+        display: none;
+    }
+    .sidebar-overlay-pwa.active {
+        display: block;
+    }
+    .transition-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 .4rem .8rem rgba(0,0,0,.08)!important;
+        transition: all 0.2s ease-in-out;
+    }
+    .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.06); }
+    div::-webkit-scrollbar { display: none; }
+
+    .sidebar-pwa .list-group-item-action:hover {
+        background-color: #f8f9fa;
+        color: #000 !important;
+        font-weight: 600;
+    }
+</style>
+
+<div id="sidebar-menu" class="sidebar-pwa">
+
+    {% if session.get('modo_visao') == 'balcao' %}
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-dark text-white">
+            <div class="text-start" style="line-height: 1.2;">
+                <h6 class="m-0 fw-bold text-warning"><i class="bi bi-shield-lock-fill me-2"></i>Modo Interno</h6>
+                <small class="text-muted" style="font-size: 0.65rem;">Nível de Acesso: {{ session.get('nivel_acesso_atual', 10) }}</small>
+            </div>
+            <button id="btn-fechar-menu" class="btn btn-sm btn-outline-light border-0 rounded-circle"><i class="bi bi-x-lg"></i></button>
+        </div>
+
+        {% if session.get('usuario_is_pioneiro') and session.get('nivel_acesso_atual') == 999 %}
+        <div class="p-3 mx-3 mt-3 bg-warning bg-opacity-10 border border-warning rounded-4 text-center">
+            <span class="badge bg-warning text-dark px-2 py-1 rounded-pill text-uppercase fw-bold mb-1" style="font-size: 0.55rem;">
+                🏆 Conta Pioneira Ativa
+            </span>
+            <p class="text-dark m-0 fw-medium" style="font-size: 0.72rem; line-height: 1.3;">
+                Garantido: <strong>50% de desconto</strong> em recursos acessórios e testes antecipados liberados!
+            </p>
+        </div>
+        {% endif %}
+
+        <div class="list-group list-group-flush mt-2">
+            <a href="/agenda/painel" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-calendar3 me-3 text-primary"></i>Painel da Agenda
+            </a>
+
+            {% if session.get('nivel_acesso_atual', 10) >= 666 %}
+            <a href="/agenda/servicos" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-scissors me-3 text-success"></i>Catálogo de Serviços
+            </a>
+            {% endif %}
+
+            <a href="/agenda/balcao/cadastrar" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-person-plus-fill me-3 text-info"></i>Inserir Cliente (Balcão)
+            </a>
+
+            <hr class="my-2 mx-3 text-muted">
+
+            <a href="/balcao/sair" class="list-group-item list-group-item-action py-3 px-4 border-0 text-danger fw-bold">
+                <i class="bi bi-fullscreen-exit me-3"></i>Voltar para a Cidade
+            </a>
+        </div>
+
+    {% else %}
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-dark text-white">
+            <h6 class="m-0 fw-bold"><i class="bi bi-grid-fill me-2"></i>Navegação</h6>
+            <button id="btn-fechar-menu" class="btn btn-sm btn-outline-light border-0 rounded-circle"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="list-group list-group-flush">
+            <a href="/negocios" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-house-door-fill me-3 text-secondary"></i>Início</a>
+            <a href="/agenda/meus-horarios" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-calendar-check-fill me-3 text-secondary"></i>Meus Horários</a>
+            <a href="/favoritos" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-star-fill me-3 text-secondary"></i>Favoritos</a>
+            <a href="/perfil/reputacao" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-award-fill me-3 text-secondary"></i>Minha Reputação</a>
+            <hr class="my-2 mx-3 text-muted">
+            <a href="/ajuda" class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted"><i class="bi bi-question-circle-fill me-3"></i>Ajuda & Suporte</a>
+        </div>
+    {% endif %}
+
+</div>
+<div id="sidebar-overlay" class="sidebar-overlay-pwa"></div>
+
+<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
+
+    <div class="d-flex justify-content-between align-items-center mb-3 bg-light p-3 rounded-4 shadow-sm border-0">
+        <div class="d-flex align-items-center gap-3">
+            <button id="btn-abrir-menu" class="btn btn-white bg-white border shadow-sm rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                <i class="bi bi-list fs-5 text-dark"></i>
+            </button>
+            <div>
+                <span class="text-muted small d-block" style="font-size: 0.75rem;">Central de Negócios em:</span>
+                <strong class="text-dark"><i class="bi bi-geo-alt-fill text-danger"></i> {{ cidade }} - {{ estado }}</strong>
+            </div>
+        </div>
+        <button class="btn btn-sm bg-white border rounded-pill text-secondary px-3" style="font-size: 0.8rem;">Mudar</button>
+    </div>
+
+    <div class="mb-4 position-relative">
+        <div class="input-group bg-white border rounded-pill px-3 py-1 shadow-sm align-items-center">
+            <span class="input-group-text bg-transparent border-0 text-muted p-0 me-2"><i class="bi bi-search"></i></span>
+            <input type="text" id="busca-negocio" class="form-control bg-transparent border-0 form-control-sm shadow-none p-0" placeholder="Digite o nome da empresa ou o que precisa..." autocomplete="off">
+            <button class="btn btn-sm border-0 text-muted p-0 d-none" id="btn-limpar-busca" type="button"><i class="bi bi-x-circle-fill"></i></button>
+        </div>
+        <div id="autocomplete-results" class="list-group position-absolute w-100 mt-1 shadow rounded-3 d-none" style="z-index: 1000; max-height: 250px; overflow-y: auto;"></div>
+    </div>
+
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="fw-bold text-dark m-0" style="font-size: 0.95rem;">Acesso Rápido</h6>
+            <span class="text-muted small" style="font-size: 0.75rem;">Máx. 10</span>
+        </div>
+        <div class="d-flex gap-3 overflow-auto pb-2" style="white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch;">
+            {% if not favoritos %}
+                <div class="bg-light rounded-4 p-3 text-center w-100 border border-dashed">
+                    <p class="text-muted small m-0 py-2">Favorite um local para fixar o atalho retrato aqui!</p>
+                </div>
+            {% else %}
+                {% for fav in favoritos[:10] %}
+                <a href="/empresa/{{ fav.empresa.slug }}" class="card text-decoration-none border shadow-sm text-center p-2 rounded-4 d-inline-block transition-hover bg-white" style="width: 105px; min-width: 105px; flex-shrink: 0;">
+                    <span class="badge bg-light text-secondary text-uppercase mb-2 d-block text-truncate fw-semibold" style="font-size: 0.6rem; letter-spacing: 0.5px;">
+                        {{ fav.empresa.categoria or "Serviço" }}
+                    </span>
+                    <div class="mx-auto mb-2 bg-light rounded-circle d-flex align-items-center justify-content-center shadow-inner" style="width: 50px; height: 50px; overflow: hidden; border: 2px solid #f8f9fa;">
+                        <img src="{{ fav.empresa.logomarca or '/static/logos/default_empresa.png' }}" alt="Logo" class="img-fluid object-fit-cover h-100 w-100">
+                    </div>
+                    <div class="text-dark fw-bold text-truncate w-100" style="font-size: 0.75rem;">
+                        {{ fav.empresa.nome }}
+                    </div>
+                </a>
+                {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <h6 class="fw-bold text-dark mb-2" style="font-size: 0.95rem;">Alertas e Atividades</h6>
+        <div class="d-flex flex-column gap-2">
+            {% for notif in notificacoes %}
+            <div class="p-3 bg-{{ notif.cor_base }} bg-opacity-10 border-start border-4 border-{{ notif.cor_base }} rounded-end-4 rounded-start-2 d-flex justify-content-between align-items-center shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-2 bg-{{ notif.cor_base }} bg-opacity-20 text-{{ notif.cor_base }} rounded-circle d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                        <i class="bi {{ notif.icone }} fs-5"></i>
+                    </div>
+                    <div style="line-height: 1.3;">
+                        <span class="text-secondary d-block fw-semibold" style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px;">{{ notif.titulo_tipo }}</span>
+                        <small class="text-dark fw-bold" style="font-size: 0.82rem;">{{ notif.mensagem }}</small>
+                    </div>
+                </div>
+                {% if notif.link_acao %}
+                <a href="{{ notif.link_acao }}" class="btn btn-sm btn-{{ notif.cor_base }} rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">Acompanhar</a>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="p-3 bg-light rounded-4 text-center border">
+                <p class="text-muted small m-0"><i class="bi bi-bell-slash me-2"></i>Você não tem nenhuma notificação ativa no momento.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white border-0 shadow-sm mb-4 overflow-hidden rounded-4">
+        <div class="card-body p-4 text-center bg-gradient" style="background: linear-gradient(135deg, #111827 0%, #1f2937 100%);">
+            <span class="badge bg-warning text-dark mb-2 fw-bold" style="font-size: 0.65rem;">PUBLICIDADE PATROCINADA</span>
+            <h5 class="card-title fw-bold mb-1" style="font-size: 1.1rem;">Anuncie no FeedIn Negócios</h5>
+            <p class="card-text text-white-50 small m-0" style="font-size: 0.8rem;">Conecte seu estabelecimento diretamente ao balcão dos moradores.</p>
+        </div>
+    </div>
+
+    <div class="bg-white border rounded-4 p-3 shadow-sm mb-4">
+        <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Meu Resumo de Atividade</h6>
+        <div class="row g-2 text-center">
+            <div class="col-4">
+                <div class="p-2 bg-light rounded-3 h-100">
+                    <span class="text-muted d-block mb-1" style="font-size: 0.65rem; text-transform: uppercase;">Último Acesso</span>
+                    <strong class="text-dark d-block" style="font-size: 0.8rem;">Hoje</strong>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-2 bg-light rounded-3 h-100">
+                    <span class="text-muted d-block mb-1" style="font-size: 0.65rem; text-transform: uppercase;">Última Visita</span>
+                    <strong class="text-dark d-block text-truncate px-1" style="font-size: 0.8rem;">{{ ultimo_local or 'Nenhum' }}</strong>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-2 bg-light rounded-3 h-100">
+                    <span class="text-muted d-block mb-1" style="font-size: 0.65rem; text-transform: uppercase;">Mais Visitado</span>
+                    <strong class="text-dark d-block text-truncate px-1" style="font-size: 0.8rem;">{{ mais_visitado or 'Nenhum' }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. CONTROLE DO MENU LATERAL DESLIZÁVEL (GAVETA)
+    const btnAbrir = document.getElementById('btn-abrir-menu');
+    const btnFechar = document.getElementById('btn-fechar-menu');
+    const sidebar = document.getElementById('sidebar-menu');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    function alternarMenu() {
+        sidebar.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+
+    if (btnAbrir) btnAbrir.addEventListener('click', alternarMenu);
+    if (btnFechar) btnFechar.addEventListener('click', alternarMenu);
+    if (overlay) overlay.addEventListener('click', alternarMenu);
+
+
+    // 2. AUTOCOMPLETE ASSÍNCRONO COM DEBOUNCE
+    const inputBusca = document.getElementById('busca-negocio');
+    const resultadosContainer = document.getElementById('autocomplete-results');
+    const btnLimpar = document.getElementById('btn-limpar-busca');
+    let debounceTimer;
+
+    if (inputBusca) {
+        inputBusca.addEventListener('input', function() {
+            const query = this.value.trim();
+
+            if (query.length > 0) {
+                btnLimpar.classList.remove('d-none');
+            } else {
+                btnLimpar.classList.add('d-none');
+                resultadosContainer.classList.add('d-none');
+                return;
+            }
+
+            clearTimeout(debounceTimer);
+            if (query.length < 2) {
+                resultadosContainer.classList.add('d-none');
+                return;
+            }
+
+            debounceTimer = setTimeout(() => {
+                fetch(`/api/busca-autocomplete?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        resultadosContainer.innerHTML = '';
+
+                        if (data.length === 0) {
+                            resultadosContainer.innerHTML = `
+                                <div class="list-group-item text-muted small py-3 text-center">
+                                    <i class="bi bi-exclamation-circle me-2"></i>Nenhum estabelecimento encontrado
+                                </div>`;
+                            resultadosContainer.classList.remove('d-none');
+                            return;
+                        }
+
+                        data.forEach(item => {
+                            const itemLink = document.createElement('a');
+                            itemLink.href = `/empresa/${item.slug}`;
+                            itemLink.className = "list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 border-bottom-0";
+
+                            itemLink.innerHTML = `
+                                <div class="bg-light rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; overflow: hidden; flex-shrink: 0; border: 1px solid #eee;">
+                                    <img src="${item.logomarca}" alt="Logo" class="img-fluid object-fit-cover h-100 w-100">
+                                </div>
+                                <div class="text-truncate" style="line-height: 1.2;">
+                                    <strong class="text-dark d-block" style="font-size: 0.85rem;">${item.nome}</strong>
+                                    <span class="text-muted" style="font-size: 0.7rem; text-transform: uppercase;">${item.categoria}</span>
+                                </div>
+                            `;
+                            resultadosContainer.appendChild(itemLink);
+                        });
+
+                        resultadosContainer.classList.remove('d-none');
+                    })
+                    .catch(err => console.error('Erro na requisição do autocomplete:', err));
+            }, 300);
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!inputBusca.contains(e.target) && !resultadosContainer.contains(e.target)) {
+                resultadosContainer.classList.add('d-none');
+            }
+        });
+
+        if (btnLimpar) {
+            btnLimpar.addEventListener('click', () => {
+                inputBusca.value = '';
+                resultadosContainer.innerHTML = '';
+                resultadosContainer.classList.add('d-none');
+                btnLimpar.classList.add('d-none');
+                inputBusca.focus();
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

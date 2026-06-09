@@ -93,8 +93,11 @@
         <div class="row justify-content-center">
             <div class="col-12 col-md-10 col-lg-8">
 
-                {# 1. SEÇÃO DE BOAS-VINDAS (Só para quem já passou da triagem e tem sugestões) #}
-                {% if aba == 'feed' and sugestoes %}
+            {# 1. SEÇÃO DE BOAS-VINDAS / RADAR DE CONEXÕES #}
+            {% if aba == 'feed' %}
+
+                {% if sugestoes %}
+                    <!-- CASO A: O usuário já tem chaves cadastradas e o sistema encontrou conexões -->
                     <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
                         <div class="card-body p-4 p-md-5">
                             <div class="text-center mb-4">
@@ -123,17 +126,65 @@
                             </div>
                         </div>
                     </div>
+
+                {% else %}
+                    <!-- CASO B: O inverso. Usuário novo, zerado, sem chaves. Exibe orientação e FAQ fixo -->
+                    <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
+                        <div class="card-header bg-primary text-white p-3 border-0">
+                            <h5 class="m-0 fw-bold d-flex align-items-center">
+                                <i class="bi bi-geo-alt-fill me-2"></i> Bem-vindo ao FeedIn!
+                            </h5>
+                        </div>
+                        <div class="card-body p-4 p-md-5 bg-white">
+                            <p class="text-dark fw-bold mb-2">Este é o seu ponto de partida para reviver as memórias de Piracicaba.</p>
+                            <p class="text-muted small mb-4">
+                                Como você acabou de chegar, seu feed de sugestões está limpo. O sistema não adivinha quem você conhece, então você está no comando. Para ativar o seu "radar de lembranças" e fazer as sugestões de pessoas aparecerem, explore e preencha as abas do seu painel quando quiser:
+                            </p>
+
+                            <!-- Linha do Tempo Direta das Abas -->
+                            <div class="row g-3 text-start mb-2">
+                                <div class="col-md-4">
+                                    <div class="p-3 border rounded-3 bg-light h-100">
+                                        <h6 class="fw-bold text-primary mb-1"><i class="bi bi-person-badge me-1"></i> Aba Perfil</h6>
+                                        <small class="text-muted d-block">Insira os seus <strong>Apelidos</strong>. É por eles que velhos amigos da escola, do bairro ou do trabalho vão te encontrar.</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-3 border rounded-3 bg-light h-100">
+                                        <h6 class="fw-bold text-success mb-1"><i class="bi bi-tags me-1"></i> Aba Interesses</h6>
+                                        <small class="text-muted d-block">Marque seus gostos e temas locais (Samba, Antigos Engenhos). O motor do sistema usa isso para te aproximar de quem curte o mesmo.</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-3 border rounded-3 bg-light h-100">
+                                        <h6 class="fw-bold text-info mb-1"><i class="bi bi-building me-1"></i> Aba Locais</h6>
+                                        <small class="text-muted d-block">Aponte os locais históricos que você frequentou. O sistema vai te conectar com quem dividiu o mesmo espaço no passado.</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-light text-center py-3 border-0">
+                            <small class="text-muted"><i class="bi bi-info-circle me-1"></i> Não entendeu algum recurso? O funcionamento detalhado de cada engrenagem está explicado no menu <strong>FAQ</strong>.</small>
+                        </div>
+                    </div>
                 {% endif %}
 
-                {# 2. CONTEÚDO DINÂMICO (Onde a mágica acontece) #}
+            {% endif %}
+
+            {# 2. CONTEÚDO DINÂMICO (Onde a mágica acontece) #}
                 <div id="content-area">
                     {% if current_user.nivel_acesso < 10 %}
-                        {# FORÇA O FLUXO DE TRIAGEM #}
-                        {% if aba == 'preferencias' %} {% include "partials/_painel_interesses.html" %}
-                        {% elif aba == 'locais' %} {% include "partials/_explorar_locais.html" %}
-                        {% else %} {% include "partials/_perfil_unificado.html" %}
+                        {# FORÇA O FLUXO DE TRIAGEM DO NOVO USUÁRIO #}
+                        {% if aba == 'preferencias' %}
+                            {% include "partials/_painel_interesses.html" %}
+                        {% elif aba == 'locais' %}
+                            {% include "partials/_explorar_locais.html" %}
+                        {% else %}
+                            {# CORREÇÃO: Chama o arquivo que gerencia as Fases 1 e 2 do Onboarding #}
+                            {% include "partials/_perfil_onboarding.html" %}
                         {% endif %}
                     {% else %}
+                        {# USUÁRIOS LIBERADOS (NÍVEL >= 10) #}
                         {% if aba == 'feed' %}
                             {% for atividade in atividades_recentes %}
                                 {% with atividade=atividade, aba=aba %} {% include "partials/_feed_atividades.html" %} {% endwith %}
@@ -142,9 +193,12 @@
                                     <p class="text-muted">Nenhuma memória ainda. Explore os locais!</p>
                                 </div>
                             {% endfor %}
-                        {% elif aba == 'conexoes' %} {% include "partials/_conexoes.html" %}
-                        {% elif aba == 'locais' %} {% include "partials/_explorar_locais.html" %}
-                        {% elif aba in ['perfil', 'memorias', 'preferencias'] %} {% include "partials/_perfil_unificado.html" %}
+                        {% elif aba == 'conexoes' %}
+                            {% include "partials/_conexoes.html" %}
+                        {% elif aba == 'locais' %}
+                            {% include "partials/_explorar_locais.html" %}
+                        {% elif aba in ['perfil', 'memorias', 'preferencias'] %}
+                            {% include "partials/_perfil_unificado.html" %}
                         {% endif %}
                     {% endif %}
                 </div>

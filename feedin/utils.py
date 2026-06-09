@@ -3,6 +3,13 @@ import secrets
 from PIL import Image, ImageOps
 from flask import current_app
 from datetime import datetime, timezone
+from functools import wraps
+from flask import render_template, request, redirect, url_for
+from unicodedata import normalize
+
+from feedin.models import Local
+
+from feedin.modules.agenda.models import ModCadastroCliente
 
 def salvar_imagem(foto):
     if not foto or not hasattr(foto, 'filename') or foto.filename == '':
@@ -348,3 +355,28 @@ def obter_lista_negra_usuario(usuario_id):
         return lista_negra
     except Exception:
         return []
+
+
+def verificar_status_local(f):
+    """
+    Função Herdadável do Core: Garante que nenhuma rota exiba dados
+    ou processe ações se o Local estiver 'em_construcao'.
+    """
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        id_local = kwargs.get('id_local') or request.args.get('id_local', type=int)
+
+        if id_local:
+            local = Local.query.get(id_local)
+            if local and local.status_operacional == 'em_construcao':
+                return render_template('locais/perfil_em_construcao.html', local=local)
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+def limpar_string(texto):
+    """Remove acentos, ç, e caracteres especiais de uma string."""
+    string_normalizada = normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    return re.sub(r'[^a-zA-Z0-9\s]', '', string_normalizada).lower().strip()

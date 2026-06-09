@@ -1,13 +1,13 @@
-from feedin import login_manager
 from datetime import datetime, timezone, timedelta
 from flask_login import UserMixin
+# 💡 IMPORTANTE: Remova o 'login_manager' daqui de cima se ele for inicializado no __init__.py.
+# Deixamos apenas o UserMixin que é uma classe pura.
 import hashlib, uuid
-from feedin import database, app
 from sqlalchemy import func
 
-@login_manager.user_loader
-def load_user(user_id):
-    return Usuario.query.get(user_id)
+# 🔥 QUEBRA DE VÍNCULO CIRCULAR: Importando de forma que o Python entenda o escopo
+from . import database
+
 
 # --- TABELA DE CONEXÕES (O Grafo de Confiança) ---
 class Conexoes(database.Model):
@@ -175,9 +175,21 @@ class Usuario(database.Model, UserMixin):
     )
 
     @property
+    def foto_url(self):
+        if not self.foto_perfil:
+            return "fotos_perfil/default.jpg"
+        # Garante que termine com .webp
+        filename = self.foto_perfil if self.foto_perfil.endswith('.webp') else f"{self.foto_perfil}.webp"
+        return f"fotos_perfil/{filename}"
+
+    @property
     def convites_aceitos(self):
         # Conta quantos convites enviados via whats resultaram em cadastro
         return sum(1 for c in self.convites_enviados_whats if c.status_onboarding)
+
+    @property
+    def is_active(self):
+        return self.active
 
     # Atualize no Model Usuario
     interesses = database.relationship('Taxonomia',
@@ -312,6 +324,46 @@ class UserPaper(database.Model):
     papel = database.Column(database.String(20), nullable=False)
     direitos  = database.Column(database.String(255), nullable=False)
     nivel = database.Column(database.Integer, nullable=False)
+
+
+# feedin/models.py (Conceito de tabelas profissionais acopladas)
+
+class Cargo(database.Model):
+    """Tabela de Cargos Institucionais do FeedIn.
+    Mantém o histórico de nomenclaturas independente do nível de acesso."""
+    __tablename__ = 'cargos'
+    id = database.Column(database.Integer, primary_key=True)
+    nome_cargo = database.Column(database.String(100), nullable=False,
+                                 unique=True)  # Ex: "Cabeleireiro Master", "Manicure", "Gerente"
+
+class ColaboradorContrato(database.Model):
+    """
+    O Histórico Profissional do Usuário.
+    Permite que o João trabalhe no 'Cortes da Hora', tenha trabalhado em outro no passado,
+    ou atue em múltiplos locais simultaneamente.
+    """
+    __tablename__ = 'colaborador_contratos'
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_local = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
+    id_cargo = database.Column(database.Integer, database.ForeignKey('cargos.id'), nullable=False)
+
+    # Linha do Tempo Profissional (Sua exigência de histórico)
+    data_contratacao = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+    data_desligamento = database.Column(database.DateTime, nullable=True)  # Se preenchido, o vínculo encerrou
+
+    # Configuração de Expediente Diário (Crucial para a lógica de estouro de horário)
+    hora_inicio_expediente = database.Column(database.Time, nullable=False)  # Ex: 09:00
+    hora_fim_expediente = database.Column(database.Time, nullable=False)  # Ex: 18:00
+
+    status_profissional = database.Column(database.String(20), default='ativo')  # ativo, suspenso, desligado
+
+    # Relacionamentos
+    usuario = database.relationship('Usuario', backref='contratos_trabalho')
+    local = database.relationship('Local', backref='equipe_colaboradores')
+    cargo = database.relationship('Cargo')
+
 
 # Cria tabela de complemento do Perfil
 class Perfil(database.Model):
@@ -513,6 +565,37 @@ class LocalMidia(database.Model):
     data_upload = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+# feedin/models.py
+from datetime import datetime, timezone
+from feedin import database  # Mantendo a sua convenção de chamada do db
+
+
+# ... (Sua classe Local original continua aqui sem mexer em nada) ...
+
+class HistoricoOcupacaoLocal(database.Model):
+    """
+    O DNA de Transição Comercial do FeedIn.
+    Registra toda vez que um empreendedor assumiu uma memória ou inaugurou um balcão.
+    """
+    __tablename__ = 'historico_ocupacao_locais'
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_local = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
+    id_empreendedor = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+
+    # Rastreabilidade do ciclo de vida comercial
+    data_inicio = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+    data_fim = database.Column(database.DateTime, nullable=True)
+    plano_contratado = database.Column(database.String(20), default='gratuito')
+
+    # Relacionamentos de apoio (Mapeados apontando para as classes Core do FeedIn)
+    local = database.relationship('Local', backref=database.backref('historico_comercial', lazy='dynamic'))
+    empreendedor = database.relationship('Usuario', backref=database.backref('historico_balcoes', lazy='dynamic'),
+                                         foreign_keys=[id_empreendedor])
+
+    def __repr__(self):
+        return f'<HistoricoOcupacao LocalID: {self.id_local} EmpreendedorID: {self.id_empreendedor}>'
+
 # --- TABELA DE ASSOCIAÇÃO (Deve vir antes das classes que a utilizam) ---
 usuario_atividades = database.Table('usuario_atividades',
                                     database.Column('usuario_id', database.Integer, database.ForeignKey('usuario.id'),
@@ -632,6 +715,10 @@ class VinculoUsuarioLocal(database.Model):
 
     local = database.relationship('Local', backref='vinculos_recebidos')
 
+@property
+def total_seguidores_qualificados(self):
+    # """Retorna contagem de usuários com nivelacesso >= 10 vinculados a este local."""
+    return self.vinculos.join(Usuario).filter(Usuario.nivelacesso >= 10).count()
 
 # Convites via WhatsApp
 class Convite(database.Model):
@@ -765,6 +852,14 @@ class Postagem(database.Model):
         with database.session.no_autoflush:
             return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).order_by(
                 PostagemComentario.data_comentario.asc()).all()
+
+    @property
+    def imagem_completa(self):
+        if not self.imagem_url:
+            return None
+        # Garante que termine com .webp
+        filename = self.imagem_url if self.imagem_url.endswith('.webp') else f"{self.imagem_url}.webp"
+        return f"uploads/posts/{filename}"
 
     # Métodos de conveniência
     @property
@@ -1068,3 +1163,25 @@ def interceptar_reset_id(target, value, oldvalue, initiator):
         return oldvalue
 
     return value
+
+
+def garantir_presenca_social(id_usuario, id_local):
+    """
+    Regra Imperativa do FeedIn: Garante que o usuário possua o vínculo de
+    relacionamento/curtida com o local histórico, alimentando o DNA social da plataforma.
+    """
+
+    # Verifica se o vínculo afetivo já existe no banco
+    vinculo_existente = VinculoUsuarioLocal.query.filter_by(
+        usuario_id=id_usuario,
+        local_id=id_local
+    ).first()
+
+    if not vinculo_existente:
+        novo_vinculo = VinculoUsuarioLocal(
+            usuario_id=id_usuario,
+            local_id=id_local,
+            data_vinculo=datetime.now(timezone.utc)
+        )
+        database.session.add(novo_vinculo)
+        # O commit será feito pelo controlador principal que chamou a função

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Painel de Controle da Agenda{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>Painel Gerencial da Agenda</h2>
+            <p class="text-muted">Visualização estratégica de prazos, encaixes e retenção.</p>
+        </div>
+        <a href="{{ url_for('agenda.cadastro_balcao') }}" class="btn btn-success">
+            Novo Cadastro de Balcão
+        </a>
+    </div>
+
+    {% if perdidos %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-danger bg-light">
+                <div class="card-header bg-danger text-white">
+                    <strong class="mb-0">Prazos de Reagendamento Estourados (Mais de 7 dias inativos)</strong>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">Estes clientes perderam o direito à vaga automática. Caso tenha feito contato pessoal, você pode reverter a situação no botão lateral.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Cliente</th>
+                                    <th>WhatsApp</th>
+                                    <th>Serviço Original</th>
+                                    <th>Ações Gerenciais</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in perdidos %}
+                                <tr>
+                                    <td><strong>{{ item.cliente.nome }}</strong></td>
+                                    <td>{{ item.cliente.whatsapp }}</td>
+                                    <td>{{ item.servico_nome }}</td>
+                                    <td>
+                                        <a href="{{ url_for('agenda.reverter_prazo', id=item.id) }}" class="btn btn-sm btn-outline-danger">
+                                            Autorizar Reagendamento Extraordinário
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-md-5 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-warning text-dark font-weight-bold">
+                    <h5 class="mb-0">Reagendamentos Pendentes (Janela 37 dias)</h5>
+                </div>
+                <div class="card-body p-3">
+                    {% if not pendentes %}
+                        <p class="text-muted small my-3 text-center">Nenhum reagendamento pendente no momento.</p>
+                    {% else %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in pendentes %}
+                            <li class="list-group-item px-0 py-3">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6 class="mb-1">{{ item.cliente.nome }}</h6>
+                                        <span class="badge bg-secondary">{{ item.servico_nome }}</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-danger d-block">Aguardando definição</small>
+                                        <small class="text-muted style='font-size: 11px;'">Solicitado em: {{ item.data_solicitacao_reagendamento.strftime('%d/%m') }}</small>
+                                    </div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-7 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Próximos Agendamentos Confirmados (Próximos 30 dias)</h5>
+                </div>
+                <div class="card-body p-3">
+                    {% if not agendamentos %}
+                        <p class="text-muted small my-3 text-center">Nenhum atendimento confirmado para os próximos 30 dias.</p>
+                    {% else %}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Data/Hora</th>
+                                        <th>Cliente</th>
+                                        <th>Serviço</th>
+                                        <th>Origem</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in agendamentos %}
+                                    <tr>
+                                        <td><strong>{{ item.data_hora_inicio.strftime('%d/%m às %H:%M') }}</strong></td>
+                                        <td>{{ item.cliente.nome }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ item.servico_nome }}</span></td>
+                                        <td>
+                                            {% if item.tipo_origem == 'manual' %}
+                                                <span class="text-warning" title="Agendado no balcão">● Balcão</span>
+                                            {% else %}
+                                                <span class="text-success" title="Agendado pelo aplicativo">● Digital</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
