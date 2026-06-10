@@ -4369,16 +4369,10 @@ def ver_perfil(usuario_id):
                 .order_by(Postagem.data_criacao.desc()).limit(2).all()
 
         else:
-            # Post sem tags: vê se é livre ou se pertence a um local que o visitante tem vínculo
-            post_sem_tag = and_(
-                ~Postagem.tags_afinidade.any(),
-                or_(
-                    Postagem.id_local == None,
-                    Postagem.id_local.in_(meus_locais_ids) if meus_locais_ids else False
-                )
-            )
+            # CORREÇÃO: Se o post não tem tag de afinidade, ele é livre para os amigos verem!
+            post_sem_tag = ~Postagem.tags_afinidade.any()
 
-            # CORREÇÃO DA TRAVA: Se o post tem tags, o visitante precisa ter pelo menos UMA delas em seus interesses
+            # Se o post TEM tags, o visitante precisa ter pelo menos UMA delas em seus interesses
             post_com_tag = Postagem.tags_afinidade.any(
                 Taxonomia.id.in_(minhas_tags_ids)) if minhas_tags_ids else False
 
@@ -4501,7 +4495,7 @@ def perfil_local(local_id):
 
     import random
 
-    # OTIMIZAÇÃO: Traw o local e já carrega os relacionamentos para evitar fadiga na VPS
+    # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos para evitar fadiga na VPS
     local = Local.query.get_or_404(local_id)
 
     # 1. GARANTIA DE VARIÁVEIS
@@ -4559,54 +4553,54 @@ def perfil_local(local_id):
     for p in postagens_totais_local:
         e_o_autor = (current_user.is_authenticated and p.id_usuario == current_user.id)
 
-        if e_o_autor or usuario_segue:
-            tags_da_postagem = set(t.id for t in p.tags_afinidade)
-            tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
+        # AJUSTE: Removeu-se o 'if e_o_autor or usuario_segue:' para permitir a checagem por tags livres
+        tags_da_postagem = set(t.id for t in p.tags_afinidade)
+        tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
 
-            liberado_por_vinculo = e_o_autor or usuario_segue
-            liberado_por_tag = not tags_da_postagem or bool(tags_da_postagem & tags_usuario_segue)
+        liberado_por_vinculo = e_o_autor or usuario_segue
+        liberado_por_tag = not tags_da_postagem or bool(tags_da_postagem & tags_usuario_segue)
 
-            if liberado_por_vinculo or liberado_por_tag:
-                posts_exibidos_contador += 1
+        if liberado_por_vinculo or liberado_por_tag:
+            posts_exibidos_contador += 1
 
-                # =========================================================================
-                # 🎲 CADÊNCIA EQUILIBRADA DE PUBLICIDADE CONCORRENTE (25% CHANCE + 2 RESPIROS)
-                # =========================================================================
-                anuncio_gerado = None
+            # =========================================================================
+            # 🎲 CADÊNCIA EQUILIBRADA DE PUBLICIDADE CONCORRENTE (25% CHANCE + 2 RESPIROS)
+            # =========================================================================
+            anuncio_gerado = None
 
-                # Se a trava de respiro estiver ativa, pula a requisição do anúncio
-                if cards_de_respiro_restantes > 0:
-                    cards_de_respiro_restantes -= 1
-                else:
-                    # Roda o dado calibrado em 25% de chance
-                    if random.random() < 0.25:
-                        anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
+            # Se a trava de respiro estiver ativa, pula a requisição do anúncio
+            if cards_de_respiro_restantes > 0:
+                cards_de_respiro_restantes -= 1
+            else:
+                # Roda o dado calibrado em 25% de chance
+                if random.random() < 0.25:
+                    anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
 
-                        if isinstance(anuncio_gerado, list) and len(anuncio_gerado) > 0:
-                            anuncio_gerado = random.choice(anuncio_gerado)
+                    if isinstance(anuncio_gerado, list) and len(anuncio_gerado) > 0:
+                        anuncio_gerado = random.choice(anuncio_gerado)
 
-                        if anuncio_gerado:
-                            # Ativa o respiro obrigatório para os próximos 2 cards liberados
-                            cards_de_respiro_restantes = 2
-                # =========================================================================
+                    if anuncio_gerado:
+                        # Ativa o respiro obrigatório para os próximos 2 cards liberados
+                        cards_de_respiro_restantes = 2
+            # =========================================================================
 
-                atividades_formatadas.append({
-                    'id': p.id,
-                    'tipo_card': 'postagem',
-                    'tipo': 'postagem',
-                    'data_criacao': p.data_criacao,
-                    'data_comentario': p.data_criacao,
-                    'autor_objeto': p.autor,
-                    'autor': p.autor,
-                    'usuario': p.autor,
-                    'conteudo_exibicao': p.conteudo,
-                    'conteudo': p.conteudo,
-                    'mensagem': p.conteudo,
-                    'objeto_original': p,
-                    'anuncio': anuncio_gerado,
-                    'pessoas_marcadas': p.pessoas_marcadas_confirmadas,
-                    'id_usuario': p.id_usuario
-                })
+            atividades_formatadas.append({
+                'id': p.id,
+                'tipo_card': 'postagem',
+                'tipo': 'postagem',
+                'data_criacao': p.data_criacao,
+                'data_comentario': p.data_criacao,
+                'autor_objeto': p.autor,
+                'autor': p.autor,
+                'usuario': p.autor,
+                'conteudo_exibicao': p.conteudo,
+                'conteudo': p.conteudo,
+                'mensagem': p.conteudo,
+                'objeto_original': p,
+                'anuncio': anuncio_gerado,
+                'pessoas_marcadas': p.pessoas_marcadas_confirmadas,
+                'id_usuario': p.id_usuario
+            })
 
     # Ordenação cronológica reversa estrita das postagens
     atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
@@ -4624,7 +4618,6 @@ def perfil_local(local_id):
                            exibir_como_flyer=True,
                            meus_interesses_ids=meus_interesses_ids,
                            rating_data=local.get_rating_data())
-
 
 @app.route('/local_v2/<int:local_id>')
 @login_required

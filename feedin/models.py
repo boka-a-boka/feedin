@@ -1109,7 +1109,6 @@ class AnuncioClique(database.Model):
     usuario = database.relationship('Usuario', backref=database.backref('cliques_anuncios', lazy='dynamic'))
 
 
-
 class LocalAnuncio(database.Model):
     __tablename__ = 'local_anuncio'
 
