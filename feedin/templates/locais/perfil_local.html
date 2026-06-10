@@ -123,6 +123,7 @@
                     {% endif %}
                 </div>
             </div>
+            </div>
         </div>
     </div>
 </section>
@@ -154,21 +155,21 @@
                 {% endif %}
             </div>
 
-{# LOOP DA TIMELINE UNIFICADO E ADAPTADO #}
-{% for item_post in atividades %}
-    <div class="col-12">
-        {# Isolamos o contexto exatamente como é feito no perfil público #}
-        {% with atividade = item_post, post_obj = item_post.objeto_original, context_origem = 'perfil_local', exibir_como_flyer = True %}
-            {% set post = post_obj %}
-            {% include "partials/cards/card_postagem_universal.html" %}
-        {% endwith %}
-    </div>
-{% else %}
-    <div class="text-center py-5 bg-light rounded-4 border-dashed animate__animated animate__fadeIn">
-        <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
-        <p class="text-muted mt-3 mb-0">Nenhuma história ou atividade registrada ainda neste local.</p>
-    </div>
-{% endfor %}
+            {# LOOP DA TIMELINE UNIFICADO E ADAPTADO #}
+            {% for item_post in atividades %}
+                <div class="col-12">
+                    {# Isolamos o contexto exatamente como é feito no perfil público #}
+                    {% with atividade = item_post, post_obj = item_post.objeto_original, context_origem = 'perfil_local', exibir_como_flyer = True %}
+                        {% set post = post_obj %}
+                        {% include "partials/cards/card_postagem_universal.html" %}
+                    {% endwith %}
+                </div>
+            {% else %}
+                <div class="text-center py-5 bg-light rounded-4 border-dashed animate__animated animate__fadeIn">
+                    <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
+                    <p class="text-muted mt-3 mb-0">Nenhuma história ou atividade registrada ainda neste local.</p>
+                </div>
+            {% endfor %}
         </div>
 
         <div class="col-lg-4">
@@ -251,6 +252,17 @@
         </div>
     </div>
 </div>
+
+{# --- BOTÃO FLUTUANTE VOLTAR AO TOPO ADAPTADO PARA O PERFIL LOCAL --- #}
+{% if atividades|length >= 3 %}
+    <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1040;">
+        <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap text-white"
+                onclick="voltarAoTopo()"
+                style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
+            <i class="bi bi-arrow-up-circle-fill me-2 text-white"></i>Voltar ao Topo
+        </button>
+    </div>
+{% endif %}
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -451,9 +463,11 @@ window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
     });
 };
 
-function volverAoTopo() {
+/**
+ * ROLAGEM SUAVE ATÉ O TOPO DA PÁGINA (Nome unificado com o padrão do projeto)
+ */
+function voltarAoTopo() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
-
 {% endblock %}

@@ -651,6 +651,99 @@ function voltarAoTopo() {
         behavior: 'smooth' // Desliza suavemente até o topo
     });
 }
+
+/**
+ * MOTOR DE AUTOCOMPLETE GLOBAL PARA TAGS (INTERESSES)
+ * Conecta o input do modal com a rota /api/buscar-interesses
+ */
+$(document).ready(function() {
+    const $inputBusca = $('#busca_tags_input');
+    const $containerBadges = $('#container-tags-selecionadas');
+    const $inputOcultoIds = $('#tags_ids_input');
+
+    // Set para rastrear IDs selecionados e evitar duplicatas no front
+    let tagsSelecionadas = new Set();
+
+    if (!$inputBusca.length) return;
+
+    // Criar dinamicamente o menu flutuante de sugestões abaixo do input
+    const $dropdown = $('<div class="list-group position-absolute w-100 shadow-sm d-none" style="z-index: 1100; max-height: 200px; overflow-y: auto;"></div>');
+    $inputBusca.parent().css('position', 'relative').append($dropdown);
+
+    // Escuta a digitação do usuário
+    $inputBusca.on('input', function() {
+        const termo = $(this).val().trim();
+        if (termo.length < 2) {
+            $dropdown.addClass('d-none');
+            return;
+        }
+
+        // Requisição para a nossa rota recém-ajustada (Global!)
+        $.getJSON(`/api/buscar-interesses?q=${encodeURIComponent(termo)}`, function(tags) {
+            $dropdown.empty();
+
+            if (tags.length === 0) {
+                $dropdown.addClass('d-none');
+                return;
+            }
+
+            tags.forEach(function(tag) {
+                // Se o usuário já selecionou esta tag, pula para não repetir na lista
+                if (tagsSelecionadas.has(tag.id)) return;
+
+                const $item = $(`
+                    <button type="button" class="list-group-item list-group-item-action text-start py-2 border-0">
+                        <i class="bi bi-tag-fill text-primary me-2"></i>${tag.nome}
+                    </button>
+                `);
+
+                // Evento ao clicar na sugestão da lista
+                $item.on('click', function() {
+                    adicionarBadgeTag(tag.id, tag.nome);
+                    $dropdown.addClass('d-none');
+                    $inputBusca.val('');
+                });
+
+                $dropdown.append($item);
+            });
+
+            $dropdown.removeClass('d-none');
+        });
+    });
+
+    // Fecha o dropdown se clicar em qualquer outro lugar da tela
+    $(document).on('click', function(e) {
+        if (!$inputBusca.is(e.target) && !$dropdown.is(e.target) && !$dropdown.has(e.target).length) {
+            $dropdown.addClass('d-none');
+        }
+    });
+
+    // Função que renderiza o Badge visual na tela e atualiza o input oculto do form
+    function adicionarBadgeTag(id, nome) {
+        tagsSelecionadas.add(id);
+        atualizarInputOculto();
+
+        const $badge = $(`
+            <span class="badge bg-primary rounded-pill p-2 d-flex align-items-center gap-2 animate__animated animate__fadeIn" style="cursor: pointer;">
+                #${nome} <i class="bi bi-x-circle-fill text-white-50"></i>
+            </span>
+        `);
+
+        // Remove a tag caso o usuário clique no 'X' do badge
+        $badge.on('click', function() {
+            tagsSelecionadas.delete(id);
+            atualizarInputOculto();
+            $badge.remove();
+        });
+
+        $containerBadges.append($badge);
+    }
+
+    // Transforma o Set [2, 5] na string "2,5" que o backend espera no request.form.get('tags_ids')
+    function atualizarInputOculto() {
+        $inputOcultoIds.val(Array.from(tagsSelecionadas).join(','));
+    }
+});
 </script>
 
 {% endblock %}

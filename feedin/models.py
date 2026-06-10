@@ -874,9 +874,15 @@ class Postagem(database.Model):
             return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).count()
 
     def usuario_ja_curtiu(self, user_id):
-        from feedin.models import PostagemInteracao
-        with database.session.no_autoflush:
-            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id, tipo='curti').first() is not None
+        # Consistência: Se o ID for nulo ou inválido (ex: usuário deslogado), assume que não curtiu
+        if not user_id or not isinstance(user_id, int):
+            return False
+
+        return PostagemInteracao.query.filter_by(
+            id_postagem=self.id,
+            id_usuario=user_id,
+            tipo='curti'
+        ).first() is not None
 
     # Métodos de compatibilidade para o template (Espelhamento)
     @property

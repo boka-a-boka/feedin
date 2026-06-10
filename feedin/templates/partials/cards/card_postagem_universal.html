@@ -66,7 +66,6 @@
                 <div class="d-flex align-items-center">
                     <i class="bi bi-patch-check-fill text-primary me-2" style="font-size: 1.1rem;"></i>
                     <div>
-                        {# Ajuste: como 'atividade' agora é o próprio LocalAnuncio, acessamos o local direto #}
                         <strong class="text-dark d-block" style="font-size: 0.9rem; line-height: 1.2;">{{ atividade.local.nome }}</strong>
                         <small class="text-muted small" style="font-size: 0.72rem;">Anfitrião da Memória • Espaço Verificado</small>
                     </div>
@@ -80,17 +79,17 @@
             </div>
 
             {# CORPO DO FLYER #}
-<div class="position-relative container-memoria bg-transparent">
-    {# Trocamos a estrutura para evitar que o clique tente carregar o link como imagem #}
-    <a href="{{ url_for('registrar_clique', anuncio_id=atividade.id, origem='flyer', tag_id=atividade.taxonomia_id) }}"
-       class="w-100 d-block"
-       onclick="window.open(this.href, '_blank'); return false;">
+            <div class="position-relative container-memoria bg-transparent">
+                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.id, origem='flyer', tag_id=atividade.taxonomia_id) }}"
+                   class="w-100 d-block"
+                   onclick="window.open(this.href, '_blank'); return false;">
 
-    <img src="{{ url_for('static', filename='uploads/anuncios/' + atividade.url_flyer.replace('.webp', '') + '.webp') }}"
-         class="img-respeitosa w-100"
-         onerror="this.onerror=null; this.src='{{ url_for('static', filename='uploads/anuncios/publicidadeinterna.jpg') }}'">
-    </a>
-</div>
+                <img src="{{ url_for('static', filename='uploads/anuncios/' + atividade.url_flyer.replace('.webp', '') + '.webp') }}"
+                     class="img-respeitosa w-100"
+                     onerror="this.onerror=null; this.src='{{ url_for('static', filename='uploads/anuncios/publicidadeinterna.jpg') }}'">
+                </a>
+            </div>
+
             {# TEXTO DE APOIO #}
             <div class="p-3 bg-white border-top">
                 <p class="text-dark mb-0 fw-medium card-text style-postagem" style="font-size: 0.95rem; line-height: 1.4;">
@@ -108,8 +107,6 @@
         </div>
 
     {% elif render_modo == 'post' %}
-        {# AQUI COMEÇA O FORMATO DE POST NORMAL QUE VOCÊ JÁ TINHA #}
-
         {# ======================================================================= #}
         {# FORMATO POST NORMAL: FLUXO DE MEMÓRIA ORIGINAL HOMOLOGADO DE CARLOS     #}
         {# ======================================================================= #}
@@ -126,7 +123,7 @@
             {% set autor_acao = atividade.usuario if atividade.usuario is defined else (Usuario.query.get(atividade.id_usuario) if Usuario is defined else none) %}
         {% else %}
             {% set post_obj = post_obj if post_obj is defined else (atividade.objeto_original if atividade.objeto_original else atividade) %}
-            {% set texto_exibicao = atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo or (post_obj.conteudo if post_obj) %}
+            {% set texto_exibicao = activity_mensagem or atividade.mensagem or atividade.conteudo_exibicao or atividade.conteudo or (post_obj.conteudo if post_obj) %}
             {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario or (post_obj.autor if post_obj) %}
         {% endif %}
 
@@ -141,7 +138,6 @@
                             <span class="text-dark fw-bold d-inline-block" style="font-size: 0.95rem;">
                                 {{ autor_acao.username }}
 
-                                {# Pequena indicação discreta se quem está lendo foi incluído nesta memória #}
                                 {% if current_user.is_authenticated and post_obj and post_obj.todas_as_marcacoes %}
                                     {% set vc_marcado = post_obj.todas_as_marcacoes | selectattr("usuario_id", "equalto", current_user.id) | selectattr("status", "equalto", "aceito") | list %}
                                     {% if vc_marcado %}
@@ -156,9 +152,7 @@
 
                 <div class="content-wrapper clearfix">
                     {# IMAGEM ÚNICA #}
-                    {# IMAGEM ÚNICA #}
                     {% if not eh_sistema and post_obj.imagem_url %}
-                        {# Ajuste a chamada para usar a rota se a property falhar, ou corrija o nome #}
                         <img src="{{ url_for('static', filename='uploads/posts/' ~ post_obj.imagem_url.replace('.webp', '') ~ '.webp') }}" class="img-ajustada-feed" onerror="this.src='/static/fotos_perfil/default.jpg'">
                     {% endif %}
 
@@ -182,7 +176,7 @@
 
                     <div style="clear: both;"></div>
 
-                    {# 👥 NOVA EXIBIÇÃO TRATADA: QUEM APARECE NA PUBLICAÇÃO (@nickname) #}
+                    {# 👥 QUEM APARECE NA PUBLICAÇÃO #}
                     {% if post_obj and post_obj.todas_as_marcacoes %}
                         {% set aprovados = post_obj.todas_as_marcacoes | selectattr("status", "equalto", "aceito") | list %}
                         {% if aprovados | length > 0 %}
@@ -202,7 +196,7 @@
                         {% endif %}
                     {% endif %}
 
-                    {# LINHA 2: TAGS DE AFINIDADE #}
+                    {# TAGS DE AFINIDADE #}
                     {% if post_obj and post_obj.tags %}
                         <div class="mt-2 border-top pt-2" style="border-top-style: dotted !important; opacity: 0.9;">
                             <div class="d-flex flex-wrap gap-1">
@@ -255,93 +249,90 @@
                 {% endif %}
             </div>
 
-            {# RODAPÉ: LOCAL, GATILHO SOCIAL E REAÇÕES #}
-            {% if exibir_controles %}
-                <div class="px-3 pb-2 border-top bg-light bg-opacity-25">
-                    <div class="pt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            {# ======================================================================= #}
+            {# RODAPÉ SOCIAL RESGATADO: LOCAL, GATILHO ASSÍNCRONO E REAÇÕES            #}
+            {# ======================================================================= #}
+            <div class="px-3 pb-2 border-top bg-light bg-opacity-25">
+                <div class="pt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-                        <div class="d-flex align-items-center gap-2">
-                            {% if post_obj.id_local and context_origem != 'perfil_local' %}
-                                <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
-                                    <span class="badge rounded-pill bg-white text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
-                                        <i class="bi bi-geo-alt-fill me-1 text-danger"></i>
-                                        <span class="fw-bold">{{ post_obj.local_foco.nome if post_obj.local_foco else "Local" }}</span>
-                                    </span>
-                                </a>
-                            {% endif %}
-
-                            {# 🚀 NOVO GATILHO SOCIAL ASSÍNCRONO: "Olha eu ali!" #}
-                            <div id="universal-container-olha-{{ post_obj.id }}">
-                                {% if current_user.is_authenticated %}
-                                    {% if post_obj.id_usuario == current_user.id %}
-                                        <span class="badge bg-light text-muted border rounded-pill px-2 py-1.5 fs-xs fw-normal" style="font-size: 0.72rem;">Sua Memória</span>
-                                    {% else %}
-                                        {# Varre as marcações vigentes para saber se exibe o botão ou o status atual do leitor #}
-                                        {% set vinculo_do_leitor = namespace(status='nenhum') %}
-                                        {% for m_check in post_obj.todas_as_marcacoes %}
-                                            {% if m_check.usuario_id == current_user.id %}
-                                                {% set vinculo_do_leitor.status = m_check.status %}
-                                            {% endif %}
-                                        {% endfor %}
-
-                                        {% if vinculo_do_leitor.status == 'aceito' %}
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold" style="font-size: 0.75rem;">
-                                                <i class="bi bi-check-circle-fill me-1"></i> Você está aqui!
-                                            </span>
-                                        {% elif vinculo_do_leitor.status == 'pendente' %}
-                                            <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
-                                                <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
-                                            </button>
-                                        {% else %}
-                                            <button class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold text-decoration-none btn-fluxo-silencioso"
-                                                    style="font-size: 0.75rem; border-color: #d4a373; color: #a06a42; background-color: #fffaf0;"
-                                                    onclick="solicitarOlhaEuAliUniversal('{{ post_obj.id }}')">
-                                                <i class="bi bi-geo-fill me-1"></i> Olha eu ali!
-                                            </button>
-                                        {% endif %}
-                                    {% endif %}
-                                {% else %}
-                                    <small class="text-muted" style="font-size: 0.72rem;"><i class="bi bi-lock-fill me-1"></i> Entre para se identificar</small>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        {# GERENCIAMENTO DE EDIÇÃO/EXCLUSÃO DO USUÁRIO #}
-                        {% if current_user.is_authenticated and atividade.id_usuario == current_user.id %}
-                            {# 1. Ocultar o Dropdown de Edição/Exclusão #}
-                            {% if exibir_controles and current_user.is_authenticated and atividade.id_usuario == current_user.id %}
-                                <div class="dropdown ms-auto">
-                                    <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                        <i class="bi bi-three-dots-vertical fs-5"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
-                                        <li>
-                                            <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
-                                                <i class="bi bi-pencil me-2 text-primary"></i> Editar História
-                                            </button>
-                                        </li>
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li>
-                                            <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
-                                                <i class="bi bi-trash3 me-2"></i> Excluir Memória
-                                            </button>
-                                        </li>
-                                    </ul>
-                                </div>
-                                <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                </form>
-                            {% endif %}
+                    <div class="d-flex align-items-center gap-2">
+                        {% if post_obj.id_local and context_origem != 'perfil_local' %}
+                            <a href="{{ url_for('perfil_local', local_id=post_obj.id_local) }}" class="text-decoration-none">
+                                <span class="badge rounded-pill bg-white text-primary border py-2 px-3 shadow-xs" style="font-size: 0.8rem; border-color: #4e73df20 !important;">
+                                    <i class="bi bi-geo-alt-fill me-1 text-danger"></i>
+                                    <span class="fw-bold">{{ post_obj.local_foco.nome if post_obj.local_foco else "Local" }}</span>
+                                </span>
+                            </a>
                         {% endif %}
 
-                        <div class="d-flex align-items-center gap-3">
-                            {% if render_modo == 'post' %}
-                                {% include "partials/cards/_footer_reacoes.html" %}
+                        {# 🚀 GATILHO SOCIAL ASSÍNCRONO: "Olha eu ali!" #}
+                        <div id="universal-container-olha-{{ post_obj.id }}">
+                            {% if current_user.is_authenticated %}
+                                {% if post_obj.id_usuario == current_user.id %}
+                                    <span class="badge bg-light text-muted border rounded-pill px-2 py-1.5 fs-xs fw-normal" style="font-size: 0.72rem;">Sua Memória</span>
+                                {% else %}
+                                    {% set vinculo_do_leitor = namespace(status='nenhum') %}
+                                    {% for m_check in post_obj.todas_as_marcacoes %}
+                                        {% if m_check.usuario_id == current_user.id %}
+                                            {% set vinculo_do_leitor.status = m_check.status %}
+                                        {% endif %}
+                                    {% endfor %}
+
+                                    {% if vinculo_do_leitor.status == 'aceito' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold" style="font-size: 0.75rem;">
+                                            <i class="bi bi-check-circle-fill me-1"></i> Você está aqui!
+                                        </span>
+                                    {% elif vinculo_do_leitor.status == 'pendente' %}
+                                        <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
+                                            <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
+                                        </button>
+                                    {% else %}
+                                        <button class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold text-decoration-none btn-fluxo-silencioso"
+                                                style="font-size: 0.75rem; border-color: #d4a373; color: #a06a42; background-color: #fffaf0;"
+                                                onclick="solicitarOlhaEuAliUniversal('{{ post_obj.id }}')">
+                                            <i class="bi bi-geo-fill me-1"></i> Olha eu ali!
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+                            {% else %}
+                                <small class="text-muted" style="font-size: 0.72rem;"><i class="bi bi-lock-fill me-1"></i> Entre para se identificar</small>
                             {% endif %}
                         </div>
                     </div>
+
+                    {# GERENCIAMENTO EXCLUSIVO DE EDIÇÃO/EXCLUSÃO (Isolado e Ocultável na Index) #}
+                    {% if exibir_controles and current_user.is_authenticated and atividade.id_usuario == current_user.id %}
+                        <div class="dropdown ms-auto">
+                            <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-three-dots-vertical fs-5"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
+                                <li>
+                                    <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
+                                        <i class="bi bi-pencil me-2 text-primary"></i> Editar História
+                                    </button>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
+                                        <i class="bi bi-trash3 me-2"></i> Excluir Memória
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                        <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        </form>
+                    {% endif %}
+
+                    {# BLOCO DE REAÇÕES (Sempre visível se for um post) #}
+                    <div class="d-flex align-items-center gap-3 {% if not (exibir_controles and current_user.is_authenticated and atividade.id_usuario == current_user.id) %}ms-auto{% endif %}">
+                        {% if render_modo == 'post' %}
+                            {% include "partials/cards/_footer_reacoes.html" %}
+                        {% endif %}
+                    </div>
                 </div>
-            {% endif %}
+            </div>
 
             {# ======================================================================= #}
             {# SUBSOLO DO CARD: APOIO COMERCIAL                                        #}
@@ -448,7 +439,6 @@ function solicitarOlhaEuAliUniversal(postId) {
     const url = `/postagem/${postId}/solicitar_marcacao`;
     const container = document.getElementById(`universal-container-olha-${postId}`);
 
-    // Captura o CSRF Token tentando o Meta Tag ou buscando qualquer input csrf_token da página
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
                       document.querySelector('meta[name="csrf_token"]')?.getAttribute('content') ||
                       document.querySelector('input[name="csrf_token"]')?.value || '';
@@ -456,22 +446,20 @@ function solicitarOlhaEuAliUniversal(postId) {
     fetch(url, {
         method: 'POST',
         headers: {
-            // Enviamos as duas variações comuns de cabeçalho para garantir compatibilidade com o Flask-WTF
             'X-CSRFToken': csrfToken,
             'X-CSRF-Token': csrfToken,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ post_id: postId }) // Garante um corpo estruturado caso a rota exija
+        body: JSON.stringify({ post_id: postId })
     })
     .then(response => {
-        // Se der erro 400 ou qualquer outro, lança um erro com o status para não quebrar no .json()
         if (!response.ok) {
             throw new Error(`Servidor retornou status ${response.status}`);
         }
         return response.json();
     })
     .then(data => {
-        if (data.status === 'success') {
+        if (data.status === 'success' || data.status === 'sucesso') {
             if (container) {
                 container.innerHTML = `
                     <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>

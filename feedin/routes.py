@@ -317,7 +317,9 @@ def login():
     form_login = FormLogin()
 
     if form_login.validate_on_submit():
-        usuario = Usuario.query.filter_by(email=form_login.email.data).first()
+
+        email_limpo = form_login.email.data.strip().lower()
+        usuario = Usuario.query.filter_by(email=email_limpo).first()
 
         if usuario and bcrypt.check_password_hash(usuario.senha, form_login.senha.data):
             if usuario.active:
@@ -898,12 +900,8 @@ def index():
 @app.route('/editar_perfil', methods=['POST'])
 @login_required
 def editar_perfil():
-    form = FormPerfil()
-    form.estado_civil.choices = [(e.id, str(e.id)) for e in EstadoCivil.query.all()]
-
     if request.method == 'POST':
         try:
-            # 1. BUSCAR O PERFIL EXISTENTE
             from feedin.models import Perfil
             perfil_obj = Perfil.query.filter_by(id_usuario=current_user.id).first()
 
@@ -911,21 +909,32 @@ def editar_perfil():
                 perfil_obj = Perfil(id_usuario=current_user.id)
                 database.session.add(perfil_obj)
 
-            # 2. CAPTURAR OS DADOS OBRIGATÓRIOS DO FORMULÁRIO COMPLEMENTAR
+            # 1. CAPTURA DOS DADOS (Tratando possíveis variações de nomenclatura do HTML)
             cidade_natal = request.form.get('cidade_natal', '').strip()
-            id_civ = request.form.get('estado_civil')
+            # Tenta pegar tanto 'estado_civil' quanto 'id_estado_civil' para não quebrar o HTML antigo
+            id_civ = request.form.get('estado_civil') or request.form.get('id_estado_civil')
             biografia = request.form.get('biografia', '').strip()
 
+            # Validação rápida de segurança
             if not cidade_natal or not id_civ or not biografia:
-                flash("Por favor, preencha sua Cidade Natal, Estado Civil e Biografia.", "warning")
-                return redirect(url_for('get_perfil', id_usuario=current_user.id))
+                print(
+                    f"⚠️ [MÍDIA PERFIL] Falha de preenchimento: Cidade={cidade_natal}, Civil={id_civ}, Bio={biografia}")
+                flash("Por favor, preencha todos os campos obrigatórios (Cidade Natal, Estado Civil e Biografia).",
+                      "warning")
+                return redirect(url_for('configuracoes', aba='perfil'))
 
+            # 2. GRAVAÇÃO CORRETA NOS CAMPOS DO MODEL
             perfil_obj.cidade_natal = cidade_natal
-            perfil_obj.estado_civil = int(id_civ)
-            perfil_obj.biografia = biografia
+            biografia = biografia
+
+            # ATENÇÃO: Tratando o campo de Estado Civil conforme a estrutura do banco
+            if hasattr(perfil_obj, 'id_estado_civil'):
+                perfil_obj.id_estado_civil = int(id_civ)
+            else:
+                perfil_obj.estado_civil = int(id_civ)
 
             # =================================================================
-            # PROCESSAMENTO DA FOTO DE PERFIL (Se enviada via formulário unificado)
+            # PROCESSAMENTO DA FOTO DE PERFIL
             # =================================================================
             file = request.files.get('foto_perfil')
             if file and file.filename != '':
@@ -951,32 +960,21 @@ def editar_perfil():
                             except Exception as e:
                                 print(f"ERRO AO DELETAR FOTO ANTIGA: {e}")
 
-            # Salva o estado dos dados preenchidos até aqui
+            # 3. COMMIT ÚNICO E SEGURO
             database.session.commit()
-
-            # =================================================================
-            # 3. SALVAR E PROMOVER (Apenas se clicou no botão correto!)
-            # =================================================================
-            # Mudança aqui: Verificamos se o 'gatilho' de encerramento foi enviado no POST
-            if current_user.nivel_acesso < 10 and 'concluir_onboarding' in request.form:
-                sucesso_nivel, msg_nivel = processar_mudanca_nivel(current_user, novo_nivel=10)
-
-                if sucesso_nivel:
-                    database.session.commit()
-                    flash("Parabéns! Seu cadastro foi concluído e seu acesso está liberado. 🎉", "success")
-                    return redirect(url_for('dashboard'))
-                else:
-                    flash(f"Houve um problema na ativação da conta: {msg_nivel}", "danger")
-
-            # Se não veio a confirmação ou a promoção falhou, apenas mantém o usuário salvando o rascunho
-            flash("Informações salvas temporariamente.", "info")
-            return redirect(url_for('get_perfil', id_usuario=current_user.id))
+            flash("Seus dados de perfil foram atualizados com sucesso! 🎉", "success")
 
         except Exception as e:
             database.session.rollback()
-            print(f"ERRO AO SALVAR PERFIL COMPLEMENTAR: {e}")
-            flash(f"Erro técnico ao salvar o perfil: {e}", "danger")
-            return redirect(url_for('get_perfil', id_usuario=current_user.id))
+            print(f"❌ ERRO CRÍTICO AO SALVAR PERFIL: {e}")
+            flash(f"Erro técnico ao salvar alterações: {e}", "danger")
+
+        # =================================================================
+        # RETORNO UNIFICADO: Sempre mantém o usuário na tela de Gestão
+        # =================================================================
+        return redirect(url_for('configuracoes', aba='perfil'))
+
+    return redirect(url_for('configuracoes', aba='perfil'))
 
 
 @app.route('/upload-foto-perfil', methods=['POST'])
@@ -1091,11 +1089,6 @@ def dashboard():
                 contagem_memorias >= 1 and
                 contagem_preferencias >= 10
         )
-
-        notificacoes_sino = Notificacao.query.filter_by(
-            id_usuario_destino=current_user.id,
-            lida=False
-        ).order_by(Notificacao.data_criacao.desc()).all()
 
         # --- 3. LÓGICA DE DIRECIONAMENTO ---
         if current_user.nivel_acesso >= 10:
@@ -1220,7 +1213,6 @@ def dashboard():
                                usuario=current_user,
                                categorias=categorias,
                                minhas_prefs_ids=minhas_prefs_ids,
-                               notificacoes=notificacoes_sino,
                                locais_populares=locais_populares,
                                lista_de_convites=lista_de_convites,
                                publicacoes=publicacoes_banco,
@@ -3011,13 +3003,12 @@ def buscar_interesses():
     if len(termo) < 2:
         return jsonify([])
 
-    # BUSCA RESTRITA: Somente tags que o usuário já selecionou no cadastro/perfil
-    meus_gostos = Taxonomia.query.join(usuarios_interesses).filter(
-        usuarios_interesses.c.usuario_id == current_user.id,
+    # LIBERADO: Busca global na tabela Taxonomia para permitir novas marcações
+    tags_globais = Taxonomia.query.filter(
         Taxonomia.nome.ilike(f'%{termo}%')
-    ).limit(5).all()
+    ).limit(10).all()  # Aumentamos para 10 para dar um leque maior de opções no feed
 
-    return jsonify([{'id': t.id, 'nome': t.nome} for t in meus_gostos])
+    return jsonify([{'id': t.id, 'nome': t.nome} for t in tags_globais])
 
 
 @app.route('/salvar_preferencias', methods=['POST'])
@@ -3691,6 +3682,8 @@ def sugerir_local():
         return jsonify({"status": "erro", "message": "Nome e Bairro são obrigatórios"}), 400
 
     try:
+        from feedin.models import Local, VinculoUsuarioLocal
+
         novo_local = Local(
             nome=nome,
             logradouro=logradouro,
@@ -3698,10 +3691,29 @@ def sugerir_local():
             cidade=cidade,
             estado=estado,
             verificado=False,  # Cai na fila do Admin
-            id_indicador=current_user.id  # Rastreabilidade total
+            id_indicador=current_user.id
+            # Rastreabilidade total (Nota: mude para id_usuario_indicador se for o nome exato da coluna)
         )
 
         database.session.add(novo_local)
+
+        # =================================================================
+        # AJUSTE CIRÚRGICO: FLUSH & AUTO-SEGUIR
+        # =================================================================
+        # O flush força o SQLAlchemy a obter o ID do 'novo_local' do banco de dados
+        # AGORA, sem fechar a transação com o commit ainda.
+        database.session.flush()
+
+        # Cria o vínculo automático unindo o criador ao novo local criado
+        vinculo_auto = VinculoUsuarioLocal(
+            usuario_id=current_user.id,
+            local_id=novo_local.id,
+            experiencia="Adicionado automaticamente aos meus locais frequentados."
+        )
+        database.session.add(vinculo_auto)
+        # =================================================================
+
+        # Salva o Local e o Vínculo de uma só vez (Operação Atômica)
         database.session.commit()
 
         # O segredo: retornar o ID para o front-end já usar na próxima etapa
@@ -3712,7 +3724,97 @@ def sugerir_local():
         })
     except Exception as e:
         database.session.rollback()
+        print(f"❌ ERRO NO AUTO-SEGUIR AO SUGERIR LOCAL: {e}")
         return jsonify({"status": "erro", "message": str(e)}), 500
+
+
+@app.route('/editar_local/<int:local_id>', methods=['GET', 'POST'])
+@login_required
+def editar_local(local_id):
+    local = Local.query.get_or_404(local_id)
+
+    # Definição clara dos papéis
+    e_criador = (local.id_indicador == current_user.id)
+    e_admin = (current_user.nivel_acesso == 9999)  # Ajuste para a sua validação de Admin
+
+    # Se não for o criador nem admin, barra imediatamente
+    if not e_criador and not e_admin:
+        return jsonify({'status': 'erro', 'message': 'Permissão negada.'}), 403
+
+    # Busca a atividade vinculada criada pelo autor original do local
+    atividade = AtividadeLocal.query.filter_by(
+        id_local=local.id,
+        id_criador=local.id_indicador
+    ).first()
+
+    # ==========================================
+    # FLUXO GET: Recupera os dados para o Modal
+    # ==========================================
+    if request.method == 'GET':
+        dados = {
+            'nome': local.nome,
+            'logradouro': local.logradouro,
+            'numero': local.numero,
+            'bairro': local.bairro,
+            'cep': local.cep,
+            'telefone': local.telefone,
+            'email': local.email,
+            'esta_ativo': local.esta_ativo,
+            'ano_displacement': local.ano_displacement,
+            'experiencia_usuario': atividade.descricao if atividade else "",
+
+            # CHAVE ESTRATÉGICA: Passa um booleano para o Front-end saber
+            # se deve aplicar o atributo 'readonly' ou 'disabled' no textarea
+            'pode_editar_lembranca': e_criador
+        }
+        return jsonify({'status': 'sucesso', 'dados': dados})
+
+    # ==========================================
+    # FLUXO POST: Salva as alterações enviadas
+    # ==========================================
+    if request.method == 'POST':
+        # REGRA 1: Dados cadastrais do Local (Criador ou Admin podem editar)
+        local.nome = request.form.get('nome')
+        local.logradouro = request.form.get('logradouro')
+        local.numero = request.form.get('numero')
+        local.bairro = request.form.get('bairro')
+        local.cep = request.form.get('cep')
+        local.telefone = request.form.get('telefone')
+        local.email = request.form.get('email')
+        local.esta_ativo = int(request.form.get('esta_ativo', 1))
+
+        if local.esta_ativo == 0:
+            local.ano_displacement = request.form.get('ano_displacement')
+        else:
+            local.ano_displacement = None
+
+        # REGRA 2 (A TRAVA): Só processa a lembrança se o usuário atual for o criador original
+        if e_criador:
+            texto_lembranca = request.form.get('experiencia_usuario', '').strip()
+
+            if atividade:
+                # Atualiza a descrição e mantém o título alinhado se o nome do local mudou
+                atividade.descricao = texto_lembranca
+                atividade.nome = f"Lembrança de {local.nome}"
+            elif texto_lembranca:
+                # Se não havia lembrança inicial e o criador resolveu adicionar agora
+                nova_atividade = AtividadeLocal(
+                    nome=f"Lembrança de {local.nome}",
+                    id_local=local.id,
+                    id_criador=local.id_indicador,  # Permanece amarrado ao criador original
+                    descricao=texto_lembranca
+                )
+                database.session.add(nova_atividade)
+
+        # Se for APENAS ADMIN editando, o bloco 'if e_criador:' é completamente ignorado.
+        # Mesmo que o front-end envie algo no campo por acidente, o back-end blinda a tabela.
+
+        try:
+            database.session.commit()
+            return jsonify({'status': 'sucesso', 'message': 'Dados atualizados respeitando os níveis de autoria!'})
+        except Exception as e:
+            database.session.rollback()
+            return jsonify({'status': 'erro', 'message': f'Erro técnico ao salvar: {str(e)}'}), 500
 
 
 @app.route('/api/local/<int:local_id>/tags_ocultas')
@@ -4406,12 +4508,20 @@ def perfil_local(local_id):
     tags_dos_amigos = []
     atividades_formatadas = []
 
-    # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO
-    vinculo = VinculoUsuarioLocal.query.filter_by(
+    # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO (UNIFICADA)
+    vinculo_explicito = VinculoUsuarioLocal.query.filter_by(
         usuario_id=current_user.id,
         local_id=local_id
     ).first()
-    usuario_segue = True if vinculo else False
+
+    # Verifica se ele já possui vínculo automático gerado por postagem de memórias
+    vinculo_atividade = AtividadeLocal.query.filter_by(
+        id_criador=current_user.id,
+        id_local=local_id
+    ).first()
+
+    # Se ele tiver qualquer um dos dois, ele já faz parte do perímetro do local!
+    usuario_segue = True if (vinculo_explicito or vinculo_atividade) else False
 
     # 3. CAPTURA DE TAGS DE AFINIDADE DO PERÍMETRO
     try:
@@ -4729,19 +4839,6 @@ def criar_postagem():
     arquivo = request.files.get('imagem')
     local = Local.query.get(id_local) if id_local and id_local.isdigit() else None
 
-    # --- NOVA TRAVA DE SEGURANÇA: VALIDAÇÃO DE VÍNCULO/SEGUIDOR ---
-    if local:
-        # Verifica se o usuário já tem um vínculo (segue/atividade) com este local
-        segue_local = AtividadeLocal.query.filter_by(
-            id_criador=current_user.id,
-            id_local=local.id
-        ).first()
-
-        if not segue_local:
-            flash(f"Para postar no mural do {local.nome}, você precisa primeiro segui-lo!", "warning")
-            return redirect(url_for('perfil_local', local_id=local.id))
-    # --- FIM DA TRAVA ---
-
     # 2. Lógica de Construção de Narrativa (O "Cérebro" da Rota)
     if tipo_postagem == 'vinculo':
         texto_gerado = f"Resgatou uma memória"
@@ -4780,7 +4877,7 @@ def criar_postagem():
         # 1. Instância da Postagem (O que vai para o Feed)
         nova_postagem = Postagem(
             id_usuario=current_user.id,
-            id_local=local.id,
+            id_local=local.id if local else None,
             conteudo=conteudo,
             imagem_url=nome_final,
             data_criacao=datetime.now(timezone.utc),
@@ -4791,47 +4888,81 @@ def criar_postagem():
         database.session.add(nova_postagem)
         database.session.flush()
 
-        # 2. Lógica de Vínculo (Só cria se for 'vinculo' e se ainda não existir)
-        if tipo_postagem == 'vinculo' and local:
-            vinculo_existente = AtividadeLocal.query.filter_by(
+        # =======================================================================
+        # REGRA DE CONTORNO: VÍNCULO AUTOMÁTICO COM O LOCAL (SEGUIR)
+        # =======================================================================
+        if local:
+            # Verifica se o usuário já possui qualquer atividade ou segue este local
+            segue_local = AtividadeLocal.query.filter_by(
                 id_criador=current_user.id,
                 id_local=local.id
             ).first()
 
-            if not vinculo_existente:
-                nova_atividade = AtividadeLocal(
+            # Se não tiver vínculo, criamos um automático como 'seguidor silencioso'
+            if not segue_local:
+                vinculo_automatico = AtividadeLocal(
+                    # CORREÇÃO CIRÚRGICA: Preenche o campo obrigatório 'nome' exigido pelo banco
+                    nome="Memória de Vínculo" if tipo_postagem == 'vinculo' else "Seguidor Silencioso",
+
                     id_criador=current_user.id,
                     id_local=local.id,
-                    periodo_estimado=epoca,
-                    descricao=relato_extra,
+                    periodo_estimado=epoca if tipo_postagem == 'vinculo' else None,
+                    descricao=relato_extra if tipo_postagem == 'vinculo' else "Seguiu ao publicar uma memória",
                     data_criacao=datetime.now(timezone.utc)
                 )
-                database.session.add(nova_atividade)
+                database.session.add(vinculo_automatico)
 
-        # 3. Taxonomia (Tags)
+            # Se já existia, mas a postagem atual é do tipo 'vinculo', atualizamos os metadados
+            elif tipo_postagem == 'vinculo':
+                segue_local.nome = "Memória de Vínculo"
+                segue_local.periodo_estimado = epoca  # <-- CORREÇÃO: Atribuição direta e limpa
+                segue_local.descricao = relato_extra
+
+        # =======================================================================
+        # REGRA DE CONTORNO: VÍNCULO AUTOMÁTICO COM AS TAGS (INTERESSES)
+        # =======================================================================
         tags_ids = request.form.get('tags_ids', '')
         if tags_ids:
             ids_t = [int(i) for i in tags_ids.split(',') if i.strip().isdigit()]
-            nova_postagem.tags_afinidade.extend(Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all())
+            tags_objetos = Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all()
 
-        # --- PROCESSAMENTO DE MARCAÇÃO DE AMIGOS (LIMPO E SANEADO) ---
+            # Associa as tags à postagem
+            nova_postagem.tags_afinidade.extend(tags_objetos)
+
+            # Garante que as tags marcadas entrem para a lista de interesses do criador
+            for tag in tags_objetos:
+                if tag not in current_user.interesses:
+                    current_user.interesses.append(tag)
+
+        # =======================================================================
+        # SEGURANÇA MÁXIMA: MARCAÇÃO DE USUÁRIOS (APENAS AMIGOS CONECTADOS)
+        # =======================================================================
         pessoas_ids = request.form.get('pessoas_ids', '')
         if pessoas_ids:
             ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
+
+            # Mapeia os IDs dos amigos reais com conexões aceitas
+            meus_amigos_ids = {amigo.id for amigo in current_user.amigos}
 
             for id_marcado in ids_p:
                 if id_marcado == current_user.id:
                     continue
 
-                # Gravação direta na tabela intermediária com status 'aceito'
-                nova_marcacao = MarcacaoPostagem(
-                    postagem_id=nova_postagem.id,
-                    usuario_id=id_marcado,
-                    status='aceito',
-                    criado_em=datetime.now(timezone.utc)
-                )
-                database.session.add(nova_marcacao)
-        # --- FIM DA LÓGICA DE MARCAÇÃO ---
+                # Defesa estrita: Só insere no banco se o ID estiver na lista de conexões reais
+                if id_marcado in meus_amigos_ids:
+                    nova_marcacao = MarcacaoPostagem(
+                        postagem_id=nova_postagem.id,
+                        usuario_id=id_marcado,
+                        status='aceito',
+                        criado_em=datetime.now(timezone.utc)
+                    )
+                    database.session.add(nova_marcacao)
+                else:
+                    # Injeção maliciosa ou erro de ID: ignora silenciosamente para proteção de privacidade
+                    print(
+                        f"[ALERTA DE SEGURANÇA] Usuário {current_user.id} tentou marcar ID {id_marcado} sem ter amizade.")
+
+        # =======================================================================
 
         # 4. Salva tudo definitivamente no banco
         database.session.commit()

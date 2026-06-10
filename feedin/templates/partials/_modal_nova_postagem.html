@@ -33,7 +33,7 @@
                     </div>
                     <div class="mb-4">
                         <label class="form-label small fw-bold text-muted text-uppercase">O que este momento representa?</label>
-                        <textarea name="conteudo" class="form-control border-0 bg-light rounded-4 p-3" rows="4"
+                        <textarea name="conteudo" id="conteudoPostagem" class="form-control border-0 bg-light rounded-4 p-3" rows="4"
                                   placeholder="Conte a história por trás desta memória..." required></textarea>
                         <!-- Abaixo do textarea da sua modal de nova postagem, adicione estes botões rápidos de atalho -->
                         <div class="mt-2 d-flex gap-1 text-muted small align-items-center">
@@ -171,6 +171,29 @@ document.addEventListener('DOMContentLoaded', function() {
         configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => `<i class="bi bi-person-circle me-2"></i>${item.username}`);
     });
 
+// Limpa o estado e os campos ocultos caso o usuário feche ou cancele o modal
+    modalEl.addEventListener('hidden.bs.modal', function () {
+        // Limpa os conjuntos de dados (Sets)
+        PostState.tags.clear();
+        PostState.pessoas.clear();
+
+        // Limpa os containers visuais de Badges
+        document.getElementById('pessoasSelecionadas').innerHTML = '';
+        document.getElementById('tagsSelecionadas').innerHTML = '';
+
+        // Reseta os inputs ocultos de envio
+        document.getElementById('idLocalHidden').value = '';
+        document.getElementById('pessoasIdsHidden').value = '';
+        document.getElementById('tagsIdsHidden').value = '';
+
+        // Esconde o preview de imagem e volta ao placeholder original
+        document.getElementById('previewContainer').classList.add('d-none');
+        document.getElementById('placeholderContent').classList.remove('d-none');
+
+        // Reseta o formulário por completo
+        modalEl.querySelector('form').reset();
+    });
+
     // Fechar listas ao clicar fora
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.position-relative')) {
@@ -200,10 +223,17 @@ function adicionarBadge(id, nome, containerId, setObj, inputHiddenId, extraClass
     document.getElementById(inputHiddenId).value = Array.from(setObj).join(',');
 }
 function inserirNoTexto(emoji) {
-    // Substitua 'id_do_seu_textarea' pelo ID real do campo de texto da sua modal (ex: 'conteudo')
-    const textarea = document.getElementById('conteudo') || document.querySelector('textarea');
+    const textarea = document.getElementById('conteudoPostagem');
     if (textarea) {
-        textarea.value += emoji;
+        // Captura a posição do cursor para inserir o emoji exatamente onde o usuário está digitando
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const textoAnterior = textarea.value;
+
+        textarea.value = textoAnterior.substring(0, start) + emoji + textoAnterior.substring(end);
+
+        // Reposiciona o cursor logo após o emoji inserido
+        textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
         textarea.focus();
     }
 }
