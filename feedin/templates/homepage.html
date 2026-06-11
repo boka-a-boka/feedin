@@ -13,7 +13,6 @@
                     FeedIn!
                 </a>
 
-                <!-- Menus de Rotina (Desktop) -->
                 <div class="d-none d-md-flex gap-3 align-items-center">
                     <a href="{{ url_for('dashboard', aba='feed') }}"
                        class="nav-link {{ 'text-primary fw-bold border-bottom border-2 border-primary' if aba == 'feed' else 'text-muted' }}
@@ -37,6 +36,13 @@
                        {{ 'disabled opacity-50' if current_user.nivel_acesso < 10 }}">
                        <i class="bi bi-geo-alt-fill me-1"></i> Locais
                     </a>
+
+                    {# 🎯 BOTÃO DESKTOP: SIGA-ME (Exibido apenas se nível >= 10) #}
+                    {% if current_user.nivel_acesso >= 10 %}
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-bold ms-2" data-bs-toggle="modal" data-bs-target="#modalQRCode">
+                            <i class="bi bi-qr-code me-1"></i> Siga-me! 🕸️
+                        </button>
+                    {% endif %}
 
                     {# BOTÃO ADMIN #}
                     {% if current_user.nivel_acesso == 9999 %}
@@ -97,7 +103,6 @@
             {% if aba == 'feed' %}
 
                 {% if sugestoes %}
-                    <!-- CASO A: O usuário já tem chaves cadastradas e o sistema encontrou conexões -->
                     <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
                         <div class="card-body p-4 p-md-5">
                             <div class="text-center mb-4">
@@ -128,7 +133,6 @@
                     </div>
 
                 {% else %}
-                    <!-- CASO B: O inverso. Usuário novo, zerado, sem chaves. Exibe orientação e FAQ fixo -->
                     <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
                         <div class="card-header bg-primary text-white p-3 border-0">
                             <h5 class="m-0 fw-bold d-flex align-items-center">
@@ -138,10 +142,9 @@
                         <div class="card-body p-4 p-md-5 bg-white">
                             <p class="text-dark fw-bold mb-2">Este é o seu ponto de partida para reviver as memórias de Piracicaba.</p>
                             <p class="text-muted small mb-4">
-                                Como você acabou de chegar, seu feed de sugestões está limpo. O sistema não adivinha quem você conhece, então você está no comando. Para ativar o seu "radar de lembranças" e fazer as sugestões de pessoas aparecerem, explore e preencha as abas do seu painel quando quiser:
+                                Como você acabou de chegar, seu feed de sugestões está limpo. O sistema não adivinha quem você conhece, então você está no comando. Para ativar o seu "radar de lembranças" and fazer as sugestões de pessoas aparecerem, explore e preencha as abas do seu painel quando quiser:
                             </p>
 
-                            <!-- Linha do Tempo Direta das Abas -->
                             <div class="row g-3 text-start mb-2">
                                 <div class="col-md-4">
                                     <div class="p-3 border rounded-3 bg-light h-100">
@@ -186,8 +189,8 @@
                     {% else %}
                         {# USUÁRIOS LIBERADOS (NÍVEL >= 10) #}
                         {% if aba == 'feed' %}
-                            {% for atividade in atividades_recentes %}
-                                {% with atividade=atividade, aba=aba %} {% include "partials/_feed_atividades.html" %} {% endwith %}
+                            {% for activity in atividades_recentes %}
+                                {% with atividade=activity, aba=aba %} {% include "partials/_feed_atividades.html" %} {% endwith %}
                             {% else %}
                                 <div class="text-center py-5">
                                     <p class="text-muted">Nenhuma memória ainda. Explore os locais!</p>
@@ -206,15 +209,23 @@
         </div>
     </main>
 
-        {# NAVEGAÇÃO MOBILE #}
+    {# NAVEGAÇÃO MOBILE (Injetado o ícone centralizado do QR Code) #}
     {% if current_user.nivel_acesso >= 10 %}
-        <nav class="d-md-none fixed-bottom bg-white border-top d-flex justify-content-around py-3 shadow-lg rounded-top-4" style="z-index: 1040;">
+        <nav class="d-md-none fixed-bottom bg-white border-top d-flex justify-content-around align-items-center py-3 shadow-lg rounded-top-4" style="z-index: 1040;">
             <a href="{{ url_for('dashboard', aba='feed') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'feed' else 'text-muted' }}">
                 <i class="bi bi-house-door{{ '-fill' if aba == 'feed' }} fs-4"></i>
             </a>
             <a href="{{ url_for('dashboard', aba='locais') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'locais' else 'text-muted' }}">
                 <i class="bi bi-geo-alt{{ '-fill' if aba == 'locais' }} fs-4"></i>
             </a>
+
+            {# 🎯 ÍCONE CENTRAL: ACIONADOR DO QR CODE EM DISPOSITIVOS MÓVEIS #}
+            <a href="#" class="text-center text-decoration-none text-primary" data-bs-toggle="modal" data-bs-target="#modalQRCode" style="margin-top: -6px;">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px;">
+                    <i class="bi bi-qr-code-scan fs-4"></i>
+                </div>
+            </a>
+
             <a href="{{ url_for('dashboard', aba='conexoes') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'conexoes' else 'text-muted' }}">
                 <i class="bi bi-people{{ '-fill' if aba == 'conexoes' }} fs-4"></i>
             </a>
@@ -223,5 +234,39 @@
             </a>
         </nav>
     {% endif %}
+
+    {# 🎯 MODAL UNIVERSAL DO QR CODE (Fica oculto e surge de forma suave) #}
+    {% if current_user.nivel_acesso >= 10 %}
+    <div class="modal fade" id="modalQRCode" tabindex="-1" aria-labelledby="modalQRCodeLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 340px;">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-0 bg-light py-3 rounded-top-4">
+                    <h6 class="modal-title fw-bold text-dark m-0" id="modalQRCodeLabel">🕸️ Siga-me no FeedIn!</h6>
+                    <button type="button" class="btn-close" data-bs-shadow="none" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <p class="text-muted small mb-3">Apresente este código para adicionar novas conexões na sua teia de confiança.</p>
+
+                    <div class="bg-white p-3 d-inline-block rounded-3 border shadow-sm mb-3">
+                        <img src="{{ qrcode_url }}"
+                             class="img-fluid"
+                             alt="QR Code Siga-me"
+                             referrerpolicy="no-referrer"
+                             style="width: 200px; height: 200px; min-width: 200px; min-height: 200px;">
+                    </div>
+
+                    <div class="text-muted text-break text-center border-0 p-2 rounded bg-light" style="font-size: 0.75rem;">
+                        <strong>Seu link de indicação:</strong><br>
+                        <span class="text-primary">{{ link_convite }}</span>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light py-2 justify-content-center rounded-bottom-4">
+                    <span class="text-secondary small fw-semibold">FeedIn Piracicaba</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}

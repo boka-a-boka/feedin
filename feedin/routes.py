@@ -1,5 +1,6 @@
 from flask import (url_for, redirect, render_template, flash, session, request,
-                   abort, Response, jsonify, current_app, send_from_directory, Blueprint, send_file)
+                   abort, Response, jsonify, current_app, send_from_directory, Blueprint, send_file,
+                   make_response)
 from feedin import app, database, bcrypt, csrf
 from flask_mail import Mail, Message
 from flask_login import login_required, login_user, logout_user, current_user
@@ -16,7 +17,7 @@ from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Pare
                            PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
                            AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
                            CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio, HistoricoOcupacaoLocal,
-                           Cargo, ColaboradorContrato)
+                           Cargo, ColaboradorContrato, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo)
 
 from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa,
                           salvar_imagem_postagem, salvar_imagem_anuncio)
@@ -283,7 +284,7 @@ def notify(message, type):
 @app.route("/logout")
 @login_required
 def realizar_logout():
-    from flask import make_response
+
 
     logout_user()  # Remove do Flask-Login
     session.clear()  # Limpa o dicionário da sessão
@@ -686,7 +687,19 @@ def login_biometrico():
 def newuser():
     logout_user()
     email_vindo_do_email = request.args.get('email_prefill', '')
-    id_indicador_final = request.form.get('indicado_por') or request.args.get('indicado_por')
+
+    # 🕵️‍♂️ RESOLUÇÃO DE PADRINHOS (HIERARQUIA DE PRIORIDADE)
+    token_url = request.args.get('token_pioneiro')
+    convite_validado = ConviteAdmin.query.filter_by(token=token_url, usado=False).first() if token_url else None
+
+    if convite_validado:
+        # Se há token válido de Admin, ele manda no fluxo
+        id_indicador_final = convite_validado.id_admin
+    else:
+        # Se não há token, busca primeiro no Cookie (QR Code), depois no form/args (WhatsApp Antigo)
+        id_indicador_final = request.cookies.get('feedin_indicador_id') or \
+                             request.form.get('indicado_por') or \
+                             request.args.get('indicado_por')
 
     form_newuser = FormNewUser(email=email_vindo_do_email)
 
@@ -699,16 +712,13 @@ def newuser():
                 flash('Este e-mail já está cadastrado e ativo. Faça login.', 'info')
                 return redirect(url_for('login'))
             else:
-                # O e-mail existe mas NÃO está ativo.
-                # Vamos atualizar os dados e reenviar o e-mail.
+                # O e-mail existe mas NÃO está ativo. Atualiza dados e reenvia e-mail.
                 usuario_existente.username = form_newuser.usuario.data
                 usuario_existente.senha = bcrypt.generate_password_hash(form_newuser.senha.data).decode('utf-8')
                 usuario_existente.id_indicador = id_indicador_final
-                # O fs_uniquifier já existe, não precisamos mudar.
 
                 user_para_email = usuario_existente
                 msg_flash = 'Lembramos de você! O link de ativação foi reenviado para o seu e-mail.'
-
         else:
             # Fluxo de criação total do zero
             try:
@@ -722,38 +732,31 @@ def newuser():
                     fs_uniquifier=str(uuid.uuid4()),
                     id_indicador=id_indicador_final
                 )
+
+                # Regra de pioneiro baseada na data final do Beta
                 fim_beta = app.config.get('DATA_FIM_BETA')
                 agora = datetime.now(timezone.utc)
 
                 if agora <= fim_beta:
                     # Se foi indicado por Admin (IDs 1 ou 2), ganha o selo na hora
-                    if id_indicador_final in ['1', '2']:  # Lembre-se que id vindo de args pode ser string
+                    if str(id_indicador_final) in ['1', '2']:
                         novo_usuario.is_pioneiro = True
+
+                # Queima o token do Admin se ele de fato foi utilizado neste fluxo
+                if convite_validado:
+                    convite_validado.usado = True
 
                 database.session.add(novo_usuario)
                 user_para_email = novo_usuario
-                # No momento que o usuário termina o cadastro:
-                token_url = request.args.get('token_pioneiro')
-                convite_validado = ConviteAdmin.query.filter_by(token=token_url, usado=False).first()
-
-                if convite_validado:
-                    # Este usuário ganha o ID de indicador do Admin que gerou o token
-                    novo_usuario.id_indicador = convite_validado.id_admin
-                    # Marcamos o token como usado para que ninguém mais use o mesmo link!
-                    convite_validado.usado = True
-                else:
-                    # Se não tem token ou já foi usado, ele é um usuário comum (sem id_indicador de admin)
-                    novo_usuario.id_indicador = request.args.get('indicado_por')
-
                 msg_flash = 'Conta criada! Verifique seu e-mail para confirmar a ativação.'
 
             except Exception as e:
                 database.session.rollback()
-                print(f"ERRO: {e}")
+                print(f"ERRO NO CADASTRO: {e}")
                 flash('Erro ao processar cadastro.', 'danger')
-                return render_template("newuser.html", form=form_newuser)
+                return render_template("newuser.html", form=form_newuser, id_indicador=id_indicador_final)
 
-        # Parte comum: Salvar e Enviar E-mail
+        # Parte comum: Salvar, Limpar Cookie de Indicação e Enviar E-mail
         try:
             database.session.commit()
 
@@ -769,10 +772,15 @@ def newuser():
             mail.send(msg)
 
             flash(msg_flash, 'warning')
-            return redirect(url_for('login'))
+
+            # 🧹 LIMPEZA SEGURA: Prepara a resposta e remove o cookie para fechar o ciclo
+            resposta = make_response(redirect(url_for('login')))
+            resposta.delete_cookie('feedin_indicador_id')
+            return resposta
 
         except Exception as e:
             database.session.rollback()
+            print(f"ERRO ENVIO E-MAIL: {e}")
             flash('Erro ao enviar e-mail de confirmação.', 'danger')
 
     return render_template("newuser.html", form=form_newuser, id_indicador=id_indicador_final)
@@ -1192,6 +1200,12 @@ def dashboard():
             form_p.genero.choices = []
             form_p.estado_civil.choices = []
 
+        # 🎯 AJUSTE SEGURO: GERAÇÃO DA URL UNIFICADA E QR CODE DO USUÁRIO LOGADO
+        from urllib.parse import quote
+        link_convite_real = url_for('processar_convite_unificado', id_padrinho=current_user.id, _external=True)
+        link_qrcode_codificado = quote(link_convite_real)
+        qrcode_url = f"https://chart.googleapis.com/chart?chs=250x250&cht=qr&chl={link_convite_real}&choe=UTF-8"
+
         # --- 6. RETORNO DA VIEW (DENTRO DO WITH GLOBAL) ---
         return render_template("homepage.html",
                                aba=aba,
@@ -1216,7 +1230,9 @@ def dashboard():
                                locais_populares=locais_populares,
                                lista_de_convites=lista_de_convites,
                                publicacoes=publicacoes_banco,
-                               minhas_prefs_json=json.dumps(prefs_atuais_data))
+                               minhas_prefs_json=json.dumps(prefs_atuais_data),
+                               link_convite=link_convite_real,  # Injetado com sucesso
+                               qrcode_url=qrcode_url)          # Injetado com sucesso
 
 
 @app.route('/promover_pioneiro/<int:usuario_id>')
@@ -4095,9 +4111,7 @@ def gerar_convite():
             database.session.commit()
 
         # 3. Preparação do Link de Cadastro (Garante o id_indicador no futuro)
-        link_registro = url_for('newuser',
-                                indicado_por=current_user.id,
-                                _external=True)
+        link_registro = url_for('processar_convite_unificado', id_padrinho=current_user.id, _external=True)
 
         # Mensagem direta e focada na rede geral de Piracicaba
         texto_base = (
@@ -5974,5 +5988,63 @@ def enviar_documentos_homologacao(id_local):
 
     # Redireciona o usuário para a tela de espera "24h" na área pública
     return redirect(url_for('main.status_reivindicacao', id_local=local.id))
+
+
+# CONECTAR USUÁRIOS SILENCIOSAMENTE, UTILIZANDO QR CODE "
+
+@app.route('/conectar/<int:id_padrinho>')
+def conectar_silencioso(id_padrinho):
+    # 1. Cria a resposta base apontando para a sua URL principal (raiz do sistema)
+    # Mudando para redirecionamento externo para garantir que bata na sua URL de produção ou homologação
+    resposta = make_response(redirect('/'))
+
+    # 2. Grava o cookie em segundo plano (válido por 30 dias)
+    # httponly=True garante segurança contra scripts maliciosos
+    resposta.set_cookie('feedin_indicador_id', str(id_padrinho), max_age=30 * 24 * 60 * 60, httponly=True)
+
+    # 3. Tratamento em tempo de execução:
+    if current_user.is_authenticated:
+        # Se o cara já está logado, a raiz '/' vai jogar ele direto para o Feed.
+        # Mas nós já podemos aproveitar este milissegundo para criar a solicitação de conexão pendente!
+        if current_user.id != id_padrinho:
+            from feedin.models import Convite  # Ou a sua tabela de conexões/solicitações pendentes
+
+            # Verifica se já não existe essa solicitação para não duplicar
+            ja_existe = Convite.query.filter_by(id_remetente=id_padrinho, id_destinatario=current_user.id).first()
+            if not ja_existe:
+                # Criamos a conexão em estado pendente. Ela vai aparecer na lista de pendências de quem exibiu o QR Code!
+                nova_solicitacao = Convite(
+                    id_remetente=id_padrinho,  # Quem exibiu o QR Code (O Artista)
+                    id_destinatario=current_user.id,  # Quem leu e já tinha o app aberto
+                    status_onboarding=True  # Flag de controle interna sua
+                )
+                database.session.add(nova_solicitacao)
+                database.session.commit()
+
+                # O alerta normal vai disparar no feed deles na próxima requisição automática
+
+    # Se NÃO está logado, a resposta apenas segue para o '/' (que renderiza a Index).
+    # O cookie está salvo no navegador dele. O sistema continua esteticamente limpo.
+    return resposta
+
+
+@app.route('/convite/<int:id_padrinho>')
+def processar_convite_unificado(id_padrinho):
+    # 1. Garante que o padrinho existe no sistema
+    padrinho = Usuario.query.get_or_404(id_padrinho)
+
+    # CENÁRIO A: O usuário já está logado (abriu o link/QR Code por dentro do sistema)
+    if current_user.is_authenticated:
+        if current_user.id != id_padrinho:
+            # 🤝 Cria a solicitação de conexão pendente na hora
+            # (Aqui você insere a lógica padrão de criar registro na sua tabela de Conexões)
+            pass
+        return redirect(url_for('dashboard', aba='feed'))
+
+    # CENÁRIO B: Usuário deslogado ou visitante novo (WhatsApp ou QR Code Externo)
+    # Gravamos o Cookie de 30 dias que você idealizou e mandamos para o Login/Cadastro
+    resposta = make_response(redirect(url_for('login'))) # ou 'newuser' se preferir direto
+    resposta.set_cookie('feedin_indicador_id', str(id_padrinho), max_age=30*24*60*60, httponly=True)
+    return resposta
 
 

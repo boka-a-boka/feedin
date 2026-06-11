@@ -810,7 +810,10 @@ class Postagem(database.Model):
     imagem_url = database.Column(database.String(255), nullable=True)
     data_criacao = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
     ativo = database.Column(database.Boolean, default=True)
-
+    preservacao_memoria = database.Column(database.Boolean, default=False)
+    id_epoca = database.Column(database.Integer, database.ForeignKey('epocas.id'), nullable=False)
+    id_empresa = database.Column(database.Integer, database.ForeignKey('empresas.id'), nullable=True)
+    
     # RELACIONAMENTOS EXISTENTES
     autor = database.relationship('Usuario', backref=database.backref('postagens', lazy='dynamic'),
                                   foreign_keys=[id_usuario])
@@ -1190,3 +1193,80 @@ def garantir_presenca_social(id_usuario, id_local):
         )
         database.session.add(novo_vinculo)
         # O commit será feito pelo controlador principal que chamou a função
+
+
+# =============================================== #
+# TABELAS PARA TRATATIVAS DE SELOS E ÉPOCAS       #
+# =============================================== #
+
+# ==========================================
+# 1. TABELA DE ÉPOCAS (Soberana no Tempo)
+# ==========================================
+class Epoca(database.Model):
+    __tablename__ = 'epocas'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    nome_exibicao = database.Column(database.String(50), nullable=False)  # Ex: "Anos 90", "Anos 2020 (Atual)"
+    rotulo_interno = database.Column(database.String(30), unique=True, nullable=False)  # Ex: "anos_90", "anos_2020"
+    ordem_cronologica = database.Column(database.Integer, nullable=False)  # Para ordenar na tela (1, 2, 3...)
+    eh_vigente = database.Column(database.Boolean, default=False)  # Substitui o "Atualmente" volátil
+
+    def __repr__(self):
+        return f"<Epoca {self.nome_exibicao}>"
+
+
+# ==========================================
+# 2. RELAÇÃO MULTITEMPORAL (Usuário x Local x Época)
+# ==========================================
+class UsuarioLocalEpoca(database.Model):
+    __tablename__ = 'usuario_local_epocas'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_local = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
+    id_epoca = database.Column(database.Integer, database.ForeignKey('epocas.id'), nullable=False)
+    criado_em = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relacionamentos para facilitar buscas no Back-end
+    usuario = database.relationship('Usuario', backref='locais_frequentados')
+    local = database.relationship('Local', backref='frequentadores_epocas')
+    epoca = database.relationship('Epoca')
+
+
+# ==========================================
+# 3. CATÁLOGO DE SELOS (Gamificação)
+# ==========================================
+class Selo(database.Model):
+    __tablename__ = 'selos'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    nome = database.Column(database.String(50), unique=True, nullable=False)  # Ex: "Preservador da Memória"
+    codigo_interno = database.Column(database.String(30), unique=True,
+                                     nullable=False)  # Ex: "preservador_memoria", "pioneiro"
+    descricao = database.Column(database.Text, nullable=False)  # Explicação do Modal
+    icone_class = database.Column(database.String(50), nullable=True)  # Classe Bootstrap Icons (ex: "bi-award")
+    exibir_no_card = database.Column(database.Boolean, default=True)  # Controle de exibição discreta
+    ativo = database.Column(database.Boolean, default=True)  # Ativo/Inativo no sistema
+
+    def __repr__(self):
+        return f"<Selo {self.nome}>"
+
+
+# ==========================================
+# 4. CONQUISTAS DE SELOS (Quem ganhou o quê)
+# ==========================================
+class ConquistaSelo(database.Model):
+    __tablename__ = 'conquistas_selos'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_selo = database.Column(database.Integer, database.ForeignKey('selos.id'), nullable=False)
+    conquistado_em = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relacionamentos lógicos
+    usuario = database.relationship('Usuario', backref='conquistas')
+    selo = database.relationship('Selo', backref='usuarios_conquistaram')
