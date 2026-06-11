@@ -162,18 +162,22 @@
                                 </select>
                             </div>
                             <hr class="my-3 text-muted">
+
+                            {# --- AJUSTE MULTITEMPORAL: SELECT DINÂMICO CONECTADO AO GRAFO --- #}
                             <div class="col-md-6">
-                                <label class="small fw-bold text-dark">EM QUAL ÉPOCO VOCÊ FREQUENTAVA?</label>
-                                <select name="periodo" class="form-select border-primary" required>
-                                    <option value="Atualmente" selected>Atualmente</option>
-                                    <option value="Anos 2010">Anos 2010</option>
-                                    <option value="Anos 2000">Anos 2000</option>
-                                    <option value="Anos 90">Anos 90</option>
-                                    <option value="Anos 80">Anos 80</option>
-                                    <option value="Anos 70">Anos 70</option>
-                                    <option value="Anos 60">Anos 60</option>
+                                <label class="small fw-bold text-dark">EM QUAL ÉPOCA VOCÊ FREQUENTAVA? <span class="text-danger">*</span></label>
+                                <select name="id_epoca" class="form-select border-primary" required>
+                                    <option value="" disabled selected>Selecione um período...</option>
+                                    {% if epocas_todas %}
+                                        {% for ep in epocas_todas %}
+                                            <option value="{{ ep.id }}">{{ ep.nome_exibicao }}</option>
+                                        {% endfor %}
+                                    {% else %}
+                                        <option value="" disabled class="text-danger">⚠️ Nenhuma época carregada pelo sistema</option>
+                                    {% endif %}
                                 </select>
                             </div>
+
                             <div class="col-12">
                                 <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
                                 <textarea name="experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
@@ -249,7 +253,6 @@
                                 <input type="number" name="ano_displacement" id="edit_ano_enc" class="form-control" placeholder="Ex: 1994">
                             </div>
 
-                            {# --- AJUSTE 3: INCLUSÃO DO CAMPO DE LEMBRANÇA NO FORMULÁRIO DE EDIÇÃO --- #}
                             <div class="col-12">
                                 <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
                                 <textarea name="experiencia_usuario" id="edit_experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
@@ -275,7 +278,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const formBusca = document.getElementById('form-busca-local');
     const formSugerirModal = document.getElementById('form-sugerir-local-modal');
 
-    // Inicializa os modais
     const elConfirm = document.getElementById('modalConfirmarCadastro');
     const elForm = document.getElementById('modalFormularioCompleto');
 
@@ -284,7 +286,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (!inputBusca || !formBusca) return;
 
-    // 1. Alimenta o Autocomplete
     inputBusca.addEventListener('input', function(e) {
         const termo = e.target.value;
         if (termo.length < 2) return;
@@ -303,7 +304,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 
-    // 2. Executa a Busca Tradicional
     formBusca.addEventListener('submit', function(e) {
         e.preventDefault();
         const textoDigitado = inputBusca.value.trim();
@@ -327,7 +327,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 3. Transição entre modais
     window.abrirFormularioCompleto = function() {
         const textoDigitado = inputBusca.value.trim();
 
@@ -412,11 +411,10 @@ function abrirModalEditarLocal(localId) {
                 document.getElementById('edit_esta_ativo').value = dados.esta_ativo;
                 document.getElementById('edit_ano_enc').value = dados.ano_displacement;
 
-                // --- CORREÇÃO AQUI: Centralizado no ID correto e blindado contra nulos ---
                 const campoLembranca = document.getElementById('edit_experiencia_usuario');
                 if (campoLembranca) {
                     campoLembranca.value = dados.experiencia_usuario || "";
-                    campoLembranca.disabled = !dados.pode_editar_lembranca; // Trava o campo se não for o criador
+                    campoLembranca.disabled = !dados.pode_editar_lembranca;
                 }
 
                 toggleAnoEncerramentoEdicao(dados.esta_ativo);

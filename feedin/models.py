@@ -1273,7 +1273,8 @@ class ConquistaSelo(database.Model):
     id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
     id_selo = database.Column(database.Integer, database.ForeignKey('selos.id'), nullable=False)
     conquistado_em = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
-
+    tribuido_por_admin = database.Column(database.Boolean, default=False, nullable=False)
+    
     # Relacionamentos lógicos
     usuario = database.relationship('Usuario', backref='conquistas')
     selo = database.relationship('Selo', backref='usuarios_conquistaram')

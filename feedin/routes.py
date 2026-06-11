@@ -918,41 +918,53 @@ def editar_perfil():
                 perfil_obj = Perfil(id_usuario=current_user.id)
                 database.session.add(perfil_obj)
 
-            # 1. CAPTURA DOS DADOS (Tratando possíveis variações de nomenclatura do HTML)
+            # 1. CAPTURA DOS DADOS (Alinhado com os inputs do seu HTML)
+            nome_completo = request.form.get('nome_completo', '').strip()
+            data_nascimento = request.form.get('data_nascimento', '').strip()
             cidade_natal = request.form.get('cidade_natal', '').strip()
-            # Tenta pegar tanto 'estado_civil' quanto 'id_estado_civil' para não quebrar o HTML antigo
-            id_civ = request.form.get('estado_civil') or request.form.get('id_estado_civil')
             biografia = request.form.get('biografia', '').strip()
 
-            # Validação rápida de segurança
-            if not cidade_natal or not id_civ or not biografia:
-                print(
-                    f"⚠️ [MÍDIA PERFIL] Falha de preenchimento: Cidade={cidade_natal}, Civil={id_civ}, Bio={biografia}")
-                flash("Por favor, preencha todos os campos obrigatórios (Cidade Natal, Estado Civil e Biografia).",
-                      "warning")
+            # Captura opcional (caso o Estado Civil esteja em outra tela/aba no futuro)
+            id_civ = request.form.get('estado_civil') or request.form.get('id_estado_civil')
+
+            # VALIDAÇÃO FLEXÍVEL: Checa apenas os campos que realmente existem neste formulário
+            if not cidade_natal or not biografia or not nome_completo:
+                print(f"⚠️ [MÍDIA PERFIL] Falha: Nome={nome_completo}, Cidade={cidade_natal}, Bio={biografia}")
+                flash("Por favor, preencha o Nome Completo, Cidade Natal e sua História.", "warning")
                 return redirect(url_for('configuracoes', aba='perfil'))
 
-            # 2. GRAVAÇÃO CORRETA NOS CAMPOS DO MODEL
+            # 2. GRAVAÇÃO CORRETA NO MODEL DO PERFIL
+            perfil_obj.nome_completo = nome_completo
             perfil_obj.cidade_natal = cidade_natal
-            biografia = biografia
+            perfil_obj.biografia = biografia
 
-            # ATENÇÃO: Tratando o campo de Estado Civil conforme a estrutura do banco
-            if hasattr(perfil_obj, 'id_estado_civil'):
-                perfil_obj.id_estado_civil = int(id_civ)
-            else:
-                perfil_obj.estado_civil = int(id_civ)
+            # Tratamento da data de nascimento se preenchida
+            if data_nascimento:
+                try:
+                    from datetime import datetime
+                    perfil_obj.data_nascimento = datetime.strptime(data_nascimento, '%Y-%m-%d').date()
+                except Exception as e_date:
+                    print(f"⚠️ Erro na conversão de data: {e_date}")
+
+            # Persiste o Estado Civil de forma segura APENAS se ele vier no request
+            if id_civ:
+                if hasattr(perfil_obj, 'id_estado_civil'):
+                    perfil_obj.id_estado_civil = int(id_civ)
+                else:
+                    perfil_obj.estado_civil = int(id_civ)
 
             # =================================================================
             # PROCESSAMENTO DA FOTO DE PERFIL
             # =================================================================
             file = request.files.get('foto_perfil')
+
             if file and file.filename != '':
                 nome_da_foto_para_deletar = current_user.foto_perfil
                 novo_nome = salvar_imagem(file)
 
                 if novo_nome:
                     current_user.foto_perfil = novo_nome
-                    print(f"DEBUG [editar_perfil]: Foto atualizada: {novo_nome}")
+                    print(f"📸 DEBUG [editar_perfil]: Foto atualizada para: {novo_nome}")
 
                     if nome_da_foto_para_deletar and \
                             nome_da_foto_para_deletar != 'default.jpg' and \
@@ -967,20 +979,19 @@ def editar_perfil():
                             try:
                                 os.remove(caminho_completo_antigo)
                             except Exception as e:
-                                print(f"ERRO AO DELETAR FOTO ANTIGA: {e}")
+                                print(f"⚠️ Erro ao deletar foto antiga: {e}")
 
-            # 3. COMMIT ÚNICO E SEGURO
+            # 3. COMMIT ÚNICO E ATÔMICO
             database.session.commit()
             flash("Seus dados de perfil foram atualizados com sucesso! 🎉", "success")
 
         except Exception as e:
             database.session.rollback()
             print(f"❌ ERRO CRÍTICO AO SALVAR PERFIL: {e}")
+            import traceback
+            traceback.print_exc()
             flash(f"Erro técnico ao salvar alterações: {e}", "danger")
 
-        # =================================================================
-        # RETORNO UNIFICADO: Sempre mantém o usuário na tela de Gestão
-        # =================================================================
         return redirect(url_for('configuracoes', aba='perfil'))
 
     return redirect(url_for('configuracoes', aba='perfil'))
@@ -1077,6 +1088,7 @@ def dashboard():
         memorias_usuario = VinculoUsuarioLocal.query.filter_by(usuario_id=current_user.id).all()
         contagem_memorias = len(memorias_usuario)
         contagem_preferencias = current_user.interesses.count()
+        epocas_todas = Epoca.query.order_by(Epoca.ordem_cronologica.asc()).all()
 
         categorias = Taxonomia.query.filter(~Taxonomia.contextos.any()).order_by(Taxonomia.nome).all()
         minhas_prefs_ids = [p.id for p in current_user.interesses]
@@ -1236,6 +1248,7 @@ def dashboard():
                                usuario=current_user,
                                categorias=categorias,
                                minhas_prefs_ids=minhas_prefs_ids,
+                               epocas_todas=epocas_todas,
                                locais_populares=locais_populares,
                                lista_de_convites=lista_de_convites,
                                publicacoes=publicacoes_banco,
@@ -1243,28 +1256,70 @@ def dashboard():
                                qrcode_url=qrcode_url,
                                link_convite=link_convite)
 
+
 @app.route('/promover_pioneiro/<int:usuario_id>')
 @login_required
 def promover_pioneiro(usuario_id):
-    # Verifica se o usuário atual é um administrador (Nível 9999)
+    # 1. Barreira de Segurança: Apenas superadmins (9999) prosseguem
     if current_user.nivel_acesso < 9999:
         flash('Acesso negado. Você não tem permissão para esta ação.', 'danger')
         return redirect(url_for('dashboard'))
 
-    # Busca o usuário no banco de dados
+    # Busca o usuário que receberá a honraria
     usuario_alvo = Usuario.query.get_or_404(usuario_id)
 
+    # 2. Proteção de Idempotência: Evita reprocessar quem já possui o título
+    if usuario_alvo.is_pioneiro:
+        flash(f'O usuário {usuario_alvo.username} já possui o título de Pioneiro.', 'info')
+        return redirect(url_for('admin_sistema'))
+
     try:
+        from feedin.models import Selo, UsuarioSelo, AtividadeLocal  # Ajuste os imports conforme seu app
+        from datetime import datetime, timezone
+
+        # Atribui o status no perfil do usuário
         usuario_alvo.is_pioneiro = True
+
+        # =================================================================
+        # DISPARO DA ROTINA DE SELEÇÃO: VÍNCULO DO SELO HISTÓRICO
+        # =================================================================
+        # Buscamos a entidade do Selo de Pioneiro pelo código ou referência única
+        selo_pioneiro = Selo.query.filter_by(codigo='PIONEIRO_FUNDADOR').first()
+
+        if selo_pioneiro:
+            # Verifica se por algum motivo ele já tinha o selo (blindagem extra)
+            ja_tem_selo = UsuarioSelo.query.filter_by(
+                id_usuario=usuario_alvo.id,
+                id_selo=selo_pioneiro.id
+            ).first()
+
+            if not ja_tem_selo:
+                # Concede a medalha/selo na carteira de conquistas do usuário
+                novo_usuario_selo = UsuarioSelo(
+                    id_usuario=usuario_alvo.id,
+                    id_selo=selo_pioneiro.id,
+                    data_conquista=datetime.now(timezone.utc),
+                    atribuido_por_admin=True  # Rastreabilidade da concessão manual
+                )
+                database.session.add(novo_usuario_selo)
+
+                print(f"🏅 [Rotina de Sele] Selo '{selo_pioneiro.nome}' vinculado ao usuário {usuario_alvo.username}")
+        else:
+            print("⚠️ Alerta: O selo com código 'PIONEIRO_FUNDADOR' não foi localizado no banco de dados.")
+        # =================================================================
+
+        # Executa todas as alterações de uma vez de forma atômica
         database.session.commit()
-        flash(f'Usuário {usuario_alvo.username} agora é um Pioneiro!', 'success')
+        flash(f'Usuário {usuario_alvo.username} agora é um Pioneiro e suas conquistas foram atualizadas!', 'success')
+
     except Exception as e:
         database.session.rollback()
-        flash('Erro ao promover usuário. Tente novamente.', 'danger')
-        print(f"Erro: {e}")
+        flash('Erro técnico ao processar promoção e rotinas de selos. Operação cancelada.', 'danger')
+        print(f"❌ ERRO CRÍTICO NA PROMOÇÃO DE PIONEIRO MANUAL: {e}")
+        import traceback
+        traceback.print_exc()
 
-    # Retorna para a página de administração (ajuste o nome da rota se necessário)
-    return redirect(url_for('admin_sistema'))  # Ou o nome da sua função de dashboard admin
+    return redirect(url_for('admin_sistema'))
 
 
 from itertools import groupby
@@ -1681,10 +1736,15 @@ def adicionar_local_novo():
 @app.route('/seguir_local/<int:local_id>', methods=['POST'])
 @login_required
 def seguir_local(local_id):
-    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal
+    # Importamos o novo modelo UsuarioLocalEpoca
+    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, UsuarioLocalEpoca
     local = Local.query.get_or_404(local_id)
 
-    # Verifica se já existe o vínculo de seguidor
+    # Captura a lista de IDs de épocas enviados pelo front-end (via FormData ou JSON)
+    # request.form.getlist pega múltiplos inputs com o mesmo nome (ex: <input name="epocas[]">)
+    epocas_selecionadas = request.form.getlist('epocas[]')
+
+    # Verifica se já existe o vínculo principal de seguidor
     vinculo = VinculoUsuarioLocal.query.filter_by(
         usuario_id=current_user.id,
         local_id=local_id
@@ -1692,8 +1752,14 @@ def seguir_local(local_id):
 
     try:
         if vinculo:
-            # Remove o vínculo principal
+            # 1. REMOVE O VÍNCULO PRINCIPAL
             database.session.delete(vinculo)
+
+            # 2. LIMPEZA HISTÓRICA: Remove todas as épocas atreladas a esse usuário e local
+            UsuarioLocalEpoca.query.filter_by(
+                id_usuario=current_user.id,
+                id_local=local_id
+            ).delete()
 
             # Deleta APENAS a atividade de entrada na linha do tempo para evitar órfãos
             texto_atividade = f"Novo seguidor: {current_user.username}"
@@ -1707,15 +1773,24 @@ def seguir_local(local_id):
                 database.session.delete(ativ)
 
             database.session.commit()
-            return jsonify({"status": "success", "sucesso": True, "message": "Parou de seguir"})
+            return jsonify({"status": "success", "sucesso": True, "message": "Parou de seguir e removeu épocas"})
 
         else:
-            # Criamos o Vínculo do botão
+            # 1. CRIA O VÍNCULO PRINCIPAL
             novo_vinculo = VinculoUsuarioLocal(
                 usuario_id=current_user.id,
                 local_id=local_id
             )
             database.session.add(novo_vinculo)
+
+            # 2. GRAVAÇÃO MULTITEMPORAL: Associa as épocas marcadas ao perfil do usuário para este local
+            for epoca_id in epocas_selecionadas:
+                novo_vinculo_epoca = UsuarioLocalEpoca(
+                    id_usuario=current_user.id,
+                    id_local=local_id,
+                    id_epoca=int(epoca_id)
+                )
+                database.session.add(novo_vinculo_epoca)
 
             # Criamos a atividade específica de novo seguidor
             nova_atividade = AtividadeLocal(
@@ -1731,7 +1806,6 @@ def seguir_local(local_id):
 
     except Exception as e:
         database.session.rollback()
-        # Se der erro no banco, o JS vai te avisar o motivo real no console log
         return jsonify({"status": "error", "sucesso": False, "message": str(e)}), 500
 
 
@@ -3701,12 +3775,17 @@ def sugerir_local():
     cidade = request.form.get('cidade', 'Piracicaba')
     estado = request.form.get('estado', 'SP')
 
+    # NÚCLEO MULTITEMPORAL: Captura o ID relacional da Época e a lembrança opcional
+    id_epoca = request.form.get('id_epoca')
+    experiencia_usuario = request.form.get('experiencia_usuario', '').strip()
+
     # Validação básica de segurança
     if not nome or not bairro:
         return jsonify({"status": "erro", "message": "Nome e Bairro são obrigatórios"}), 400
 
     try:
-        from feedin.models import Local, VinculoUsuarioLocal
+        from feedin.models import Local, VinculoUsuarioLocal, UsuarioLocalEpoca, AtividadeLocal, Epoca
+        from datetime import datetime, timezone
 
         novo_local = Local(
             nome=nome,
@@ -3716,28 +3795,50 @@ def sugerir_local():
             estado=estado,
             verificado=False,  # Cai na fila do Admin
             id_indicador=current_user.id
-            # Rastreabilidade total (Nota: mude para id_usuario_indicador se for o nome exato da coluna)
         )
 
         database.session.add(novo_local)
 
         # =================================================================
-        # AJUSTE CIRÚRGICO: FLUSH & AUTO-SEGUIR
+        # AJUSTE CIRÚRGICO: FLUSH & AUTO-SEGUIR + ENGENHARIA TEMPORAL
         # =================================================================
-        # O flush força o SQLAlchemy a obter o ID do 'novo_local' do banco de dados
-        # AGORA, sem fechar a transação com o commit ainda.
+        # O flush força o SQLAlchemy a obter o ID do 'novo_local' do banco
         database.session.flush()
 
-        # Cria o vínculo automático unindo o criador ao novo local criado
+        # 1. Cria o vínculo explícito tradicional unindo o criador ao novo local
         vinculo_auto = VinculoUsuarioLocal(
             usuario_id=current_user.id,
             local_id=novo_local.id,
             experiencia="Adicionado automaticamente aos meus locais frequentados."
         )
         database.session.add(vinculo_auto)
+
+        # 2. Conecta a Época na tabela de relacionamento do Grafo (Coleta Ativa)
+        if id_epoca and id_epoca.isdigit():
+            novo_vinculo_epoca = UsuarioLocalEpoca(
+                id_usuario=current_user.id,
+                id_local=novo_local.id,
+                id_epoca=int(id_epoca)
+            )
+            database.session.add(novo_vinculo_epoca)
+
+            # 3. Alimenta a AtividadeLocal para manter o histórico de interações do Feed
+            epoca_obj = Epoca.query.get(id_epoca)
+            periodo_texto = epoca_obj.nome_exibicao if epoca_obj else "Perímetro Histórico"
+
+            novo_vinculo_atividade = AtividadeLocal(
+                nome="Memória de Vínculo",
+                id_criador=current_user.id,
+                id_local=novo_local.id,
+                periodo_estimado=periodo_texto,  # Garante o texto para compatibilidade de views antigas
+                descricao=experiencia_usuario if experiencia_usuario else f"Registrou este local na época de {periodo_texto}",
+                data_criacao=datetime.now(timezone.utc)
+            )
+            database.session.add(novo_vinculo_atividade)
+            print(f"🧠 [Grafo Conectado] Local {novo_local.id} amarrado à época {id_epoca} por {current_user.username}")
         # =================================================================
 
-        # Salva o Local e o Vínculo de uma só vez (Operação Atômica)
+        # Salva o Local, os Vínculos e o Grafo de uma só vez (Operação Atômica)
         database.session.commit()
 
         # O segredo: retornar o ID para o front-end já usar na próxima etapa
@@ -3748,7 +3849,9 @@ def sugerir_local():
         })
     except Exception as e:
         database.session.rollback()
-        print(f"❌ ERRO NO AUTO-SEGUIR AO SUGERIR LOCAL: {e}")
+        print(f"❌ ERRO NO AUTO-SEGUIR E VÍNCULO TEMPORAL AO SUGERIR LOCAL: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"status": "erro", "message": str(e)}), 500
 
 
@@ -4516,6 +4619,9 @@ def perfil_local(local_id):
     database.session.rollback()
 
     import random
+    # INJETADO: Importação do modelo Epoca para alimentar a engenharia multitemporal
+    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, Taxonomia, Postagem, postagem_tags, Epoca
+    from sqlalchemy.orm import joinedload
 
     # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos para evitar fadiga na VPS
     local = Local.query.get_or_404(local_id)
@@ -4523,6 +4629,9 @@ def perfil_local(local_id):
     # 1. GARANTIA DE VARIÁVEIS
     tags_dos_amigos = []
     atividades_formatadas = []
+
+    # RECUPERAÇÃO DAS ÉPOCAS: Busca os períodos urbanos para montar os checkboxes do modal
+    epocas_todas = Epoca.query.order_by(Epoca.ordem_cronologica.asc()).all()
 
     # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO (UNIFICADA)
     vinculo_explicito = VinculoUsuarioLocal.query.filter_by(
@@ -4575,7 +4684,6 @@ def perfil_local(local_id):
     for p in postagens_totais_local:
         e_o_autor = (current_user.is_authenticated and p.id_usuario == current_user.id)
 
-        # AJUSTE: Removeu-se o 'if e_o_autor or usuario_segue:' para permitir a checagem por tags livres
         tags_da_postagem = set(t.id for t in p.tags_afinidade)
         tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
 
@@ -4590,11 +4698,9 @@ def perfil_local(local_id):
             # =========================================================================
             anuncio_gerado = None
 
-            # Se a trava de respiro estiver ativa, pula a requisição do anúncio
             if cards_de_respiro_restantes > 0:
                 cards_de_respiro_restantes -= 1
             else:
-                # Roda o dado calibrado em 25% de chance
                 if random.random() < 0.25:
                     anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
 
@@ -4602,7 +4708,6 @@ def perfil_local(local_id):
                         anuncio_gerado = random.choice(anuncio_gerado)
 
                     if anuncio_gerado:
-                        # Ativa o respiro obrigatório para os próximos 2 cards liberados
                         cards_de_respiro_restantes = 2
             # =========================================================================
 
@@ -4627,7 +4732,7 @@ def perfil_local(local_id):
     # Ordenação cronológica reversa estrita das postagens
     atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
 
-    # 5. RENDERIZAÇÃO NO TEMPLATE
+    # 5. RENDERIZAÇÃO NO TEMPLATE (Injetada a variável epocas_todas)
     return render_template('locais/perfil_local.html',
                            local=local,
                            atividades=atividades,
@@ -4639,7 +4744,8 @@ def perfil_local(local_id):
                            context_origem='perfil_local',
                            exibir_como_flyer=True,
                            meus_interesses_ids=meus_interesses_ids,
-                           rating_data=local.get_rating_data())
+                           rating_data=local.get_rating_data(),
+                           epocas_todas=epocas_todas) # <-- ADICIONADO AQUI!
 
 @app.route('/local_v2/<int:local_id>')
 @login_required
