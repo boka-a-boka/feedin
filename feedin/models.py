@@ -812,8 +812,8 @@ class Postagem(database.Model):
     ativo = database.Column(database.Boolean, default=True)
     preservacao_memoria = database.Column(database.Boolean, default=False)
     id_epoca = database.Column(database.Integer, database.ForeignKey('epocas.id'), nullable=False)
-    id_empresa = database.Column(database.Integer, database.ForeignKey('empresas.id'), nullable=True)
-    
+    id_empresa = database.Column(database.Integer, database.ForeignKey('ese_empresa.id'), nullable=True)
+
     # RELACIONAMENTOS EXISTENTES
     autor = database.relationship('Usuario', backref=database.backref('postagens', lazy='dynamic'),
                                   foreign_keys=[id_usuario])
@@ -1087,11 +1087,18 @@ class Publicacao(database.Model):
     # Aponta para 'locais.id' (no plural, como está na sua tabela real)
     local_id = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=True)
 
-    # 🌟 A LINHA QUE FALTAVA: Registro cronológico da memória
+    # 🛠️ CORREÇÃO CIRÚRGICA: Vínculo oficial com a tabela da Agenda ('ese_empresa')
+    id_empresa = database.Column(database.Integer, database.ForeignKey('ese_empresa.id'), nullable=True)
+
+    # 🌟 Registro cronológico da memória
     data_cadastro = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # RELACIONAMENTOS
     local_objeto = database.relationship('Local', backref='publicacoes_vinculadas', foreign_keys=[local_id])
+
+    # 🛠️ RELACIONAMENTO ORM: Permite acessar publicacao.empresa_objeto para coletar cores/slug
+    empresa_objeto = database.relationship('EseEmpresa', backref=database.backref('postagens_vinculadas', lazy=True),
+                                           foreign_keys=[id_empresa])
 
     tags = database.relationship('Taxonomia',
                                  secondary=publicacao_taxonomia,
