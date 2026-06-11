@@ -5219,34 +5219,63 @@ def excluir_comentario(comentario_id):
 
 
 # Para que a marcação de pessoas funcione (Apenas conexões aceitas na Teia)
+from flask_login import current_user
+from flask import jsonify, request
+
+
 @app.route('/buscar_usuarios')
-@login_required
 def buscar_usuarios():
-    termo = request.args.get('q', '').replace('@', '').strip()
+    if not current_user.is_authenticated:
+        return jsonify([])
+
+    # Importando os seus modelos reais do projeto
+    from feedin.models import Usuario, Perfil, Conexoes
+    from sqlalchemy import or_
+
+    termo = request.args.get('q', '').strip()
     if len(termo) < 2:
         return jsonify([])
 
-    # 1. Alinhamento com a Teia: Filtra usando o modelo correto 'Conexoes'
-    conexoes = Conexoes.query.filter(
-        (Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id),
+    # 1. Busca todas as conexões ACEITAS onde o usuário atual participa (como remetente OU destinatário)
+    vinculos = Conexoes.query.filter(
+        or_(Conexoes.id_remetente == current_user.id, Conexoes.id_destinatario == current_user.id),
         Conexoes.status == 'aceito'
     ).all()
 
-    # Isola os IDs dos amigos confirmados
-    amigos_ids = [c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente for c in conexoes]
+    # 2. Extrai os IDs dos amigos de dentro dessas conexões
+    ids_amigos = []
+    for v in vinculos:
+        if v.id_remetente != current_user.id:
+            ids_amigos.append(v.id_remetente)
+        if v.id_destinatario != current_user.id:
+            ids_amigos.append(v.id_destinatario)
 
-    # Se o usuário não tiver conexões aceitas, bloqueia a busca imediatamente
-    if not amigos_ids:
+    # Se o usuário não tiver nenhuma conexão aceita na Teia, encerra com lista vazia
+    if not ids_amigos:
         return jsonify([])
 
-    # 2. Busca refinada na lista restrita de amigos
-    usuarios = Usuario.query.join(Perfil).filter(
-        Usuario.id.in_(amigos_ids),  # Trava de segurança absoluta baseada no Grafo
-        ((Usuario.username.ilike(f'%{termo}%')) |
-         (Perfil.nome_completo.ilike(f'%{termo}%')))
-    ).limit(5).all()
+    busca = f"%{termo}%"
 
-    return jsonify([{'id': u.id, 'username': u.username} for u in usuarios])
+    # 3. Faz a busca por Nome ou Username filtrando estritamente dentro dos IDs coletados
+    usuarios = Usuario.query.join(Perfil).filter(
+        Usuario.id.in_(ids_amigos),
+        or_(
+            Usuario.username.ilike(busca),
+            Perfil.nome_completo.ilike(busca)
+        )
+    ).limit(10).all()
+
+    # 4. Estrutura o retorno JSON esperado pelo seu JavaScript do modal
+    resultados = []
+    for u in usuarios:
+        nome_real = u.perfil.nome_completo.strip() if (u.perfil and u.perfil.nome_completo) else None
+        resultados.append({
+            'id': u.id,
+            'username': u.username,
+            'nome_completo': nome_real if nome_real else "Usuário sem nome"
+        })
+
+    return jsonify(resultados)
 
 
 # consulta que gera a visão que o empreendedor de Piracicaba precisa para tomar decisões:

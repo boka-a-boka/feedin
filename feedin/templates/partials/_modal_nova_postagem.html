@@ -132,46 +132,71 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (termo.length < 2) { lista.classList.add('d-none'); return; }
 
                 fetch(`${rota}?q=${encodeURIComponent(termo)}`)
-                    .then(res => res.json())
-                    .then(dados => {
-                        lista.innerHTML = '';
-                        if (!dados.length) { lista.classList.add('d-none'); return; }
+    .then(res => {
+        // Se o servidor responder com erro (ex: 503, 500, 404), impede o crash do JSON e lança uma exceção
+        if (!res.ok) {
+            throw new Error(`Erro no servidor: ${res.status} - ${res.statusText}`);
+        }
+        return res.json();
+    })
+    .then(dados => {
+        lista.innerHTML = '';
+        if (!dados.length) { lista.classList.add('d-none'); return; }
 
-                        dados.forEach(item => {
-                            let btn = document.createElement('button');
-                            btn.type = 'button';
-                            btn.className = 'list-group-item list-group-item-action border-0 py-2';
-                            btn.innerHTML = callbackItem(item);
+        dados.forEach(item => {
+            let btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'list-group-item list-group-item-action border-0 py-2';
+            btn.innerHTML = callbackItem(item);
 
-                            btn.onclick = () => {
-                                if (inputId === 'buscaLocalPost') {
-                                    input.value = item.nome || item.name;
-                                    document.getElementById('idLocalHidden').value = item.id;
-                                }
-                                else if (inputId === 'buscaTagsPost') {
-                                    adicionarBadge(item.id, `#${item.nome}`, 'tagsSelecionadas', PostState.tags, 'tagsIdsHidden', 'bg-primary-subtle text-primary');
-                                    input.value = '';
-                                }
-                                else if (inputId === 'buscaPessoasPost') {
-                                    adicionarBadge(item.id, `@${item.username}`, 'pessoasSelecionadas', PostState.pessoas, 'pessoasIdsHidden', 'bg-success-subtle text-success');
-                                    input.value = '';
-                                }
-                                lista.classList.add('d-none');
-                            };
-                            lista.appendChild(btn);
-                        });
-                        lista.classList.remove('d-none');
-                    });
+            btn.onclick = () => {
+                if (inputId === 'buscaLocalPost') {
+                    input.value = item.nome || item.name;
+                    document.getElementById('idLocalHidden').value = item.id;
+                }
+                else if (inputId === 'buscaTagsPost') {
+                    adicionarBadge(item.id, `#${item.nome}`, 'tagsSelecionadas', PostState.tags, 'tagsIdsHidden', 'bg-primary-subtle text-primary');
+                    input.value = '';
+                }
+                else if (inputId === 'buscaPessoasPost') {
+                    adicionarBadge(item.id, `@${item.username}`, 'pessoasSelecionadas', PostState.pessoas, 'pessoasIdsHidden', 'bg-success-subtle text-success');
+                    input.value = '';
+                }
+                lista.classList.add('d-none');
+            };
+            lista.appendChild(btn);
+        });
+        lista.classList.remove('d-none');
+    })
+    .catch(err => {
+        // Captura o erro (seja de rede, 503 do Flask ou JSON inválido) de forma silenciosa e segura
+        console.error("Falha na requisição de busca de autocomplete:", err);
+        lista.innerHTML = '';
+        lista.classList.add('d-none'); // Fecha o menu de sugestões amigavelmente para o usuário
+    });
             };
         };
 
         // Ativação das Buscas
         configurarBusca('buscaLocalPost', 'sugestoesLocais', '/buscar_locais', item => `<i class="bi bi-geo-alt-fill me-2 text-danger"></i>${item.nome || item.name}`);
         configurarBusca('buscaTagsPost', 'sugestoesTags', '/api/buscar-interesses', item => `<i class="bi bi-hash me-2"></i>${item.nome}`);
-        configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => `<i class="bi bi-person-circle me-2"></i>${item.username}`);
+
+        // Ajuste aplicado aqui: Busca de Pessoas com exibição inteligente de Nome + Username
+        configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => {
+            const nomeExibicao = item.nome_completo ? item.nome_completo : item.username;
+            return `
+                <div class="d-flex align-items-center w-100">
+                    <i class="bi bi-person-circle me-2 text-success fs-5"></i>
+                    <div class="text-start">
+                        <span class="d-block fw-bold text-dark small mb-0">${nomeExibicao}</span>
+                        <small class="text-muted" style="font-size: 0.7rem;">@${item.username}</small>
+                    </div>
+                </div>
+            `;
+        });
     });
 
-// Limpa o estado e os campos ocultos caso o usuário feche ou cancele o modal
+    // Limpa o estado e os campos ocultos caso o usuário feche ou cancele o modal
     modalEl.addEventListener('hidden.bs.modal', function () {
         // Limpa os conjuntos de dados (Sets)
         PostState.tags.clear();
@@ -222,6 +247,7 @@ function adicionarBadge(id, nome, containerId, setObj, inputHiddenId, extraClass
     container.appendChild(badge);
     document.getElementById(inputHiddenId).value = Array.from(setObj).join(',');
 }
+
 function inserirNoTexto(emoji) {
     const textarea = document.getElementById('conteudoPostagem');
     if (textarea) {
