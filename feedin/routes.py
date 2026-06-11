@@ -41,6 +41,7 @@ from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
 from markupsafe import escape
 import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64, random
+import qrcode
 from itertools import groupby
 from io import TextIOWrapper
 from PIL import Image, ImageOps
@@ -1187,7 +1188,7 @@ def dashboard():
         for pub in publicacoes_banco:
             pub.anuncio = obter_publicidade_contextual(pub)
 
-        # --- 5. FORMULÁRIOS UNIVERSAIS ---
+        # --- 5. FORMULÁRIOS UNIVERSAIS (Alinhamento corrigido - Fora do laço for) ---
         form_p = FormPerfil(obj=perfil_usuario)
         form_a = FormApelido()
         form_convite = FormConvite()
@@ -1200,13 +1201,21 @@ def dashboard():
             form_p.genero.choices = []
             form_p.estado_civil.choices = []
 
-        # 🎯 AJUSTE SEGURO: GERAÇÃO DA URL UNIFICADA E QR CODE DO USUÁRIO LOGADO
-        from urllib.parse import quote
-        link_convite_real = url_for('processar_convite_unificado', id_padrinho=current_user.id, _external=True)
-        link_qrcode_codificado = quote(link_convite_real)
-        qrcode_url = f"https://chart.googleapis.com/chart?chs=250x250&cht=qr&chl={link_convite_real}&choe=UTF-8"
+        # 🎯 PRONTO: Geração dinâmica sem mexer no disco físico
+        link_convite = f"{request.host_url.rstrip('/')}/convite/{current_user.id}"
 
-        # --- 6. RETORNO DA VIEW (DENTRO DO WITH GLOBAL) ---
+        qr = qrcode.QRCode(version=1, box_size=10, border=1)
+        qr.add_data(link_convite)
+        qr.make(fit=True)
+
+        img = qr.make_image(fill_color="#111827", back_color="white")
+
+        output = io.BytesIO()
+        img.save(output, format='PNG')
+        qr_code_base64 = base64.b64encode(output.getvalue()).decode('utf-8')
+        qrcode_url = f"data:image/png;base64,{qr_code_base64}"
+
+        # --- 6. RETORNO DA VIEW (Perfeitamente posicionado) ---
         return render_template("homepage.html",
                                aba=aba,
                                perfil=perfil_usuario,
@@ -1231,9 +1240,8 @@ def dashboard():
                                lista_de_convites=lista_de_convites,
                                publicacoes=publicacoes_banco,
                                minhas_prefs_json=json.dumps(prefs_atuais_data),
-                               link_convite=link_convite_real,  # Injetado com sucesso
-                               qrcode_url=qrcode_url)          # Injetado com sucesso
-
+                               qrcode_url=qrcode_url,
+                               link_convite=link_convite)
 
 @app.route('/promover_pioneiro/<int:usuario_id>')
 @login_required
