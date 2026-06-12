@@ -157,11 +157,12 @@
                     {% endif %}
 
                     {# TEXTO DA HISTÓRIA #}
-                    <div class="card-text text-dark mb-3" style="font-size: 1.05rem; line-height: 1.5;">
+                    <div class="card-text text-dark mb-3">
                         {% if eh_sistema %}
-                            <i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong>
+                            <p style="white-space: pre-wrap;"><i class="bi bi-stars text-primary me-1"></i> <strong>{{ texto_exibicao | safe }}</strong></p>
                         {% else %}
                             {% if eh_comentario %}
+                                <p style="white-space: pre-wrap;">{{ atividade.conteudo | formatar_postagem }}</p>
                                 <div class="p-2 bg-light border-start border-3 rounded-end mb-2 text-muted italic" style="font-size: 0.95rem;">
                                     <i class="bi bi-chat-quote me-1"></i> "{{ texto_exibicao | formatar_postagem | safe }}"
                                 </div>
@@ -169,7 +170,8 @@
                                     <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
                                 </div>
                             {% else %}
-                                {{ texto_exibicao | formatar_postagem | safe }}
+                                {# Postagem normal: renderiza apenas uma vez, respeitando quebras de linha #}
+                                <p style="white-space: pre-wrap;">{{ texto_exibicao | formatar_postagem | safe }}</p>
                             {% endif %}
                         {% endif %}
                     </div>
@@ -300,33 +302,36 @@
                         </div>
                     </div>
 
-                    {# GERENCIAMENTO EXCLUSIVO DE EDIÇÃO/EXCLUSÃO (Isolado e Ocultável na Index) #}
-                    {% if exibir_controles and current_user.is_authenticated and atividade.id_usuario == current_user.id %}
+                    {# GERENCIAMENTO EXCLUSIVO DE EDIÇÃO/EXCLUSÃO (Unificado com Roteamento do Perfil) #}
+                    {% if current_user.is_authenticated and (atividade.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
                         <div class="dropdown ms-auto">
                             <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-three-dots-vertical fs-5"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
                                 <li>
-                                    <button class="dropdown-item py-2" type="button" data-bs-toggle="modal" data-bs-target="#modalEditarPost" onclick="preencherDadosModalEditar('{{ atividade.id }}', '{{ atividade.conteudo|e }}')">
+                                    <button class="dropdown-item py-2" type="button"
+                                            onclick="abrirModalEditarPostagem(
+                                                '{{ post_obj.id }}',
+                                                '{{ (post_obj.conteudo)|e }}',
+                                                '{{ post_obj.id_epoca or "" }}',
+                                                '{{ post_obj.id_local or "0" }}'
+                                            )">
                                         <i class="bi bi-pencil me-2 text-primary"></i> Editar História
                                     </button>
                                 </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPost('{{ atividade.id }}')">
+                                    <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPostagem('{{ post_obj.id }}')">
                                         <i class="bi bi-trash3 me-2"></i> Excluir Memória
                                     </button>
                                 </li>
                             </ul>
                         </div>
-                        <form id="form-excluir-{{ atividade.id }}" action="{{ url_for('excluir_post', post_id=atividade.id) }}" method="POST" style="display: none;">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        </form>
                     {% endif %}
 
                     {# BLOCO DE REAÇÕES (Sempre visível se for um post) #}
-                    <div class="d-flex align-items-center gap-3 {% if not (exibir_controles and current_user.is_authenticated and atividade.id_usuario == current_user.id) %}ms-auto{% endif %}">
+                    <div class="d-flex align-items-center gap-3 {% if not (current_user.is_authenticated and (atividade.id_usuario == current_user.id or post_obj.id_usuario == current_user.id)) %}ms-auto{% endif %}">
                         {% if render_modo == 'post' %}
                             {% include "partials/cards/_footer_reacoes.html" %}
                         {% endif %}
@@ -380,7 +385,7 @@
                                     {{ atividade.anuncio.texto_formatado }}
                                 </p>
 
-                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
+                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origins='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
                                    class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
                                     <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
                                 </a>
@@ -416,25 +421,6 @@
 {% endif %}
 
 <script>
-window.preencherDadosModalEditar = function(postId, conteudoAtual) {
-    const formEditar = document.getElementById('formEditarPost');
-    const inputConteudo = document.getElementById('inputConteudoPost');
-
-    if (formEditar && inputConteudo) {
-        formEditar.action = "/editar_post/" + postId;
-        inputConteudo.value = conteudoAtual;
-    } else {
-        console.error("Erro: Elementos do formulário de edição não encontrados na página.");
-    }
-};
-
-window.confirmarExclusaoPost = function(postId) {
-    if (confirm("Tem certeza que deseja remover esta história permanentemente? Esta ação não poderá ser desfeita.")) {
-        const formExcluir = document.getElementById('form-excluir-' + postId);
-        if (formExcluir) formExcluir.submit();
-    }
-};
-
 function solicitarOlhaEuAliUniversal(postId) {
     const url = `/postagem/${postId}/solicitar_marcacao`;
     const container = document.getElementById(`universal-container-olha-${postId}`);

@@ -15,6 +15,28 @@
         border-color: #1e293b;
         color: #ffffff;
     }
+    /* Estilização da barra de ferramentas de texto corrigida */
+    .toolbar-editor {
+        display: flex !important;
+        align-items: center;
+        gap: 0.35rem;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-bottom: none;
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+        padding: 0.4rem;
+    }
+    .toolbar-btn {
+        padding: 0.25rem 0.65rem;
+        font-size: 0.82rem;
+        font-weight: bold;
+        line-height: 1;
+    }
+    .textarea-toolbar-attached {
+        border-top-left-radius: 0 !important;
+        border-top-right-radius: 0 !important;
+    }
 </style>
 
 <div class="animate__animated animate__fadeIn">
@@ -69,7 +91,7 @@
                             Ver Histórias <i class="bi bi-arrow-right ms-1"></i>
                         </a>
 
-                        {# --- NOVO BOTÃO DE EDIÇÃO DESTACADO EM PRETO/AZUL ESCURO --- #}
+                        {# --- BOTÃO DE EDIÇÃO --- #}
                         {% if current_user.is_authenticated and (local.id_indicador == current_user.id or current_user.nivel_acesso == 9999) %}
                             <button type="button" onclick="abrirModalEditarLocal({{ local.id }})"
                                     class="btn btn-dark-system btn-sm rounded-pill w-100 fw-bold mb-1 shadow-sm" style="font-size: 0.85rem;">
@@ -163,7 +185,6 @@
                             </div>
                             <hr class="my-3 text-muted">
 
-                            {# --- AJUSTE MULTITEMPORAL: SELECT DINÂMICO CONECTADO AO GRAFO --- #}
                             <div class="col-md-6">
                                 <label class="small fw-bold text-dark">EM QUAL ÉPOCA VOCÊ FREQUENTAVA? <span class="text-danger">*</span></label>
                                 <select name="id_epoca" class="form-select border-primary" required>
@@ -180,7 +201,14 @@
 
                             <div class="col-12">
                                 <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
-                                <textarea name="experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
+
+                                {# --- BARRA DE FERRAMENTAS CORRIGIDA E UNIFICADA PARA O CAMPO DE LEMBRANÇA --- #}
+                                <div class="toolbar-editor">
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" onclick="formatarTextoArea('inputLembrancaNovoLocal', '*')">N</button>
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" style="font-style: italic;" onclick="formatarTextoArea('inputLembrancaNovoLocal', '_')">I</button>
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" onclick="formatarTextoArea('inputLembrancaNovoLocal', '>')">“ ”</button>
+                                </div>
+                                <textarea name="experiencia_usuario" id="inputLembrancaNovoLocal" class="form-control textarea-toolbar-attached" rows="4" style="white-space: pre-wrap;" placeholder="O que você mais curtia nesse lugar? Use os botões acima para aplicar os efeitos..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -255,7 +283,14 @@
 
                             <div class="col-12">
                                 <label class="small fw-bold text-dark">CONTE UMA LEMBRANÇA DE LÁ (OPCIONAL)</label>
-                                <textarea name="experiencia_usuario" id="edit_experiencia_usuario" class="form-control" rows="2" placeholder="O que você mais curtia nesse lugar?"></textarea>
+
+                                {# --- BARRA DE FERRAMENTAS PARA EDIÇÃO --- #}
+                                <div class="toolbar-editor">
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" onclick="formatarTextoArea('edit_experiencia_usuario', '*')">N</button>
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" style="font-style: italic;" onclick="formatarTextoArea('edit_experiencia_usuario', '_')">I</button>
+                                    <button type="button" class="btn btn-light btn-sm border toolbar-btn" onclick="formatarTextoArea('edit_experiencia_usuario', '>')">“ ”</button>
+                                </div>
+                                <textarea name="experiencia_usuario" id="edit_experiencia_usuario" class="form-control textarea-toolbar-attached" rows="4" style="white-space: pre-wrap;" placeholder="O que você mais curtia nesse lugar?"></textarea>
                             </div>
                         </div>
                     </div>
@@ -272,6 +307,31 @@
 </div>
 
 <script>
+function formatarTextoArea(idTextArea, caractere) {
+    const txtArea = document.getElementById(idTextArea);
+    if (!txtArea) return;
+
+    const start = txtArea.selectionStart;
+    const end = txtArea.selectionEnd;
+    const textoCompleto = txtArea.value;
+    const textoSelecionado = textoCompleto.substring(start, end);
+
+    let textoFormatado = "";
+    let novoCursorPos = start;
+
+    if (caractere === '>') {
+        textoFormatado = textoCompleto.substring(0, start) + "\n> " + textoSelecionado + textoCompleto.substring(end);
+        novoCursorPos = start + 3 + textoSelecionado.length;
+    } else {
+        textoFormatado = textoCompleto.substring(0, start) + caractere + textoSelecionado + caractere + textoCompleto.substring(end);
+        novoCursorPos = start + 1 + textoSelecionado.length + 1;
+    }
+
+    txtArea.value = textoFormatado;
+    txtArea.focus();
+    txtArea.setSelectionRange(novoCursorPos, novoCursorPos);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const inputBusca = document.getElementById('busca_local');
     const datalist = document.getElementById('lista-locais-autocomplete');
@@ -329,7 +389,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.abrirFormularioCompleto = function() {
         const textoDigitado = inputBusca.value.trim();
-
         if (modalConfirmacao) modalConfirmacao.hide();
 
         const campoNomeFinal = document.getElementById('final_nome_local');
@@ -362,7 +421,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(data => {
                 if (data.status === 'sucesso' || data.status === 'success') {
                     if (modalFormulario) modalFormulario.hide();
-                    window.location.href = "{{ url_for('dashboard', aba='locais') }}";
+                    window.location.reload();
                 } else {
                     alert("Erro ao cadastrar local: " + (data.message || "Erro desconhecido"));
                     if (btnSubmit) {
@@ -452,7 +511,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'sucesso') {
                     window.location.reload();
                 } else {
-                    alert("Aviso: " + (data.message || "Não foi possível salvar as correções."));
+                    alert("Aviso: " + (data.message || "Não foi possível salvar as cookies."));
                     if (btnSubmit) {
                         btnSubmit.disabled = false;
                         btnSubmit.innerHTML = 'Salvar Alterações <i class="bi bi-check-lg ms-1"></i>';

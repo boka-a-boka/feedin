@@ -10,50 +10,78 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 <div class="modal-body">
-                    <div class="mb-4 text-center">
+                    <!-- Upload de Imagem Compactado para Mobile -->
+                    <div class="mb-3 text-center">
                         <div class="upload-placeholder border rounded-4 p-2 bg-light shadow-sm"
                              onclick="document.getElementById('imagem').click();"
-                             style="cursor: pointer; border-style: dashed !important; border-color: #dee2e6 !important; min-height: 150px; display: flex; align-items: center; justify-content: center;">
+                             style="cursor: pointer; border-style: dashed !important; border-color: #dee2e6 !important; min-height: 120px; display: flex; align-items: center; justify-content: center;">
 
                             <div id="previewContainer" class="d-none w-100">
                                 <img id="imgPreview" src="#" alt="Sua Memória"
                                      class="img-fluid rounded-4"
-                                     style="max-height: 450px; width: 100%; object-fit: contain;">
+                                     style="max-height: 350px; width: 100%; object-fit: contain;">
                                 <p class="small text-primary mt-2 mb-0"><i class="bi bi-arrow-repeat"></i> Trocar fotografia</p>
                             </div>
 
                             <div id="placeholderContent">
-                                <i class="bi bi-camera-fill display-5 text-secondary"></i>
-                                <p class="mt-2 mb-0 fw-bold text-muted">Qual a sua memória?</p>
-                                <small class="text-muted">Clique para anexar uma foto (Opcional para locais antigos)</small>
+                                <i class="bi bi-camera-fill display-6 text-secondary"></i>
+                                <p class="mt-1 mb-0 small fw-bold text-muted">Qual a sua memória?</p>
+                                <small class="text-muted" style="font-size: 0.75rem;">Clique para anexar foto (Opcional)</small>
                             </div>
 
                             <input type="file" name="imagem" id="imagem" class="d-none" accept="image/*" onchange="previewImagem(this)">
                         </div>
                     </div>
-                    <div class="mb-4">
-                        <label class="form-label small fw-bold text-muted text-uppercase">O que este momento representa?</label>
-                        <textarea name="conteudo" id="conteudoPostagem" class="form-control border-0 bg-light rounded-4 p-3" rows="4"
-                                  placeholder="Conte a história por trás desta memória..." required></textarea>
-                        <!-- Abaixo do textarea da sua modal de nova postagem, adicione estes botões rápidos de atalho -->
-                        <div class="mt-2 d-flex gap-1 text-muted small align-items-center">
-                            <span class="me-1">Toques rápidos:</span>
-                            <button type="button" class="btn btn-light btn-sm px-2 py-1 border" onclick="inserirNoTexto('☕')">☕</button>
-                            <button type="button" class="btn btn-light btn-sm px-2 py-1 border" onclick="inserirNoTexto('📸')">📸</button>
-                            <button type="button" class="btn btn-light btn-sm px-2 py-1 border" onclick="inserirNoTexto('❤️')">❤️</button>
-                            <button type="button" class="btn btn-light btn-sm px-2 py-1 border" onclick="inserirNoTexto('✨')">✨</button>
-                            <button type="button" class="btn btn-light btn-sm px-2 py-1 border" onclick="inserirNoTexto('🎶')">🎶</button>
-                            <small class="ms-auto text-secondary">Use *negrito* ou _itálico_</small>
+
+                    <!-- CAIXA DE TEXTO COM BARRA ERGONÔMICA FIXA/ANEXADA -->
+                    <div class="mb-3 position-relative">
+                        <label class="form-label small fw-bold text-muted text-uppercase mb-1" style="font-size: 0.7rem;">O que este momento representa?</label>
+
+                        <!-- BARRA MOBILE ERGONÔMICA (Carrossel Horizontal Deslizante por Toque) -->
+                        <div class="toolbar-mobile-container d-flex align-items-center bg-dark text-white p-1 rounded-top overflow-x-auto"
+                             style="gap: 0.4rem; white-space: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
+
+                            <!-- Formatação Clássica -->
+                            <button type="button" class="btn btn-sm btn-outline-light border-0 fw-bold px-3 py-2" onclick="formatarTextoMobile('*')">N</button>
+                            <button type="button" class="btn btn-sm btn-outline-light border-0 fst-italic px-3 py-2" onclick="formatarTextoMobile('_')">I</button>
+                            <button type="button" class="btn btn-sm btn-outline-light border-0 px-3 py-2" onclick="formatarTextoMobile('>')">“ ”</button>
+
+                            <div class="vr bg-secondary my-1" style="width: 1px; height: 20px;"></div>
+
+                            <!-- Ditador de Voz Inteligente -->
+                            <button type="button" id="btn-ditador-voz" class="btn btn-sm btn-danger rounded-pill px-3 py-2 d-inline-flex align-items-center gap-1 small" onclick="alternarDitadoVoz()">
+                                <i class="bi bi-mic-fill"></i> <span>🎙️ Voz</span>
+                            </button>
+
+                            <!-- Embelezador IA Assist (Mapeado) -->
+                            <button type="button" class="btn btn-sm btn-outline-warning border-0 px-3 py-2 small" onclick="acionarEmbelezadorIA()">
+                                <span>✨ Ajustar</span>
+                            </button>
+
+                            <div class="vr bg-secondary my-1" style="width: 1px; height: 20px;"></div>
+
+                            <!-- Atalhos de Emojis Rápidos Ergonômicos -->
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none p-2" onclick="inserirEmojiMobile('☕')">☕</button>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none p-2" onclick="inserirEmojiMobile('📸')">📸</button>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none p-2" onclick="inserirEmojiMobile('❤️')">❤️</button>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none p-2" onclick="inserirEmojiMobile('✨')">✨</button>
+                            <button type="button" class="btn btn-sm btn-link text-decoration-none p-2" onclick="inserirEmojiMobile('🎶')">🎶</button>
                         </div>
+
+                        <textarea name="conteudo" id="conteudoPostagem"
+                                  class="form-control border-top-0 bg-light rounded-bottom p-3"
+                                  rows="5"
+                                  placeholder="Conte a história por trás desta memória..."
+                                  style="border-top-left-radius: 0; border-top-right-radius: 0; font-size: 1rem; line-height: 1.5;"
+                                  required></textarea>
                     </div>
 
-
-
-                    <div class="row g-3">
+                    <!-- COMPONENTES DE SELEÇÃO E METADADOS -->
+                    <div class="row g-2">
                         <div class="col-md-12 position-relative">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light border-0"><i class="bi bi-geo-alt-fill text-danger"></i></span>
-                                <input type="text" id="buscaLocalPost" class="form-control border-0 bg-light" placeholder="Onde foi isso?">
+                                <input type="text" id="buscaLocalPost" class="form-control border-0 bg-light" placeholder="Onde foi isso (Nome do Local)?" autocomplete="off">
                                 <input type="hidden" name="id_local" id="idLocalHidden">
                             </div>
                             <div id="sugestoesLocais" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1070;"></div>
@@ -62,7 +90,7 @@
                         <div class="col-md-6 position-relative">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light border-0"><i class="bi bi-person-plus-fill text-success"></i></span>
-                                <input type="text" id="buscaPessoasPost" class="form-control border-0 bg-light" placeholder="Marcar amigos (@...)">
+                                <input type="text" id="buscaPessoasPost" class="form-control border-0 bg-light" placeholder="Marcar amigos (@...)" autocomplete="off">
                             </div>
                             <input type="hidden" name="pessoas_ids" id="pessoasIdsHidden">
                             <div id="sugestoesPessoas" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1060;"></div>
@@ -71,7 +99,7 @@
                         <div class="col-md-6 position-relative">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light border-0"><i class="bi bi-tag-fill text-primary"></i></span>
-                                <input type="text" id="buscaTagsPost" class="form-control border-0 bg-light" placeholder="Tags de afinidade">
+                                <input type="text" id="buscaTagsPost" class="form-control border-0 bg-light" placeholder="Tags de afinidade" autocomplete="off">
                             </div>
                             <input type="hidden" name="tags_ids" id="tagsIdsHidden">
                             <div id="sugestoesTags" class="list-group shadow-sm position-absolute w-100 d-none" style="z-index: 1065;"></div>
@@ -96,7 +124,7 @@
 </div>
 
 <script>
-// 1. Preview da Imagem com proporção original (Object-fit)
+// 1. Preview de Imagens
 function previewImagem(input) {
     const container = document.getElementById('previewContainer');
     const preview = document.getElementById('imgPreview');
@@ -112,114 +140,216 @@ function previewImagem(input) {
     }
 }
 
-// 2. Estado Global do Modal
+// 2. Estado do Modal e Instância do Reconhecimento de Voz
 const PostState = {
     tags: new Set(),
     pessoas: new Set()
 };
 
+let rVozInstancia = null;
+let gravandoVoz = false;
+
+// 3. Mecânica do Ditador de Voz Nativo (Web Speech API)
+function alternarDitadoVoz() {
+    const btn = document.getElementById('btn-ditador-voz');
+    const txtArea = document.getElementById('conteudoPostagem');
+
+    const ReconhecimentoDeVoz = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!ReconhecimentoDeVoz) {
+        alert("O ditado por voz não é suportado pelo seu navegador atual. Tente usar o Google Chrome ou Safari Móvel.");
+        return;
+    }
+
+    if (gravandoVoz) {
+        // Para a gravação
+        if (rVozInstancia) rVozInstancia.stop();
+        return;
+    }
+
+    // Inicializa o motor de voz do aparelho móvel
+    rVozInstancia = new ReconhecimentoDeVoz();
+    rVozInstancia.lang = 'pt-BR';
+    rVozInstancia.continuous = true;
+    rVozInstancia.interimResults = false;
+
+    rVozInstancia.onstart = function() {
+        gravandoVoz = true;
+        btn.classList.replace('btn-danger', 'btn-warning');
+        btn.innerHTML = `<span class="spinner-grow spinner-grow-sm me-1" role="status"></span> <span>Gravando...</span>`;
+    };
+
+    rVozInstancia.onerror = function(e) {
+        console.error("Erro no ditador:", e.error);
+        pararInterfaceVoz();
+    };
+
+    rVozInstancia.onend = function() {
+        pararInterfaceVoz();
+    };
+
+    rVozInstancia.onresult = function(event) {
+        const resultadoTexto = event.results[event.results.length - 1][0].transcript;
+
+        // Injeta o texto ditado exatamente onde o cursor móvel estiver posicionado
+        const start = txtArea.selectionStart;
+        const end = txtArea.selectionEnd;
+        const textoOriginal = txtArea.value;
+
+        txtArea.value = textoOriginal.substring(0, start) + resultadoTexto + textoOriginal.substring(end);
+        txtArea.selectionStart = txtArea.selectionEnd = start + resultadoTexto.length;
+        txtArea.focus();
+    };
+
+    rVozInstancia.start();
+}
+
+function pararInterfaceVoz() {
+    gravandoVoz = false;
+    const btn = document.getElementById('btn-ditador-voz');
+    if (btn) {
+        btn.classList.replace('btn-warning', 'btn-danger');
+        btn.innerHTML = `<i class="bi bi-mic-fill"></i> <span>🎙️ Voz</span>`;
+    }
+}
+
+// 4. Mecânica Ergonômica de Inserção de Formatação e Emojis
+function formatarTextoMobile(caractere) {
+    const txtArea = document.getElementById('conteudoPostagem');
+    if (!txtArea) return;
+
+    const start = txtArea.selectionStart;
+    const end = txtArea.selectionEnd;
+    const textoCompleto = txtArea.value;
+    const textoSelecionado = textoCompleto.substring(start, end);
+
+    let textoFormatado = "";
+    let novoCursorPos = start;
+
+    if (caractere === '>') {
+        textoFormatado = textoCompleto.substring(0, start) + "\n> " + textoSelecionado + textoCompleto.substring(end);
+        novoCursorPos = start + 3 + textoSelecionado.length;
+    } else {
+        textoFormatado = textoCompleto.substring(0, start) + caractere + textoSelecionado + caractere + textoCompleto.substring(end);
+        novoCursorPos = start + 1 + textoSelecionado.length + 1;
+    }
+
+    txtArea.value = textoFormatado;
+    txtArea.focus();
+    txtArea.setSelectionRange(novoCursorPos, novoCursorPos);
+}
+
+function inserirEmojiMobile(emoji) {
+    const txtArea = document.getElementById('conteudoPostagem');
+    if (!txtArea) return;
+
+    const start = txtArea.selectionStart;
+    const end = txtArea.selectionEnd;
+    const textoAnterior = txtArea.value;
+
+    txtArea.value = textoAnterior.substring(0, start) + emoji + textoAnterior.substring(end);
+    txtArea.selectionStart = txtArea.selectionEnd = start + emoji.length;
+    txtArea.focus();
+}
+
+function acionarEmbelezadorIA() {
+    alert("✨ O Embelezador de Memórias por Inteligência Artificial está sendo integrado ao servidor e estará ativo após a próxima virada de chaves no VPS!");
+}
+
+// 5. Autocomplete e Gerenciamento do Ciclo de Vida do DOM
 document.addEventListener('DOMContentLoaded', function() {
     const modalEl = document.getElementById('modalNovaPostagem');
+    if (!modalEl) return;
 
-    modalEl.addEventListener('shown.bs.modal', function () {
+    const configurarBusca = (inputId, listaId, rota, callbackItem) => {
+        const input = document.getElementById(inputId);
+        const lista = document.getElementById(listaId);
+        if (!input || !lista) return;
 
-        const configurarBusca = (inputId, listaId, rota, callbackItem) => {
-            const input = document.getElementById(inputId);
-            const lista = document.getElementById(listaId);
+        input.addEventListener('input', function(e) {
+            let termo = e.target.value.replace('@', '');
+            if (termo.length < 2) { lista.classList.add('d-none'); return; }
 
-            input.oninput = function(e) {
-                let termo = e.target.value.replace('@', '');
-                if (termo.length < 2) { lista.classList.add('d-none'); return; }
+            fetch(`${rota}?q=${encodeURIComponent(termo)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`Erro: ${res.status}`);
+                    return res.json();
+                })
+                .then(dados => {
+                    lista.innerHTML = '';
+                    if (!dados.length) { lista.classList.add('d-none'); return; }
 
-                fetch(`${rota}?q=${encodeURIComponent(termo)}`)
-    .then(res => {
-        // Se o servidor responder com erro (ex: 503, 500, 404), impede o crash do JSON e lança uma exceção
-        if (!res.ok) {
-            throw new Error(`Erro no servidor: ${res.status} - ${res.statusText}`);
-        }
-        return res.json();
-    })
-    .then(dados => {
-        lista.innerHTML = '';
-        if (!dados.length) { lista.classList.add('d-none'); return; }
+                    dados.forEach(item => {
+                        let btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'list-group-item list-group-item-action border-0 py-2';
+                        btn.innerHTML = callbackItem(item);
 
-        dados.forEach(item => {
-            let btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'list-group-item list-group-item-action border-0 py-2';
-            btn.innerHTML = callbackItem(item);
-
-            btn.onclick = () => {
-                if (inputId === 'buscaLocalPost') {
-                    input.value = item.nome || item.name;
-                    document.getElementById('idLocalHidden').value = item.id;
-                }
-                else if (inputId === 'buscaTagsPost') {
-                    adicionarBadge(item.id, `#${item.nome}`, 'tagsSelecionadas', PostState.tags, 'tagsIdsHidden', 'bg-primary-subtle text-primary');
-                    input.value = '';
-                }
-                else if (inputId === 'buscaPessoasPost') {
-                    adicionarBadge(item.id, `@${item.username}`, 'pessoasSelecionadas', PostState.pessoas, 'pessoasIdsHidden', 'bg-success-subtle text-success');
-                    input.value = '';
-                }
-                lista.classList.add('d-none');
-            };
-            lista.appendChild(btn);
+                        btn.onclick = (event) => {
+                            event.preventDefault();
+                            if (inputId === 'buscaLocalPost') {
+                                input.value = item.nome || item.name;
+                                document.getElementById('idLocalHidden').value = item.id;
+                            }
+                            else if (inputId === 'buscaTagsPost') {
+                                adicionarBadge(item.id, `#${item.nome}`, 'tagsSelecionadas', PostState.tags, 'tagsIdsHidden', 'bg-primary-subtle text-primary');
+                                input.value = '';
+                            }
+                            else if (inputId === 'buscaPessoasPost') {
+                                adicionarBadge(item.id, `@${item.username}`, 'pessoasSelecionadas', PostState.pessoas, 'pessoasIdsHidden', 'bg-success-subtle text-success');
+                                input.value = '';
+                            }
+                            lista.classList.add('d-none');
+                        };
+                        lista.appendChild(btn);
+                    });
+                    lista.classList.remove('d-none');
+                })
+                .catch(err => {
+                    console.error("Erro na busca remota do autocomplete:", err);
+                    lista.innerHTML = '';
+                    lista.classList.add('d-none');
+                });
         });
-        lista.classList.remove('d-none');
-    })
-    .catch(err => {
-        // Captura o erro (seja de rede, 503 do Flask ou JSON inválido) de forma silenciosa e segura
-        console.error("Falha na requisição de busca de autocomplete:", err);
-        lista.innerHTML = '';
-        lista.classList.add('d-none'); // Fecha o menu de sugestões amigavelmente para o usuário
-    });
-            };
-        };
+    };
 
-        // Ativação das Buscas
-        configurarBusca('buscaLocalPost', 'sugestoesLocais', '/buscar_locais', item => `<i class="bi bi-geo-alt-fill me-2 text-danger"></i>${item.nome || item.name}`);
-        configurarBusca('buscaTagsPost', 'sugestoesTags', '/api/buscar-interesses', item => `<i class="bi bi-hash me-2"></i>${item.nome}`);
-
-        // Ajuste aplicado aqui: Busca de Pessoas com exibição inteligente de Nome + Username
-        configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => {
-            const nomeExibicao = item.nome_completo ? item.nome_completo : item.username;
-            return `
-                <div class="d-flex align-items-center w-100">
-                    <i class="bi bi-person-circle me-2 text-success fs-5"></i>
-                    <div class="text-start">
-                        <span class="d-block fw-bold text-dark small mb-0">${nomeExibicao}</span>
-                        <small class="text-muted" style="font-size: 0.7rem;">@${item.username}</small>
-                    </div>
+    configurarBusca('buscaLocalPost', 'sugestoesLocais', '/buscar_locais', item => `<i class="bi bi-geo-alt-fill me-2 text-danger"></i>${item.nome || item.name}`);
+    configurarBusca('buscaTagsPost', 'sugestoesTags', '/api/buscar-interesses', item => `<i class="bi bi-hash me-2"></i>${item.nome}`);
+    configurarBusca('buscaPessoasPost', 'sugestoesPessoas', '/buscar_usuarios', item => {
+        const nomeExibicao = item.nome_completo ? item.nome_completo : item.username;
+        return `
+            <div class="d-flex align-items-center w-100">
+                <i class="bi bi-person-circle me-2 text-success fs-5"></i>
+                <div class="text-start">
+                    <span class="d-block fw-bold text-dark small mb-0">${nomeExibicao}</span>
+                    <small class="text-muted" style="font-size: 0.7rem;">@${item.username}</small>
                 </div>
-            `;
-        });
+            </div>
+        `;
     });
 
-    // Limpa o estado e os campos ocultos caso o usuário feche ou cancele o modal
+    // Evento de fechamento do modal (Garante parada do microfone e reseta campos)
     modalEl.addEventListener('hidden.bs.modal', function () {
-        // Limpa os conjuntos de dados (Sets)
+        if (gravandoVoz && rVozInstancia) {
+            rVozInstancia.stop();
+        }
+
         PostState.tags.clear();
         PostState.pessoas.clear();
 
-        // Limpa os containers visuais de Badges
         document.getElementById('pessoasSelecionadas').innerHTML = '';
         document.getElementById('tagsSelecionadas').innerHTML = '';
 
-        // Reseta os inputs ocultos de envio
         document.getElementById('idLocalHidden').value = '';
         document.getElementById('pessoasIdsHidden').value = '';
         document.getElementById('tagsIdsHidden').value = '';
 
-        // Esconde o preview de imagem e volta ao placeholder original
         document.getElementById('previewContainer').classList.add('d-none');
         document.getElementById('placeholderContent').classList.remove('d-none');
 
-        // Reseta o formulário por completo
         modalEl.querySelector('form').reset();
     });
 
-    // Fechar listas ao clicar fora
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.position-relative')) {
             document.querySelectorAll('.list-group').forEach(el => el.classList.add('d-none'));
@@ -227,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// 3. Gerenciador de Badges (Tags e Pessoas)
+// 6. Gerenciamento de Badges de Envio
 function adicionarBadge(id, nome, containerId, setObj, inputHiddenId, extraClass) {
     if (setObj.has(id)) return;
     setObj.add(id);
@@ -246,21 +376,5 @@ function adicionarBadge(id, nome, containerId, setObj, inputHiddenId, extraClass
 
     container.appendChild(badge);
     document.getElementById(inputHiddenId).value = Array.from(setObj).join(',');
-}
-
-function inserirNoTexto(emoji) {
-    const textarea = document.getElementById('conteudoPostagem');
-    if (textarea) {
-        // Captura a posição do cursor para inserir o emoji exatamente onde o usuário está digitando
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const textoAnterior = textarea.value;
-
-        textarea.value = textoAnterior.substring(0, start) + emoji + textoAnterior.substring(end);
-
-        // Reposiciona o cursor logo após o emoji inserido
-        textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
-        textarea.focus();
-    }
 }
 </script>

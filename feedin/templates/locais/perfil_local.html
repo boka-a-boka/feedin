@@ -254,7 +254,7 @@
             </div>
         </div>
 
-        {# MODAL DE EDIÇÃO DE POSTAGEM #}
+        {# MODAL DE EDIÇÃO DE POSTAGEM (COMPLETAMENTE REMAPEADO E COMPATÍVEL COM TODOS OS CAMPOS) #}
         <div class="modal fade" id="modalEditarPost" tabindex="-1" aria-labelledby="modalEditarPostLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content rounded-4 border-0 shadow">
@@ -262,16 +262,43 @@
                         <h5 class="modal-title fw-bold text-secondary" id="modalEditarPostLabel">Editar sua História</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <form id="formEditarPost" method="POST" action="">
+                    <form id="formEditarPost" method="POST" action="" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="modal-body">
+
                             <div class="mb-3">
-                                <label for="inputConteudoPost" class="form-label small text-muted">Sua memória:</label>
+                                <label for="inputConteudoPost" class="form-label small text-muted fw-bold">Sua memória:</label>
                                 <textarea class="form-control rounded-3" id="inputConteudoPost" name="conteudo" rows="4" required></textarea>
                             </div>
+
+                            <div class="mb-3">
+                                <label for="selectLocalPost" class="form-label small text-muted fw-bold">Vincular a qual estabelecimento?</label>
+                                <select class="form-select rounded-3" id="selectLocalPost" name="id_local">
+                                    <option value="0">— Sem Local Vinculado (História Livre) —</option>
+                                    {# Aqui você pode passar uma lista do back, ou deixar estático o atual do perfil #}
+                                    <option value="{{ local.id }}" selected>{{ local.nome }} ({{ local.bairro }})</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="selectEpocaPost" class="form-label small text-muted fw-bold">Em qual período isso aconteceu?</label>
+                                <select class="form-select rounded-3" id="selectEpocaPost" name="id_epoca">
+                                    {% if epocas_todas %}
+                                        {% for ep in epocas_todas %}
+                                            <option value="{{ ep.id }}">{{ ep.nome_exibicao }}</option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </select>
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="inputImagemPost" class="form-label small text-muted fw-bold">Substituir Imagem Ilustrativa (Opcional):</label>
+                                <input type="file" class="form-control rounded-3" id="inputImagemPost" name="imagem_post" accept="image/*">
+                            </div>
+
                         </div>
-                        <div class="modal-header border-0 pt-0 d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-toggle="disabled" data-bs-dismiss="modal">Cancelar</button>
+                        <div class="modal-footer border-0 pt-0 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
                             <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Alterações</button>
                         </div>
                     </form>
@@ -319,6 +346,65 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
+/**
+ * Captura os dados do Card Universal e monta o ecossistema do Modal de Edição Completa
+ */
+function abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAtual) {
+    const formEditar = document.getElementById('formEditarPost');
+    if (formEditar) {
+        // Redireciona a action diretamente para a sua rota cadastrada no backend do Flask
+        formEditar.action = `/editar_post/${postId}`;
+    }
+
+    const textareaConteudo = document.getElementById('inputConteudoPost');
+    if (textareaConteudo) {
+        textareaConteudo.value = conteudoAtual;
+        textareaConteudo.style.height = "auto";
+        textareaConteudo.style.height = (textareaConteudo.scrollHeight) + "px";
+    }
+
+    // Sincroniza os selects de Época e Local com as referências atuais da postagem
+    const selectEpoca = document.getElementById('selectEpocaPost');
+    if (selectEpoca && idEpocaAtual) {
+        selectEpoca.value = idEpocaAtual;
+    }
+
+    const selectLocal = document.getElementById('selectLocalPost');
+    if (selectLocal) {
+        selectLocal.value = idLocalAtual || "0";
+    }
+
+    const modalElement = document.getElementById('modalEditarPost');
+    if (modalElement) {
+        const meuModal = new bootstrap.Modal(modalElement);
+        meuModal.show();
+    }
+}
+
+/**
+ * Trata o disparo assíncrono para a sua rota de exclusão física ou lógica
+ */
+function confirmarExclusaoPostagem(postId) {
+    if (confirm("Você tem certeza de que deseja remover permanentemente esta história da linha do tempo?")) {
+        const csrfToken = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
+
+        $.ajax({
+            url: `/excluir_post/${postId}`,
+            method: 'POST',
+            data: { csrf_token: csrfToken },
+            success: function(response) {
+                // Força o reload para limpar a timeline instantaneamente
+                window.location.reload();
+            },
+            error: function(xhr) {
+                console.error("Erro na remoção da postagem:", xhr.responseText);
+                // Caso a sua rota execute redirect(request.referrer) em vez de JSON, recarregamos de qualquer forma
+                window.location.reload();
+            }
+        });
+    }
+}
+
 function reagirPostagem(postId, tipoReacao) {
     if (window.event) window.event.preventDefault();
     const urlReacao = "/reagir_post/" + postId + "/" + tipoReacao;
@@ -439,15 +525,11 @@ function cancelarAvaliacao() {
     $('#feedback-container').fadeOut();
 }
 
-/**
- * ADAPTADO: Aceita o envio do array de épocas capturado do modal de seleção
- */
 function prepararSeguirDireto(localId, jaSegue) {
     const token = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
     let dadosPayload = { csrf_token: token };
 
     if (!jaSegue) {
-        // Coleta todos os checkboxes de épocas selecionados pelo usuário
         let epocasMarcadas = [];
         $('.checkbox-epoca-item:checked').each(function() {
             epocasMarcadas.push($(this).val());
@@ -457,7 +539,6 @@ function prepararSeguirDireto(localId, jaSegue) {
             alert("Por favor, selecione ao menos uma época para registrar sua biografia neste local.");
             return;
         }
-        // Atribui o array ao payload que o Flask espera via request.form.getlist('epocas[]')
         dadosPayload['epocas[]'] = epocasMarcadas;
     }
 
@@ -531,9 +612,6 @@ window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
     });
 };
 
-/**
- * ROLAGEM SUAVE ATÉ O TOPO DA PÁGINA (Nome unificado com o padrão do projeto)
- */
 function voltarAoTopo() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }

@@ -39,7 +39,7 @@ from functools import wraps
 from sqlalchemy import or_, func, asc, desc, and_, not_
 from sqlalchemy.orm import joinedload
 from cryptography.fernet import Fernet  # Para criptografia reversível
-from markupsafe import escape
+from markupsafe import escape, Markup
 import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64, random
 import qrcode
 from itertools import groupby
@@ -792,16 +792,19 @@ def formatar_postagem(texto):
     if not texto:
         return ""
 
-    # 1. Converte o texto para string e limpa qualquer HTML malicioso (bloqueia <script>, etc)
+    # 1. Escapa caracteres perigosos para evitar falhas de layout e XSS Injection
     texto_seguro = str(escape(texto))
 
     # 2. Converte a formatação estilo WhatsApp (* e _) para o padrão do Markdown (** e *)
     texto_processado = re.sub(r'\*(.*?)\*', r'**\1**', texto_seguro)  # Negrito
     texto_processado = re.sub(r'_(.*?)_', r'*\1*', texto_processado)  # Itálico
 
-    # 3. Transforma em HTML o que sobrou (apenas as marcações seguras de negrito e itálico)
-    html_puro = markdown.markdown(texto_processado)
-    return html_puro
+    # 3. Transforma em HTML ativando a extensão 'nl2br' (New Line to BR)
+    # Ela força o interpretador do Markdown a converter todo \n em <br> automaticamente
+    html_puro = markdown.markdown(texto_processado, extensions=['nl2br'])
+
+    # 4. Retorna como Markup seguro para o Jinja2 renderizar os <br> e as tags de estilo na tela
+    return Markup(html_puro)
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -5128,55 +5131,172 @@ def bloquear_usuarios_incompletos():
 @app.route("/editar_post/<int:post_id>", methods=['POST'])
 @login_required
 def editar_post(post_id):
+    from feedin.models import Postagem, UsuarioLocalEpoca
     post = Postagem.query.get_or_404(post_id)
 
-    # 1. Validação de segurança (que corrigimos no passo anterior)
-    if post.id_usuario != current_user.id:
+    # 1. Defesa de Perímetro (Segurança)
+    if post.id_usuario != current_user.id and current_user.nivel_acesso < 9999:
         flash("Ação não permitida.", "danger")
         return redirect(request.referrer)
 
-    # 2. Captura do novo conteúdo vindo do formulário
-    # O textarea no HTML tem o atributo name="conteudo"
-    novo_conteudo = request.form.get('conteudo')
+    # 2. Captura dos Dados do Formulário (Texto, Época e LOCAL)
+    novo_conteudo = request.form.get('conteudo', '').strip()
+    nova_id_epoca = request.form.get('id_epoca')
 
-    if novo_conteudo:
-        post.conteudo = novo_conteudo.strip()  # Atualiza o campo do objeto
+    # 📌 CAPTURA DO LOCAL: O select/input do seu modal deve enviar o name="id_local"
+    novo_id_local = request.form.get('id_local')
 
-        try:
-            database.session.commit()  # 3. Salva no banco de dados
-            flash("História atualizada com sucesso!", "success")
-        except Exception as e:
-            database.session.rollback()
-            flash("Erro ao salvar as alterações.", "danger")
-    else:
-        flash("O conteúdo não pode ficar vazio.", "warning")
+    if not novo_conteudo:
+        flash("O conteúdo da história não pode ficar vazio.", "warning")
+        return redirect(request.referrer)
+
+    try:
+        # Guardamos o rastro antigo antes de alterar o objeto
+        id_local_antigo = post.id_local
+        id_epoca_antiga = post.id_epoca
+
+        # Atualização dos elementos básicos
+        post.conteudo = novo_conteudo
+
+        if nova_id_epoca:
+            post.id_epoca = int(nova_id_epoca)
+
+        # =================================================================
+        # 🧠 ENGENHARIA DO GRAFO: REMAPEAMENTO DINÂMICO DE LOCAL
+        # =================================================================
+        # Tratando o ID do local recebido (se vier vazio ou '0', vira None)
+        novo_id_local = int(novo_id_local) if (novo_id_local and novo_id_local != '0') else None
+
+        if novo_id_local != id_local_antigo:
+            # Efetua a troca do local no objeto
+            post.id_local = novo_id_local
+            print(f"🔄 [Remapeamento] Post {post_id} movido do Local {id_local_antigo} para o Local {novo_id_local}")
+
+            # --- LIMPEZA: O usuário tinha um vínculo com o LOCAL ANTIGO nesta ÉPOCA? ---
+            if id_local_antigo and id_epoca_antiga:
+                # Checa se restou QUALQUER outra postagem dele ativa naquele local e época passados
+                restou_postagem = Postagem.query.filter_by(
+                    id_usuario=current_user.id,
+                    id_local=id_local_antigo,
+                    id_epoca=id_epoca_antiga,
+                    ativo=True
+                ).filter(Postagem.id != post.id).first()
+
+                # Se não sobrou nenhuma, removemos o nó de relacionamento para limpar o perfil dele
+                if not restou_postagem:
+                    no_antigo = UsuarioLocalEpoca.query.filter_by(
+                        id_usuario=current_user.id,
+                        id_local=id_local_antigo,
+                        id_epoca=id_epoca_antiga
+                    ).first()
+                    if no_antigo:
+                        database.session.delete(no_antigo)
+                        print(
+                            f"🧹 [Grafo] Nó antigo desfeito: Usuário deixou de frequentar o Local {id_local_antigo} na Época {id_epoca_antiga}")
+
+            # --- INCREMENTO: Criar o novo vínculo no Grafo se o novo local exigir ---
+            if novo_id_local and post.id_epoca:
+                vinculo_existente = UsuarioLocalEpoca.query.filter_by(
+                    id_usuario=current_user.id,
+                    id_local=novo_id_local,
+                    id_epoca=post.id_epoca
+                ).first()
+
+                if not vinculo_existente:
+                    novo_no = UsuarioLocalEpoca(
+                        id_usuario=current_user.id,
+                        id_local=novo_id_local,
+                        id_epoca=post.id_epoca
+                    )
+                    database.session.add(novo_no)
+                    print(
+                        f"🌱 [Grafo] Novo nó adicionado: Usuário agora frequenta o Local {novo_id_local} na Época {post.id_epoca}")
+
+        # =================================================================
+        # PROCESSAMENTO DE IMAGEM (Mantido)
+        # =================================================================
+        file = request.files.get('imagem_post')
+        if file and file.filename != '':
+            novo_nome_imagem = salvar_imagem_postagem(file)
+            if novo_nome_imagem:
+                imagem_antiga = post.imagem_url
+                post.imagem_url = novo_nome_imagem
+                if imagem_antiga and imagem_antiga != 'default.jpg':
+                    import os
+                    caminho = os.path.join(current_app.root_path, 'static', 'uploads', 'posts', imagem_antiga)
+                    if os.path.exists(caminho):
+                        try:
+                            os.remove(caminho)
+                        except Exception as e_f:
+                            print(f"Erro físico: {e_f}")
+
+        database.session.commit()
+        flash("História e vínculos espaciais atualizados com sucesso! 🗺️🎉", "success")
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"❌ ERRO CRÍTICO AO REMAPEAR POSTAGEM: {e}")
+        flash("Erro técnico ao processar a mudança de local da postagem.", "danger")
 
     return redirect(request.referrer)
+
 
 
 @app.route('/excluir_post/<int:post_id>', methods=['POST'])
 @login_required
 def excluir_post(post_id):
+    from feedin.models import Postagem, UsuarioLocalEpoca
     post = Postagem.query.get_or_404(post_id)
 
-    # Checagem direta antes de apagar o arquivo físico e o banco
-    if post.id_usuario != current_user.id:
+    # Validação de segurança estrita
+    if post.id_usuario != current_user.id and current_user.nivel_acesso < 9999:
         flash("Você não tem permissão para excluir esta postagem.", "danger")
         return redirect(request.referrer)
 
     try:
-        # 1. Remover arquivo físico
-        caminho_imagem = os.path.join(app.root_path, 'static', 'uploads', 'posts', post.imagem_url)
-        if os.path.exists(caminho_imagem):
-            os.remove(caminho_imagem)
+        # 1. Se você usa exclusão física, delete os arquivos do disco
+        if post.imagem_url and post.imagem_url != 'default.jpg':
+            import os
+            from flask import current_app
+            caminho_imagem = os.path.join(current_app.root_path, 'static', 'uploads', 'posts', post.imagem_url)
+            if os.path.exists(caminho_imagem):
+                try:
+                    os.remove(caminho_imagem)
+                except Exception as e_file:
+                    print(f"⚠️ Erro ao remover arquivo de post deletado: {e_file}")
 
-        # 2. Remover do banco (Exclusão física, já que você tem interações e comentários)
-        database.session.delete(post)
+        # 2. EXCLUSÃO LÓGICA (Recomendada): Protege contra quebras por conta de comentários/likes
+        if hasattr(post, 'ativo'):
+            post.ativo = False
+        else:
+            # Caso queira manter a exclusão física rígida, você precisará apagar os comentários relacionados antes
+            # Exemplo se necessário: Comentario.query.filter_by(id_post=post.id).delete()
+            database.session.delete(post)
+
+        # 3. MANUTENÇÃO DO GRAFO (Remove o nó se o usuário não tiver mais posts ali)
+        if post.id_local and post.id_epoca:
+            restou_outra_historia = Postagem.query.filter_by(
+                id_usuario=current_user.id,
+                id_local=post.id_local,
+                id_epoca=post.id_epoca
+            ).filter(Postagem.id != post.id).first() # Adicionar 'Postagem.ativo == True' se usar lógica
+
+            if not restou_outra_historia:
+                vinculo_no = UsuarioLocalEpoca.query.filter_by(
+                    id_usuario=current_user.id,
+                    id_local=post.id_local,
+                    id_epoca=post.id_epoca
+                ).first()
+                if vinculo_no:
+                    database.session.delete(vinculo_no)
+
         database.session.commit()
-        flash("Memória removida com sucesso.", "success")
+        flash("Memória removida com sucesso de nossa linha do tempo.", "success")
+
     except Exception as e:
         database.session.rollback()
-        flash(f"Erro ao excluir: {str(e)}", "danger")
+        print(f"❌ ERRO AO EXCLUIR POSTAGEM {post_id}: {e}")
+        flash(f"Erro técnico ao excluir registro: {str(e)}", "danger")
 
     return redirect(request.referrer)
 

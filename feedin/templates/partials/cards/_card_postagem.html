@@ -28,6 +28,23 @@
     display: inline;
 }
 
+/* Garante que elementos filhos gerados pelo Markdown herdem a tipografia correta */
+.texto-postagem p {
+    margin-bottom: 0.5rem;
+    display: inline;
+}
+.texto-postagem p:last-child {
+    margin-bottom: 0;
+}
+/* Estilização elegante para o bloco de Citação nativo extraído da barra móvel */
+.texto-postagem blockquote {
+    border-left: 4px solid #d4a373;
+    padding-left: 10px;
+    margin-left: 10px;
+    font-style: italic;
+    color: #6c757d;
+}
+
 .container-memoria {
     background-color: #f8f9fa;
     display: flex;
@@ -212,7 +229,6 @@
                 <div class="notification-content text-dark fw-medium" style="font-size: 0.95rem;">
                     <span class="notification-users">@{{ m.usuario_origem_username }}</span>
 
-                    {# ALTERAÇÃO COMPORTAMENTAL: Analisa o texto salvo para exibir o alerta final customizado de aceite ou recusa #}
                     {% if "recusou" in m.mensagem.lower() or "recusou" in texto_verificacao.lower() %}
                         <span class="notification-action">"Recusou o seu pedido de marcação na postagem"</span>
                     {% else %}
@@ -251,7 +267,6 @@
                         <span class="text-dark fw-bold d-inline-block">
                             <strong>{{ autor.username or autor['username'] }}</strong>
                         </span>
-                        {# Teste seguro de data no Layout C #}
                         <small class="text-muted d-block small w-100" style="font-size: 0.75rem; margin-top: 2px;">
                             <i class="bi bi-clock me-1"></i>
                             {% if atividade.data_criacao is defined and atividade.data_criacao %}
@@ -276,7 +291,7 @@
                                     <i class="bi bi-person-plus-fill"></i> SOLICITAÇÃO
                                 </span>
                                 <small class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.3px;">
-                                    Identificações aguardando sua decisão nesta memória:
+                                    Identificações aguardando sua decision nesta memória:
                                 </small>
                             </div>
 
@@ -297,7 +312,6 @@
                                                         solicitou ser marcado nessa publicação
                                                     </span>
 
-                                                    {# Teste seguro de data no Layout B #}
                                                     <small class="text-muted fw-normal ms-1 bg-light px-1 rounded" style="font-size: 0.72rem;">
                                                         ({% if vinculo.data_criacao is defined and vinculo.data_criacao %}
                                                             {{ vinculo.data_criacao.strftime('%d/%m/%Y às %H:%M') }}
@@ -333,7 +347,7 @@
             {% endif %}
         {% endif %}
 
-        {# CORPO PRINCIPAL DA HISTÓRIA #}
+        {# CORPO PRINCIPAL DA HISTÓRIA AJUSTADO COM FILTRO DE PARSING #}
         <div class="p-4 pt-2" style="display: block; overflow: hidden;">
             {% if imagem -%}
                 <a href="{{ url_for('ver_perfil', usuario_id=autor.id) }}#post-{{ id_post }}">
@@ -341,7 +355,9 @@
                 </a>
             {%- endif -%}
 
-            <p class="text-dark mb-0 texto-postagem" style="white-space: pre-line; font-size: 1.1rem; line-height: 1.4; font-weight: 500; margin: 0; padding: 0;">{{- texto.strip() | safe -}}</p>
+            <div class="text-dark mb-0 texto-postagem" style="font-size: 1.1rem; line-height: 1.4; font-weight: 500; margin: 0; padding: 0;">
+                {{- texto.strip() | formatar_postagem | safe -}}
+            </div>
             <div style="clear: both;"></div>
 
             {% if atividade.anuncio %}
@@ -376,16 +392,13 @@
 
 <script>
 function gerenciarMarcacaoTimeline(marcacaoId, acao) {
-    // 1. Traduz 'aprovar' para 'aceitar' para casar exatamente com a sua rota Flask
     const acaoCorreta = acao === 'aprovar' ? 'aceitar' : 'recusar';
     const url = `/marcacao/${marcacaoId}/${acaoCorreta}`;
 
-    // 2. Cria um formulário oculto para disparar o POST tradicional que o Flask espera
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = url;
 
-    // 3. Injeta o token CSRF necessário para segurança
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
     const csrfInput = document.createElement('input');
     csrfInput.type = 'hidden';
@@ -395,7 +408,6 @@ function gerenciarMarcacaoTimeline(marcacaoId, acao) {
     form.appendChild(csrfInput);
     document.body.appendChild(form);
 
-    // 4. Envia e deixa o Flask assumir o controle e dar o redirect
     form.submit();
 }
 </script>
