@@ -311,24 +311,31 @@ def realizar_logout():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        # Se logado e com CPF ok -> Feed. Se logado sem CPF -> Perfil (onde a modal aparecerá)
-        target = 'feed' if current_user.aceite_lgpd else 'get_perfil'
+        # ... (seu código atual de check de LGPD e redirecionamento)
         return redirect(url_for(target, id_usuario=current_user.id))
 
-    session.permanent = True
     form_login = FormLogin()
-
     if form_login.validate_on_submit():
-
-        email_limpo = form_login.email.data.strip().lower()
-        usuario = Usuario.query.filter_by(email=email_limpo).first()
-
+        # ... (seu código atual de validação de usuário e senha)
         if usuario and bcrypt.check_password_hash(usuario.senha, form_login.senha.data):
             if usuario.active:
                 login_user(usuario, remember=True)
 
-                # Lógica simplificada:
-                # 1. Sem LGPD? Vai pro Perfil/Dashboard (a modal vai travar lá)
+                # --- AQUI ENTRA O AJUSTE DE CONEXÃO ---
+                # Verifica se existe um indicador vindo pelo QR Code
+                id_padrinho = request.cookies.get('feedin_indicador_id')
+
+                if id_padrinho and int(id_padrinho) != usuario.id:
+                    # Tenta criar a conexão automaticamente
+                    sucesso = criar_conexao(id_remetente=usuario.id, id_destinatario=int(id_padrinho))
+                    if sucesso:
+                        flash(f"Você se conectou à rede de indicação!", "success")
+
+                    # Opcional: Limpa o cookie após processar
+                    # resposta = make_response(redirect(...))
+                    # resposta.set_cookie('feedin_indicador_id', '', expires=0)
+                # --------------------------------------
+
                 if not usuario.aceite_lgpd:
                     flash("Validação de identidade necessária.", "info")
                     return redirect(url_for('get_perfil', id_usuario=usuario.id))
@@ -6264,21 +6271,35 @@ def conectar_silencioso(id_padrinho):
 
 @app.route('/convite/<int:id_padrinho>')
 def processar_convite_unificado(id_padrinho):
-    # 1. Garante que o padrinho existe no sistema
+    # 1. Garante que o padrinho existe
     padrinho = Usuario.query.get_or_404(id_padrinho)
 
-    # CENÁRIO A: O usuário já está logado (abriu o link/QR Code por dentro do sistema)
+    # CENÁRIO A: Usuário logado - Executa a conexão imediatamente
     if current_user.is_authenticated:
         if current_user.id != id_padrinho:
-            # 🤝 Cria a solicitação de conexão pendente na hora
-            # (Aqui você insere a lógica padrão de criar registro na sua tabela de Conexões)
-            pass
+            criar_conexao(id_remetente=current_user.id, id_destinatario=id_padrinho)
         return redirect(url_for('dashboard', aba='feed'))
 
-    # CENÁRIO B: Usuário deslogado ou visitante novo (WhatsApp ou QR Code Externo)
-    # Gravamos o Cookie de 30 dias que você idealizou e mandamos para o Login/Cadastro
-    resposta = make_response(redirect(url_for('login'))) # ou 'newuser' se preferir direto
+    # CENÁRIO B: Visitante novo - Guarda o cookie e manda pro cadastro
+    resposta = make_response(redirect(url_for('cadastro_usuario')))
     resposta.set_cookie('feedin_indicador_id', str(id_padrinho), max_age=30*24*60*60, httponly=True)
     return resposta
 
 
+def criar_conexao(id_remetente, id_destinatario):
+    # Verifica se já não existe uma conexão pendente ou aceita para evitar duplicatas
+    existe = Conexoes.query.filter_by(
+        id_remetente=id_remetente,
+        id_destinatario=id_destinatario
+    ).first()
+
+    if not existe:
+        nova_conexao = Conexoes(
+            id_remetente=id_remetente,
+            id_destinatario=id_destinatario,
+            status='pendente'
+        )
+        database.session.add(nova_conexao)
+        database.session.commit()
+        return True
+    return False
