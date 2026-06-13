@@ -1,20 +1,30 @@
 {# --- MOTOR DE RENDERIZAÇÃO: MODO SEGURO --- #}
 {% set obj = objeto_entrada | default(atividade | default(none)) %}
 
-{% if obj %}
-    {# Identificação do tipo #}
-    {% set eh_anuncio = (obj.__class__.__name__ == 'LocalAnuncio') or (obj.url_flyer is defined and obj.url_flyer) %}
+{# --- MOTOR DE RENDERIZAÇÃO: MODO SEGURO --- #}
+{% set obj = objeto_entrada | default(atividade | default(none)) %}
 
-    {# Se for anúncio, processa como flyer e encerra o processamento deste bloco #}
-    {% if eh_anuncio %}
+{% if obj %}
+    {# 1. Identificação se o objeto é um anúncio #}
+    {% set is_anuncio_nativo = (obj.is_flyer_nativo is defined and obj.is_flyer_nativo) %}
+    {% set eh_anuncio = is_anuncio_nativo or (obj.__class__.__name__ == 'LocalAnuncio') or (obj.url_flyer is defined and obj.url_flyer) %}
+
+    {# 2. Definição do modo de renderização e da variável 'atividade' para o card #}
+    {% if eh_anuncio and obj.url_flyer and obj.url_flyer != 'None' %}
         {% set render_modo = 'flyer' %}
         {% set atividade = obj %}
-
-    {# Se não for anúncio, processa como postagem social #}
     {% else %}
         {% set render_modo = 'post' %}
         {% set atividade = obj %}
     {% endif %}
+
+{% if eh_anuncio and atividade.url_flyer %}
+    {% set render_modo = 'flyer' %}
+{% elif eh_anuncio %}
+    {% set render_modo = 'post' %} {# Cai no formato de botão se não tiver flyer #}
+{% else %}
+    {% set render_modo = 'post' %}
+{% endif %}
 
     <style>
     .img-ajustada-feed {
@@ -340,11 +350,11 @@
             </div>
 
             {# ======================================================================= #}
-            {# SUBSOLO DO CARD: APOIO COMERCIAL                                        #}
+            {# SUBSOLO DO CARD: APOIO COMERCIAL (AJUSTADO PARA PERFIS)                 #}
             {# ======================================================================= #}
-            {% if atividade.anuncio and not atividade.anuncio.url_flyer and not (context_origem == 'perfil_local' and atividade.anuncio.local_id == local.id) %}
-                <div class="feed-ad-inline-wrapper my-2 border-top pt-2" style="width: 100%; display: block;">
 
+            {% if atividade.anuncio %}
+                <div class="feed-ad-inline-wrapper my-2 border-top pt-2" style="width: 100%; display: block;">
                     <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 500px;">
                         <span class="text-dark small fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.2px;">
                             <i class="bi bi-heart-fill text-danger me-1"></i> Apoio:
@@ -356,59 +366,37 @@
                                 data-bs-target="#ad-universal-collapse-{{ post_obj.id }}"
                                 aria-expanded="false"
                                 style="font-size: 0.75rem; letter-spacing: 0.3px;">
-                            {{ atividade.anuncio.local.nome }}
-                            {% if atividade.anuncio.mais_x > 0 %}
+                            {{ atividade.anuncio.local.nome if atividade.anuncio.local else "Parceiro" }}
+                            {% if atividade.anuncio.mais_x and atividade.anuncio.mais_x > 0 %}
                                 <span class="badge bg-white text-primary ms-1" style="font-size: 0.7rem; padding: 2px 5px;">
                                     +{{ atividade.anuncio.mais_x }}
                                 </span>
-                            {% else %}
-                                <i class="bi bi-plus-lg ms-1"></i>
                             {% endif %}
                         </button>
                     </div>
 
+                    {# ÁREA DO COLLAPSE: Onde listamos todos os parceiros #}
                     <div class="collapse" id="ad-universal-collapse-{{ post_obj.id }}">
-                        <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3 text-center" style="max-width: 500px;">
-
-                            <div class="parceiro-destaque-bloco mb-3 pb-3 {% if atividade.anuncio.mais_x > 0 %}border-bottom{% endif %}">
-                                {% if atividade.anuncio.tag_referencia_nome %}
-                                    <div class="mb-2">
-                                        <span class="badge bg-primary-subtle text-primary rounded-pill px-2 py-1" style="font-size: 0.68rem; letter-spacing: 0.3px; text-transform: uppercase;">
-                                            <i class="bi bi-tag-fill me-1"></i> Conteúdo relacionado: {{ atividade.anuncio.tag_referencia_nome }}
-                                        </span>
-                                    </div>
-                                {% endif %}
-
-                                <h6 class="fw-bold text-dark mb-1">{{ atividade.anuncio.local.nome }}</h6>
-
-                                <p class="card-text text-muted small mb-3" style="line-height: 1.4; font-size: 0.82rem;">
-                                    {{ atividade.anuncio.texto_formatado }}
-                                </p>
-
-                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origins='botao', tag_id=atividade.anuncio.taxonomia_id) }}"
-                                   class="btn btn-sm btn-outline-primary rounded-pill fw-bold w-100 py-2" style="font-size: 0.8rem;">
-                                    <i class="bi bi-geo-alt-fill me-1 text-danger"></i> Visite o Espaço Comercial <i class="bi bi-arrow-right ms-1"></i>
-                                </a>
+                        <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3" style="max-width: 500px;">
+                            {# Destaque principal #}
+                            <div class="parceiro-destaque-bloco mb-3 pb-3 border-bottom">
+                                <h6 class="fw-bold text-dark">{{ atividade.anuncio.local.nome }}</h6>
+                                <p class="text-muted small">{{ atividade.anuncio.texto_formatado }}</p>
+                                <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}" class="btn btn-sm btn-outline-primary rounded-pill w-100">Visitar</a>
                             </div>
 
-                            {% if atividade.anuncio.mais_x > 0 %}
-                                <div class="outros-parceiros-bloco text-start mt-2">
-                                    <small class="text-muted fw-bold d-block mb-2" style="font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.5px;">
-                                        Também apoiam histórias de {{ atividade.anuncio.tag_referencia_nome }}:
-                                    </small>
-
-                                    {% for outro in atividade.anuncio.outros_parceiros %}
-                                        <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded-2 mb-2 border border-light-subtle">
-                                            <div style="max-width: 70%;">
-                                                <span class="fw-bold text-dark d-block" style="font-size: 0.8rem;">{{ outro.local.nome }}</span>
-                                                <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Parceiro Comercial</small>
-                                            </div>
-                                            <a href="{{ url_for('registrar_clique', anuncio_id=outro.id, origem='botao', tag_id=outro.taxonomia_id) }}"
-                                               class="btn btn-xs btn-primary rounded-pill fw-bold px-3" style="font-size: 0.7rem; padding: 3px 10px;">
-                                                Visitar
+                            {# Vitrine de outros parceiros (O ajuste que faltava) #}
+                            {% if atividade.anuncio.outros_parceiros %}
+                                <div class="mt-2">
+                                    <small class="text-muted fw-bold d-block mb-2">Também apoiam este nicho:</small>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        {% for parceiro in atividade.anuncio.outros_parceiros %}
+                                            <a href="{{ url_for('registrar_clique', anuncio_id=parceiro.id, origem='vitrine', tag_id=parceiro.taxonomia_id) }}"
+                                               class="badge bg-light text-dark border p-2 text-decoration-none">
+                                                {{ parceiro.local.nome }}
                                             </a>
-                                        </div>
-                                    {% endfor %}
+                                        {% endfor %}
+                                    </div>
                                 </div>
                             {% endif %}
                         </div>

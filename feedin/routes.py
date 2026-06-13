@@ -311,43 +311,57 @@ def realizar_logout():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        # ... (seu código atual de check de LGPD e redirecionamento)
+        # Se logado e com CPF ok -> Feed. Se logado sem CPF -> Perfil (onde a modal aparecerá)
+        target = 'feed' if current_user.aceite_lgpd else 'get_perfil'
         return redirect(url_for(target, id_usuario=current_user.id))
 
+    session.permanent = True
     form_login = FormLogin()
+
     if form_login.validate_on_submit():
-        # ... (seu código atual de validação de usuário e senha)
+        email_limpo = form_login.email.data.strip().lower()
+        usuario = Usuario.query.filter_by(email=email_limpo).first()
+
         if usuario and bcrypt.check_password_hash(usuario.senha, form_login.senha.data):
             if usuario.active:
                 login_user(usuario, remember=True)
 
-                # --- AQUI ENTRA O AJUSTE DE CONEXÃO ---
-                # Verifica se existe um indicador vindo pelo QR Code
+                # --- AJUSTE DE CONEXÃO VIA QR CODE (INDICADOR) ---
                 id_padrinho = request.cookies.get('feedin_indicador_id')
+                conexao_criada = False
 
                 if id_padrinho and int(id_padrinho) != usuario.id:
-                    # Tenta criar a conexão automaticamente
+                    # Tenta criar a conexão automaticamente na árvore/rede
                     sucesso = criar_conexao(id_remetente=usuario.id, id_destinatario=int(id_padrinho))
                     if sucesso:
-                        flash(f"Você se conectou à rede de indicação!", "success")
+                        flash("Você se conectou à rede de indicação!", "success")
+                        conexao_criada = True
+                # --------------------------------------------------
 
-                    # Opcional: Limpa o cookie após processar
-                    # resposta = make_response(redirect(...))
-                    # resposta.set_cookie('feedin_indicador_id', '', expires=0)
-                # --------------------------------------
-
+                # DETERMINAÇÃO DO DESTINO DO USUÁRIO
+                # 1. Sem LGPD? Vai pro Perfil/Dashboard (a modal vai travar lá)
                 if not usuario.aceite_lgpd:
                     flash("Validação de identidade necessária.", "info")
-                    return redirect(url_for('get_perfil', id_usuario=usuario.id))
+                    target_url = url_for('get_perfil', id_usuario=usuario.id)
 
                 # 2. Nível baixo? Completa os dados
-                if usuario.nivel_acesso < 10:
+                elif usuario.nivel_acesso < 10:
                     flash('Bem-vindo! Vamos completar seu perfil.', 'info')
-                    return redirect(url_for("get_perfil", id_usuario=usuario.id))
+                    target_url = url_for("get_perfil", id_usuario=usuario.id)
 
                 # 3. Tudo OK? Feed direto.
-                flash(f"Olá, {usuario.username}!", "success")
-                return redirect(url_for("feed"))  # Direcionando para o Feed como você queria
+                else:
+                    flash(f"Olá, {usuario.username}!", "success")
+                    target_url = url_for("feed")
+
+                # Se uma conexão foi processada, criamos a resposta explicitamente para limpar o cookie
+                if id_padrinho:
+                    resposta = make_response(redirect(target_url))
+                    resposta.set_cookie('feedin_indicador_id', '', expires=0)
+                    return resposta
+
+                return redirect(target_url)
+
             else:
                 flash('Usuário requer ativação. Verifique seu e-mail.', 'warning')
         else:
@@ -4723,6 +4737,7 @@ def perfil_local(local_id):
 
             atividades_formatadas.append({
                 'id': p.id,
+                'eh_anuncio': True if anuncio_gerado else False,  # <--- A PISTA PARA O TEMPLATE
                 'tipo_card': 'postagem',
                 'tipo': 'postagem',
                 'data_criacao': p.data_criacao,
@@ -5986,7 +6001,7 @@ def obter_publicidade_contextual(pub, local_contexto_id=None):
             # Silencioso no ambiente de produção, mas visível no console do PyCharm
             print(f"Erro ao computar visualização de forma assíncrona: {e}")
         # =========================================================================
-
+        anuncio_destaque.is_flyer_nativo = True
         return anuncio_destaque
 
 
