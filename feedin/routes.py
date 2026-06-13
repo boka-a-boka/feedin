@@ -2264,46 +2264,43 @@ def sugerir_conexoes_reais(usuario_atual):
         agora = datetime.now(data_fim_beta.tzinfo) if data_fim_beta.tzinfo else datetime.now()
         is_beta = agora < data_fim_beta
 
-    # 1. Identifica os locais onde o usuário atual circula
-    meus_locais_ids = [v.local_id for v in VinculoUsuarioLocal.query.filter_by(usuario_id=usuario_atual.id).all()]
-
-    # 2. Identifica as TAXONOMIAS (Tags) que o usuário atual segue na tabela associativa
+    # 1. Identifica as TAXONOMIAS (Tags) que o usuário atual segue
     minhas_tags_ids = [
         r.taxonomia_id for r in database.session.query(usuarios_interesses.c.taxonomia_id)
         .filter(usuarios_interesses.c.usuario_id == usuario_atual.id).all()
     ]
 
-    # Se a regra é afinidade, se ele não tiver locais E não tiver tags seguidas, não sugerimos ninguém
-    if not meus_locais_ids and not minhas_tags_ids:
+    # 🚨 MUDANÇA CRUCIAL: Se o usuário atual não segue NENHUMA tag ainda,
+    # não sugerimos ninguém por afinidade (tela limpa até ele interagir)
+    if not minhas_tags_ids:
         return []
 
-    # 3. Base da Query focada em trazer Usuários
+    # 2. Base da Query focada em trazer Usuários
     query = database.session.query(Usuario)
 
-    # 4. FILTRO DE LOCALIDADE (Mantido original se houver locais cadastrados)
+    # 3. Trava de Ferro: O usuário sugerido DEVE seguir pelo menos uma das minhas tags
+    subquery_usuarios_com_mesmo_gosto = database.session.query(usuarios_interesses.c.usuario_id) \
+        .filter(usuarios_interesses.c.taxonomia_id.in_(minhas_tags_ids))
+
+    query = query.filter(Usuario.id.in_(subquery_usuarios_com_mesmo_gosto))
+
+    # 4. Filtro de Localidade (Vira um refinamento opcional, não uma porta aberta)
+    meus_locais_ids = [v.local_id for v in VinculoUsuarioLocal.query.filter_by(usuario_id=usuario_atual.id).all()]
     if meus_locais_ids:
         query = query.join(VinculoUsuarioLocal, Usuario.id == VinculoUsuarioLocal.usuario_id) \
             .filter(VinculoUsuarioLocal.local_id.in_(meus_locais_ids))
 
-    # 5. O SEGREDO QUE FECHA A PORTEIRA: FILTRO DE TAXONOMIA EM COMUM
-    # Se o usuário segue tags, restringimos as sugestões APENAS a usuários que seguem alguma dessas mesmas tags
-    if minhas_tags_ids:
-        # Criamos uma subquery que busca os IDs de usuários que possuem qualquer uma das tags do usuário atual
-        subquery_usuarios_com_mesmo_gosto = database.session.query(usuarios_interesses.c.usuario_id) \
-            .filter(usuarios_interesses.c.taxonomia_id.in_(minhas_tags_ids))
-
-        # Aplicamos o filtro na query principal: o usuário sugerido DEVE estar nessa lista
-        query = query.filter(Usuario.id.in_(subquery_usuarios_com_mesmo_gosto))
-
-    # 6. Filtros Universais (Evita auto-sugestão e duplicações)
+    # 5. Filtros Universais (Evita auto-sugestão e duplicações)
     query = query.filter(Usuario.id != usuario_atual.id)
+    query = query.filter(Usuario.active == True)
+    query = query.filter(Usuario.nivel_acesso >= 10)  # Garante que o sugerido seja homologado
 
     # Filtro de "Já são amigos"
     ids_amigos = [a.id for a in usuario_atual.amigos]
     if ids_amigos:
         query = query.filter(not_(Usuario.id.in_(ids_amigos)))
 
-    # 7. LÓGICA DE FIADOR (Fora do Beta)
+    # 6. LÓGICA DE FIADOR (Fora do Beta)
     if not is_beta:
         from feedin.models import Conexoes
         query = query.join(Conexoes, (Usuario.id == Conexoes.id_destinatario) | (Usuario.id == Conexoes.id_remetente)) \
@@ -2313,11 +2310,10 @@ def sugerir_conexoes_reais(usuario_atual):
             Conexoes.id_destinatario.in_(ids_amigos)
         ))
 
-    # 8. Finalização e Oxigenação do Carrossel
+    # 7. Finalização e Sorteio
     from sqlalchemy import func
     sugestoes = query.distinct().order_by(func.random()).limit(10).all()
 
-    # Retorna no formato exato que seu carrossel Jinja espera
     return [{'usuario': u} for u in sugestoes]
 
 
