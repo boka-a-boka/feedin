@@ -1,31 +1,34 @@
 {# --- MOTOR DE RENDERIZAÇÃO: MODO SEGURO --- #}
 {% set obj = objeto_entrada | default(atividade | default(none)) %}
 
-{# --- MOTOR DE RENDERIZAÇÃO: MODO SEGURO --- #}
-{% set obj = objeto_entrada | default(atividade | default(none)) %}
-
 {% if obj %}
-    {# 1. Identificação se o objeto é um anúncio #}
+    {# 1. Identificação se o objeto principal ou o seu anexo é um anúncio #}
     {% set is_anuncio_nativo = (obj.is_flyer_nativo is defined and obj.is_flyer_nativo) %}
+
+    {# NOVIDADE: Verifica se o post carrega um anúncio injetado pelo motor contextual #}
+    {% set possui_anuncio_injetado = (obj.anuncio is defined and obj.anuncio) %}
+
+    {# Determina se o comportamento deve ser tratado como publicidade #}
     {% set eh_anuncio = is_anuncio_nativo or (obj.__class__.__name__ == 'LocalAnuncio') or (obj.url_flyer is defined and obj.url_flyer) %}
 
     {# 2. Definição do modo de renderização e da variável 'atividade' para o card #}
+    {# CASO A: O próprio objeto principal é um flyer (Comportamento da Index) #}
     {% if eh_anuncio and obj.url_flyer and obj.url_flyer != 'None' %}
         {% set render_modo = 'flyer' %}
         {% set atividade = obj %}
+
+    {# CASO B: O objeto é um Post, mas ele carrega um Anúncio com Flyer válido e a rota pediu exibição (Comportamento do Perfil) #}
+    {% elif possui_anuncio_injetado and obj.anuncio.url_flyer and obj.anuncio.url_flyer != 'None' and exibir_como_flyer %}
+        {% set render_modo = 'flyer' %}
+        {% set atividade = obj.anuncio %} {# Mudamos o escopo da atividade para o anúncio, permitindo o card renderizar o flyer perfeitamente! #}
+
+    {# CASO C: É um post normal (com ou sem anúncio estilo botão embutido) #}
     {% else %}
         {% set render_modo = 'post' %}
         {% set atividade = obj %}
     {% endif %}
 
-{% if eh_anuncio and atividade.url_flyer %}
-    {% set render_modo = 'flyer' %}
-{% elif eh_anuncio %}
-    {% set render_modo = 'post' %} {# Cai no formato de botão se não tiver flyer #}
-{% else %}
-    {% set render_modo = 'post' %}
-{% endif %}
-
+    {# --- REMOVIDO O SEGUNDO BLOCO CONFLITANTE DE IFs QUE ESTAVA DUPLICADO ABAIXO --- #}
     <style>
     .img-ajustada-feed {
         {% if context_origem in ['perfil_local', 'perfil_publico'] %}

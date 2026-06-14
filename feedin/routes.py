@@ -4601,10 +4601,14 @@ def ver_perfil(usuario_id):
             fotos_com_alvo = []
 
         # =========================================================================
-        # 🎲 MOTOR DE PUBLICIDADE CONTEXTUAL CALIBRADO (25% CHANCE + 2 RESPIROS)
+        # 🎲 MOTOR DE PUBLICIDADE CONTEXTUAL CALIBRADO (25% CHANCE + ALTERNÂNCIA)
         # =========================================================================
         import random
         cards_de_respiro_restantes = 0
+
+        # Flag para forçar a alternância de formato a cada exibição de anúncio
+        # Começa sorteando True ou False para o primeiro flyer
+        proximo_sera_flyer = random.choice([True, False])
 
         for post in postagens_permitidas:
             # Limpa qualquer resíduo anterior do objeto
@@ -4619,13 +4623,35 @@ def ver_perfil(usuario_id):
             if random.random() < 0.25:
                 anuncio_gerado = obter_publicidade_contextual(post, local_contexto_id=None)
 
-                # Mantém o sorteio dinâmico caso retorne uma lista de variações do patrocinador
+                # Mantém o sorteio dinâmico caso retorne uma lista de variações
                 if isinstance(anuncio_gerado, list) and len(anuncio_gerado) > 0:
                     anuncio_gerado = random.choice(anuncio_gerado)
 
                 if anuncio_gerado:
+                    # Injeta o anúncio no post
                     post.anuncio = anuncio_gerado
-                    # Ativa o isolamento tático: as próximas duas memórias serão limpas
+
+                    # --- A MÁGICA DA ALTERNÂNCIA AQUI ---
+                    # Forçamos o objeto do anúncio a respeitar o carrossel de formatos
+                    if proximo_sera_flyer:
+                        # Se o anúncio veio sem URL de flyer por falta de cadastro no banco,
+                        # garantimos que ele não quebre, mas se tiver, ele vai como Flyer.
+                        if hasattr(post.anuncio, 'url_flyer') and post.anuncio.url_flyer:
+                            # Mantém o comportamento de Flyer ativo para este post
+                            pass
+                        else:
+                            # Fallback de segurança se o anunciante sorteado não tiver imagem
+                            post.anuncio.url_flyer = None
+                    else:
+                        # Forçamos o apagamento temporário da url_flyer APENAS no objeto em memória
+                        # deste post específico, obrigando o Jinja a renderizar o formato "Botão"
+                        if hasattr(post.anuncio, 'url_flyer'):
+                            post.anuncio.url_flyer = None
+
+                    # Inverte a flag para o próximo anúncio ser do formato oposto
+                    proximo_sera_flyer = not proximo_sera_flyer
+
+                    # Ativa o isolamento tático: as próximas duas memórias serão limpas (respiro)
                     cards_de_respiro_restantes = 2
         # =========================================================================
 

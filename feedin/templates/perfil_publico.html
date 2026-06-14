@@ -304,15 +304,23 @@
                 </div>
 
                 <div id="mural-content" class="row g-4">
+                    {# Trocado 'postagens' por 'atividades', que é o que vem da rota #}
                     {% for item in postagens %}
                         <div class="col-12 feed-card-wrapper">
-                            {# Ajustado com apenas um escopo de objeto para travar a duplicação no card_postagem_universal #}
-                            {% with atividade = item, context_origem = 'perfil_publico' %}
+                            {# Passamos o item, garantindo a flag de exibição e mapeando o objeto original se necessário #}
+                            {% with objeto_entrada = item, atividade = item, context_origem = 'perfil_publico', exibir_como_flyer = True %}
+                                {% if item.eh_anuncio and item.anuncio %}
+                                    {% set post = item.objeto_original %}
+                                {% else %}
+                                    {% set post = item.objeto_original | default(item) %}
+                                {% endif %}
+
                                 {% include "partials/cards/card_postagem_universal.html" %}
                             {% endwith %}
                         </div>
+
                     {% else %}
-                        <div class="text-center py-5 opacity-75">
+                        <div class="text-center py-5 opacity-75 col-12">
                             <i class="bi bi-camera2 fs-1"></i>
                             <p class="mt-2">Ainda não há memórias aqui.</p>
                         </div>
@@ -339,7 +347,6 @@
                     {% endfor %}
                 </div>
             </div>
-
         </div>
     </div>
 
@@ -357,6 +364,16 @@
         <div class="{% if user_alvo.is_pioneiro %}pioneiro-theme pioneiro-modal-wrapper{% endif %}">
             {% include "partials/_modal_nova_postagem.html" %}
         </div>
+    {% endif %}
+
+    {# BOTÃO FLUTUANTE VOLTAR AO TOPO #}
+    {% if postagens|length >= 3 %}
+        <button type="button"
+                class="btn btn-primary rounded-pill fw-bold shadow-lg text-nowrap text-white {% if user_alvo.is_pioneiro %}bg-gradient-pioneiro{% endif %}"
+                onclick="voltarAoTopo()"
+                style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 9999 !important; {% if not user_alvo.is_pioneiro %}background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);{% endif %} border: none; font-size: 0.9rem; padding: 12px 24px; display: inline-flex; align-items: center; justify-content: center;">
+            <i class="bi bi-arrow-up-circle-fill me-2 text-white"></i>Voltar ao Topo
+        </button>
     {% endif %}
 
     <div class="modal fade" id="modalComentario" tabindex="-1" aria-hidden="true">
@@ -523,16 +540,7 @@
         </div>
     </div>
 
-    {# BOTÃO FLUTUANTE VOLTAR AO TOPO #}
-    {% if postagens|length >= 3 %}
-        <div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1040;">
-            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap text-white"
-                    onclick="voltarAoTopo()"
-                    style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
-                <i class="bi bi-arrow-up-circle-fill me-2 text-white"></i>Voltar ao Topo
-            </button>
-        </div>
-    {% endif %}
+
 </div>
 
 {# Scripts originais preservados mantendo inalterados os métodos de ciclo Ajax do jQuery #}
