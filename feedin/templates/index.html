@@ -326,40 +326,57 @@
 {% endif %}
 
         <!-- SESSÃO 2: CARROSSEL DE COMUNIDADE (10 Fotos de Perfis Reais Anônimas tiradas do banco) -->
-        <section id="comunidade" class="py-5" style="background: rgba(15, 23, 42, 0.45);">
+<section id="comunidade" class="py-5" style="background: linear-gradient(180deg, rgba(15, 23, 42, 0.45) 0%, rgba(15, 23, 42, 0.6) 100%); overflow: hidden;">
             <div class="container text-center">
                 <div class="max-w-2xl mx-auto mb-5 text-center">
                     <h3 class="display-6 fw-bold text-white mb-2">Comunidade de Guardiões</h3>
                     <p style="color: var(--text-muted-pira);">Quem faz a preservação da nossa história no dia a dia. Conecte-se com rostos conhecidos.</p>
                 </div>
 
-                <div id="carrosselCuradores" class="carousel slide" data-bs-ride="carousel" data-bs-interval="4000">
-                    <div class="carousel-inner">
+                <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-4 justify-content-center">
 
-                        {# AJUSTE AQUI: Mudamos para [:12] e batch(4) #}
-                        {% for batch in usuarios_reais[:12] | batch(4) %}
-                        <div class="carousel-item {{ 'active' if loop.first else '' }}">
-                            <div class="d-flex justify-content-center gap-3">
-                                {% for usr in batch %}
-                                <div class="glass-panel-pira p-4 text-center d-flex flex-column align-items-center" style="width: 200px;">
-                                    <div class="rounded-4 mx-auto mb-3 border-2 border-primary overflow-hidden p-1" style="width: 85px; height: 85px; background: rgba(45, 212, 191, 0.1);">
-                                        {% if usr.foto_perfil and usr.foto_perfil != 'default.jpg' %}
-                                            <img src="{{ url_for('static', filename=usr.foto_url) }}"
-                                                 class="w-100 h-100" style="object-fit: cover;">
-                                        {% else %}
-                                            <img src="https://placehold.co/150x150/0b1329/2dd4bf?text=@{{ usr.username[:2]|upper }}" class="w-100 h-100" style="object-fit: cover;">
-                                        {% endif %}
-                                    </div>
-                                    {# EXIBIÇÃO DO USERNAME #}
-                                    <span class="fw-bold text-white mb-1" style="font-size: 0.85rem;">@{{ usr.username }}</span>
-                                    <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary-light px-2 py-1" style="font-size: 0.65rem;">Guardião</span>
-                                </div>
-                                {% endfor %}
+                    {# Loop direto pelos 11 usuários reais, deixando o 12º espaço para o convite #}
+                    {% for usr in usuarios_reais[:11] %}
+                    <div class="col">
+                        <div class="glass-panel-pira p-3 text-center d-flex flex-column align-items-center h-100 position-relative transition-hover"
+                             style="border-radius: 20px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);">
+
+                            <div class="rounded-4 mx-auto mb-3 border border-2 overflow-hidden p-1 wrapper-avatar-celebridade"
+                                 style="width: 80px; height: 80px; background: rgba(45, 212, 191, 0.1); border-color: rgba(45, 212, 191, 0.4) !important; transition: all 0.3s ease;">
+                                {% if usr.foto_perfil and usr.foto_perfil != 'default.jpg' %}
+                                    <img src="{{ url_for('static', filename=usr.foto_url) }}"
+                                         class="w-100 h-100 rounded-3" style="object-fit: cover;">
+                                {% else %}
+                                    <img src="https://placehold.co/150x150/0b1329/2dd4bf?text=@{{ usr.username[:2]|upper }}"
+                                         class="w-100 h-100 rounded-3" style="object-fit: cover;">
+                                {% endif %}
                             </div>
-                        </div>
-                        {% endfor %}
 
+                            {# EXIBIÇÃO DO USERNAME #}
+                            <span class="fw-bold text-white mb-1 text-truncate w-100" style="font-size: 0.85rem; letter-spacing: 0.3px;">@{{ usr.username }}</span>
+                            <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary-light px-2 py-1" style="font-size: 0.65rem; border: 1px solid rgba(45, 212, 191, 0.15);">Guardião</span>
+                        </div>
                     </div>
+                    {% endfor %}
+
+                    <div class="col">
+                        <a href="{{ url_for('configuracoes', aba='perfil') if current_user.is_authenticated else url_for('newuser') }}" class="text-decoration-none">
+                            <div class="p-3 text-center d-flex flex-column align-items-center justify-content-center h-100 position-relative"
+                                 style="border-radius: 20px; background: linear-gradient(135deg, rgba(45, 212, 191, 0.15) 0%, rgba(13, 110, 253, 0.1) 100%); border: 2px dashed rgba(45, 212, 191, 0.4); cursor: pointer; transition: all 0.3s ease-in-out;"
+                                 onmouseenter="this.style.transform='scale(1.05)'; this.style.boxShadow='0 0 20px rgba(45, 212, 191, 0.25)';"
+                                 onmouseleave="this.style.transform='scale(1)'; this.style.boxShadow='none';">
+
+                                <div class="rounded-circle d-flex align-items-center justify-content-center mb-3 bg-gradient-pira"
+                                     style="width: 65px; height: 65px; background: rgba(45, 212, 191, 0.2); color: #2dd4bf; border: 1px solid #2dd4bf;">
+                                    <i class="bi bi-star-fill fs-4 text-warning"></i>
+                                </div>
+
+                                <span class="fw-bold text-white mb-1" style="font-size: 0.85rem;">Sua Foto Aqui?</span>
+                                <small class="text-info font-medium" style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px;">Fazer Parte <i class="bi bi-arrow-right-short"></i></small>
+                            </div>
+                        </a>
+                    </div>
+
                 </div>
             </div>
         </section>
@@ -732,6 +749,17 @@ document.addEventListener('DOMContentLoaded', function() {
         filter: grayscale(0%);
         opacity: 1;
         transform: scale(1.08);
+    }
+.transition-hover:hover {
+        transform: translateY(-5px);
+        background: rgba(30, 41, 59, 0.8) !important;
+        border-color: rgba(45, 212, 191, 0.5) !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 0 15px rgba(45, 212, 191, 0.15);
+    }
+    .transition-hover:hover .wrapper-avatar-celebridade {
+        border-color: #2dd4bf !important;
+        transform: scale(1.05);
+        box-shadow: 0 0 12px rgba(45, 212, 191, 0.4);
     }
 </style>
 

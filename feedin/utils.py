@@ -11,6 +11,7 @@ from feedin.models import Local
 
 from feedin.modules.agenda.models import ModCadastroCliente
 
+
 def salvar_imagem(foto):
     if not foto or not hasattr(foto, 'filename') or foto.filename == '':
         return None
@@ -27,14 +28,17 @@ def salvar_imagem(foto):
     try:
         img = Image.open(foto)
 
-        # --- NOVO: Corrigir orientação EXIF (evita foto deitada) ---
+        # 1. Corrigir orientação EXIF (evita foto deitada)
         img = ImageOps.exif_transpose(img)
 
-        # --- NOVO: Converter para RGB (Garante compatibilidade com WebP e remove transparência) ---
+        # --- SOLUÇÃO: Força o Pillow a consolidar a nova orientação na matriz de pixels ---
+        img.load()
+
+        # 2. Converter para RGB (Garante compatibilidade com WebP e remove transparência)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
 
-        # 4. Lógica de Crop Central 1:1
+        # 3. Lógica de Crop Central 1:1 (Agora a largura e altura são 100% reais)
         largura, altura = img.size
         if largura > altura:
             margem = (largura - altura) / 2
@@ -43,10 +47,10 @@ def salvar_imagem(foto):
             margem = (altura - largura) / 2
             img = img.crop((0, margem, largura, altura - margem))
 
-        # 5. Redimensionar 800x800
+        # 4. Redimensionar 800x800
         img = img.resize((800, 800), Image.Resampling.LANCZOS)
 
-        # 6. Salvar em WEBP (Quality 85 é o ponto ideal entre peso e qualidade)
+        # 5. Salvar em WEBP
         img.save(caminho_completo, "WEBP", quality=85)
 
         return nome_arquivo
