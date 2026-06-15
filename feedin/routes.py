@@ -4658,6 +4658,62 @@ def ver_perfil(usuario_id):
         # 2. PREPARAÇÃO DO FORMULÁRIO (Mantido original)
         form_convite = FormConexao()
 
+    from datetime import datetime, timedelta
+
+    # 1. Definir o intervalo de 7 dias a partir de hoje
+    hoje = datetime.now().date()
+    fim_semana = hoje + timedelta(days=7)
+
+    aniversariantes_dia = []
+    aniversariantes_semana = []
+
+    if current_user.is_authenticated and e_o_proprio:
+        # 2. Buscar todas as conexões aceitas onde o usuário está envolvido
+        conexoes_aceitas = Conexoes.query.filter(
+            (Conexoes.status == 'aceito') &
+            ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id))
+        ).all()
+
+        # 3. Extrair o objeto do Amigo (o lado oposto da relação)
+        amigos_ids = set()
+        for cx in conexoes_aceitas:
+            if cx.id_remetente == current_user.id:
+                amigos_ids.add(cx.id_destinatario)
+            else:
+                amigos_ids.add(cx.id_remetente)
+
+        if amigos_ids:
+            # Buscar os usuários e seus respectivos perfis de uma só vez (otimizando o banco)
+            amigos = Usuario.query.filter(Usuario.id.in_(amigos_ids)).all()
+
+            for amigo in amigos:
+                if amigo.perfil and amigo.perfil.data_nascimento:
+                    dt_nasc = amigo.perfil.data_nascimento
+
+                    # Gerar a data do aniversário para o ano atual
+                    try:
+                        nasc_este_ano = dt_nasc.replace(year=hoje.year)
+                    except ValueError:
+                        # Trata o dia 29 de Fevereiro em anos não-bissextos
+                        nasc_este_ano = dt_nasc.replace(year=hoje.year, day=28)
+
+                    # Se o aniversário já passou este ano mas a janela de 7 dias pega a virada de ano,
+                    # calculamos também para o próximo ano para não quebrar em dezembrinos/janeirinos
+                    if nasc_este_ano < hoje and fim_semana.year > hoje.year:
+                        try:
+                            nasc_este_ano = dt_nasc.replace(year=fim_semana.year)
+                        except ValueError:
+                            nasc_este_ano = dt_nasc.replace(year=fim_semana.year, day=28)
+
+                    # 4. Organizar as listas baseado no dia
+                    if nasc_este_ano == hoje:
+                        aniversariantes_dia.append(amigo)
+                    elif hoje < nasc_este_ano <= fim_semana:
+                        aniversariantes_semana.append(amigo)
+
+    # Certifique-se de injetar no retorno do seu render_template:
+    # return render_template('perfil.html', ..., aniversariantes_dia=aniversariantes_dia, aniversariantes_semana=aniversariantes_semana)
+
     # 3. RETORNO DA ROTA
     return render_template("perfil_publico.html",
                            user_alvo=user_alvo,
@@ -4678,8 +4734,9 @@ def ver_perfil(usuario_id):
                            locais_seguidos=locais_seguidos,
                            signo_nome=s_nome,
                            signo_icone=s_icone,
-                           form_convite=form_convite)
-
+                           form_convite=form_convite,
+                           aniversariantes_dia=aniversariantes_dia,
+                           aniversariantes_semana=aniversariantes_semana)
 
 from sqlalchemy.orm import joinedload
 
