@@ -1,22 +1,36 @@
-{# Lógica de decisão de Cards - FeedIn (VERSÃO REVISADA) #}
+{# feed.html - VERSÃO FINAL UNIFICADA E BLINDADA #}
 
-{% if atividade.id_conexao or atividade.tipo == 'conexao' or atividade.tipo in ['pioneiro', 'vinculo', 'rede'] %}
+{% for atividade in atividade_lista %}
+
+    {# CASO VIP: Alerta de Aniversário passa direto sem checar tabelas do banco #}
+    {% if atividade.tipo_customizado is defined and atividade.tipo_customizado == 'aniversario' %}
+        {% with atividade = atividade %}
+            {% include "partials/cards/_card_postagem.html" %}
+        {% endwith %}
+
     {# CASO 1: Vínculos e mensagens de sistema #}
-    {# Redirecionamos para o card limpo para evitar as reações do Universal #}
-    {% with atividade = atividade, context_origem = 'feed' %}
-        {% include "partials/cards/_card_postagem.html" %}
-    {% endwith %}
+    {% elif atividade.id_conexao or (atividade.tipo is defined and (atividade.tipo == 'conexao' or atividade.tipo in ['pioneiro', 'vinculo', 'rede'])) %}
+        {% with atividade = atividade, context_origem = 'feed' %}
+            {% include "partials/cards/_card_postagem.html" %}
+        {% endwith %}
 
-{% elif atividade.__tablename__ == 'postagens' or atividade.tipo == 'postagem' %}
     {# CASO 2: Postagens de usuários #}
-    {% with atividade = atividade %}
-        {% include "partials/cards/_card_postagem.html" %}
-    {% endwith %}
+    {% elif (atividade.__tablename__ is defined and atividade.__tablename__ == 'postagens') or (atividade.tipo is defined and atividade.tipo == 'postagem') %}
+        {% with atividade = atividade %}
+            {% include "partials/cards/_card_postagem.html" %}
+        {% endwith %}
+
+    {# CASO 3: Memórias de locais (Fallback) #}
+    {% else %}
+        {% with atividade = atividade %}
+            {% include "partials/cards/_card_postagem.html" %}
+        {% endwith %}
+    {% endif %}
 
 {% else %}
-    {# CASO 3: Memórias de locais (Fallback) #}
-    {# Se for para o feed, podemos usar o card postagem também #}
-    {% with atividade = atividade %}
-        {% include "partials/cards/_card_postagem.html" %}
-    {% endwith %}
-{% endif %}
+    {# Fallback visual caso o feed não tenha absolutamente nenhuma postagem ou notificação #}
+    <div class="text-center p-5 text-muted bg-white rounded-4 shadow-sm mb-4">
+        <i class="bi bi-mailbox" style="font-size: 2.5rem; color: #d4a373;"></i>
+        <p class="mt-2 fw-medium">Nenhuma atividade ou memória na teia por enquanto.</p>
+    </div>
+{% endfor %}

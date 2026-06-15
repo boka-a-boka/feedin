@@ -295,7 +295,7 @@
                         {% if aniversariantes_dia %}
                             <div class="mb-2">
                                 {% for amigo in aniversariantes_dia %}
-                                    <a href="{{ url_for('perfil', username=amigo.username) }}" class="text-decoration-none d-block mb-2">
+                                    <a href="{{ url_for('ver_perfil', usuario_id=amigo.id) }}" class="text-decoration-none d-block mb-2">
                                         <div class="d-flex align-items-center gap-2 p-2 rounded-3"
                                              style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.12) 0%, rgba(244, 63, 94, 0.05) 100%); border: 1px solid rgba(244, 63, 94, 0.25);">
                                             <img src="{{ url_for('servir_foto_perfil', usuario_id=amigo.id) }}" class="rounded-circle border border-2 border-danger" style="width: 36px; height: 36px; object-fit: cover;">
@@ -395,7 +395,7 @@
                                             🎉 Assoprando Velinhas Hoje!
                                         </small>
                                         {% for amigo in aniversariantes_dia %}
-                                            <a href="{{ url_for('perfil', username=amigo.username) }}" class="text-decoration-none d-block mb-2">
+                                            <a href="{{ url_for('ver_perfil', usuario_id=amigo.id) }}" class="text-decoration-none d-block mb-2">
                                                 <div class="d-flex align-items-center gap-2 p-2 rounded-3 transition-hover"
                                                      style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.12) 0%, rgba(244, 63, 94, 0.05) 100%); border: 1px solid rgba(244, 63, 94, 0.25);">
                                                     <img src="{{ url_for('servir_foto_perfil', usuario_id=amigo.id) }}" class="rounded-circle border border-2 border-danger" style="width: 38px; height: 38px; object-fit: cover;">

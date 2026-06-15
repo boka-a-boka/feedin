@@ -1175,10 +1175,55 @@ def dashboard():
 
                 atividades_recentes = alertas_confirmacao + atividades_normais
 
+                # =========================================================================
+                # 🎯 INJEÇÃO CIRÚRGICA: CAPTURAR AMIGOS ANIVERSARIANTES DE HOJE
+                # =========================================================================
+                atividades_aniversario = []
+                conexoes_ativas = Conexoes.query.filter(
+                    (Conexoes.status == 'aceito') &
+                    ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id))
+                ).all()
+
+                amigos_ids = [cx.id_destinatario if cx.id_remetente == current_user.id else cx.id_remetente for cx in
+                              conexoes_ativas]
+
+                if amigos_ids:
+                    hoje = datetime.now().date()
+                    amigos = Usuario.query.filter(Usuario.id.in_(amigos_ids)).all()
+                    for amigo in amigos:
+
+                        # 🔥 LINHA DE TESTE SEGURO: Descomente para forçar a exibição do card nos testes
+                        # amigo.perfil.data_nascimento = hoje
+
+                        if amigo.perfil and amigo.perfil.data_nascimento:
+                            try:
+                                nasc_este_ano = amigo.perfil.data_nascimento.replace(year=hoje.year)
+                            except ValueError:
+                                nasc_este_ano = amigo.perfil.data_nascimento.replace(year=hoje.year, day=28)
+
+                            if nasc_este_ano == hoje:
+                                atividades_aniversario.append({
+                                    'id': f"niver-{amigo.id}",
+                                    'tipo_customizado': 'aniversario',
+                                    'amigo_objeto': amigo,
+                                    'id_conexao': None,
+                                    'dados_conexao': None,
+                                    'dados_marcacao': None,
+                                    'anuncio': None
+                                })
+
+                # Adiciona os aniversariantes perfeitamente no topo absoluto da timeline
+                atividades_recentes = atividades_aniversario + atividades_recentes
+                # =========================================================================
+
                 proximo_gatilho = random.randint(1, 4)
                 contador_respiro = 0
 
                 for atividade in atividades_recentes:
+                    # Proteção para não tentar injetar anúncio comercial no dicionário de aniversário
+                    if isinstance(atividade, dict) and atividade.get('tipo_customizado') == 'aniversario':
+                        continue
+
                     contador_respiro += 1
                     if contador_respiro >= proximo_gatilho:
                         atividade.anuncio = obter_publicidade_contextual(atividade)
@@ -1229,7 +1274,7 @@ def dashboard():
         for pub in publicacoes_banco:
             pub.anuncio = obter_publicidade_contextual(pub)
 
-        # --- 5. FORMULÁRIOS UNIVERSAIS (Alinhamento corrigido - Fora do laço for) ---
+        # --- 5. FORMULÁRIOS UNIVERSAIS ---
         form_p = FormPerfil(obj=perfil_usuario)
         form_a = FormApelido()
         form_convite = FormConvite()
@@ -1242,7 +1287,6 @@ def dashboard():
             form_p.genero.choices = []
             form_p.estado_civil.choices = []
 
-        # 🎯 PRONTO: Geração dinâmica sem mexer no disco físico
         link_convite = f"{request.host_url.rstrip('/')}/convite/{current_user.id}"
 
         qr = qrcode.QRCode(version=1, box_size=10, border=1)
@@ -1256,7 +1300,7 @@ def dashboard():
         qr_code_base64 = base64.b64encode(output.getvalue()).decode('utf-8')
         qrcode_url = f"data:image/png;base64,{qr_code_base64}"
 
-        # --- 6. RETORNO DA VIEW (Perfeitamente posicionado) ---
+        # --- 6. RETORNO DA VIEW ---
         return render_template("homepage.html",
                                aba=aba,
                                perfil=perfil_usuario,
@@ -3637,77 +3681,6 @@ def buscar_afinidades_por_fiador(usuario, tag_nome):
             afinidades_validadas.append(potencial_amigo)
 
     return afinidades_validadas
-
-
-@app.route("/feed")
-@login_required
-def feed():
-    # 1. Identifica a aba (útil se você unificar com a homepage futuramente)
-    aba = 'feed'
-
-    # 2. Dados básicos para a "Linha Mágica" e Identificação de Posse
-    grupos_filiados = MembroGrupo.query.filter_by(id_usuario=current_user.id).all()
-    grupos_ids = [m.id_grupo for m in grupos_filiados]
-
-    locais_vinculados = Local.query.filter(
-        (Local.id_empreendedor == current_user.id) | (Local.id_indicador == current_user.id)
-    ).all()
-    locais_negocio_ids = [l.id for l in locais_vinculados]
-
-    meus_locais_ids = grupos_ids + locais_negocio_ids
-
-    # --- CONTADORES PARA O DASHBOARD ---
-    contagem = len(meus_locais_ids)
-
-    total_pendentes = Conexoes.query.filter_by(
-        id_destinatario=current_user.id,
-        status='pendente'
-    ).count()
-
-    total_conexoes = Conexoes.query.filter(
-        ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)) &
-        (Conexoes.status == 'aceito')
-    ).count()
-
-    # 3. Busca de Conteúdo Dinâmico
-    sugestoes = obter_sugestoes_pioneiras(current_user)
-
-    # Suas memórias, amigos e postagens públicas chegam aqui
-    atividades_recentes = obter_atividades_feed(current_user)
-
-    # --- O PULO DO GATO: INJEÇÃO DO RESPIRO ALEATÓRIO DE PUBLICIDADE ---
-    # Sorteia em qual posição de post o primeiro anúncio vai aparecer (ex: entre o 1º e o 4º)
-    proximo_gatilho = random.randint(1, 4)
-    contador_respiro = 0
-
-    for atividade in atividades_recentes:
-        contador_respiro += 1
-
-        # Se a atividade atingiu o número do sorteio, ela ganha o direito ao anúncio
-        if contador_respiro >= proximo_gatilho:
-            # Passamos a atividade (post) para a função correta mapeada para o Beta do FeedIn
-            with database.session.no_autoflush:
-                atividade.anuncio = obter_publicidade_contextual(atividade)
-
-                # Zera o contador e sorteia o próximo respiro dinâmico (de 1 a 6 posts livres)
-                # Se a função retornar None (ex: uma conexão automática), o respiro continua correndo
-                if atividade.anuncio:
-                    contador_respiro = 0
-                    proximo_gatilho = random.randint(1, 6)
-        else:
-            # Garante que a atividade está 100% limpa de anúncios
-            atividade.anuncio = None
-
-    # 4. Renderização com todas as variáveis "vivas" e protegidas
-    return render_template("homepage.html",
-                           aba=aba,
-                           atividades_recentes=atividades_recentes,
-                           sugestoes=sugestoes,
-                           meus_locais_ids=meus_locais_ids,
-                           usuario=current_user,
-                           contagem=contagem,
-                           total_pendentes=total_pendentes,
-                           total_conexoes=total_conexoes)
 
 
 @app.route('/sugerir_preferencia', methods=['POST'])
@@ -6112,24 +6085,60 @@ def obter_publicidade_contextual(pub, local_contexto_id=None):
 @app.route('/feed')
 @login_required
 def exibir_feed():
-    # 1. Busca as postagens reais do banco (filtrando por ativas e ordenando pelas mais recentes)
+    # 1. Busca as postagens reais do banco
     postagens_do_feed = Postagem.query.filter_by(ativo=True).order_by(Postagem.data_creation.desc()).all()
 
-    print(f"=== INICIANDO RASTREAMENTO NO FEED (Total de posts: {len(postagens_do_feed)}) ===")
+    print("\n" + "=" * 50)
+    print(f"!!! [DEBUG] ROTA REAL ACESSADA !!! Total de posts: {len(postagens_do_feed)}")
+    print("=" * 50 + "\n")
 
-    # 2. Varre cada postagem e acopla o anúncio comercial se houver match de tag
     for post in postagens_do_feed:
         anuncio_encontrado = obter_publicidade_contextual(post)
-
         if anuncio_encontrado:
-            print(f"[SUCESSO] Post ID {post.id} ganhou o anúncio da empresa {anuncio_encontrado.local.nome}")
             post.anuncio = anuncio_encontrado
-        else:
-            print(f"[VAZIO] Post ID {post.id} não encontrou anúncio comercial correspondente.")
 
-    print("=== FIM DO RASTREAMENTO ===")
+    # --- CAPTURAR AMIGOS ANIVERSARIANTES ---
+    atividades_aniversario = []
+    if current_user.is_authenticated:
+        conexoes_aceitas = Conexoes.query.filter(
+            (Conexoes.status == 'aceito') &
+            ((Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id))
+        ).all()
 
-    # 3. Envia a lista de postagens atualizada para o seu template
+        amigos_ids = [cx.id_destinatario if cx.id_remetente == current_user.id else cx.id_remetente for cx in
+                      conexoes_aceitas]
+
+        if amigos_ids:
+            hoje = datetime.now().date()
+            amigos = Usuario.query.filter(Usuario.id.in_(amigos_ids)).all()
+            for amigo in amigos:
+                # --- LINHA DE TESTE FORÇADO ---
+                # Descomente a linha abaixo para ignorar a data real e forçar o primeiro amigo a ser aniversariante:
+                # amigo.perfil.data_nascimento = hoje
+
+                if amigo.perfil and amigo.perfil.data_nascimento:
+                    try:
+                        nasc_este_ano = amigo.perfil.data_nascimento.replace(year=hoje.year)
+                    except ValueError:
+                        nasc_este_ano = amigo.perfil.data_nascimento.replace(year=hoje.year, day=28)
+
+                    if nasc_este_ano == hoje:
+                        print(f"[DEBUG PYTHON] Aniversariante encontrado hoje: @{amigo.username}")
+                        atividades_aniversario.append({
+                            'id': f"niver-{amigo.id}",
+                            'tipo_customizado': 'aniversario',
+                            'amigo_objeto': amigo,
+                            'id_conexao': None,
+                            'dados_conexao': None,
+                            'dados_marcacao': None,
+                            'anuncio': None
+                        })
+
+    # Unifica no topo do feed
+    postagens_do_feed = atividades_aniversario + postagens_do_feed
+
+    print(f"--- [DEBUG] TOTAL ENVIADO AO TEMPLATE: {len(postagens_do_feed)} itens ---")
+
     return render_template('feed.html', atividade_lista=postagens_do_feed)
 
 

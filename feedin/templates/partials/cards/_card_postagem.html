@@ -164,32 +164,78 @@
 </style>
 
 {# 1. LÓGICA DE DADOS SEGUROS #}
-{% set id_post = atividade.id or atividade['id'] %}
-{% set texto_verificacao = atividade.descricao or atividade.conteudo_exibicao or atividade.mensagem or atividade.conteudo or "" %}
-
-{% if (atividade.tipo is defined and atividade.tipo == 'marcacao') or "marcou você" in texto_verificacao or "solicitou" in texto_verificacao or "Recusou" in texto_verificacao %}
-    {% set remetente_objeto = atividade.usuario_origem or atividade.remetente or atividade.solicitante or atividade.origem %}
-    {% set m_origem_id = atividade.id_usuario_origem or (remetente_objeto.id if remetente_objeto and remetente_objeto.id is defined else 1) %}
-
-    {% set m_origem_username = remetente_objeto.username if (remetente_objeto and remetente_objeto.username is defined) else (atividade.autor.username if atividade.autor else 'usuario') %}
-
-    {% set m = {
-        'id': atividade.id,
-        'usuario_origem_id': m_origem_id,
-        'usuario_origem_username': m_origem_username,
-        'mensagem': texto_verificacao,
-        'postagem_id': atividade.id_postagem_referencia or atividade.id,
-        'lida': atividade.lida if atividade.lida is defined else True
-    } %}
+{% if atividade.tipo_customizado is defined and atividade.tipo_customizado == 'aniversario' %}
+    {# Se for aniversário, ignora as checagens de marcação/conexão para não quebrar o Jinja #}
+    {% set id_post = atividade.id %}
+    {% set m = None %}
     {% set c = None %}
 {% else %}
-    {% set c = atividade.dados_conexao if atividade.dados_conexao is defined else None %}
-    {% set m = atividade.dados_marcacao if atividade.dados_marcacao is defined else None %}
+    {# Mantém a sua lógica original intacta para postagens, marcações e conexões #}
+    {% set id_post = atividade.id or atividade['id'] %}
+    {% set texto_verificacao = atividade.descricao or atividade.conteudo_exibicao or atividade.mensagem or atividade.conteudo or "" %}
+
+    {% if (atividade.tipo is defined and atividade.tipo == 'marcacao') or "marcou você" in texto_verificacao or "solicitou" in texto_verificacao or "Recusou" in texto_verificacao %}
+        {% set remetente_objeto = atividade.usuario_origem or atividade.remetente or atividade.solicitante or atividade.origem %}
+        {% set m_origem_id = atividade.id_usuario_origem or (remetente_objeto.id if remetente_objeto and remetente_objeto.id is defined else 1) %}
+
+        {% set m_origem_username = remetente_objeto.username if (remetente_objeto and remetente_objeto.username is defined) else (atividade.autor.username if atividade.autor else 'usuario') %}
+
+        {% set m = {
+            'id': atividade.id,
+            'usuario_origem_id': m_origem_id,
+            'usuario_origem_username': m_origem_username,
+            'mensagem': texto_verificacao,
+            'postagem_id': atividade.id_postagem_referencia or atividade.id,
+            'lida': atividade.lida if atividade.lida is defined else True
+        } %}
+        {% set c = None %}
+    {% else %}
+        {% set c = atividade.dados_conexao if atividade.dados_conexao is defined else None %}
+        {% set m = atividade.dados_marcacao if atividade.dados_marcacao is defined else None %}
+    {% endif %}
 {% endif %}
 
 {# 2. RENDERIZAÇÃO DOS CARDS #}
 
-{% if atividade.id_conexao and c %}
+{% if atividade.tipo_customizado is defined and atividade.tipo_customizado == 'aniversario' %}
+    {# --- LAYOUT D: ALERTA DE ANIVERSÁRIO (NOVO) --- #}
+    {% set amigo = atividade.amigo_objeto %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden position-relative animate__animated animate__fadeInDown"
+         style="background: linear-gradient(135deg, #ffffff 0%, #fff5f5 100%); border-left: 5px solid #f43f5e !important;">
+
+        <div class="position-absolute top-0 end-0 p-3 opacity-25 animate__animated animate__pulse animate__infinite" style="pointer-events: none; font-size: 1.8rem;">
+            🎉
+        </div>
+
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div class="d-flex align-items-center flex-grow-1 overflow-hidden">
+                    <div class="me-3 position-relative" style="flex-shrink: 0;">
+                        <img src="{{ url_for('servir_foto_perfil', usuario_id=amigo.id) }}" class="rounded-circle border border-2 border-danger" style="width: 46px; height: 46px; object-fit: cover;" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        <span class="position-absolute bottom-0 end-0 rounded-circle" style="transform: translate(20%, 20%); font-size: 0.8rem;">🎂</span>
+                    </div>
+
+                    <div class="text-truncate">
+                        <span class="badge bg-danger text-white rounded-pill mb-1 fw-bold animate__animated animate__flash animate__infinite" style="font-size: 0.55rem; animation-duration: 3s; padding: 3px 6px;">
+                            GUARDIÃO ASSOPRANDO VELINHAS
+                        </span>
+                        <div class="notification-content text-dark" style="font-size: 0.95rem;">
+                            <span class="fw-bold text-dark" style="font-size: 1.05rem;">@{{ amigo.username }}</span>
+                            <span class="text-secondary d-none d-sm-inline">— {{ amigo.perfil.nome_completo or '' }} está celebrando mais um ano de histórias hoje!</span>
+                            <span class="text-secondary d-inline d-sm-none" style="font-size: 0.85rem;"><br>Fica mais velho hoje! 🎉</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-shrink-0 ms-auto ms-sm-0">
+                    <a href="{{ url_for('ver_perfil', usuario_id=amigo.id) }}" class="btn btn-sm btn-danger rounded-pill fw-bold px-3 py-2 shadow-sm d-inline-flex align-items-center gap-1 transition-hover" style="font-size: 0.72rem;">
+                        <i class="bi bi-balloon-heart-fill"></i> Parabéns
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% elif atividade.id_conexao and c %}
     {# --- LAYOUT A: CONEXÕES DA TEIA --- #}
     <div class="card border-0 shadow-sm rounded-3 mb-3 border-start border-primary border-3 notification-item notification-conexao" style="padding: 0;">
         <div class="card-body p-2 px-3 d-flex align-items-center justify-content-between">
