@@ -20,3 +20,9 @@ feedin/static/uploads/posts/*
 !feedin/static/fotos_perfil/.gitkeep
 !feedin/static/uploads/capas/.gitkeep
 !feedin/static/uploads/posts/.gitkeep
+
+# Ignora todas as fotos e arquivos dentro da pasta de uploads de posts
+feedin/static/uploads/posts/*
+
+# Mas garante que o Git não delete a pasta 'posts' em si se ela estiver vazia
+!feedin/static/uploads/posts/.gitkeep
