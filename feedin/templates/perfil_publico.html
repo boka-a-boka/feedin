@@ -604,7 +604,8 @@
                     <div class="modal-footer border-0 pt-0 d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Manter</button>
                         <a href="#" onclick="if(confirm('Deseja realmente desfazer o vínculo?')) { document.getElementById('form-desfazer').submit(); }" class="btn btn-sm btn-danger rounded-pill px-4 fw-bold">Desconectar</a>
-                        <form id="form-desfazer" action="{{ url_for('desfazer_conexao', usuario_id=perfil_usuario.id) }}" method="POST" style="display: none;"></form>
+
+                        <form id="form-desfazer" action="{{ url_for('desfazer_conexao', usuario_id=user_alvo.id) }}" method="POST" style="display: none;"></form>
                     </div>
                 </div>
             </div>
