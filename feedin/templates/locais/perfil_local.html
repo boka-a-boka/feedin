@@ -272,12 +272,23 @@
                             </div>
 
                             <div class="mb-3">
-                                <label for="selectLocalPost" class="form-label small text-muted fw-bold">Vincular a qual estabelecimento?</label>
-                                <select class="form-select rounded-3" id="selectLocalPost" name="id_local">
-                                    <option value="0">— Sem Local Vinculado (História Livre) —</option>
-                                    {# Aqui você pode passar uma lista do back, ou deixar estático o atual do perfil #}
-                                    <option value="{{ local.id }}" selected>{{ local.nome }} ({{ local.bairro }})</option>
-                                </select>
+                                <label for="inputLocalFalsoBusca" class="form-label small text-muted fw-bold">Vincular a qual estabelecimento?</label>
+
+                                {# Input visível onde o usuário digita e o navegador filtra instantaneamente #}
+                                <input type="text" class="form-control rounded-3" id="inputLocalFalsoBusca" list="listaLocaisSeguidos" placeholder="Digite para buscar entre os locais que você segue...">
+
+                                {# O ID real do Local (que o Flask espera receber no POST) fica guardado de forma segura aqui #}
+                                <input type="hidden" id="selectLocalPost" name="id_local" value="0">
+
+                                {# Lista nativa de autocomplete alimentada pelo banco em ordem alfabética #}
+                                <datalist id="listaLocaisSeguidos">
+                                    <option data-id="0" value="— Sem Local Vinculado (História Livre) —"></option>
+                                    {% if locais_seguidos %}
+                                        {% for loc in locais_seguidos %}
+                                            <option data-id="{{ loc.id }}" value="{{ loc.nome }}"></option>
+                                        {% endfor %}
+                                    {% endif %}
+                                </datalist>
                             </div>
 
                             <div class="mb-3">
@@ -349,12 +360,10 @@
 /**
  * Captura os dados do Card Universal e monta o ecossistema do Modal de Edição Completa
  */
+// 📝 FUNÇÃO DE EDIÇÃO - ADAPTADA PARA O SELECT TRADICIONAL DE FRICÇÃO
 function abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAtual) {
     const formEditar = document.getElementById('formEditarPost');
-    if (formEditar) {
-        // Redireciona a action diretamente para a sua rota cadastrada no backend do Flask
-        formEditar.action = `/editar_post/${postId}`;
-    }
+    if (formEditar) { formEditar.action = `/editar_post/${postId}`; }
 
     const textareaConteudo = document.getElementById('inputConteudoPost');
     if (textareaConteudo) {
@@ -363,12 +372,10 @@ function abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAt
         textareaConteudo.style.height = (textareaConteudo.scrollHeight) + "px";
     }
 
-    // Sincroniza os selects de Época e Local com as referências atuais da postagem
     const selectEpoca = document.getElementById('selectEpocaPost');
-    if (selectEpoca && idEpocaAtual) {
-        selectEpoca.value = idEpocaAtual;
-    }
+    if (selectEpoca && idEpocaAtual) { selectEpoca.value = idEpocaAtual; }
 
+    // No select tradicional, basta injetar o ID direto que o HTML se posiciona sozinho!
     const selectLocal = document.getElementById('selectLocalPost');
     if (selectLocal) {
         selectLocal.value = idLocalAtual || "0";
@@ -377,8 +384,31 @@ function abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAt
     const modalElement = document.getElementById('modalEditarPost');
     if (modalElement) {
         const meuModal = new bootstrap.Modal(modalElement);
+
+        modalElement.addEventListener('shown.bs.modal', function () {
+            if (textareaConteudo) {
+                textareaConteudo.style.height = "auto";
+                textareaConteudo.style.height = (textareaConteudo.scrollHeight) + "px";
+                textareaConteudo.focus();
+            }
+        }, { once: true });
+
         meuModal.show();
     }
+}
+
+/**
+ * 🛡️ INTERCEPTADOR DE SEGURANÇA CONTRA SYNTAXERROR
+ * Lê os atributos "data-*" do botão do card para evitar quebra de aspas ou enters do texto.
+ */
+function dispararEdicaoPeloCard(elementoBotao) {
+    const postId = elementoBotao.getAttribute('data-post-id');
+    const conteudoAtual = elementoBotao.getAttribute('data-conteudo');
+    const idEpocaAtual = elementoBotao.getAttribute('data-epoca');
+    const idLocalAtual = elementoBotao.getAttribute('data-local');
+
+    // Repassa os dados limpos para a abertura do modal
+    abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAtual);
 }
 
 /**
@@ -403,6 +433,31 @@ function confirmarExclusaoPostagem(postId) {
             }
         });
     }
+}
+
+/**
+ * 🏷️ MOTOR DE AFINIDADES: Abre o modal de conexões e tags do Repost
+ */
+function abrirModalAfinidadesRepost(repostId) {
+    const formAfinidades = document.getElementById('formAfinidadesRepost');
+    if (formAfinidades) {
+        formAfinidades.action = `/repost/afinidades/${repostId}`;
+    }
+
+    const modalElement = document.getElementById('modalAfinidadesRepost');
+    if (modalElement) {
+        const meuModal = new bootstrap.Modal(modalElement);
+        meuModal.show();
+    } else {
+        console.log("Aguardando container #modalAfinidadesRepost para o ID:", repostId);
+    }
+}
+
+/**
+ * 🛡️ FUNÇÃO ESPELHO: Elimina erros de Uncaught ReferenceError gerados por cache dos cards antigos
+ */
+function abrirModalEditarAfinidadesRepost(repostId) {
+    abrirModalAfinidadesRepost(repostId);
 }
 
 function reagirPostagem(postId, tipoReacao) {
@@ -498,6 +553,8 @@ $(document).ready(function() {
         });
         $('#feedback-container').removeClass('d-none').hide().fadeIn();
     });
+
+    // O ouvinte antigo do inputFalsoBusca foi removido daqui para evitar conflitos!
 });
 
 function enviarAvaliacaoCompleta() {

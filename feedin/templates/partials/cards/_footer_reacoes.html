@@ -2,7 +2,7 @@
 {% if current_user.is_authenticated %}
 
     <div class="d-flex align-items-center gap-3">
-        {# Varáveis de banco de dados rodando apenas em ambiente seguro #}
+        {# Variáveis de banco de dados rodando apenas em ambiente seguro #}
         {% set user_id = current_user.id %}
         {% set ja_curtiu = post_obj.usuario_ja_curtiu(user_id) %}
         {% set ja_rejeitou = post_obj.usuario_ja_deu_nao_curti(user_id) %}
@@ -11,6 +11,20 @@
         {% set tem_curtidas = post_obj.total_curtidas > 0 %}
         {% set tem_nao_curtidas = post_obj.total_nao_curtidas > 0 %}
         {% set tem_comentarios = post_obj.total_comentarios > 0 %}
+
+        {# 🔄 1º LUGAR DA FILA: BOTÃO REPOSTAR (Apenas para visitantes) #}
+        {% if atividade.id_usuario != user_id and post_obj.id_usuario != user_id %}
+            <form action="{{ url_for('repostar_memoria', id_post=post_obj.id) }}" method="POST" class="d-inline mb-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined }}">
+
+                <button type="submit" class="btn btn-sm group-reaction border-0 rounded-pill px-2.5 d-flex align-items-center text-muted"
+                        style="transition: all 0.2s ease; background-color: transparent;"
+                        title="Relembrar essa história no meu mural">
+                    <i class="bi bi-repeat me-1 fw-bold hover-sucesso" style="transition: transform 0.2s; font-size: 0.95rem;"></i>
+                    <span class="fw-bold small hover-sucesso-texto">Repostar</span>
+                </button>
+            </form>
+        {% endif %}
 
         {# BOTÃO: CURTIR #}
         <button class="btn btn-sm group-reaction border-0 rounded-pill px-2.5 d-flex align-items-center {{ 'bg-success text-white' if ja_curtiu else ('bg-success-subtle text-success' if tem_curtidas else 'text-muted') }}"
@@ -47,6 +61,13 @@
         }
         .group-reaction:active i {
             transform: scale(0.9);
+        }
+
+        /* Efeito de hover verde sutil dedicado ao botão de Repost */
+        .group-reaction:hover .hover-sucesso,
+        .group-reaction:hover .hover-sucesso-texto {
+            color: #198754 !important;
+            transition: color 0.15s ease-in-out;
         }
     </style>
 

@@ -813,26 +813,42 @@ class Postagem(database.Model):
     preservacao_memoria = database.Column(database.Boolean, default=False)
     id_epoca = database.Column(database.Integer, database.ForeignKey('epocas.id'), nullable=False)
     id_empresa = database.Column(database.Integer, database.ForeignKey('ese_empresa.id'), nullable=True)
+    id_repost_original = database.Column(database.Integer, database.ForeignKey('postagens.id'), nullable=True)
 
-    # RELACIONAMENTOS EXISTENTES
-    autor = database.relationship('Usuario', backref=database.backref('postagens', lazy='dynamic'),
-                                  foreign_keys=[id_usuario])
+    # =================================================================
+    # RELACIONAMENTOS LAPIDADOS (Livres de Ambiguidade)
+    # =================================================================
 
-    # Ajustado de backref para back_populates apontando para a nova variável da classe Local
+    # Informa ao SQLAlchemy exatamente qual coluna liga o comentário à Postagem
+    post_original = database.relationship(
+        'Postagem',
+        remote_side=[id],
+        foreign_keys=[id_repost_original],  # <-- Usa a coluna local da classe Postagem
+        backref=database.backref('reposts', lazy='dynamic')
+    )
+
+    # Informa ao SQLAlchemy exatamente qual coluna liga o comentário ao Usuário
+    autor = database.relationship(
+        'Usuario',
+        foreign_keys=[id_usuario],
+        backref=database.backref('comentarios_feitos', lazy='dynamic')
+    )
+
     local_foco = database.relationship(
         'Local',
         back_populates='mural_historias',
         foreign_keys=[id_local],
-        passive_deletes=True  # <-- Impede que o SQLAlchemy altere essa coluna de forma automatizada
+        passive_deletes=True
     )
 
-    tags_afinidade = database.relationship('Taxonomia',
-                                           secondary=postagem_tags,
-                                           backref=database.backref('postagens_relacionadas', lazy='dynamic'))
+    tags_afinidade = database.relationship(
+        'Taxonomia',
+        secondary=postagem_tags,
+        backref=database.backref('postagens_relacionadas', lazy='dynamic')
+    )
 
     anuncio = None
 
-    # 2. Nova relação (Mantida exatamente como você estruturou)
     pessoas_marcadas = database.relationship(
         'Usuario',
         secondary='marcacoes_postagens',
@@ -841,18 +857,22 @@ class Postagem(database.Model):
         viewonly=True
     )
 
-    # 🎯 AJUSTE SEGURO: Nova relação configurada com overlaps para coexistir com as antigas sem Warnings
     todas_as_marcacoes = database.relationship(
         'MarcacaoPostagem',
         backref=database.backref('postagem_alvo', overlaps="marcacoes,postagem"),
         lazy='joined',
-        overlaps="marcacoes,pessoas_marcadas,postagem"
+        overlaps="marcacoes,pessoas_marcadas,postagem",
+        foreign_keys="[MarcacaoPostagem.postagem_id]"  # <-- Garante o vínculo correto na tabela de marcações
     )
 
+    # =================================================================
+    # MÉTODOS E PROPRIEDADES (Mantidos 100% originais)
+    # =================================================================
     @property
     def lista_comentarios_ativos(self):
-        """Retorna os comentários ativos ordenados para o template"""
         with database.session.no_autoflush:
+            # Nota de segurança extra: garante o uso do nome correto da coluna do relacionamento
+            from feedin.models import PostagemComentario
             return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).order_by(
                 PostagemComentario.data_comentario.asc()).all()
 
@@ -860,11 +880,9 @@ class Postagem(database.Model):
     def imagem_completa(self):
         if not self.imagem_url:
             return None
-        # Garante que termine com .webp
         filename = self.imagem_url if self.imagem_url.endswith('.webp') else f"{self.imagem_url}.webp"
         return f"uploads/posts/{filename}"
 
-    # Métodos de conveniência
     @property
     def total_curtidas(self):
         from feedin.models import PostagemInteracao
@@ -873,21 +891,17 @@ class Postagem(database.Model):
 
     @property
     def total_comentarios(self):
+        from feedin.models import PostagemComentario
         with database.session.no_autoflush:
             return PostagemComentario.query.filter_by(id_postagem=self.id, ativo=True).count()
 
     def usuario_ja_curtiu(self, user_id):
-        # Consistência: Se o ID for nulo ou inválido (ex: usuário deslogado), assume que não curtiu
         if not user_id or not isinstance(user_id, int):
             return False
+        from feedin.models import PostagemInteracao
+        return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id,
+                                                 tipo='curti').first() is not None
 
-        return PostagemInteracao.query.filter_by(
-            id_postagem=self.id,
-            id_usuario=user_id,
-            tipo='curti'
-        ).first() is not None
-
-    # Métodos de compatibilidade para o template (Espelhamento)
     @property
     def total_curtidas_memoria(self):
         return self.total_curtidas
@@ -904,7 +918,6 @@ class Postagem(database.Model):
 
     @property
     def pessoas_marcadas_confirmadas(self):
-        """Retorna a lista de usuários cuja marcação já foi aceita pelo autor"""
         from feedin.models import MarcacaoPostagem
         with database.session.no_autoflush:
             vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='aceito').all()
@@ -912,7 +925,6 @@ class Postagem(database.Model):
 
     @property
     def solicitantes_pendentes_ids(self):
-        """Retorna uma lista de IDs de usuários que pediram para ser marcados e estão aguardando"""
         from feedin.models import MarcacaoPostagem
         with database.session.no_autoflush:
             vinculos = MarcacaoPostagem.query.filter_by(postagem_id=self.id, status='pendente').all()
@@ -921,17 +933,14 @@ class Postagem(database.Model):
     def usuario_ja_deu_nao_curti(self, user_id):
         from feedin.models import PostagemInteracao
         with database.session.no_autoflush:
-            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id, tipo='nao_curti').first() is not None
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id,
+                                                     tipo='nao_curti').first() is not None
 
     def usuario_ja_reagiu_tipo(self, user_id, tipo_procurado):
-        """Verifica se o usuário reagiu com um tipo específico"""
         from feedin.models import PostagemInteracao
         with database.session.no_autoflush:
-            return PostagemInteracao.query.filter_by(
-                id_postagem=self.id,
-                id_usuario=user_id,
-                tipo=tipo_procurado
-            ).first() is not None
+            return PostagemInteracao.query.filter_by(id_postagem=self.id, id_usuario=user_id,
+                                                     tipo=tipo_procurado).first() is not None
 
 
 class PostagemInteracao(database.Model):
@@ -953,19 +962,48 @@ class PostagemInteracao(database.Model):
 class PostagemComentario(database.Model):
     __tablename__ = 'postagem_comentarios'
     __table_args__ = {'extend_existing': True}
+
     id = database.Column(database.Integer, primary_key=True)
     id_postagem = database.Column(database.Integer, database.ForeignKey('postagens.id'), nullable=False)
     id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
     texto = database.Column(database.String(500), nullable=False)
     data_comentario = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
-    ativo = database.Column(database.Boolean, default=True)  # Para "exclusão" lógica
+    ativo = database.Column(database.Boolean, default=True)
+    id_repost_original = database.Column(database.Integer, database.ForeignKey('postagens.id'), nullable=True)
+
+    # =================================================================
+    # RELACIONAMENTOS CORRIGIDOS E SEGUROS
+    # =================================================================
+
+    # 1. Postagem atual onde o comentário foi inserido
+    postagem_atual = database.relationship(
+        'Postagem',
+        foreign_keys=[id_postagem],
+        backref=database.backref('comentarios_no_card', lazy='dynamic')
+    )
+
+    # 2. Vínculo do comentário com a postagem raiz (usando a FK existente id_repost_original)
+    post_original = database.relationship(
+        'Postagem',
+        foreign_keys=[id_repost_original],
+        backref=database.backref('comentarios_da_raiz_origem', lazy='dynamic')
+    )
+
+    # 3. 🛡️ CORREÇÃO DO AUTO-RELACIONAMENTO (respostas)
+    # Como não há uma coluna 'id_comentario_pai', precisamos dizer ao SQLAlchemy
+    # para usar a chave primária local e o id_repost_original para amarrar a árvore de gốc,
+    # ou deixar explícito o join caso seja um espelhamento de reposts:
+    respostas = database.relationship(
+        'PostagemComentario',
+        primaryjoin="PostagemComentario.id_repost_original == foreign(PostagemComentario.id_postagem)",
+        remote_side=[id_postagem],
+        lazy='dynamic'
+    )
 
     @property
     def usuario(self):
-        """Busca o objeto do usuário dono do comentário direto na sessão ativa do banco"""
-        from feedin.models import Usuario  # Mantém a importação isolada contra loops cíclicos
+        from feedin.models import Usuario
         try:
-            # Buscamos direto pela sessão global do banco, garantindo o mapeamento no Jinja
             return database.session.query(Usuario).get(self.id_usuario)
         except Exception:
             return None

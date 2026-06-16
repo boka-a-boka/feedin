@@ -1,0 +1,11 @@
+{% for comentario in comentarios %}
+<div class="comentario-item mb-2 p-2 border-bottom text-left">
+    <div class="d-flex justify-content-between align-items-center">
+        <strong>@{{ comentario.usuario.username if comentario.usuario else 'usuario' }}</strong>
+        <small class="text-muted" style="font-size: 0.75rem;">
+            {{ comentario.data_comentario.strftime('%d/%m/%Y %H:%M') }}
+        </small>
+    </div>
+    <p class="mb-0 text-secondary" style="font-size: 0.9rem;">{{ comentario.texto }}</p>
+</div>
+{% endfor %}

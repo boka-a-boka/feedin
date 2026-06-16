@@ -4447,7 +4447,14 @@ def ver_perfil(usuario_id):
     with database.session.no_autoflush:
 
         # Chamada dedicada à lógica de locais populares do usuário
-        locais_seguidos = Local.get_locais_populares_por_usuario(user_alvo.id)
+        locais_seguidos = (
+            database.session.query(Local, func.count(VinculoUsuarioLocal.id).label('total'))
+            .join(VinculoUsuarioLocal, Local.id == VinculoUsuarioLocal.local_id)
+            .filter(VinculoUsuarioLocal.usuario_id == usuario_id)
+            .group_by(Local.id)
+            .order_by(Local.nome.asc())  # Mantém a nossa ordem alfabética crucial para o Autocomplete!
+            .all()
+        )
 
         # UNIFAÇÃO DE QUERY: Uma única consulta resolve relacao e conexao_atual
         conexao_atual = Conexoes.query.filter(
@@ -4684,8 +4691,8 @@ def ver_perfil(usuario_id):
                     elif hoje < nasc_este_ano <= fim_semana:
                         aniversariantes_semana.append(amigo)
 
-    # Certifique-se de injetar no retorno do seu render_template:
-    # return render_template('perfil.html', ..., aniversariantes_dia=aniversariantes_dia, aniversariantes_semana=aniversariantes_semana)
+    # 🔥 INJEÇÃO NECESSÁRIA: Busca todas as épocas ordenadas pela cronologia
+    epocas_todas = Epoca.query.order_by(Epoca.ordem_cronologica.asc()).all()
 
     # 3. RETORNO DA ROTA
     return render_template("perfil_publico.html",
@@ -4698,6 +4705,7 @@ def ver_perfil(usuario_id):
                            total_postagens=total_mural_bruto,
                            fotos_com_voce=fotos_com_alvo,
                            memorias=memorias_alvo,
+                           epocas_todas=epocas_todas,
                            conexao=conexao_atual,
                            conexoes_confirmadas=conexoes_confirmadas,
                            tags_comum_ids=[t.id for t in tags_em_comum],
@@ -5238,11 +5246,14 @@ def editar_post(post_id):
         flash("Ação não permitida.", "danger")
         return redirect(request.referrer)
 
+    # 🚨 TRAVA DO REPOST: Impede modificação de memórias propagadas
+    if post.id_repost_original is not None:
+        flash("Não é possível editar uma memória repostada.", "warning")
+        return redirect(request.referrer)
+
     # 2. Captura dos Dados do Formulário (Texto, Época e LOCAL)
     novo_conteudo = request.form.get('conteudo', '').strip()
     nova_id_epoca = request.form.get('id_epoca')
-
-    # 📌 CAPTURA DO LOCAL: O select/input do seu modal deve enviar o name="id_local"
     novo_id_local = request.form.get('id_local')
 
     if not novo_conteudo:
@@ -5263,17 +5274,14 @@ def editar_post(post_id):
         # =================================================================
         # 🧠 ENGENHARIA DO GRAFO: REMAPEAMENTO DINÂMICO DE LOCAL
         # =================================================================
-        # Tratando o ID do local recebido (se vier vazio ou '0', vira None)
         novo_id_local = int(novo_id_local) if (novo_id_local and novo_id_local != '0') else None
 
         if novo_id_local != id_local_antigo:
-            # Efetua a troca do local no objeto
             post.id_local = novo_id_local
             print(f"🔄 [Remapeamento] Post {post_id} movido do Local {id_local_antigo} para o Local {novo_id_local}")
 
             # --- LIMPEZA: O usuário tinha um vínculo com o LOCAL ANTIGO nesta ÉPOCA? ---
             if id_local_antigo and id_epoca_antiga:
-                # Checa se restou QUALQUER outra postagem dele ativa naquele local e época passados
                 restou_postagem = Postagem.query.filter_by(
                     id_usuario=current_user.id,
                     id_local=id_local_antigo,
@@ -5281,7 +5289,6 @@ def editar_post(post_id):
                     ativo=True
                 ).filter(Postagem.id != post.id).first()
 
-                # Se não sobrou nenhuma, removemos o nó de relacionamento para limpar o perfil dele
                 if not restou_postagem:
                     no_antigo = UsuarioLocalEpoca.query.filter_by(
                         id_usuario=current_user.id,
@@ -5290,8 +5297,7 @@ def editar_post(post_id):
                     ).first()
                     if no_antigo:
                         database.session.delete(no_antigo)
-                        print(
-                            f"🧹 [Grafo] Nó antigo desfeito: Usuário deixou de frequentar o Local {id_local_antigo} na Época {id_epoca_antiga}")
+                        print(f"🧹 [Grafo] Nó antigo desfeito: Usuário deixou de frequentar o Local {id_local_antigo} na Época {id_epoca_antiga}")
 
             # --- INCREMENTO: Criar o novo vínculo no Grafo se o novo local exigir ---
             if novo_id_local and post.id_epoca:
@@ -5308,8 +5314,7 @@ def editar_post(post_id):
                         id_epoca=post.id_epoca
                     )
                     database.session.add(novo_no)
-                    print(
-                        f"🌱 [Grafo] Novo nó adicionado: Usuário agora frequenta o Local {novo_id_local} na Época {post.id_epoca}")
+                    print(f"🌱 [Grafo] Novo nó adicionado: Usuário agora frequenta o Local {novo_id_local} na Época {post.id_epoca}")
 
         # =================================================================
         # PROCESSAMENTO DE IMAGEM (Mantido)
@@ -5339,6 +5344,39 @@ def editar_post(post_id):
 
     return redirect(request.referrer)
 
+
+@app.route('/postagem/<int:id_post>/repost', methods=['POST'])
+@login_required
+def repostar_memoria(id_post):
+    post_alvo = Postagem.query.get_or_404(id_post)
+
+    # Efeito Viral: Se o alvo já for um repost, pegamos o original da raiz
+    if post_alvo.id_repost_original is not None:
+        post_orig = Postagem.query.get(post_alvo.id_repost_original)
+    else:
+        post_orig = post_alvo
+
+    # Regra de Negócio: Evita que o usuário reposte a própria história
+    if post_orig.id_usuario == current_user.id:
+        flash('Você não pode repostar sua própria história!', 'warning')
+        return redirect(request.referrer or url_for('dashboard'))
+
+    # Cria o registro do Repost herdando LOCAL e fixando o texto
+    novo_repost = Postagem(
+        conteudo=f"Repostando @{post_orig.autor.username}",  # Texto simplificado combinado
+        id_usuario=current_user.id,
+        id_repost_original=post_orig.id,  # Amarração eterna com a raiz
+        id_local=post_orig.id_local,  # Preserva o vínculo do estabelecimento histórico
+        data_criacao=datetime.now(timezone.utc)
+    )
+
+    # Nota: Se no futuro for capturar novas taxonomias, o espaço é aqui.
+
+    database.session.add(novo_repost)
+    database.session.commit()
+
+    flash('Memória propagada com sucesso no seu mural!', 'success')
+    return redirect(request.referrer or url_for('dashboard'))
 
 
 @app.route('/excluir_post/<int:post_id>', methods=['POST'])
@@ -5403,15 +5441,25 @@ def excluir_post(post_id):
 @app.route('/comentar_post/<int:post_id>', methods=['POST'])
 @login_required
 def comentar_post(post_id):
-    post = Postagem.query.get_or_404(post_id)
+    post_alvo = Postagem.query.get_or_404(post_id)
     texto = request.form.get('texto')
 
     if not texto or len(texto.strip()) == 0:
         return jsonify({"status": "error", "message": "O comentário não pode estar vazio."}), 400
 
+    # 🚨 INTELIGÊNCIA DE REDIRECIONAMENTO DO REPOST:
+    # Se o post onde o usuário comentou for um repost, mudamos o alvo para a raiz histórica original
+    if post_alvo.id_repost_original is not None:
+        post = Postagem.query.get(post_alvo.id_repost_original)
+        id_final_postagem = post.id
+    else:
+        post = post_alvo
+        id_final_postagem = post_alvo.id
+
     try:
+        # O comentário é fisicamente atrelado à postagem raiz
         novo_comentario = PostagemComentario(
-            id_postagem=post_id,
+            id_postagem=id_final_postagem,
             id_usuario=current_user.id,
             texto=texto,
             data_comentario=datetime.now(timezone.utc),
@@ -5420,11 +5468,11 @@ def comentar_post(post_id):
         database.session.add(novo_comentario)
 
         # =========================================================================
-        # MOTOR DE DISTRIBUIÇÃO DE NOTIFICAÇÕES EXPANDIDO (VALIDADO)
+        # MOTOR DE DISTRIBUIÇÃO DE NOTIFICAÇÕES EXPANDIDO (MANTIDO E PROTEGIDO)
         # =========================================================================
         usuarios_notificados = set()
 
-        # 1. Notifica o dono do post original
+        # 1. Notifica o dono do post original (raiz)
         if post.id_usuario != current_user.id:
             notif_dono = Notificacao(
                 id_usuario_destino=post.id_usuario,
@@ -5436,7 +5484,7 @@ def comentar_post(post_id):
             database.session.add(notif_dono)
             usuarios_notificados.add(post.id_usuario)
 
-        # 2. CORRIGIDO: Notifica as pessoas confirmadas marcadas na foto (Ajustado o nome do método)
+        # 2. Notifica as pessoas confirmadas marcadas na foto original
         for pessoa in post.pessoas_marcadas_confirmadas:
             if pessoa.id != current_user.id and pessoa.id not in usuarios_notificados:
                 notif_marcado = Notificacao(
@@ -5449,11 +5497,10 @@ def comentar_post(post_id):
                 database.session.add(notif_marcado)
                 usuarios_notificados.add(pessoa.id)
 
-        # 3. Notifica os usuários que seguem as tags dessa publicação
+        # 3. Notifica os usuários que seguem as tags dessa publicação original
         if post.tags:
             tag_ids = [t.id for t in post.tags]
 
-            # Buscamos usuários interessados através da tabela intermediária explicitamente
             usuarios_interessados_ids = [res[0] for res in database.session.query(
                 usuarios_interesses.c.usuario_id
             ).filter(
@@ -5478,9 +5525,8 @@ def comentar_post(post_id):
 
     except Exception as e:
         database.session.rollback()
-        # Log local útil para você pegar no terminal do PyCharm se algo falhar internamente
         print(f"ERRO CRÍTICO AO COMENTAR: {str(e)}")
-        return jsonify({"status": "error", "message": "Erro ao comentar."}), 500
+        return jsonify({"status": "error", "message": "Erro ao comentário."}), 500
 
 
 @app.route('/reagir_post/<int:post_id>/<string:tipo>', methods=['POST'])
@@ -5766,12 +5812,27 @@ def registrar_reivindicacao(local_id):
 def solicitar_marcacao(id_postagem):
     postagem = Postagem.query.get_or_404(id_postagem)
 
+    # 🛡️ TRAVA DE SEGURANÇA: O usuário não pode solicitar marcação na própria postagem/repost
+    if postagem.id_usuario == current_user.id:
+        return jsonify({'status': 'error', 'message': 'Você não pode se marcar na sua própria publicação.'}), 400
+
+    # Busca se já existe um histórico de marcação (pendente, aceito ou rejeitado)
     ja_existe = MarcacaoPostagem.query.filter_by(
         postagem_id=postagem.id,
         usuario_id=current_user.id
     ).first()
 
-    if not ja_existe:
+    if ja_existe:
+        # Se já estiver pendente ou aceito, não faz nada
+        if ja_existe.status in ['pendente', 'aceito']:
+            return jsonify({'status': 'success', 'message': 'Solicitação já enviada ou aprovada!'})
+
+        # Se estava 'rejeitado', permite que o usuário tente novamente (reseta para pendente)
+        ja_existe.status = 'pendente'
+        # Atualiza quem solicitou, garantindo a autoria da nova tentativa
+        ja_existe.solicitante_id = current_user.id
+    else:
+        # Criação de um registro totalmente novo
         nova_marcacao = MarcacaoPostagem(
             postagem_id=postagem.id,
             usuario_id=current_user.id,
@@ -5780,24 +5841,27 @@ def solicitar_marcacao(id_postagem):
         )
         database.session.add(nova_marcacao)
 
-        nova_notificacao = Notificacao(
-            id_usuario_destino=postagem.id_usuario,  # Dono do post (quem aprova)
-            id_usuario_origem=current_user.id,  # O solicitante (quem quer aparecer)
-            id_postagem_referencia=postagem.id,
-            # Garantimos dinamicamente a string com o username de quem tomou a iniciativa
-            mensagem=f"@{current_user.username} solicitou identificação em sua publicação.",
-            tipo='solicitacao_marcacao',  # Um tipo específico ajuda o HTML a renderizar melhor
-            lida=False
-        )
-        database.session.add(nova_notificacao)
+    # 🔔 GERAÇÃO DA NOTIFICAÇÃO: Direcionada dinamicamente ao dono deste nível (Original ou Repost)
+    nova_notificacao = Notificacao(
+        id_usuario_destino=postagem.id_usuario,  # Quem gerou este nó (dono do repost ou autor raiz)
+        id_usuario_origem=current_user.id,  # O solicitante
+        id_postagem_referencia=postagem.id,
+        mensagem=f"@{current_user.username} solicitou identificação em sua publicação.",
+        tipo='solicitacao_marcacao',
+        lida=False
+    )
+    database.session.add(nova_notificacao)
 
-        # Grava de forma definitiva no banco
-        database.session.commit()
+    # Grava de forma definitiva no banco
+    database.session.commit()
 
-        # 🧹 LIMPEZA DE SESSÃO: Remove os objetos da memória ativa do ORM
-        # para que o Autoflush de outras rotas não tente reavaliá-los
+    # 🧹 LIMPEZA DE SESSÃO: Mantendo a boa prática que você implementou
+    if not ja_existe:
         database.session.refresh(nova_marcacao)
-        database.session.refresh(nova_notificacao)
+    else:
+        database.session.refresh(ja_existe)
+
+    database.session.refresh(nova_notificacao)
 
     return jsonify({'status': 'success', 'message': 'Solicitação enviada!'})
 

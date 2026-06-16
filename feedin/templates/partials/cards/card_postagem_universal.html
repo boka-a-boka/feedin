@@ -28,7 +28,6 @@
         {% set atividade = obj %}
     {% endif %}
 
-    {# --- REMOVIDO O SEGUNDO BLOCO CONFLITANTE DE IFs QUE ESTAVA DUPLICADO ABAIXO --- #}
     <style>
     .img-ajustada-feed {
         {% if context_origem in ['perfil_local', 'perfil_publico'] %}
@@ -140,16 +139,42 @@
             {% set autor_acao = atividade.autor_objeto or atividade.autor or atividade.usuario or (post_obj.autor if post_obj) %}
         {% endif %}
 
-        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}" style="border-left: 0 !important;">
-            <div class="card-body">
+        {# Detecta de forma segura se estamos lidando com um Repost #}
+        {% set eh_repost = post_obj.id_repost_original is defined and post_obj.id_repost_original is not none %}
 
-                {# CABEÇALHO DO AUTOR #}
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden card-postagem-final {{ 'border-start border-primary border-4' if eh_sistema }}" id="post-{{ post_obj.id }}" style="border-left: 0 !important;">
+
+            {# 🔁 CHANCELA SUPERIOR DO REPOST (Injetada dinamicamente) #}
+            {% if eh_repost %}
+                <div class="px-3 pt-2 pb-1 bg-light bg-opacity-75 border-bottom d-flex align-items-center text-muted" style="font-size: 0.8rem;">
+                    <i class="bi bi-repeat text-success me-2 fw-bold" style="font-size: 0.95rem;"></i>
+                    <span>
+                        <strong>@{{ autor_acao.username }}</strong> relembrou esta história de
+                        <a href="{{ url_for('ver_perfil', usuario_id=post_obj.post_original.id_usuario) }}" class="text-decoration-none fw-bold text-dark">
+                            @{{ post_obj.post_original.autor.username if post_obj.post_original.autor else 'Usuário Antigo' }}
+                        </a>
+                    </span>
+                </div>
+            {% endif %}
+
+<div class="card-body">
+
+                {# CABEÇALHO DO AUTOR ORIGINAL DA MEMÓRIA #}
                 {% if autor_acao %}
                     <div class="d-flex align-items-center mb-3">
-                        <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        {% if eh_repost %}
+                            <img src="{{ url_for('servir_foto_perfil', usuario_id=post_obj.post_original.id_usuario) }}" class="rounded-circle border" width="40" height="40" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        {% else %}
+                            <img src="{{ url_for('servir_foto_perfil', usuario_id=autor_acao.id) }}" class="rounded-circle border" width="40" height="40" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        {% endif %}
+
                         <div class="ms-2">
                             <span class="text-dark fw-bold d-inline-block" style="font-size: 0.95rem;">
-                                {{ autor_acao.username }}
+                                {% if eh_repost %}
+                                    {{ post_obj.post_original.autor.username }}
+                                {% else %}
+                                    {{ autor_acao.username }}
+                                {% endif %}
 
                                 {% if current_user.is_authenticated and post_obj and post_obj.todas_as_marcacoes %}
                                     {% set vc_marcado = post_obj.todas_as_marcacoes | selectattr("usuario_id", "equalto", current_user.id) | selectattr("status", "equalto", "aceito") | list %}
@@ -158,15 +183,25 @@
                                     {% endif %}
                                 {% endif %}
                             </span>
-                            <small class="text-muted d-block" style="font-size: 0.78rem;">{{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}</small>
+                            <small class="text-muted d-block" style="font-size: 0.78rem;">
+                                {% if eh_repost %}
+                                    História original de {{ post_obj.post_original.data_criacao.strftime('%d/%m/%Y') }}
+                                {% else %}
+                                    {{ atividade.data_comentario.strftime('%d/%m/%Y') if eh_comentario else (atividade.data_criacao.strftime('%d/%m/%Y') if atividade.data_criacao) }}
+                                {% endif %}
+                            </small>
                         </div>
                     </div>
                 {% endif %}
 
                 <div class="content-wrapper clearfix">
                     {# IMAGEM ÚNICA #}
-                    {% if not eh_sistema and post_obj.imagem_url %}
-                        <img src="{{ url_for('static', filename='uploads/posts/' ~ post_obj.imagem_url.replace('.webp', '') ~ '.webp') }}" class="img-ajustada-feed" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                    {% if not eh_sistema %}
+                        {% if eh_repost and post_obj.post_original.imagem_url %}
+                            <img src="{{ url_for('static', filename='uploads/posts/' ~ post_obj.post_original.imagem_url.replace('.webp', '') ~ '.webp') }}" class="img-ajustada-feed" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        {% elif not eh_repost and post_obj.imagem_url %}
+                            <img src="{{ url_for('static', filename='uploads/posts/' ~ post_obj.imagem_url.replace('.webp', '') ~ '.webp') }}" class="img-ajustada-feed" onerror="this.src='/static/fotos_perfil/default.jpg'">
+                        {% endif %}
                     {% endif %}
 
                     {# TEXTO DA HISTÓRIA #}
@@ -183,8 +218,11 @@
                                     <i class="bi bi-arrow-return-right"></i> Relato original: {{ post_obj.conteudo | formatar_postagem | safe }}
                                 </div>
                             {% else %}
-                                {# Postagem normal: renderiza apenas uma vez, respeitando quebras de linha #}
-                                <p style="white-space: pre-wrap;">{{ texto_exibicao | formatar_postagem | safe }}</p>
+                                {% if eh_repost %}
+                                    <p style="white-space: pre-wrap;">{{ post_obj.post_original.conteudo | formatar_postagem | safe }}</p>
+                                {% else %}
+                                    <p style="white-space: pre-wrap;">{{ texto_exibicao | formatar_postagem | safe }}</p>
+                                {% endif %}
                             {% endif %}
                         {% endif %}
                     </div>
@@ -192,8 +230,9 @@
                     <div style="clear: both;"></div>
 
                     {# 👥 QUEM APARECE NA PUBLICAÇÃO #}
-                    {% if post_obj and post_obj.todas_as_marcacoes %}
-                        {% set aprovados = post_obj.todas_as_marcacoes | selectattr("status", "equalto", "aceito") | list %}
+                    {% set post_referencia_marcacao = post_obj.post_original if eh_repost else post_obj %}
+                    {% if post_referencia_marcacao and post_referencia_marcacao.todas_as_marcacoes %}
+                        {% set aprovados = post_referencia_marcacao.todas_as_marcacoes | selectattr("status", "equalto", "aceito") | list %}
                         {% if aprovados | length > 0 %}
                             <div class="mt-2 mb-3 pt-2 border-top border-light-subtle d-flex align-items-center flex-wrap gap-2">
                                 <small class="text-muted fw-medium" style="font-size: 0.78rem;">
@@ -212,10 +251,11 @@
                     {% endif %}
 
                     {# TAGS DE AFINIDADE #}
-                    {% if post_obj and post_obj.tags %}
+                    {% set post_referencia_tags = post_obj.post_original if eh_repost else post_obj %}
+                    {% if post_referencia_tags and post_referencia_tags.tags %}
                         <div class="mt-2 border-top pt-2" style="border-top-style: dotted !important; opacity: 0.9;">
                             <div class="d-flex flex-wrap gap-1">
-                                {% for tag in post_obj.tags %}
+                                {% for tag in post_referencia_tags.tags %}
                                     {% if meus_interesses_ids and tag.id in meus_interesses_ids %}
                                         <span class="badge bg-primary rounded-pill px-2 py-1 shadow-xs" style="font-size: 0.68rem; font-weight: 700; letter-spacing: 0.3px;">
                                             <i class="bi bi-bookmark-check-fill me-1"></i>#{{ tag.nome.replace(' ', '') }}
@@ -231,35 +271,48 @@
                     {% endif %}
                 </div>
 
-                {# --- BLOCO DE EXIBIÇÃO DE COMENTÁRIOS DESTA HISTÓRIA --- #}
-                {% if post_obj and post_obj.total_comentarios is defined and post_obj.total_comentarios > 0 %}
-                    <div class="mt-3 pt-3 border-top" style="background-color: #f8f9fa; border-radius: 8px; padding: 10px 15px;">
-                        <h6 class="text-muted mb-2" style="font-size: 0.85rem;"><i class="bi bi-chat-left-text me-1"></i> Comentários:</h6>
+                {# --- BARRA DE GERENCIAMENTO HORIZONTAL DIRETA (SEM DROPDOWN) --- #}
+                {% if current_user.is_authenticated and (atividade.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
+                    <div class="d-flex justify-content-start align-items-center flex-wrap gap-3 mt-3 pt-2 border-top border-light">
 
-                        {% for com in post_obj.lista_comentarios_ativos %}
-                            <div class="d-flex align-items-start mb-2 pb-2 border-bottom border-light" id="comentario-{{ com.id }}">
-                                <img src="{{ url_for('servir_foto_perfil', usuario_id=com.id_usuario) }}" class="rounded-circle border me-2" width="28" height="28" onerror="this.src='/static/fotos_perfil/default.jpg'">
-                                <div class="w-100">
-                                    <div class="bg-white p-2 rounded shadow-xs" style="font-size: 0.92rem;">
-                                        <strong class="text-dark">
-                                            {% if com.usuario and com.usuario.username %} @{{ com.usuario.username }}
-                                            {% elif com.id_usuario %} @ID_{{ com.id_usuario }}
-                                            {% else %} @Usuário {% endif %}
-                                        </strong>
-                                        <span class="text-secondary">{{ com.texto | formatar_postagem | safe }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center mt-1 px-1">
-                                        <small class="text-muted" style="font-size: 0.75rem;">{{ com.data_comentario.strftime('%d/%m/%Y %H:%M') }}</small>
+                        {% if eh_repost %}
+                            {# Fluxo de Edição de Afinidades do Repost #}
+                            <button type="button" class="btn btn-link p-0 text-decoration-none text-muted btn-fluxo-silencioso"
+                                    style="font-size: 0.82rem;"
+                                    onclick="abrirModalEditarAfinidadesRepost('{{ post_obj.id }}')">
+                                <i class="bi bi-tags text-primary me-1"></i> Ajustar Marcações/Tags
+                            </button>
 
-                                        {% if current_user.is_authenticated and (com.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
-                                            <button class="btn btn-sm btn-link text-danger p-0 border-0" style="font-size: 0.75rem; text-decoration: none;" onclick="excluirComentario('{{ com.id }}')">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
+                            <span class="text-black-50" style="font-size: 0.8rem;">•</span>
+
+                            {# Fluxo de Remoção do Repost #}
+                            <button type="button" class="btn btn-link p-0 text-decoration-none text-danger btn-fluxo-silencioso"
+                                    style="font-size: 0.82rem;"
+                                    onclick="confirmarExclusaoPostagem('{{ post_obj.id }}')">
+                                <i class="bi bi-trash3 me-1"></i> Remover Repost
+                            </button>
+                        {% else %}
+                            {# Fluxo de Edição da História Original - AJUSTADO COM DATA-ATTRIBUTES CONTRA QUEBRAS DE LINHA #}
+                            <button type="button" class="btn btn-link p-0 text-decoration-none text-muted btn-fluxo-silencioso"
+                                    style="font-size: 0.82rem;"
+                                    data-post-id="{{ post_obj.id }}"
+                                    data-conteudo="{{ post_obj.conteudo }}"
+                                    data-epoca="{{ post_obj.id_epoca or '' }}"
+                                    data-local="{{ post_obj.id_local or '0' }}"
+                                    onclick="dispararEdicaoPeloCard(this)">
+                                <i class="bi bi-pencil text-primary me-1"></i> Editar História
+                            </button>
+
+                            <span class="text-black-50" style="font-size: 0.8rem;">•</span>
+
+                            {# Fluxo de Exclusão da História Original #}
+                            <button type="button" class="btn btn-link p-0 text-decoration-none text-danger btn-fluxo-silencioso"
+                                    style="font-size: 0.82rem;"
+                                    onclick="confirmarExclusaoPostagem('{{ post_obj.id }}')">
+                                <i class="bi bi-trash3 me-1"></i> Excluir Memória
+                            </button>
+                        {% endif %}
+
                     </div>
                 {% endif %}
             </div>
@@ -280,13 +333,15 @@
                             </a>
                         {% endif %}
 
-                        {# 🚀 GATILHO SOCIAL ASSÍNCRONO: "Olha eu ali!" #}
+                        {# 🚀 GATILHO SOCIAL ASSÍNCRONO: "Olha eu ali!" (Escopo por Nível de Repost) #}
                         <div id="universal-container-olha-{{ post_obj.id }}">
                             {% if current_user.is_authenticated %}
                                 {% if post_obj.id_usuario == current_user.id %}
-                                    <span class="badge bg-light text-muted border rounded-pill px-2 py-1.5 fs-xs fw-normal" style="font-size: 0.72rem;">Sua Memória</span>
+                                    <span class="badge bg-light text-muted border rounded-pill px-2 py-1.5 fw-normal" style="font-size: 0.72rem;">Sua Linha do Tempo</span>
                                 {% else %}
                                     {% set vinculo_do_leitor = namespace(status='nenhum') %}
+
+                                    {# Checa as marcações DESSA postagem específica (seja ela original ou repost) #}
                                     {% for m_check in post_obj.todas_as_marcacoes %}
                                         {% if m_check.usuario_id == current_user.id %}
                                             {% set vinculo_do_leitor.status = m_check.status %}
@@ -299,9 +354,10 @@
                                         </span>
                                     {% elif vinculo_do_leitor.status == 'pendente' %}
                                         <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
-                                            <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
+                                            <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando @{{ autor_acao.username }}...
                                         </button>
                                     {% else %}
+                                        {# Dispara o ID do post atual que está na tela (se for repost, vai o ID do repost) #}
                                         <button class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-bold text-decoration-none btn-fluxo-silencioso"
                                                 style="font-size: 0.75rem; border-color: #d4a373; color: #a06a42; background-color: #fffaf0;"
                                                 onclick="solicitarOlhaEuAliUniversal('{{ post_obj.id }}')">
@@ -315,36 +371,8 @@
                         </div>
                     </div>
 
-                    {# GERENCIAMENTO EXCLUSIVO DE EDIÇÃO/EXCLUSÃO (Unificado com Roteamento do Perfil) #}
-                    {% if current_user.is_authenticated and (atividade.id_usuario == current_user.id or post_obj.id_usuario == current_user.id) %}
-                        <div class="dropdown ms-auto">
-                            <button class="btn btn-link text-muted p-0 lh-1" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-three-dots-vertical fs-5"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3">
-                                <li>
-                                    <button class="dropdown-item py-2" type="button"
-                                            onclick="abrirModalEditarPostagem(
-                                                '{{ post_obj.id }}',
-                                                '{{ (post_obj.conteudo)|e }}',
-                                                '{{ post_obj.id_epoca or "" }}',
-                                                '{{ post_obj.id_local or "0" }}'
-                                            )">
-                                        <i class="bi bi-pencil me-2 text-primary"></i> Editar História
-                                    </button>
-                                </li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li>
-                                    <button class="dropdown-item py-2 text-danger" type="button" onclick="confirmarExclusaoPostagem('{{ post_obj.id }}')">
-                                        <i class="bi bi-trash3 me-2"></i> Excluir Memória
-                                    </button>
-                                </li>
-                            </ul>
-                        </div>
-                    {% endif %}
-
-                    {# BLOCO DE REAÇÕES (Sempre visível se for um post) #}
-                    <div class="d-flex align-items-center gap-3 {% if not (current_user.is_authenticated and (atividade.id_usuario == current_user.id or post_obj.id_usuario == current_user.id)) %}ms-auto{% endif %}">
+                    {# 📢 BLOCO DE REAÇÕES UNIFICADO (Injeta o _footer_reacoes que agora gerencia o Repost no início) #}
+                    <div class="d-flex align-items-center gap-3 ms-auto">
                         {% if render_modo == 'post' %}
                             {% include "partials/cards/_footer_reacoes.html" %}
                         {% endif %}
@@ -353,9 +381,8 @@
             </div>
 
             {# ======================================================================= #}
-            {# SUBSOLO DO CARD: APOIO COMERCIAL (AJUSTADO PARA PERFIS)                 #}
+            {# SUBSOLO DO CARD: APOIO COMERCIAL                                       #}
             {# ======================================================================= #}
-
             {% if atividade.anuncio %}
                 <div class="feed-ad-inline-wrapper my-2 border-top pt-2" style="width: 100%; display: block;">
                     <div class="d-flex justify-content-between align-items-center bg-primary-subtle bg-opacity-25 border border-primary-subtle rounded-3 p-2 mx-auto" style="max-width: 500px;">
@@ -371,7 +398,7 @@
                                 style="font-size: 0.75rem; letter-spacing: 0.3px;">
                             {{ atividade.anuncio.local.nome if atividade.anuncio.local else "Parceiro" }}
                             {% if atividade.anuncio.mais_x and atividade.anuncio.mais_x > 0 %}
-                                <span class="badge bg-white text-primary ms-1" style="font-size: 0.7rem; padding: 2px 5px;">
+                                <span class="badge bg-white text-primary ms-1" style="font-size: 0.71rem; padding: 2px 5px;">
                                     +{{ atividade.anuncio.mais_x }}
                                 </span>
                             {% endif %}
@@ -381,14 +408,12 @@
                     {# ÁREA DO COLLAPSE: Onde listamos todos os parceiros #}
                     <div class="collapse" id="ad-universal-collapse-{{ post_obj.id }}">
                         <div class="card border border-light-subtle shadow-sm rounded-3 bg-white mx-auto mt-2 p-3" style="max-width: 500px;">
-                            {# Destaque principal #}
                             <div class="parceiro-destaque-bloco mb-3 pb-3 border-bottom">
                                 <h6 class="fw-bold text-dark">{{ atividade.anuncio.local.nome }}</h6>
                                 <p class="text-muted small">{{ atividade.anuncio.texto_formatado }}</p>
                                 <a href="{{ url_for('registrar_clique', anuncio_id=atividade.anuncio.id, origem='botao', tag_id=atividade.anuncio.taxonomia_id) }}" class="btn btn-sm btn-outline-primary rounded-pill w-100">Visitar</a>
                             </div>
 
-                            {# Vitrine de outros parceiros (O ajuste que faltava) #}
                             {% if atividade.anuncio.outros_parceiros %}
                                 <div class="mt-2">
                                     <small class="text-muted fw-bold d-block mb-2">Também apoiam este nicho:</small>
@@ -410,47 +435,3 @@
         </div>
     {% endif %}
 {% endif %}
-
-<script>
-function solicitarOlhaEuAliUniversal(postId) {
-    const url = `/postagem/${postId}/solicitar_marcacao`;
-    const container = document.getElementById(`universal-container-olha-${postId}`);
-
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
-                      document.querySelector('meta[name="csrf_token"]')?.getAttribute('content') ||
-                      document.querySelector('input[name="csrf_token"]')?.value || '';
-
-    fetch(url, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': csrfToken,
-            'X-CSRF-Token': csrfToken,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ post_id: postId })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Servidor retornou status ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === 'success' || data.status === 'sucesso') {
-            if (container) {
-                container.innerHTML = `
-                    <button class="btn btn-sm btn-light rounded-pill px-3 fw-medium border text-muted" style="font-size: 0.75rem;" disabled>
-                        <i class="bi bi-hourglass-split text-warning me-1"></i> Aguardando aprovação...
-                    </button>
-                `;
-            }
-        } else {
-            alert(data.message || 'Erro ao submeter pedido.');
-        }
-    })
-    .catch(error => {
-        console.error('Erro na requisição da marcação universal:', error);
-        alert('Não foi possível completar a ação. Verifique se você está logado ou a segurança da sessão.');
-    });
-}
-</script>

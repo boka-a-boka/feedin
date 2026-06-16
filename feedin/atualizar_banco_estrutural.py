@@ -1,19 +1,18 @@
-# atualizar_banco_vps.py
 import os
 from feedin import app, database
 from sqlalchemy import text
 
 print("=" * 60)
-print("🌐 SCRIPT DE ATUALIZAÇÃO DO BANCO DE DADOS - PRODUÇÃO (VPS)")
+print("🌐 SCRIPT V1: ATUALIZAÇÃO DO BANCO DE DADOS - BASE (HOMOLOGAÇÃO / VPS)")
 print("=" * 60)
 
 with app.app_context():
     # -----------------------------------------------------------------
-    # PASSO 1: Importação dos Modelos (Garante que o SQLAlchemy mapeie tudo)
+    # PASSO 1: Importação dos Modelos (Garante o mapeamento completo)
     # -----------------------------------------------------------------
     print("📦 Mapeando modelos do sistema...")
     try:
-        from feedin.models import Usuario, Postagem, Local, Taxonomia
+        from feedin.models import Usuario, Postagem, PostagemComentario, Local, Taxonomia
         from feedin.models import Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo
 
         try:
@@ -40,20 +39,39 @@ with app.app_context():
     # -----------------------------------------------------------------
     # PASSO 3: Injetar colunas novas na tabela 'postagens' existente
     # -----------------------------------------------------------------
-    print("\n📝 Injetando campos temporais na tabela 'postagens' de produção...")
+    print("\n📝 Injetando novos campos na tabela 'postagens'...")
 
-    # Sintaxe limpa e compatível com PostgreSQL, MySQL e SQLite
     alteracoes_postagem = [
-        ("preservacao_memoria", "BOOLEAN DEFAULT FALSE"),
-        ("id_epoca", "INTEGER REFERENCES epocas(id)"),
-        ("id_empresa", "INTEGER REFERENCES ese_empresa(id)")  # Nome da tabela física da agenda
+        {"coluna": "preservacao_memoria", "tipo": "BOOLEAN DEFAULT FALSE", "fk": None},
+        {"coluna": "id_epoca", "tipo": "INTEGER", "fk": "epocas(id)"},
+        {"coluna": "id_empresa", "tipo": "INTEGER", "fk": "ese_empresa(id)"},
+        {"coluna": "id_repost_original", "tipo": "INTEGER", "fk": "postagens(id)"}
     ]
 
-    for coluna, tipo in alteracoes_postagem:
+    for item in alteracoes_postagem:
+        coluna = item["coluna"]
+        tipo = item["tipo"]
+        fk = item["fk"]
+
         try:
             database.session.execute(text(f"ALTER TABLE postagens ADD COLUMN {coluna} {tipo};"))
             database.session.commit()
             print(f"   🔹 Coluna '{coluna}' injetada com sucesso.")
+
+            if fk:
+                try:
+                    database.session.execute(text(
+                        f"ALTER TABLE postagens ADD CONSTRAINT fk_postagens_{coluna} FOREIGN KEY ({coluna}) REFERENCES {fk};"
+                    ))
+                    database.session.commit()
+                    print(f"      🔗 Restrição Foreign Key aplicada para '{coluna}'.")
+                except Exception as e_fk:
+                    database.session.rollback()
+                    if "syntax error" in str(e_fk).lower() or "sqlite" in str(database.engine.url):
+                        pass
+                    else:
+                        print(f"      ⚠️ Nota sobre a FK de '{coluna}': {e_fk}")
+
         except Exception as e_alter:
             database.session.rollback()
             msg_erro = str(e_alter).lower()
@@ -63,5 +81,5 @@ with app.app_context():
                 print(f"   ⚠️ Nota/Aviso sobre a coluna '{coluna}': {e_alter}")
 
 print("\n" + "=" * 60)
-print("🏁 Banco de dados da VPS atualizado e protegido contra esquecimentos!")
+print("🏁 Script V1 executado e verificado!")
 print("=" * 60)
