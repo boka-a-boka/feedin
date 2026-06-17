@@ -10,6 +10,7 @@ from feedin.forms import (FormLogin, FormNewUser, FormPerfil, FormApelido, FormC
 from feedin.modules.agenda.models import ModHomologacaoEmpresa
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from datetime import datetime, timezone, date, timedelta
+from zoneinfo import ZoneInfo
 from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Parentesco,
                            GrauParentesco, MembroGrupo, GrupoSocial, Local, Conexoes, Memoria,
                            AtividadeLocal, VinculoUsuarioLocal, Taxonomia, LocalMidia, Convite,
@@ -5050,6 +5051,9 @@ def processar_identidade():
 @app.route('/criar-postagem', methods=['POST'])
 @login_required
 def criar_postagem():
+    fuso_brasil = ZoneInfo("America/Sao_Paulo")
+    data_atual = datetime.now(fuso_brasil)
+
     # 1. Coleta Universal de Dados
     id_local = request.form.get('id_local')
     conteudo = request.form.get('conteudo', '').strip()
@@ -5103,7 +5107,7 @@ def criar_postagem():
             id_local=local.id if local else None,
             conteudo=conteudo,
             imagem_url=nome_final,
-            data_criacao=datetime.now(timezone.utc),
+            data_criacao=datetime.now(fuso_brasil),
             ativo=True
         )
 
@@ -5177,7 +5181,7 @@ def criar_postagem():
                         postagem_id=nova_postagem.id,
                         usuario_id=id_marcado,
                         status='aceito',
-                        criado_em=datetime.now(timezone.utc)
+                        criado_em=datetime.now(fuso_brasil)
                     )
                     database.session.add(nova_marcacao)
                 else:
@@ -6344,7 +6348,6 @@ from flask import render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from feedin.models import database, Local
 from werkzeug.utils import secure_filename
-from datetime import datetime, timezone
 import os
 
 # Pasta protegida na raiz da VPS
