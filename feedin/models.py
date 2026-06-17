@@ -962,20 +962,21 @@ class PostagemComentario(database.Model):
         backref=database.backref('comentarios_da_raiz_origem', lazy='dynamic')
     )
 
-    # 3. 🛡️ CORREÇÃO DO AUTO-RELACIONAMENTO (respostas)
-    # Como não há uma coluna 'id_comentario_pai', precisamos dizer ao SQLAlchemy
-    # para usar a chave primária local e o id_repost_original para amarrar a árvore de gốc,
-    # ou deixar explícito o join caso seja um espelhamento de reposts:
+    # ==============================================================================
+    # 🛡️ CORREÇÃO DEFINITIVA DO AUTO-RELACIONAMENTO (respostas)
+    # ==============================================================================
+    # Ajustamos o 'overlaps' com os nomes exatos apontados pelo log do Gunicorn.
+    # Isso remove a ambiguidade de escrita/leitura concorrente na coluna 'id_repost_original'
+    # e estabiliza o configure_mappers() do SQLAlchemy, eliminando o gargalo de CPU.
     respostas = database.relationship(
         'PostagemComentario',
         primaryjoin="PostagemComentario.id == foreign(PostagemComentario.id_repost_original)",
-        lazy='select',  # 👈 Mudamos de 'dynamic' para 'select' para aceitar a coleção com segurança
-        overlaps="comentarios_no_card,postagem_atual"
+        lazy='select',
+        overlaps="comentarios_da_raiz_origem,post_original"  # 👈 Ajustado com os culpados reais do log
     )
 
     @property
     def usuario(self):
-        from feedin.models import Usuario
         try:
             return database.session.query(Usuario).get(self.id_usuario)
         except Exception:
