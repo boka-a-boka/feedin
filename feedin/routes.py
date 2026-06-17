@@ -312,7 +312,7 @@ def realizar_logout():
 def login():
     if current_user.is_authenticated:
         # Se logado e com CPF ok -> Feed. Se logado sem CPF -> Perfil (onde a modal aparecerá)
-        target = 'feed' if current_user.aceite_lgpd else 'get_perfil'
+        target = 'dashboard' if current_user.aceite_lgpd else 'get_perfil'
         return redirect(url_for(target, id_usuario=current_user.id))
 
     session.permanent = True
@@ -352,7 +352,7 @@ def login():
                 # 3. Tudo OK? Feed direto.
                 else:
                     flash(f"Olá, {usuario.username}!", "success")
-                    target_url = url_for("feed")
+                    target_url = url_for("dashboard")
 
                 # Se uma conexão foi processada, criamos a resposta explicitamente para limpar o cookie
                 if id_padrinho:
@@ -6150,7 +6150,7 @@ def obter_publicidade_contextual(pub, local_contexto_id=None):
 @login_required
 def exibir_feed():
     # 1. Busca as postagens reais do banco
-    postagens_do_feed = Postagem.query.filter_by(ativo=True).order_by(Postagem.data_creation.desc()).all()
+    postagens_do_feed = Postagem.query.filter_by(ativo=True).order_by(Postagem.data_criacao.desc()).all()
 
     print("\n" + "=" * 50)
     print(f"!!! [DEBUG] ROTA REAL ACESSADA !!! Total de posts: {len(postagens_do_feed)}")

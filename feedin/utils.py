@@ -7,9 +7,7 @@ from functools import wraps
 from flask import render_template, request, redirect, url_for
 from unicodedata import normalize
 
-from feedin.models import Local
-
-from feedin.modules.agenda.models import ModCadastroCliente
+from feedin.models import Local, ModCadastroCliente
 
 
 def salvar_imagem(foto):
@@ -384,3 +382,25 @@ def limpar_string(texto):
     """Remove acentos, ç, e caracteres especiais de uma string."""
     string_normalizada = normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
     return re.sub(r'[^a-zA-Z0-9\s]', '', string_normalizada).lower().strip()
+
+
+import re
+from feedin.models import IdentidadeCivil
+
+
+def preparar_e_hashear_cpf(cpf_cru):
+    """
+    Higieniza o CPF e gera o hash oficial e inegociável consumindo
+    o motor padrão da classe IdentidadeCivil da Alfândega do FeedIn.
+    """
+    if not cpf_cru:
+        return None, None
+
+    # Limpeza rigorosa idêntica à da Alfândega: re.sub(r'\D', '', ...)
+    cpf_limpo = re.sub(r'\D', '', str(cpf_cru))
+
+    # Executa a regra nativa e imutável que você definiu no Core
+    cpf_hash = IdentidadeCivil.gerar_hash(cpf_limpo)
+
+    return cpf_hash, cpf_limpo
+

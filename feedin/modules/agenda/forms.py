@@ -2,7 +2,7 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, TextAreaField, DecimalField, IntegerField, HiddenField, BooleanField, IntegerField, SelectField, TimeField
 from wtforms.validators import DataRequired, Email, Length, ValidationError, NumberRange, Optional
-from feedin.modules.agenda.models import ModCadastroCliente
+from feedin.models import ModCadastroCliente, ModFilaAtivacaoCliente
 
 
 class FormCadastroBalcao(FlaskForm):
@@ -96,16 +96,26 @@ class FormColaborador(FlaskForm):
 
 
 class FormCredenciamentoLocal(FlaskForm):
-    """Formulário unificado para assumir memória ou inaugurar local inédito"""
-    # Campo oculto para controle técnico do Match
+    """Formulário unificado para assumir memória urbana (Core) ou inaugurar estabelecimento inédito (Agenda)"""
+
+    # 🔧 Campos Ocultos de Controle Técnico
     id_local_existente = HiddenField('ID Local Existente', validators=[Optional()])
 
-    # Identificação e Comercial
+    # 👔 Identificação e Comercial (O Inquilino - EseEmpresa)
     nome = StringField('Nome Fantasia do Estabelecimento', validators=[DataRequired(), Length(max=100)])
-    documento = StringField('CNPJ / CPF', validators=[Optional(), Length(max=18)])
-    id_categoria_principal = IntegerField('Categoria (Taxonomia)', validators=[Optional()])
 
-    # Geolocalização (Campos populados via Autocomplete ou digitados se inédito)
+    # ADICIONADO: Essencial para a rota criar a URL exclusiva do PWA do cliente na Agenda
+    slug = StringField('Endereço do Link (Slug)', validators=[DataRequired(), Length(max=100)])
+
+    # Mantido o padrão do Core (pode ser usado para salvar na EseEmpresa ou mapear taxonomia)
+    id_categoria_principal = IntegerField('Categoria (Taxonomia)', validators=[Optional()])
+    categoria_string = StringField('Nome da Categoria',
+                                   validators=[Optional(), Length(max=50)])  # Auxiliar para a EseEmpresa
+
+    # 🏢 Documentação Jurídica
+    documento = StringField('CNPJ / CPF', validators=[Optional(), Length(max=18)])
+
+    # 📍 Geolocalização (Campos populados via Autocomplete do Core ou digitados se inédito)
     cep = StringField('CEP', validators=[DataRequired(), Length(max=10)])
     logradouro = StringField('Logradouro (Rua/Av)', validators=[DataRequired(), Length(max=150)])
     numero = StringField('Número', validators=[DataRequired(), Length(max=20)])
@@ -113,7 +123,7 @@ class FormCredenciamentoLocal(FlaskForm):
     cidade = StringField('Cidade', default='Piracicaba', validators=[DataRequired(), Length(max=100)])
     estado = StringField('Estado', default='SP', validators=[DataRequired(), Length(max=2)])
 
-    # Contato
+    # 📞 Contato Operacional
     telefone = StringField('Telefone de Contato', validators=[DataRequired(), Length(max=20)])
     is_whatsapp = BooleanField('Este número é WhatsApp?', default=True)
     email = StringField('E-mail Comercial', validators=[Optional(), Length(max=120)])

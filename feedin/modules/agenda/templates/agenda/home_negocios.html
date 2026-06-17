@@ -64,24 +64,24 @@
                 🏆 Conta Pioneira Ativa
             </span>
             <p class="text-dark m-0 fw-medium" style="font-size: 0.72rem; line-height: 1.3;">
-                Garantido: <strong>50% de desconto</strong> em recursos acessórios e testes antecipados liberados!
+                Garantido: <strong>50% de desconto</strong> em recursos acessórios!
             </p>
         </div>
         {% endif %}
 
         <div class="list-group list-group-flush mt-2">
-            <a href="/agenda/painel" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+            <a href="{{ url_for('agenda.dashboard') }}" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
                 <i class="bi bi-calendar3 me-3 text-primary"></i>Painel da Agenda
             </a>
 
             {% if session.get('nivel_acesso_atual', 10) >= 666 %}
-            <a href="/agenda/servicos" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
-                <i class="bi bi-scissors me-3 text-success"></i>Catálogo de Serviços
-            </a>
+            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted" disabled>
+                <i class="bi bi-scissors me-3 text-secondary"></i>Catálogo de Serviços <small>(Breve)</small>
+            </button>
             {% endif %}
 
-            <a href="/agenda/balcao/cadastrar" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
-                <i class="bi bi-person-plus-fill me-3 text-info"></i>Inserir Cliente (Balcão)
+            <a href="{{ url_for('agenda.credenciamento_balcao') }}" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-shop me-3 text-info"></i>Credenciar Novo Balcão
             </a>
 
             <hr class="my-2 mx-3 text-muted">
@@ -97,15 +97,12 @@
             <button id="btn-fechar-menu" class="btn btn-sm btn-outline-light border-0 rounded-circle"><i class="bi bi-x-lg"></i></button>
         </div>
         <div class="list-group list-group-flush">
-            <a href="/negocios" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-house-door-fill me-3 text-secondary"></i>Início</a>
-            <a href="/agenda/meus-horarios" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-calendar-check-fill me-3 text-secondary"></i>Meus Horários</a>
-            <a href="/favoritos" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-star-fill me-3 text-secondary"></i>Favoritos</a>
-            <a href="/perfil/reputacao" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-award-fill me-3 text-secondary"></i>Minha Reputação</a>
-            <hr class="my-2 mx-3 text-muted">
-            <a href="/ajuda" class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted"><i class="bi bi-question-circle-fill me-3"></i>Ajuda & Suporte</a>
+            <a href="/" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-house-door-fill me-3 text-secondary"></i>Início</a>
+            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-calendar-check-fill me-3 text-black-50"></i>Meus Horários</button>
+            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-star-fill me-3 text-black-50"></i>Favoritos</button>
+            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-award-fill me-3 text-black-50"></i>Minha Reputação</button>
         </div>
     {% endif %}
-
 </div>
 <div id="sidebar-overlay" class="sidebar-overlay-pwa"></div>
 
@@ -145,7 +142,7 @@
                 </div>
             {% else %}
                 {% for fav in favoritos[:10] %}
-                <a href="/empresa/{{ fav.empresa.slug }}" class="card text-decoration-none border shadow-sm text-center p-2 rounded-4 d-inline-block transition-hover bg-white" style="width: 105px; min-width: 105px; flex-shrink: 0;">
+                <a href="/empresa/{{ fav.empresa.id }}" class="card text-decoration-none border shadow-sm text-center p-2 rounded-4 d-inline-block transition-hover bg-white" style="width: 105px; min-width: 105px; flex-shrink: 0;">
                     <span class="badge bg-light text-secondary text-uppercase mb-2 d-block text-truncate fw-semibold" style="font-size: 0.6rem; letter-spacing: 0.5px;">
                         {{ fav.empresa.categoria or "Serviço" }}
                     </span>

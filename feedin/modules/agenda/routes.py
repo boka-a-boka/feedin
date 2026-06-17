@@ -4,13 +4,12 @@
 # =====================================================================
 import re
 import secrets
-import feedin.modules.agenda.routes
 from datetime import datetime, timedelta, timezone
 
-from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, session, url_for, session, current_app
 from flask_login import login_required
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash
 
 # =====================================================================
 # 2. INSTÂNCIAS E EXTENSÕES DO CORE DO FEEDIN
@@ -34,8 +33,6 @@ from feedin.modules.agenda.models import (
     AghProfissional,
     AghServico,
     EseEmpresa,
-    ModCadastroCliente,
-    ModFilaAtivacaoCliente,  # <-- ADICIONADO: Nova tabela de limbo
     UsuarioFavorito,
 )
 
@@ -44,9 +41,48 @@ from feedin.modules.agenda.models import (
 # =====================================================================
 import feedin.utils as utils
 from feedin.models import ColaboradorContrato, HistoricoOcupacaoLocal, Local, Usuario, IdentidadeCivil
+from feedin.models import ModCadastroCliente, ModFilaAtivacaoCliente, Epoca, VinculoUsuarioLocal, UsuarioLocalEpoca
 
 # =====================================================================
 
+@agenda_bp.route('/desafiar-senha/<int:cliente_id>', methods=['GET', 'POST'])
+def desafiar_senha(cliente_id):
+    """
+    DESAFIO DE SENHA: Segunda etapa do login para quem já é cliente do módulo.
+    Valida a senha e, se correta, inicializa a sessão e abre o Dashboard.
+    """
+    # 1. BUSCA O CLIENTE NO BANCO DA AGENDA
+    cliente = ModCadastroCliente.query.get_or_404(cliente_id)
+
+    # Se o cliente já estiver logado com essa mesma conta, manda direto pro painel
+    if session.get('cliente_modulo_id') == cliente.id:
+        return redirect(url_for('agenda.dashboard_cliente'))
+
+    if request.method == 'POST':
+        senha_digitada = request.form.get('senha_login', '')
+
+        if not senha_digitada:
+            flash("Por favor, digite sua senha.", "warning")
+            return render_template('agenda/desafiar_senha.html', cliente=cliente)
+
+        # 2. VALIDAÇÃO DA SENHA (HASH SEGURO)
+        # Substitua por 'cliente.senha == senha_digitada' APENAS se ainda estiver em texto puro para testes
+        if cliente and check_password_hash(cliente.senha, senha_digitada):
+
+            # 3. ESTABELECIMENTO DA SESSÃO ISOLADA
+            session['cliente_modulo_id'] = cliente.id
+            session['usuario_nome'] = cliente.nome  # Mantém o nome acessível se necessário
+
+            flash(f"Olá, {cliente.nome}! Acesso autorizado.", "success")
+
+            # 4. DIRECIONAMENTO PARA O DASHBOARD QUE REVISAMOS
+            return redirect(url_for('agenda.dashboard_cliente'))
+
+        else:
+            flash("Senha incorreta. Por favor, tente novamente.", "danger")
+
+    # Se for GET, renderiza a tela passando o objeto cliente (para exibir o nome/foto dele se quiser)
+    return render_template('agenda/desafiar_senha.html', cliente=cliente)
 
 def gerar_username_unico(nome_completo):
     """
@@ -249,60 +285,44 @@ def toggle_favorito_empresa(empresa_id):
 
 @agenda_bp.route('/negocios')
 def home_negocios():
-    usuario_logado_id = 1
-    usuario_cidade_atual = "Piracicaba"
-    usuario_estado_atual = "SP"
+    """Renderiza a central de atendimento com a visão móvel PWA"""
+    # Exemplo de injeção de dados mínimos para a página não quebrar se o banco estiver vazio
+    cidade = "Piracicaba"
+    estado = "SP"
 
-    # [PONTO DE ATENÇÃO]: Verificação de perfil
-    # No futuro, buscaremos o cargo/role do usuário no banco.
-    # Se ele for um Profissional/Parceiro Beta, jogamos para a Home Gerencial dele.
-    usuario_role = "cliente"  # Mocado temporariamente como 'cliente'
+    # Busca os favoritos do usuário logado se houver, limitando a 10
+    favoritos = []
+    if current_user.is_authenticated:
+        favoritos = UsuarioFavorito.query.filter_by(usuario_id=current_user.id).all()
 
-    if usuario_role == "profissional":
-        # Quando criarmos a Fase 5 (Painel Gerencial), ele cairá aqui
-        return render_template('agenda/home_profissional_gerencial.html', cidade=usuario_cidade_atual)
-
-    # --- Tudo o que você já construiu e está funcionando continua exatamente aqui ---
-    favoritos = UsuarioFavorito.query.filter_by(usuario_id=usuario_logado_id).all()
-
-    # MATRIZ DE NOTIFICAÇÕES VISUAIS CONTEXTUAIS (Dicionário dinâmico)
-    lista_notificacoes = [
+    # Mock ou busca real de alertas temporários para a sua lista de notificações
+    notificacoes = [
         {
-            "titulo_tipo": "Atendimento & Agenda",
-            "mensagem": "Você possui 1 agendamento pendente no Cabeleireiro",
-            "icone": "bi-calendar-event",
             "cor_base": "warning",
-            "link_acao": "/agenda/meus-horarios"
-        },
-        {
-            "titulo_tipo": "Delivery & Entrega",
-            "mensagem": "Seu pedido no Bar do Baixo saiu para entrega",
-            "icone": "bi-truck",
-            "cor_base": "primary",
-            "link_acao": "/delivery/rastreio"
-        },
-        {
-            "titulo_tipo": "Histórico & Memória",
-            "mensagem": "Sua avaliação da Padaria Central foi homologada!",
-            "icone": "bi-award",
-            "cor_base": "success",
-            "link_acao": "/perfil/reputacao"
+            "icone": "bi-shield-exclamation",
+            "titulo_tipo": "Compliance",
+            "mensagem": "Seu balcão exige homologação documental para liberar o PWA público.",
+            "link_acao": "/agenda/balcao/credenciamento"  # Link de exemplo
         }
-    ]
+    ] if not favoritos else []
 
-    ultimo_local_visitado = "Salão do Zé"
-    local_mais_frequentado = "Salão do Zé"
-
-    # Retorna o seu template padrão de cliente, com as suas variáveis intactas
     return render_template(
         'agenda/home_negocios.html',
-        cidade=usuario_cidade_atual,
-        estado=usuario_estado_atual,
+        cidade=cidade,
+        estado=estado,
         favoritos=favoritos,
-        notificacoes=lista_notificacoes,
-        ultimo_local=ultimo_local_visitado,
-        mais_visitado=local_mais_frequentado
+        notificacoes=notificacoes
     )
+
+
+@agenda_bp.route('/balcao/sair')
+@login_required
+def sair_balcao():
+    """Desativa o modo interno do lojista e o devolve pacificamente para a visão urbana"""
+    session.pop('modo_visao', None)
+    session.pop('nivel_acesso_atual', None)
+    flash("Você saiu do modo interno e retornou para a visão da cidade.", "info")
+    return redirect(url_for('agenda.home_negocios'))
 
 
 @agenda_bp.route('/api/busca-autocomplete')
@@ -385,7 +405,6 @@ def gerenciar_equipe():
 @agenda_bp.route('/balcao/credenciamento', methods=['GET', 'POST'])
 @login_required
 def credenciamento_balcao():
-    # Pega o ID do usuário logado na sessão do Flask-Login
     empreendedor_id = current_user.id
     form = FormCredenciamentoLocal()
 
@@ -393,25 +412,20 @@ def credenciamento_balcao():
         id_existente = form.id_local_existente.data
 
         try:
+            # 1. TRATATIVA DO PONTO FÍSICO (LOCAL)
             if id_existente:
-                # 🌟 CENÁRIO A: O usuário selecionou uma Memória da lista do Autocomplete
                 local = Local.query.get(id_existente)
                 if not local:
                     flash("Ponto físico selecionado inválido.", "danger")
                     return redirect(url_for('agenda.credenciamento_balcao'))
-
-                # Se o local já estiver ativo com OUTRO empreendedor, barramos a duplicidade de operação
-                if local.esta_ativo and local.id_empreendedor != empreendedor_id:
-                    flash("Este estabelecimento já possui uma administração ativa no FeedIn.", "warning")
-                    return redirect(url_for('agenda.credenciamento_balcao'))
             else:
-                # 🌟 CENÁRIO B: Busca vazia ou ignorada. O sistema cria um ponto inédito automaticamente
                 local = Local()
                 local.data_cadastro = datetime.now(timezone.utc)
                 db.session.add(local)
 
-            # Injeção direta dos dados do Form na Model 'Local'
-            local.nome = form.nome.data.strip()
+            # População dos dados físicos do Local
+            local.nome = form.nome_ponto_fisico.data.strip() if hasattr(form,
+                                                                        'nome_ponto_fisico') else form.nome.data.strip()
             local.documento = form.documento.data.strip() if form.documento.data else None
             local.cep = form.cep.data.strip()
             local.logradouro = form.logradouro.data.strip()
@@ -422,12 +436,11 @@ def credenciamento_balcao():
             local.telefone = form.telefone.data.strip()
             local.is_whatsapp = form.is_whatsapp.data
 
-            # Vinculo de posse comercial no Core do sistema
-            local.id_empreendedor = empreendedor_id
+            local.id_empreendedor = empreendedor_id  # Dono do "Prédio"
             local.esta_ativo = True
             local.status_operacional = 'ativo'
 
-            # Gravação do histórico de ocupação para auditoria/mural
+            # Gravação do histórico de ocupação
             ocupacao = HistoricoOcupacaoLocal(
                 local=local,
                 id_empreendedor=empreendedor_id,
@@ -435,14 +448,31 @@ def credenciamento_balcao():
             )
             db.session.add(ocupacao)
 
+            # Força o flush para o banco gerar o ID do local se ele for novo,
+            # sem fechar a transação com commit ainda
+            db.session.flush()
+
+            # 2. TRATATIVA DA EMPRESA (O INQUILINO DA AGENDA)
+            # Criamos a empresa comercial vinculada ao usuário e ao local gerado/escolhido
+            nova_empresa = EseEmpresa(
+                proprietario_id=empreendedor_id,
+                local_id=local.id,
+                nome=form.nome.data.strip(),  # Nome comercial da Marca
+                categoria=form.categoria.data.strip() if hasattr(form, 'categoria') else "Geral",
+                slug=form.slug.data.strip() if hasattr(form, 'slug') else f"empresa-{local.id}"
+            )
+            db.session.add(nova_empresa)
+
+            # Salva tudo de forma atômica (Se um falhar, nenhum entra)
             db.session.commit()
-            flash("Estabelecimento estruturado com sucesso no FeedIn!", "success")
+
+            flash("Estabelecimento e Empresa estruturados com sucesso no FeedIn!", "success")
             return redirect(url_for('agenda.dashboard'))
 
         except Exception as e:
             db.session.rollback()
             print(f"Erro crítico no credenciamento: {e}")
-            flash("Ocorreu um erro interno. Verifique se este documento ou endereço já está cadastrado.", "danger")
+            flash("Ocorreu um erro interno ao processar o credenciamento.", "danger")
 
     return render_template('agenda/credenciamento.html', form=form)
 
@@ -451,34 +481,39 @@ def credenciamento_balcao():
 def detalhe_empresa(empresa_id):
     """
     Exibe o perfil público da empresa (Visão do Cliente).
-    Se o usuário logado tiver nível e vínculo com o local, habilita o botão de transição.
+    Valida as permissões do usuário logado cruzando o Core com a Agenda de forma segura.
     """
-    # 1. Busca a empresa na base do Core
+    # 1. Busca a empresa na base do módulo (que agora conhece o seu proprietario_id e local_id)
     empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 2. Resgata o usuário logado através do Core (Exemplo com ID fixo para teste)
+    # 2. Resgata o usuário logado através do Core (Substituir pelo seu sistema real de login ex: current_user)
     usuario_id_teste = 1
     usuario_logado = Usuario.query.get(usuario_id_teste)
 
     is_colaborador = False
-    nivel_neste_local = 10  # Padrão: Usuário comum
+    nivel_neste_local = 10  # Padrão: Usuário comum / Cliente
 
     if usuario_logado:
-        # Verifica se ele é o Empreendedor Supremo (999) deste local
-        if empresa.proprietario_id == usuario_logado.id and usuario_logado.nivel_acesso == 999:
+        # 👑 NÍVEL SOBERANO: Verifica se ele é o Dono Supremo desta empresa específica
+        if empresa.proprietario_id == usuario_logado.id:
             is_colaborador = True
             nivel_neste_local = 999
         else:
-            # Busca na tabela de colaboradores se ele possui algum cargo ativo (888, 777, 666...)
-            vinculo = ColaboradorContrato.query.filter_by(
-                empresa_id=empresa.id,
-                usuario_id=usuario_logado.id,
-                is_ativo=True
+            # 👔 NÍVEL OPERACIONAL: Busca o contrato de trabalho ativo dele no ponto físico correspondente
+            # e valida se ele está cadastrado como profissional desta Empresa específica na Agenda
+            vinculo_profissional = AghProfissional.query.join(ColaboradorContrato).filter(
+                AghProfissional.estabelecimento_id == empresa.id,
+                ColaboradorContrato.id_usuario == usuario_logado.id,
+                ColaboradorContrato.status_profissional == 'ativo',
+                ColaboradorContrato.data_desligamento.is_(None),
+                AghProfissional.is_ativo == True
             ).first()
 
-            if vinculo:
+            if vinculo_profissional:
                 is_colaborador = True
-                nivel_neste_local = vinculo.nivel_acesso  # Pode ser 888, 777, etc.
+                # Aqui você herda o nível ou o cargo mapeado no contrato dele do Core
+                # Como a rota espera uma métrica, podemos capturar o ID do cargo ou um padrão operacional
+                nivel_neste_local = 888  # Ex: Nível de Colaborador Habilitado
 
     return render_template(
         'agenda/detalhe_empresa.html',
@@ -552,32 +587,59 @@ def identificar_usuario():
         flash("Por favor, informe seu E-mail para continuar.", "warning")
         return redirect(url_for('agenda.identificar_usuario'))
 
-    # 🔍 CAMADA 1: O usuário já tem acesso ao módulo?
+    # 🔍 CAMADA 1: O usuário já tem acesso ativo a este módulo?
     cliente_oficial = ModCadastroCliente.query.filter_by(email=email_digitado).first()
 
     if cliente_oficial:
-        # Destino: Desafiar a Senha
+        # Destino: Desafiar a Senha Local do Módulo (Fluxo padrão e rápido)
         return redirect(url_for('agenda.desafiar_senha', cliente_id=cliente_oficial.id))
 
-    # 🔍 CAMADA 2: O e-mail está na Fila do Limbo?
+    # 🔍 CAMADA 2: O e-mail está na Fila de Ativação do Balcão (O Limbo)?
     cliente_fila = ModFilaAtivacaoCliente.query.filter_by(email=email_digitado).first()
 
     if cliente_fila:
-        # Aqui, como é por e-mail, é muito menos provável que seja um golpista adivinhando,
-        # mas mantemos a regra de segurança: a conclusão é pelo WhatsApp.
-        flash("Seu cadastro foi iniciado no balcão! Por favor, acesse o link enviado para o seu WhatsApp para criar sua senha de acesso.", "info")
+        # Mantemos a regra de segurança de conclusão pelo WhatsApp
+        flash(
+            "Seu cadastro foi iniciado no balcão! Por favor, acesse o link enviado para o seu WhatsApp para criar sua senha de acesso.",
+            "info")
         return redirect(url_for('agenda.identificar_usuario'))
 
-    # 🔍 CAMADA 3: Tem conta no Core da Cidade pelo E-mail?
+    # 🔍 CAMADA 3: Tem conta no Core da Cidade pelo E-mail? (Atrelo Silencioso)
     usuario_core = Usuario.query.filter_by(email=email_digitado).first()
 
     if usuario_core:
-        # Destino: Exigir senha do Core para vincular ao Módulo
-        flash("Você já é um cidadão FeedIn! Digite sua senha da cidade para ativar o módulo de agendamentos.", "success")
-        return redirect(url_for('agenda.vincular_conta_core', usuario_id=usuario_core.id))
+        # Resgata o id_local onde o usuário está interagindo atualmente (da sessão)
+        id_local_atual = session.get('local_contexto_id')
+
+        # [AÇÃO DE BASTIDORES]: Cria o cadastro no módulo vinculando o usuario_id do Core
+        username_novo = gerar_username_unico(usuario_core.nome)
+
+        novo_cliente = ModCadastroCliente(
+            usuario_id=usuario_core.id,
+            nome=usuario_core.nome,
+            email=usuario_core.email,  # Herda o e-mail do Core
+            username_modulo=username_novo,
+            # Herda a Identidade Civil do cofre de forma segura para consultas futuras pelo CPF
+            cpf_hash=usuario_core.identidade_civil.cpf_hash if usuario_core.identidade_civil else None,
+            cpf_criptografado=usuario_core.identidade_civil.cpf_criptografado if usuario_core.identidade_civil else None
+        )
+        db.session.add(novo_cliente)
+
+        # [AÇÃO DE RELACIONAMENTO]: Se houver contexto de local, registra que ele segue a empresa/local
+        if id_local_atual:
+            # Aqui entrará o seu model de relacionamento (ex: vinculo_seguidor)
+            # Ex: seguidor = HistoricoOcupacaoLocal(usuario_id=usuario_core.id, local_id=id_local_atual)
+            # db.session.add(seguidor)
+            pass
+
+        db.session.commit()
+
+        flash("Identificamos seu perfil FeedIn! Defina uma senha de acesso para este painel de serviços.", "success")
+        # Mandamos ele para definir a senha do módulo pela primeira vez
+        return redirect(url_for('agenda.definir_senha_nova', cliente_id=novo_cliente.id))
 
     # 🔍 CAMADA 4: E-mail não encontrado em lugar nenhum
-    # Destino: Cadastro Novo Limpo
+    # Destino: Cadastro Novo Limpo (Onde o CPF entrará em cena como o Guardião no formulário)
     return redirect(url_for('agenda.cadastro_organico_novo', email_inicial=email_digitado))
 
 
@@ -650,75 +712,131 @@ def gerar_fila_ativacao():
     return redirect(url_for('agenda.painel_agenda'))
 
 
-@agenda_bp.route('/cadastro/ativar/<token>', methods=['GET', 'POST'])
+@agenda_bp.route('/concluir-ativacao/<token>', methods=['GET', 'POST'])
 def concluir_via_link(token):
-    serializador = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
-    agora = datetime.now(timezone.utc)
+    # -------------------------------------------------------------------------
+    # CONDUTOR DE ENTRADA: Recupera o registro temporário do limbo do balcão
+    # -------------------------------------------------------------------------
+    # Ajustado dinamicamente para o nome real da sua classe de trânsito
+    registro_fila = ModFilaAtivacaoCliente.query.filter_by(token=token).first_or_404()
 
-    # Desempacota o token para descobrir de qual cliente se trata
-    try:
-        cpf_cliente = serializador.loads(token, salt="ativacao-modulo-cliente")
-    except BadSignature:
-        return render_template('erros/erro_geral.html', msg="Link corrompido.")
-
-    # Busca o registro na tabela temporária de Limbo
-    registro_fila = ModFilaAtivacaoCliente.query.filter_by(cpf=cpf_cliente).first_or_404()
-
-    # 📊 AUDITORIA: Registra o momento exato que o usuário tentou abrir o link
-    if not registro_fila.data_tentativa_abertura:
-        registro_fila.data_tentativa_abertura = agora
-        db.session.commit()  # Grava o rastro imediatamente para o lojista acompanhar
-
-    # 🛡️ Validação da Regra Interna contra a Expiração
-    if agora > registro_fila.data_expiracao:
-        return render_template('erros/expirado.html',
-                               msg="Este link expirou. O FeedIn preza pela segurança dos seus dados. Solicite um novo envio no estabelecimento.")
-
-    # Se o usuário já pré-existia no FeedIn (usuario_id não é nulo)
-    ja_tem_core = registro_fila.usuario_id is not None
+    # Resgata o contexto geográfico do local trazido pelo escaneamento do QR Code
+    id_local_atual = session.get('local_contexto_id')
 
     if request.method == 'POST':
-        email_obrigatorio = request.form.get('email')
-        data_nascimento = request.form.get('data_nascimento')
-        senha = request.form.get('password')
+        email_obrigatorio = request.form.get('email', '').strip().lower()
+        data_nascimento_raw = request.form.get('data_nascimento')
+        senha_digitada = request.form.get('password')
 
-        if ja_tem_core:
-            # Recupera o usuário do Core e apenas traz as informações que faltavam
-            usuario_core = Usuario.query.get(registro_fila.usuario_id)
-        else:
-            # Cadastra o usuário de forma limpa e oficial no Core do FeedIn
-            usuario_core = Usuario(
+        # Validação básica de barreira
+        if not senha_digitada:
+            flash("A definição de uma senha é obrigatória para acessar seu painel.", "danger")
+            return render_template('cadastro/conclusao_modulo.html', fila=registro_fila)
+
+        # -------------------------------------------------------------------------
+        # 1. TRATAMENTO CRITERIOSO E CONSISTÊNCIA PELO CPF
+        # -------------------------------------------------------------------------
+        # Consome a utilidade do Core para limpar a string vinda da fila
+        cpf_hash_procurado, cpf_limpo = preparar_e_hashear_cpf(registro_fila.cpf)
+
+        # -------------------------------------------------------------------------
+        # 2. VARREDURA SILENCIOSA NA ALFÂNDEGA
+        # -------------------------------------------------------------------------
+        # Verifica se este CPF já cruzou a fronteira e se tornou Cidadão no Core
+        identidade_core = IdentidadeCivil.query.filter_by(cpf_hash=cpf_hash_procurado).first()
+        usuario_id_core = identidade_core.usuario_id if identidade_core else None
+
+        # -------------------------------------------------------------------------
+        # 3. POPULAÇÃO OCULTA DE MEMÓRIA URBANA (Se já for Cidadão do Core)
+        # -------------------------------------------------------------------------
+        if usuario_id_core and id_local_atual:
+            try:
+                # Localiza o período cronológico vigente do ecossistema
+                epoca_atual = Epoca.query.filter_by(eh_vigente=True).first()
+                if not epoca_atual:
+                    epoca_atual = Epoca.query.filter(Epoca.nome_exibicao.like('%(Atual)%')).first()
+
+                # A) Cria o vínculo de pertencimento com o estabelecimento (se inédito)
+                vinculo_existente = VinculoUsuarioLocal.query.filter_by(
+                    usuario_id=usuario_id_core,
+                    local_id=id_local_atual
+                ).first()
+
+                if not vinculo_existente:
+                    novo_vinculo = VinculoUsuarioLocal(
+                        usuario_id=usuario_id_core,
+                        local_id=id_local_atual,
+                        experiencia=f"Ativado via Módulo Agenda na época {epoca_atual.nome_exibicao if epoca_atual else 'Vigente'}"
+                    )
+                    db.session.add(novo_vinculo)
+
+                # B) Registra a presença na linha do tempo histórica da época
+                if epoca_atual:
+                    historico_existente = UsuarioLocalEpoca.query.filter_by(
+                        id_usuario=usuario_id_core,
+                        id_local=id_local_atual,
+                        id_epoca=epoca_atual.id
+                    ).first()
+
+                    if not historico_existente:
+                        novo_historico = UsuarioLocalEpoca(
+                            id_usuario=usuario_id_core,
+                            id_local=id_local_atual,
+                            id_epoca=epoca_atual.id
+                        )
+                        db.session.add(novo_historico)
+
+            except Exception as e:
+                # Falha silenciosa: Regra de ouro (O Core nunca trava o negócio da empresa parceira)
+                current_app.logger.error(f"⚠️ Erro silencioso ao processar memória social no onboarding: {str(e)}")
+
+        # -------------------------------------------------------------------------
+        # 4. INSTANCIAÇÃO DO CADASTRO AUTÔNOMO (Fora do except, no fluxo principal do POST)
+        # -------------------------------------------------------------------------
+        try:
+            # Importa o motor de hash do __init__.py global do Core
+            from feedin import bcrypt
+
+            # Gera o hash seguro padrão utilizando o Bcrypt real
+            senha_hasheada_modulo = bcrypt.generate_password_hash(senha_digitada).decode('utf-8')
+
+            # Gera o username automático a partir da primeira parte do e-mail
+            username_gerado = email_obrigatorio.split('@')[0] if email_obrigatorio else f"user_{int(datetime.now().timestamp())}"
+
+            novo_cliente = ModCadastroCliente(
+                usuario_id=usuario_id_core,  # Vincula o ID encontrado ou salva como None (Avulso)
                 nome=registro_fila.nome,
-                cpf=registro_fila.cpf,
-                email=email_obrigatorio,
-                senha_hash=generate_password_hash(senha),
-                nivel_acesso=10
+                whatsapp=registro_fila.whatsapp,
+                email=email_obrigatorio if email_obrigatorio else None,
+                data_nascimento=datetime.strptime(data_nascimento_raw, '%Y-%m-%d').date() if data_nascimento_raw else None,
+                username_modulo=username_gerado,
+                senha_modulo_hash=senha_hasheada_modulo
             )
-            db.session.add(usuario_core)
-            db.session.flush()
 
-        # ✨ SUCESSO DO CICLO: Agora sim, os dados limpos entram na tabela de produção do módulo
-        novo_cliente_oficial = ModCadastroCliente(
-            usuario_id=usuario_core.id,
-            nome=registro_fila.nome,
-            cpf=registro_fila.cpf,
-            whatsapp=registro_fila.whatsapp,
-            email=email_obrigatorio,
-            data_nascimento=datetime.strptime(data_nascimento, '%Y-%m-%d').date(),
-            username_modulo=email_obrigatorio.split('@')[0],  # Limpo e profissional
-            senha_modulo_hash=usuario_core.senha_hash
-        )
+            # DISPARA A MÁGICA DO SEU SETTER (@cpf.setter)
+            # Consome o current_app.fernet definido no seu __init__.py
+            novo_cliente.cpf = cpf_limpo
 
-        db.session.add(novo_cliente_oficial)
+            db.session.add(novo_cliente)
 
-        # Remove o registro da fila temporária (Opcional, ou mantenha para histórico de relatórios)
-        db.session.delete(registro_fila)
+            # -------------------------------------------------------------------------
+            # 5. LIMPEZA DOS RASTROS DA FILA TEMPORÁRIA
+            # -------------------------------------------------------------------------
+            db.session.delete(registro_fila)
 
-        db.session.commit()
-        return render_template('cadastro/sucesso.html', msg="Cadastro concluído com sucesso!")
+            # Comita toda a operação de forma atômica e segura
+            db.session.commit()
 
-    # Passa para o template se ele já tem cadastro no Core, facilitando o formulário
-    return render_template('cadastro/conclusao_modulo.html', fila=registro_fila, ja_tem_core=ja_tem_core)
+            flash("Seu acesso de conveniência foi ativado com sucesso!", "success")
+            return redirect(url_for('agenda.dashboard_cliente'))
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"💥 ERRO CRÍTICO NA GRAVAÇÃO DO MÓDULO AGENDA: {str(e)}")
+            flash("Houve um problema ao finalizar seu cadastro. Tente novamente.", "danger")
+            return render_template('cadastro/conclusao_modulo.html', fila=registro_fila)
+
+    return render_template('cadastro/conclusao_modulo.html', fila=registro_fila)
 
 
 # ROTA AUXILIAR API: Quando o usuário clica no autocomplete, trazemos os dados brutos do local para preenchimento automático
@@ -1058,3 +1176,95 @@ def criar_conta():
     db.session.commit()
 
     return redirect(url_for('agenda.home_negocios'))
+
+
+@agenda_bp.route('/dashboard', methods=['GET'])
+def dashboard_cliente():
+    """
+    PAINEL DE CONVENIÊNCIA: Área logada do cliente no PWA da Agenda.
+    Exibe os próximos agendamentos, o histórico e o atalho para novas reservas.
+    """
+    # 1. BARREIRA DE SEGURANÇA INTERNA
+    # Resgata o ID do cliente logado na sessão específica do módulo
+    cliente_id = session.get('cliente_modulo_id')
+
+    if not cliente_id:
+        flash("Por favor, faça login para acessar seu painel de agendamentos.", "warning")
+        return redirect(url_for('agenda.login_cliente'))  # Próxima rota lógica a criar
+
+    # 2. CAPTURA DE DADOS OPERACIONAIS
+    cliente = ModCadastroCliente.query.get_or_404(cliente_id)
+    id_local_atual = session.get('local_contexto_id')
+
+    # [Espaço reservado para buscar os agendamentos futuros e passados do banco]
+    agendamentos_ativos = []
+
+    # Ajustado apenas o caminho do template para 'agenda/...'
+    return render_template(
+        'agenda/dashboard_cliente.html',
+        cliente=cliente,
+        agendamentos=agendamentos_ativos,
+        id_local=id_local_atual
+    )
+
+
+@agenda_bp.route('/cadastro-organico', methods=['GET', 'POST'])
+def cadastro_organico_fluxo():
+    """
+    FUNIL ORGÂNICO REAL: Controla a entrada de usuários via link/QR Code.
+    Faz a varredura cruzada usando o Hash do CPF para garantir integridade absoluta.
+    """
+    if request.method == 'GET':
+        # Renderiza a tela inicial que pede APENAS o CPF para iniciar o funil
+        return render_template('agenda/cadastro_organico_cpf.html')
+
+    # PROCESSAMENTO DO POST (Usuário digitou o CPF e avançou)
+    cpf_digitado = request.form.get('cpf', '').strip()
+
+    # 1. TRATAMENTO NA ENTRADA: Limpa caracteres e gera o Hash idêntico ao do Core
+    cpf_limpo = "".join(filter(str.isdigit, cpf_digitado))
+
+    if len(cpf_limpo) != 11:
+        flash("Por favor, informe um CPF válido com 11 dígitos.", "warning")
+        return redirect(url_for('agenda.cadastro_organico_fluxo'))
+
+    # Aciona o método estático do Core para gerar o hash de busca
+    cpf_hash_procurado = IdentidadeCivil.gerar_hash(cpf_limpo)
+
+    # 2. VARREDURA CRUZADA EM SEGUNDO PLANO
+    existe_no_core = IdentidadeCivil.query.filter_by(cpf_hash=cpf_hash_procurado).first()
+    existe_no_modulo = ModCadastroCliente.query.filter_by(cpf_hash=cpf_hash_procurado).first()
+
+    # =====================================================================
+    # TOMADA DE DECISÃO: AS 4 LINHAS DE AÇÃO
+    # =====================================================================
+
+    # 🔴 LINHA 1: CPF Inédito em Ambos (O Verdadeiro Cadastro Novo)
+    if not existe_no_core and not existe_no_modulo:
+        # Libera o restante do formulário passando o CPF limpo para o próximo passo
+        # Armazenamos temporariamente na sessão ou passamos via parâmetro para o form completo
+        session['cadastro_cpf_limpo'] = cpf_limpo
+        return redirect(url_for('agenda.cadastro_organico_novo_formulario'))
+
+    # 🔵 LINHA 2: O CPF já existe na Cidade (Core), mas NÃO nos Módulos
+    if existe_no_core and not existe_no_modulo:
+        flash(
+            "Identificamos que você já possui cadastro no FeedIn! Digite sua senha da cidade para ativar seu acesso a este módulo.",
+            "success")
+        # Redireciona para a rota invisível de vinculação que vai exigir a senha do Core
+        return redirect(
+            url_for('agenda.vincular_conta_core', usuario_id=existe_no_core.usuario_id, cpf_limpo=cpf_limpo))
+
+    # 🟡 LINHA 3: O CPF já existe nos Módulos, mas NÃO na Cidade (Core)
+    if existe_no_modulo and not existe_no_core:
+        flash("Você já utiliza nossos serviços de conveniência! Digite sua senha de acesso para continuar.", "info")
+        # Desafia a senha local do módulo que já existe
+        return redirect(url_for('agenda.desafiar_senha', cliente_id=existe_no_modulo.id))
+
+    # 🟢 LINHA 4: O CPF já existe em Ambos e estão Atrelados
+    if existe_no_modulo and existe_no_core:
+        # Usuário totalmente regularizado. Vai direto para o fluxo padrão de login (senha do módulo)
+        return redirect(url_for('agenda.desafiar_senha', cliente_id=existe_no_modulo.id))
+
+    # Fallback de segurança
+    return redirect(url_for('agenda.cadastro_organico_fluxo'))

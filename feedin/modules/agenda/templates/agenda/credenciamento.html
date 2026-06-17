@@ -51,19 +51,37 @@
 <!-- ⚡ JAVASCRIPT DE INTEGRAÇÃO COM A SUA FUNÇÃO /buscar_locais -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const inputBusca = document.getElementById('busca-local-credenciamento');
+    const inputBusca = document.getElementById('busca-local-credenciamento'); // ID gerado pelo {{ form.nome(id="...") }}
     const listaResultados = document.getElementById('lista-resultados-credenciamento');
     const idExistenteHidden = document.getElementById('id_local_existente');
     const avisoMatch = document.getElementById('aviso-match-historico');
 
+    // Alinhado com o seu FormCredenciamentoLocal real (WTForms gera id com o nome do campo)
+    const inputSlug = document.getElementById('slug');
+    const inputCategoriaId = document.getElementById('id_categoria_principal');
+    const inputCategoriaString = document.getElementById('categoria_string');
+
+    // Função auxiliar para gerar a URL amigável (slug) em tempo real
+    function gerarSlug(texto) {
+        return texto.toString().toLowerCase().trim()
+            .replace(/[\s\W-]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
     inputBusca.addEventListener('input', function() {
-        const termo = this.value.strip ? this.value.trim() : this.value;
+        // Correção segura para navegadores antigos se necessário, usando trim() nativo
+        const termo = this.value ? this.value.trim() : '';
 
         // Se o usuário alterar o nome após ter selecionado um histórico, desvincula o ID
-        // Isso garante que se ele mudar o nome para algo totalmente diferente, vira Inédito.
+        // e volta a gerar o slug dinamicamente baseado no que ele digita
         if (idExistenteHidden.value !== '') {
             idExistenteHidden.value = '';
             avisoMatch.classList.add('d-none');
+        }
+
+        // Se for uma digitação inédita, atualiza o slug em tempo real
+        if (idExistenteHidden.value === '' && inputSlug) {
+            inputSlug.value = gerarSlug(termo);
         }
 
         if (termo.length < 2) {
@@ -76,7 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(dados => {
                 listaResultados.innerHTML = '';
                 if (dados.length === 0) {
-                    listaResultados.classList.add('d-none'); // Esconde pacificamente se não achar nada
+                    listaResultados.classList.add('d-none');
                     return;
                 }
 
@@ -84,20 +102,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     const li = document.createElement('li');
                     li.className = 'list-group-item list-group-item-action small py-2';
                     li.style.cursor = 'pointer';
-                    li.innerHTML = `<strong>${item.nome}</strong> <small class="text-muted">${item.info_exibicao}</small>`;
+                    li.innerHTML = `<strong>${item.nome}</strong> <small class="text-muted">${item.info_exibicao || ''}</small>`;
 
                     li.addEventListener('click', function() {
                         // Força o preenchimento dos dados salvos no banco
                         fetch(`/api/local/${item.id}`)
                             .then(res => res.json())
                             .then(local => {
+                                // 1. Vincula os identificadores técnicos
                                 idExistenteHidden.value = local.id;
-                                inputBusca.value = local.nome; // Alinha o nome exato
-                                document.getElementById('field-cep').value = local.cep;
-                                document.getElementById('field-logradouro').value = local.logradouro;
-                                document.getElementById('field-bairro').value = local.bairro;
-                                document.getElementById('field-telefone').value = local.telefone;
+                                inputBusca.value = local.nome;
 
+                                if (inputSlug) {
+                                    inputSlug.value = gerarSlug(local.nome);
+                                }
+
+                                // 🎯 O SEU AJUSTE INTUITIVO MOVIDO PARA O LUGAR CORRETO (Dentro do escopo de 'local'):
+                                if (inputCategoriaString) {
+                                    inputCategoriaString.value = local.categoria_nome || 'Geral';
+                                }
+                                if (inputCategoriaId) {
+                                    inputCategoriaId.value = local.id_categoria_principal || '';
+                                }
+
+                                // 2. Alimenta os campos de endereço reais gerados pelo WTForms (id="nome_do_campo")
+                                if (document.getElementById('cep')) document.getElementById('cep').value = local.cep || '';
+                                if (document.getElementById('logradouro')) document.getElementById('logradouro').value = local.logradouro || '';
+                                if (document.getElementById('numero')) document.getElementById('numero').value = local.numero || '';
+                                if (document.getElementById('bairro')) document.getElementById('bairro').value = local.bairro || '';
+                                if (document.getElementById('cidade')) document.getElementById('cidade').value = local.cidade || 'Piracicaba';
+                                if (document.getElementById('estado')) document.getElementById('estado').value = local.estado || 'SP';
+                                if (document.getElementById('telefone')) document.getElementById('telefone').value = local.telefone || '';
+
+                                // 3. Ajusta a interface visual
                                 listaResultados.classList.add('d-none');
                                 avisoMatch.classList.remove('d-none');
                             });

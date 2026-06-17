@@ -12,7 +12,7 @@
     </div>
 
     <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-        <form action="{{ url_for('identificar_usuario') }}" method="POST">
+        <form action="{{ url_for('agenda.identificar_usuario') }}" method="POST">
 
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 

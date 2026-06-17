@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmar Senha{% endblock %}
+
+{% block content %}
+<div class="container mobile-container my-5">
+    
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            <div class="card border-0 shadow-sm p-4 bg-white rounded-4">
+                
+                <div class="text-center mb-4">
+                    <div class="avatar-placeholder mb-3 d-inline-block bg-light rounded-circle p-3">
+                        <i class="bi bi-person-lock display-4 text-primary"></i>
+                    </div>
+                    <h3 class="fw-bold text-dark">Só mais um passo!</h3>
+                    <p class="text-muted small">Olá, <strong>{{ cliente.nome }}</strong>. Digite sua senha para acessar seus agendamentos.</p>
+                </div>
+
+                <form action="{{ url_for('agenda.desafiar_senha', cliente_id=cliente.id) }}" method="POST">
+                    
+                    <div class="mb-4">
+                        <label for="senha_login" class="form-label small fw-semibold text-secondary">Sua Senha</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-key text-muted"></i></span>
+                            <input type="password" 
+                                   class="form-control bg-light border-start-0" 
+                                   id="senha_login" 
+                                   name="senha_login" 
+                                   placeholder="Digite sua senha de acesso" 
+                                   required 
+                                   autofocus>
+                        </div>
+                    </div>
+
+                    <div class="d-grid mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-sm py-2">
+                            Entrar no Painel <i class="bi bi-arrow-right ms-2"></i>
+                        </button>
+                    </div>
+
+                    <div class="text-center">
+                        <a href="{{ url_for('agenda.identificar_usuario') }}" class="text-decoration-none small text-muted">
+                            <i class="bi bi-arrow-left me-1"></i> Não é você? Alterar e-mail
+                        </a>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

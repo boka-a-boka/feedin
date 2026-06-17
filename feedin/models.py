@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from flask_login import UserMixin
+from sqlalchemy.orm import foreign
 # 💡 IMPORTANTE: Remova o 'login_manager' daqui de cima se ele for inicializado no __init__.py.
 # Deixamos apenas o UserMixin que é uma classe pura.
 import hashlib, uuid
@@ -335,34 +336,6 @@ class Cargo(database.Model):
     id = database.Column(database.Integer, primary_key=True)
     nome_cargo = database.Column(database.String(100), nullable=False,
                                  unique=True)  # Ex: "Cabeleireiro Master", "Manicure", "Gerente"
-
-class ColaboradorContrato(database.Model):
-    """
-    O Histórico Profissional do Usuário.
-    Permite que o João trabalhe no 'Cortes da Hora', tenha trabalhado em outro no passado,
-    ou atue em múltiplos locais simultaneamente.
-    """
-    __tablename__ = 'colaborador_contratos'
-
-    id = database.Column(database.Integer, primary_key=True)
-    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
-    id_local = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
-    id_cargo = database.Column(database.Integer, database.ForeignKey('cargos.id'), nullable=False)
-
-    # Linha do Tempo Profissional (Sua exigência de histórico)
-    data_contratacao = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
-    data_desligamento = database.Column(database.DateTime, nullable=True)  # Se preenchido, o vínculo encerrou
-
-    # Configuração de Expediente Diário (Crucial para a lógica de estouro de horário)
-    hora_inicio_expediente = database.Column(database.Time, nullable=False)  # Ex: 09:00
-    hora_fim_expediente = database.Column(database.Time, nullable=False)  # Ex: 18:00
-
-    status_profissional = database.Column(database.String(20), default='ativo')  # ativo, suspenso, desligado
-
-    # Relacionamentos
-    usuario = database.relationship('Usuario', backref='contratos_trabalho')
-    local = database.relationship('Local', backref='equipe_colaboradores')
-    cargo = database.relationship('Cargo')
 
 
 # Cria tabela de complemento do Perfil
@@ -995,9 +968,9 @@ class PostagemComentario(database.Model):
     # ou deixar explícito o join caso seja um espelhamento de reposts:
     respostas = database.relationship(
         'PostagemComentario',
-        primaryjoin="PostagemComentario.id_repost_original == foreign(PostagemComentario.id_postagem)",
-        remote_side=[id_postagem],
-        lazy='dynamic'
+        primaryjoin="PostagemComentario.id == foreign(PostagemComentario.id_repost_original)",
+        lazy='select',  # 👈 Mudamos de 'dynamic' para 'select' para aceitar a coleção com segurança
+        overlaps="comentarios_no_card,postagem_atual"
     )
 
     @property
@@ -1316,3 +1289,148 @@ class ConquistaSelo(database.Model):
     # Relacionamentos lógicos
     usuario = database.relationship('Usuario', backref='conquistas')
     selo = database.relationship('Selo', backref='usuarios_conquistaram')
+
+
+# =============================================================================
+# ⚠️ NOTA DE ARQUITETURA (DÉBITO TÉCNICO PLANEJADO)
+# =============================================================================
+# ATENÇÃO, CARLOS DO FUTURO: As tabelas abaixo (ModCadastroCliente e FilaBalcao) 
+# foram alocadas temporariamente no Core para centralizar o trânsito de dados e 
+# evitar que o Core dependesse de subpastas de módulos específicos (Acoplamento Invertido).
+#
+# MOTIVAÇÃO: Elas servem como o "Barramento de Integração Universal" para qualquer 
+# módulo externo (Agenda, Mesas, Eventos) que consuma ou pesque clientes na rua.
+#
+# PRÓXIMO PASSO (Quando houver tempo hábil e energia): Mover estas duas tabelas 
+# para um espaço neutro compartilhado, como 'feedin/shared/models.py', limpando 
+# o escopo da rede social principal.
+# =============================================================================
+
+class ModCadastroCliente(database.Model):
+    """Tabela paralela e unificada de clientes (Comum a todos os módulos)."""
+    __tablename__ = 'mod_cadastro_cliente'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+
+    # Elo 1X1 Opcional com o FeedIn Core (Se for NULL, o cliente é só do balcão)
+    usuario_id = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=True, unique=True)
+
+    # Dados obrigatórios coletados no balcão/módulo
+    nome = database.Column(database.String(100), nullable=False)
+    cpf_hash = database.Column(database.String(64), unique=True, index=True, nullable=False)
+    whatsapp = database.Column(database.String(20), nullable=False)
+    email = database.Column(database.String(255), nullable=True)
+    data_nascimento = database.Column(database.Date, nullable=False)
+    cpf_encrypted = database.Column(database.LargeBinary, nullable=False)
+
+    # Credenciais do módulo (Garantindo que ele acesse o PWA de forma simples)
+    username_modulo = database.Column(database.String(50), unique=True, nullable=False)
+    senha_modulo_hash = database.Column(database.String(255), nullable=False)
+
+    created_at = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relacionamento direto com o Usuário para consultas no ecossistema
+    usuario_core = database.relationship('Usuario', backref=database.backref('cadastros_modulos', lazy='dynamic'))
+
+    @property
+    def cpf(self):
+        """Descriptografa o CPF sob demanda utilizando o Fernet do Core."""
+        from flask import current_app
+        return current_app.fernet.decrypt(self.cpf_encrypted).decode()
+
+    @cpf.setter
+    def cpf(self, plain_cpf):
+        """MÁGICA INTERNA: Hashea e encripta o CPF usando os motores do Core."""
+        from flask import current_app
+        self.cpf_hash = IdentidadeCivil.gerar_hash(plain_cpf)
+        self.cpf_encrypted = current_app.fernet.encrypt(plain_cpf.encode())
+
+    def __repr__(self):
+        return f"<ModCadastroCliente {self.nome} ({self.username_modulo})>"
+
+
+class ModFilaAtivacaoCliente(database.Model):
+    """
+    Tabela de trânsito (O Limbo). Guarda os pré-cadastros realizados no balcão
+    aguardando ativação/definição de senha pelo cliente.
+    """
+    __tablename__ = 'mod_fila_ativacao_cliente'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    usuario_id = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=True)
+
+    nome = database.Column(database.String(100), nullable=False)
+    whatsapp = database.Column(database.String(20), nullable=False)
+    email = database.Column(database.String(255), nullable=True)
+
+    data_disparo = database.Column(database.DateTime, nullable=True)
+    data_expiracao = database.Column(database.DateTime, nullable=False)
+    data_tentativa_abertura = database.Column(database.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<ModFilaAtivacaoCliente {self.nome} - WhatsApp: {self.whatsapp}>"
+
+
+from datetime import datetime, timezone
+from feedin import database as db  # Ajuste o import conforme o padrão do seu Core
+
+
+class ModVinculoModulo(db.Model):
+    """
+    TABELA RELACIONAL: Mapeia de forma universal o acesso do cliente a múltiplos
+    módulos externos (agenda, convites, cardapio, etc.) unificados pelo CPF.
+    """
+    __tablename__ = 'mod_vinculo_modulo'
+    __table_args__ = {'extend_existing': True}
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # O elo universal de ligação (Hash do CPF vindo da varredura)
+    cpf_hash = db.Column(db.String(64), index=True, nullable=False)
+
+    # Identificador do módulo (ex: 'agenda', 'venda_convites', 'cardapio_online')
+    modulo_slug = db.Column(db.String(50), nullable=False)
+
+    # Contexto local (Vincula o usuário à barbearia, restaurante ou estabelecimento atual)
+    local_id = db.Column(db.Integer, db.ForeignKey('locais.id'),
+                         nullable=True)  # Ajuste se o nome da tabela de locais for diferente
+
+    # Flexibilidade: Caso o usuário queira usar um e-mail de notificação diferente para ESTE módulo
+    email_customizado = db.Column(db.String(255), nullable=True)
+
+    # Metadados operacionais
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    ativo = db.Column(db.Boolean, default=True)
+
+    def __repr__(self):
+        return f"<ModVinculoModulo CPF_Hash: {self.cpf_hash[:8]} -> Módulo: {self.modulo_slug}>"
+
+class ColaboradorContrato(database.Model):
+    """
+    O Histórico Profissional do Usuário.
+    Permite que o João trabalhe no 'Cortes da Hora', tenha trabalhado em outro no passado,
+    ou atue em múltiplos locais simultaneamente.
+    """
+    __tablename__ = 'colaborador_contratos'
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    id_local = database.Column(database.Integer, database.ForeignKey('locais.id'), nullable=False)
+    id_cargo = database.Column(database.Integer, database.ForeignKey('cargos.id'), nullable=False)
+
+    # Linha do Tempo Profissional (Sua exigência de histórico)
+    data_contratacao = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+    data_desligamento = database.Column(database.DateTime, nullable=True)  # Se preenchido, o vínculo encerrou
+
+    # Configuração de Expediente Diário (Crucial para a lógica de estouro de horário)
+    hora_inicio_expediente = database.Column(database.Time, nullable=False)  # Ex: 09:00
+    hora_fim_expediente = database.Column(database.Time, nullable=False)  # Ex: 18:00
+
+    status_profissional = database.Column(database.String(20), default='ativo')  # ativo, suspenso, desligado
+
+    # Relacionamentos
+    usuario = database.relationship('Usuario', backref='contratos_trabalho')
+    local = database.relationship('Local', backref='equipe_colaboradores')
+    cargo = database.relationship('Cargo')
