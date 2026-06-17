@@ -3038,14 +3038,6 @@ def obter_atividades_feed(usuario):
             amigo_id = c.id_destinatario if c.id_remetente == usuario.id else c.id_remetente
             mapa_amigos[amigo_id] = c.data_solicitacao  # Usando a data de solicitação como marco zero real
 
-        # --- SEU PRINT DE DEBUG MANUAL (SEGURO NO ESCOPO) ---
-        print("\n=== DEBUG: MAPEAMENTO DE AMIGOS E DATAS ===")
-        for amigo_id, data_corte in mapa_amigos.items():
-            print(f"-> Amigo ID: {amigo_id} | data_corte vinda do banco: {data_corte} | Tipo: {type(data_corte)}")
-        print(f"-> Seus Interesses (Tags): {meus_interesses_ids}")
-        print(f"-> Seus Locais Cadastrados: {meus_locais_ids}")
-        print("===========================================\n")
-
         # 2. Filtros de MEMÓRIAS (Usando as variáveis já declaradas)
         filtros_memorias = [Memoria.id_usuario == usuario.id]
         for amigo_id, data_corte in mapa_amigos.items():
