@@ -881,7 +881,7 @@ class EseExcecaoCalendario(db.Model):
 
     # Vínculos com Entidades
     empresa_id = db.Column(db.String(36), db.ForeignKey('ese_empresa.id'), nullable=False)
-    contrato_id = db.Column(db.String(36), db.ForeignKey('ese_contrato_trabalho.id'), nullable=True)
+    contrato_id = db.Column(db.String(36), db.ForeignKey('colaborador_contratos.id'), nullable=True)
 
     # Tipificação e Origem
     origem = db.Column(db.Enum(EseOrigemExcecaoEnum), nullable=False)
