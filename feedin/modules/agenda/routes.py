@@ -46,7 +46,7 @@ from feedin.modules.agenda.models import AghAgendamento, AghProfissional, AghSer
 
 # Modelos do módulo parceiro Empresa necessários para regras de negócio da agenda
 from feedin.modules.empresa.models import EseEmpresa, UsuarioFavorito, ColaboradorContrato
-from utils import preparar_entrada_modulo
+from feedin.utils import preparar_entrada_modulo
 
 @agenda_bp.route('/')
 @preparar_entrada_modulo(slug_modulo='agenda', rota_destino='/agenda/negocios')
