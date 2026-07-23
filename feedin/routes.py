@@ -319,37 +319,31 @@ def notify(message, type):
     flash(message, type)
 
 
+from flask import redirect, url_for, flash, session, make_response, current_app
+from flask_login import logout_user, login_required
+
 @current_app.route("/logout")
 @login_required
 def realizar_logout():
-    # 1️⃣ Antes de limpar a sessão, checa se o usuário veio navegando pelo HUB
+    # 1️⃣ Preserva o rastreio da origem pelo HUB
     veio_do_hub = session.get('navegacao_via_hub', False)
 
-    # 2️⃣ Seu fluxo original de limpeza absoluta
-    logout_user()    # Remove do Flask-Login
-    session.clear()  # Limpa o dicionário da sessão (apaga também a bandeira)
+    # 2️⃣ Limpeza de sessão Flask-Login + Session Dict
+    logout_user()
+    session.clear()
 
-    # 3️⃣ A CONDICIONAL DO HUB: Decide para onde apontar o redirecionamento
+    # 3️⃣ Decisão de redirecionamento (HUB vs Index Externa)
     if veio_do_hub:
-        # Se veio pelo HUB, prepara para voltar ao concentrador
         response = make_response(redirect(url_for('central_hub')))
     else:
-        # Se acessou por atalho "por fora", mantém seu padrão de ir para a index
         response = make_response(redirect(url_for('index')))
 
-    # 4️⃣ Seu motor original de invalidação forçada de cookies (Vital para Produção)
-    response.set_cookie(
-        'session',
-        '',
-        expires=0,
-        httponly=True,
-        secure=True,  # Mantém a proteção HTTPS que você configurou
-        samesite='Lax'
-    )
+    # 4️⃣ Invalidação do Cookie de Sessão
+    # Mantém o descarte explícito sem travar requisições HTTP/HTTPS no ambiente local ou homologação
+    response.delete_cookie('session')
 
     flash("Sessão encerrada com sucesso. Até logo!", "info")
     return response
-
 
 @current_app.route("/login", methods=["GET", "POST"])
 def login():
