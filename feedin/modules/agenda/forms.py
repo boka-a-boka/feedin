@@ -1,8 +1,8 @@
 # feedin/modules/agenda/forms.py
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField, TextAreaField, DecimalField, IntegerField, HiddenField, BooleanField, IntegerField, SelectField, TimeField
-from wtforms.validators import DataRequired, Email, Length, ValidationError, NumberRange, Optional
-from feedin.models import ModCadastroCliente, ModFilaAtivacaoCliente
+from wtforms import StringField, SubmitField, TextAreaField, DecimalField, IntegerField, HiddenField, BooleanField, IntegerField, SelectField, TimeField, PasswordField
+from wtforms.validators import DataRequired, Email, Length, ValidationError, NumberRange, Optional, EqualTo
+from feedin.modules.auth.models import ModCadastroCliente, ModFilaAtivacaoCliente
 
 
 class FormCadastroBalcao(FlaskForm):
@@ -129,3 +129,13 @@ class FormCredenciamentoLocal(FlaskForm):
     email = StringField('E-mail Comercial', validators=[Optional(), Length(max=120)])
 
     submit = SubmitField('Concluir Credenciamento do Balcão')
+
+class FormHabilitarModulo(FlaskForm):
+    nome = StringField('Nome Completo Oficial', validators=[DataRequired()])
+    email = StringField('E-mail de Acesso', validators=[DataRequired(), Email()])
+    whatsapp = StringField('WhatsApp / Celular', validators=[DataRequired()])
+    cpf = StringField('CPF (Apenas números)', validators=[DataRequired(), Length(min=11, max=14)])
+    senha = PasswordField('Crie uma Senha', validators=[DataRequired(), Length(min=6)])
+    confirmar_senha = PasswordField('Confirme a Senha', validators=[DataRequired(), EqualTo('senha',
+                                                                                            message='As senhas devem ser idênticas.')])
+    botao_confirmacao = SubmitField('Habilitar meu Acesso')

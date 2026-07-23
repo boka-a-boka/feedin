@@ -1,0 +1,82 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Remanejar Horário{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4">
+    <div class="container py-2" style="max-width: 500px; font-family: system-ui, -apple-system, sans-serif;">
+        
+        {# ⬅️ VOLTAR #}
+        <div class="mb-3">
+            <a href="{{ url_for('empresa.configurar_jornadas_tela', empresa_id=ese_empresa.id) }}" class="text-decoration-none text-muted small fw-semibold">
+                <i class="bi bi-arrow-left me-1"></i> Voltar para Lista de Equipe
+            </a>
+        </div>
+
+        {# ⏱️ CABEÇALHO DO COLABORADOR #}
+        <!-- Procure pelo bloco do Avatar e do Nome e mude para: -->
+
+        {# Avatar / Inicial do Nome Unificado #}
+        <div class="avatar-inicial">
+            {{ contrato.cadastro_modulo.nome_completo[0] | upper if contrato.cadastro_modulo else '?' }}
+        </div>
+
+        {# Nome Comercial/Oficial Resolvido #}
+        <h5 class="fw-bold text-dark">
+            {{ contrato.cadastro_modulo.nome_completo if contrato.cadastro_modulo else 'Colaborador Desconhecido' }}
+        </h5>
+
+        {# 📝 FORMULÁRIO DE EXPEDIENTE #}
+        <form method="POST" class="d-flex flex-column gap-3">
+            <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-gray-300">
+                
+                <h6 class="fw-bold text-dark mb-3" style="font-size: 0.9rem;"><i class="bi bi-clock me-1"></i> Turno de Trabalho</h6>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small text-muted fw-semibold">Horário de Entrada</label>
+                        <input type="time" name="hora_inicio_expediente" class="form-control rounded-3" 
+                               value="{{ contrato.hora_inicio_expediente.strftime('%H:%M') }}" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted fw-semibold">Horário de Saída</label>
+                        <input type="time" name="hora_fim_expediente" class="form-control rounded-3" 
+                               value="{{ contrato.hora_fim_expediente.strftime('%H:%M') }}" required>
+                    </div>
+                </div>
+
+                <hr class="my-3 text-muted opacity-25">
+
+                <h6 class="fw-bold text-dark mb-3" style="font-size: 0.9rem;"><i class="bi bi-cup-hot me-1"></i> Intervalo / Almoço <span class="text-muted fw-normal small">(Opcional)</span></h6>
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small text-muted fw-semibold">Início Intervalo</label>
+                        <input type="time" name="hora_inicio_intervalo" class="form-control rounded-3" 
+                               value="{% if contrato.hora_inicio_intervalo %}{{ contrato.hora_inicio_intervalo.strftime('%H:%M') }}{% endif %}">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted fw-semibold">Fim Intervalo</label>
+                        <input type="time" name="hora_fim_intervalo" class="form-control rounded-3" 
+                               value="{% if contrato.hora_fim_intervalo %}{{ contrato.hora_fim_intervalo.strftime('%H:%M') }}{% endif %}">
+                    </div>
+                </div>
+
+            </div>
+
+            {# BOTÃO SALVAR #}
+            <button type="submit" class="btn btn-dark w-100 rounded-pill py-2.5 fw-semibold shadow-sm mt-2">
+                <i class="bi bi-check-circle-fill me-1"></i> Confirmar Novo Horário
+            </button>
+        </form>
+
+    </div>
+</div>
+{% endblock %}

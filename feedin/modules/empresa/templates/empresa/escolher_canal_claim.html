@@ -1,0 +1,87 @@
+{% extends "empresa/base_empresa.html" %}
+{% block titulo %}Passo 2: Escolha de Canal e Alerta Legal{% endblock %}
+
+{% block content %}
+<div class="container my-5" style="max-width: 650px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <!-- Barra de Progresso Visual -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between text-muted small fw-bold mb-2 px-1">
+            <span>Passo 1: Seleção</span>
+            <span class="text-primary">🟢 Passo 2: Verificação</span>
+            <span>Passo 3: Acesso</span>
+            <span>Passo 4: Ativação</span>
+        </div>
+        <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-primary" role="progressbar" style="width: 50%"></div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-2 bg-white">
+        <div class="card-body p-4">
+            
+            <div class="mb-4">
+                <h4 class="fw-bold text-dark mb-1">Verificação de Vínculo</h4>
+                <p class="text-muted small">Você iniciou o processo para o local: <strong class="text-dark">{{ local.nome }}</strong></p>
+            </div>
+
+            <!-- FILTRO PSICOLÓGICO / JURÍDICO -->
+            <div class="alert alert-light border border-light-subtle rounded-3 p-3 mb-4">
+                <h6 class="fw-bold text-danger d-flex align-items-center mb-2">
+                    <i class="bi bi-shield-exclamation me-2 fs-5"></i> Declaração de Responsabilidade
+                </h6>
+                <p class="small text-secondary mb-2" style="text-align: justify; line-height: 1.4;">
+                    O <strong>FeedIn</strong> preserva a integridade da memória comercial de Piracicaba. Ao prosseguir, você emite uma autodeclaração formal de propriedade. 
+                </p>
+                <p class="small text-secondary mb-3" style="text-align: justify; line-height: 1.4;">
+                    Tentativas de apropriação indevida ou dados falsos constituem fraudes sujeitas a sanções legais. Seu IP de navegação será permanentemente anexado para auditoria.
+                </p>
+                <div class="bg-danger bg-opacity-10 text-danger rounded-2 p-2 small fw-semibold">
+                    <i class="bi bi-clock-history me-1"></i> Prazo de validade: Você terá 5 dias para concluir. Após isso, o local volta ao mercado.
+                </div>
+            </div>
+
+            <!-- FORMULÁRIO DE ENVIO DO TOKEN -->
+            <form id="formDisparoClaim" action="{{ url_for('empresa.disparar_token', id_local=local.id) }}" method="POST">
+                <label class="form-label fw-bold text-dark small mb-3">Escolha por onde deseja receber seu link exclusivo de acesso:</label>
+                
+                <!-- Opção E-mail -->
+                <div class="form-check p-3 border rounded-3 mb-3 custom-card-radio transition-all">
+                    <input class="form-check-input ms-0 me-2" type="radio" name="canal_preferencial" id="canal_email" value="email" checked>
+                    <label class="form-check-label w-100" for="canal_email">
+                        <span class="fw-bold text-dark d-block mb-1">Receber por E-mail</span>
+                        <span class="text-muted small">Enviar para o endereço: <strong class="text-dark">{{ email_declarado }}</strong></span>
+                    </label>
+                </div>
+
+                <!-- Opção WhatsApp -->
+                <div class="form-check p-3 border rounded-3 mb-4 custom-card-radio transition-all">
+                    <input class="form-check-input ms-0 me-2" type="radio" name="canal_preferencial" id="canal_whatsapp" value="whatsapp">
+                    <label class="form-check-label w-100" for="canal_whatsapp">
+                        <span class="fw-bold text-dark d-block mb-1">Receber por WhatsApp</span>
+                        <span class="text-muted small">Enviar para o número: <strong class="text-dark">{{ telefone_declarado }}</strong></span>
+                    </label>
+                </div>
+
+                <!-- BOTÕES DE AÇÃO -->
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary rounded-pill fw-bold py-2-5 shadow-sm">
+                        Confirmar e Enviar Link Seguro
+                    </button>
+                    <!-- Saída Honrosa para erros de clique -->
+                    <a href="{{ url_for('empresa.cancelar_imediato', id_local=local.id) }}" class="btn btn-link btn-sm text-muted text-decoration-none mt-2">
+                        Escolhi o local errado, quero cancelar agora
+                    </a>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+<style>
+    .py-2-5 { padding-top: 0.65rem; padding-bottom: 0.65rem; }
+    .custom-card-radio:hover { background-color: #f9fafb; cursor: pointer; border-color: #cbd5e1 !important; }
+    .form-check-input:checked ~ label { color: #000; }
+</style>
+{% endblock %}

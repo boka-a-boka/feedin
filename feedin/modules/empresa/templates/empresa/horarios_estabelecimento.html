@@ -1,0 +1,194 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Perfil da Empresa{% endblock %}
+
+{% block content %}
+
+<style>
+    /* 🎨 Fundo Acetinado Premium para o Ecossistema de Piracicaba */
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .bloco-dia {
+        transition: background-color 0.2s ease;
+    }
+    .bloco-dia:hover {
+        background-color: #fcfbfa;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 position-relative">
+
+    {# 🎯 BOTÃO VOLTAR PADRÃO FEEDIN (Escuro para Alto Contraste - Posição Isolada) #}
+    <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+       class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow"
+       style="width: 40px; height: 40px; background-color: #212529; position: absolute; top: 24px; left: 24px; z-index: 1050;"
+       title="Voltar">
+        <i class="bi bi-arrow-left text-white fs-5"></i>
+    </a>
+
+    <div class="container py-3" style="max-width: 600px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 🏢 TOPO DE IDENTIFICAÇÃO DA EMPRESA (Corrigido os nós de Cidade/Estado) #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-2 border-gray-300 mb-3 text-center" style="margin-top: 45px;">
+            <h5 class="fw-bold text-dark m-0">{{ ese_empresa.nome }}</h5>
+            <p class="text-muted small m-0 mt-1">
+                {{ categoria_nome }} — {{ ese_empresa.cidade }}/{{ ese_empresa.estado }}
+            </p>
+        </div>
+
+        {# ⏱️ CARD PRINCIPAL DE CONFIGURAÇÃO #}
+        <div class="card shadow-sm border-2 border-gray-300 rounded-4 p-4 bg-white">
+            <div class="d-flex align-items-center mb-4 pb-3 border-bottom">
+                <div class="p-2.5 bg-primary-subtle text-primary rounded-3 me-3">
+                    <i class="bi bi-clock-history fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold m-0 text-dark" style="font-size: 1.1rem;">Horário do Estabelecimento</h5>
+                    <p class="text-muted m-0 small" style="font-size: 0.78rem;">Defina as faixas de atendimento padrão da sua empresa.</p>
+                </div>
+            </div>
+
+            <form method="POST" id="formHorarios">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                {# 📅 SEÇÃO A: SEMANA ÚTIL #}
+                <div class="mb-4">
+                    <div class="d-flex align-items-center mb-2 px-1">
+                        <span class="text-secondary fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px; text-transform: uppercase;">Dias Úteis</span>
+                    </div>
+
+                    <div class="border rounded-4 overflow-hidden bg-white">
+                        {% for dia_id in [1, 2, 3, 4, 5] %}
+                            {% set dia_nome = DIAS_SEMANA.get(dia_id) %}
+                            {% set registro = grade_map.get(dia_id) %}
+                            {% set ativo = true if registro else false %}
+
+                            <div class="bloco-dia row align-items-center g-0 px-3 py-2.5 {% if not loop.last %}border-bottom{% endif %}">
+                                <!-- Switch e Nome do Dia -->
+                                <div class="col-5 d-flex align-items-center">
+                                    <div class="form-check form-switch me-3">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               id="switch_{{ dia_id }}" name="trabalha_{{ dia_id }}" value="1"
+                                               {% if ativo %}checked{% endif %}
+                                               onchange="toggleInputs('{{ dia_id }}')">
+                                    </div>
+                                    <div>
+                                        <label class="fw-semibold text-dark mb-0 d-block" style="font-size: 0.88rem;" for="switch_{{ dia_id }}">{{ dia_nome }}</label>
+                                        {% if dia_id == 1 %}
+                                            <span class="text-primary d-block" style="font-size: 0.62rem; font-weight: 500;">Propaga p/ os outros dias</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <!-- Inputs de Horário -->
+                                <div class="col-7 d-flex align-items-center justify-content-end gap-2" id="inputs_dia_{{ dia_id }}">
+                                    <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none"
+                                           style="width: 85px; font-size: 0.82rem;"
+                                           id="abertura_{{ dia_id }}" name="abertura_{{ dia_id }}"
+                                           value="{% if ativo %}{{ registro.horario_abertura.strftime('%H:%M') }}{% else %}08:00{% endif %}"
+                                           {% if not ativo %}disabled{% endif %}
+                                           {% if dia_id == 1 %}onchange="replicarSemanaUtil()"{% endif %}>
+
+                                    <span class="text-muted small" style="font-size: 0.75rem;">até</span>
+
+                                    <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none"
+                                           style="width: 85px; font-size: 0.82rem;"
+                                           id="fechamento_{{ dia_id }}" name="fechamento_{{ dia_id }}"
+                                           value="{% if ativo %}{{ registro.horario_fechamento.strftime('%H:%M') }}{% else %}18:00{% endif %}"
+                                           {% if not ativo %}disabled{% endif %}
+                                           {% if dia_id == 1 %}onchange="replicarSemanaUtil()"{% endif %}>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# 🏖️ SEÇÃO B: FIM DE SEMANA #}
+                <div class="mb-2">
+                    <div class="d-flex align-items-center mb-2 px-1">
+                        <span class="text-secondary fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px; text-transform: uppercase;">Fim de Semana</span>
+                    </div>
+
+                    <div class="border rounded-4 overflow-hidden bg-white">
+                        {% for dia_id in [6, 0] %}
+                            {% set dia_nome = DIAS_SEMANA.get(dia_id) %}
+                            {% set registro = grade_map.get(dia_id) %}
+                            {% set ativo = true if registro else false %}
+
+                            <div class="bloco-dia row align-items-center g-0 px-3 py-2.5 {% if not loop.last %}border-bottom{% endif %}">
+                                <!-- Switch e Nome do Dia -->
+                                <div class="col-5 d-flex align-items-center">
+                                    <div class="form-check form-switch me-3">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               id="switch_{{ dia_id }}" name="trabalha_{{ dia_id }}" value="1"
+                                               {% if ativo %}checked{% endif %}
+                                               onchange="toggleInputs('{{ dia_id }}')">
+                                    </div>
+                                    <label class="fw-semibold text-dark mb-0" style="font-size: 0.88rem;" for="switch_{{ dia_id }}">{{ dia_nome }}</label>
+                                </div>
+
+                                <!-- Inputs de Horário -->
+                                <div class="col-7 d-flex align-items-center justify-content-end gap-2" id="inputs_dia_{{ dia_id }}">
+                                    <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none"
+                                           style="width: 85px; font-size: 0.82rem;"
+                                           id="abertura_{{ dia_id }}" name="abertura_{{ dia_id }}"
+                                           value="{% if ativo %}{{ registro.horario_abertura.strftime('%H:%M') }}{% else %}08:00{% endif %}"
+                                           {% if not ativo %}disabled{% endif %}>
+
+                                    <span class="text-muted small" style="font-size: 0.75rem;">até</span>
+
+                                    <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none"
+                                           style="width: 85px; font-size: 0.82rem;"
+                                           id="fechamento_{{ dia_id }}" name="fechamento_{{ dia_id }}"
+                                           value="{% if ativo %}{{ registro.horario_fechamento.strftime('%H:%M') }}{% else %}18:00{% endif %}"
+                                           {% if not ativo %}disabled{% endif %}>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# 💾 BOTÃO DE SALVAMENTO (Removido o botão "Voltar" redundante daqui de baixo) #}
+                <div class="text-end mt-4 pt-2">
+                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold" style="font-size: 0.85rem;">Salvar Horários</button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function toggleInputs(diaId) {
+    const isChecked = document.getElementById('switch_' + diaId).checked;
+    const container = document.getElementById('inputs_dia_' + diaId);
+    const inputs = container.getElementsByTagName('input');
+
+    for (let input of inputs) {
+        input.disabled = !isChecked;
+    }
+}
+
+function replicarSemanaUtil() {
+    const diasSemanaUtil = [2, 3, 4, 5];
+    const aberturaOrigem = document.getElementById('abertura_1').value;
+    const fechamentoOrigem = document.getElementById('fechamento_1').value;
+    const segundaAtiva = document.getElementById('switch_1').checked;
+
+    if (segundaAtiva) {
+        diasSemanaUtil.forEach(diaId => {
+            const switchDia = document.getElementById('switch_' + diaId);
+            if (!switchDia.checked) {
+                switchDia.checked = true;
+                toggleInputs(diaId);
+            }
+            document.getElementById('abertura_' + diaId).value = aberturaOrigem;
+            document.getElementById('fechamento_' + diaId).value = fechamentoOrigem;
+        });
+    }
+}
+</script>
+
+{% endblock %}

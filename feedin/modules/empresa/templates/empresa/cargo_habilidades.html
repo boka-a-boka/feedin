@@ -1,0 +1,293 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- 1. Linha do Título e Colaborador -->
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body py-3 px-4">
+            <h2 class="h5 text-primary font-weight-bold mb-1">Cargo & Habilidades Profissionais</h2>
+            <p class="text-muted mb-0">
+                Colaborador: <strong class="text-dark">{{ nome_colaborador }}</strong>
+            </p>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('empresa.configurar_cargo_habilidades', empresa_id=empresa.id, contrato_id=contrato.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="acao_form" value="salvar_habilidades">
+
+        <!-- 2. Input de Cargo com Autocomplete -->
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body py-3 px-4">
+                <div class="form-group mb-0">
+                    <label for="cargo_atuacao" class="small font-weight-bold text-dark mb-1">Cargo / Atribuição</label>
+                    <input type="text"
+                           class="form-control"
+                           id="cargo_atuacao"
+                           name="cargo_atuacao"
+                           list="lista_cargos"
+                           value="{{ cargo_atual_nome }}"
+                           placeholder="Digite ou selecione o cargo..."
+                           autocomplete="off">
+
+                    <datalist id="lista_cargos">
+                        {% for cargo in cargos_existentes %}
+                            <option value="{{ cargo }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Lista Enxuta de Serviços Atribuídos -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2 px-4 border-bottom">
+                <span class="font-weight-bold text-dark">Serviços Habilitados</span>
+
+                <button type="button"
+                        id="btnAbrirModalServicos"
+                        class="btn btn-outline-primary btn-sm"
+                        data-toggle="modal"
+                        data-target="#modalSelecionarServicos"
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalSelecionarServicos">
+                    <i class="fas fa-plus mr-1"></i>Adicionar / Selecionar Serviços
+                </button>
+            </div>
+
+            <div class="card-body p-3">
+                <!-- Lista de itens já atribuídos -->
+                <div id="container_servicos_atribuidos" class="border rounded bg-white p-2" style="max-height: 250px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush mb-0" id="lista_visivel_servicos">
+                        {% set ns = namespace(qtd=0) %}
+                        {% for servico in servicos_empresa %}
+                            {% if servico.id in habilidades_atuais_ids %}
+                                {% set ns.qtd = ns.qtd + 1 %}
+                                {% set nome_exibicao = servico.descricao_servico or (servico.servico_taxonomia.nome if servico.servico_taxonomia else 'Serviço') %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-0 bg-light rounded mb-1">
+                                    <span class="text-dark font-weight-semibold">{{ nome_exibicao }}</span>
+                                    <input type="hidden" name="servicos_ids" value="{{ servico.id }}">
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+
+                    <div id="msg_sem_servicos" class="text-center text-muted small py-3 {% if ns.qtd > 0 %}d-none{% endif %}">
+                        Nenhum serviço atribuído a este colaborador. Clique no botão acima para adicionar.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Rodapé -->
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-3 d-flex justify-content-end align-items-center">
+                <a href="javascript:history.back()" class="btn btn-light btn-sm mr-2">Cancelar</a>
+                <button type="submit" class="btn btn-success btn-sm px-4">
+                    <i class="fas fa-check mr-1"></i>Salvar Alterações
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- MODAL 1: Seleção Múltipla de Serviços do Catálogo -->
+<!-- MODAL 1: Seleção Múltipla de Serviços do Catálogo -->
+<div class="modal fade" id="modalSelecionarServicos" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title font-weight-bold small">Selecionar Serviços do Catálogo</h5>
+                <!-- "X" atualizado para fechar em BS4 e BS5 -->
+                <button type="button" class="close btn-close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Fechar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small text-muted">Marque os serviços que este colaborador realiza:</span>
+                    <button type="button" class="btn btn-link btn-sm p-0" id="btnIrParaNovoServico">
+                        + Cadastrar novo serviço no catálogo
+                    </button>
+                </div>
+
+                <div class="border rounded bg-white p-0" style="max-height: 350px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                        {% for servico in servicos_empresa %}
+                            {% set nome_exibicao = servico.descricao_servico or (servico.servico_taxonomia.nome if servico.servico_taxonomia else 'Serviço') %}
+                            <li class="list-group-item py-2 px-3 d-flex align-items-center justify-content-between">
+                                <div class="custom-control custom-checkbox custom-control-inline w-100 m-0">
+                                    <input type="checkbox"
+                                           class="custom-control-input chk-servico-modal"
+                                           id="modal_srv_{{ servico.id }}"
+                                           data-id="{{ servico.id }}"
+                                           data-nome="{{ nome_exibicao }}"
+                                           {% if servico.id in habilidades_atuais_ids %}checked{% endif %}>
+                                    <label class="custom-control-label cursor-pointer text-dark small w-100 d-block text-truncate" for="modal_srv_{{ servico.id }}">
+                                        {{ nome_exibicao }}
+                                    </label>
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="modal-footer py-2">
+                <!-- Botão Cancelar com duplo suporte de fechamento -->
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="confirmarSelecaoModal()">Confirmar Seleção</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 2: Inclusão Expressa de Serviço -->
+<div class="modal fade" id="modalNovoServicoCat" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('empresa.configurar_cargo_habilidades', empresa_id=empresa.id, contrato_id=contrato.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <input type="hidden" name="acao_form" value="novo_servico_expresso">
+
+                <div class="modal-header py-2">
+                    <h5 class="modal-title font-weight-bold small">Novo Serviço no Catálogo</h5>
+                    <button type="button" class="close btn-close" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Fechar">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group mb-2">
+                        <label for="taxonomia_id" class="small font-weight-bold">Taxonomia / Categoria</label>
+                        <select class="form-control form-control-sm" id="taxonomia_id" name="taxonomia_id" required>
+                            <option value="">Selecione...</option>
+                            {% for tax in taxonomias_globais %}
+                                <option value="{{ tax.id }}">{{ tax.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group mb-0">
+                        <label for="descricao_servico" class="small font-weight-bold">Descrição (Opcional)</label>
+                        <input type="text" class="form-control form-control-sm" id="descricao_servico" name="descricao_servico" placeholder="Ex: Corte Degradê Navalhado">
+                    </div>
+                </div>
+
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Cadastrar e Vincular</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    console.log("[DEBUG] Script de Habilidades/Serviços iniciado.");
+
+    // Função auxiliar universal para fechar modais (BS4 / BS5)
+    function fecharModalGarantido(modalId) {
+        const modalEl = document.getElementById(modalId);
+        if (!modalEl) return;
+
+        if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+            $(modalEl).modal('hide');
+        } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            let instance = bootstrap.Modal.getInstance(modalEl);
+            if (!instance) {
+                instance = new bootstrap.Modal(modalEl);
+            }
+            instance.hide();
+        }
+    }
+
+    // Função auxiliar universal para abrir modais (BS4 / BS5)
+    function abrirModalGarantido(modalId) {
+        const modalEl = document.getElementById(modalId);
+        if (!modalEl) {
+            console.error(`[ERRO] Modal #${modalId} não foi encontrado no HTML!`);
+            return;
+        }
+
+        if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+            $(modalEl).modal('show');
+        } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            let instance = bootstrap.Modal.getInstance(modalEl);
+            if (!instance) {
+                instance = new bootstrap.Modal(modalEl);
+            }
+            instance.show();
+        } else {
+            console.error("[ERRO] Nenhuma biblioteca de modal (jQuery/Bootstrap JS) encontrada.");
+        }
+    }
+
+    // 1. Abertura do Modal 1 ao clicar no botão "Adicionar / Selecionar Serviços"
+    const btnAbrir = document.getElementById('btnAbrirModalServicos');
+    if (btnAbrir) {
+        btnAbrir.addEventListener('click', function (e) {
+            e.preventDefault();
+            console.log("[DEBUG] Abrindo modal de seleção de serviços...");
+            abrirModalGarantido('modalSelecionarServicos');
+        });
+    }
+
+    // 2. Confirmação das seleções do Modal 1 para a lista principal
+    window.confirmarSelecaoModal = function() {
+        console.log("[DEBUG] Confirmando seleção de serviços...");
+        const lista = document.getElementById('lista_visivel_servicos');
+        const msgSemServicos = document.getElementById('msg_sem_servicos');
+
+        if (!lista) {
+            console.error("[ERRO] Elemento #lista_visivel_servicos não existe na página!");
+            return;
+        }
+
+        lista.innerHTML = '';
+        let selecionados = 0;
+
+        document.querySelectorAll('.chk-servico-modal:checked').forEach(chk => {
+            selecionados++;
+            const id = chk.getAttribute('data-id');
+            const nome = chk.getAttribute('data-nome');
+
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-0 bg-light rounded mb-1';
+            li.innerHTML = `
+                <span class="text-dark font-weight-semibold">${nome}</span>
+                <input type="hidden" name="servicos_ids" value="${id}">
+            `;
+            lista.appendChild(li);
+        });
+
+        if (msgSemServicos) {
+            if (selecionados > 0) {
+                msgSemServicos.classList.add('d-none');
+            } else {
+                msgSemServicos.classList.remove('d-none');
+            }
+        }
+
+        fecharModalGarantido('modalSelecionarServicos');
+    };
+
+    // 3. Transição limpa do Modal 1 para o Modal 2 (Inclusão expressa)
+    const btnIrNovo = document.getElementById('btnIrParaNovoServico');
+    if (btnIrNovo) {
+        btnIrNovo.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log("[DEBUG] Alternando do Modal 1 para o Modal 2...");
+            fecharModalGarantido('modalSelecionarServicos');
+
+            setTimeout(() => {
+                abrirModalGarantido('modalNovoServicoCat');
+            }, 350);
+        });
+    }
+});
+</script>
+{% endblock %}

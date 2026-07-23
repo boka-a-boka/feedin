@@ -1,4 +1,6 @@
-// --- 1. GESTÃO DE TEMA (DARK/LIGHT MODE) ---
+// =========================================================================
+// 1. GESTÃO DE TEMA (DARK/LIGHT MODE)
+// =========================================================================
 const toggleButton = document.getElementById('darkModeToggle');
 
 const setTheme = (theme) => {
@@ -20,8 +22,9 @@ if (toggleButton) {
     });
 }
 
-// --- 2. FUNÇÃO AUXILIAR DE FETCH (PROTEÇÃO DE SESSÃO) ---
-// Esta função centraliza as chamadas e verifica se a sessão caiu
+// =========================================================================
+// 2. FUNÇÃO AUXILIAR DE FETCH (PROTEÇÃO DE SESSÃO)
+// =========================================================================
 async function fetchProtegido(url, options = {}) {
     try {
         const response = await fetch(url, options);
@@ -30,7 +33,7 @@ async function fetchProtegido(url, options = {}) {
         if (response.status === 401 || response.redirected) {
             console.warn("Sessão expirada. Redirecionando...");
             window.location.reload();
-            return;
+            return null;
         }
         return response;
     } catch (error) {
@@ -39,18 +42,23 @@ async function fetchProtegido(url, options = {}) {
     }
 }
 
-// --- 3. TROCA DE ABAS ASSÍNCRONA ---
+// =========================================================================
+// 3. TROCA DE ABAS ASSÍNCRONA
+// =========================================================================
 function trocarAba(url) {
     const destino = document.getElementById('area-conteudo');
     if (!destino) return;
 
     fetchProtegido(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(response => response.text())
+        .then(response => response ? response.text() : '')
         .then(html => {
             if (html) destino.innerHTML = html;
         });
 }
 
+// =========================================================================
+// 4. AUTOCOMPLETE E BUSCA DE LOCAIS (DOM CONTENT LOADED)
+// =========================================================================
 document.addEventListener('DOMContentLoaded', function() {
     const inputNome = document.getElementById('inputNomeLocal');
     const listaSugestoes = document.getElementById('listaSugestoes');
@@ -59,91 +67,112 @@ document.addEventListener('DOMContentLoaded', function() {
     const secaoCurtidas = document.getElementById('secao-curtidas');
     const nomeSpan = document.getElementById('nome-local-selecionado');
 
-    inputNome.addEventListener('input', function() {
-        const busca = this.value;
-        hiddenId.value = ''; // Reseta o ID se o usuário voltar a digitar
+    if (inputNome) {
+        inputNome.addEventListener('input', function() {
+            const busca = this.value;
+            if (hiddenId) hiddenId.value = ''; // Reseta o ID se o usuário voltar a digitar
 
-        if (busca.length < 2) {
-            listaSugestoes.classList.add('d-none');
-            return;
-        }
+            if (busca.length < 2) {
+                if (listaSugestoes) listaSugestoes.classList.add('d-none');
+                return;
+            }
 
-        fetch(`/buscar_locais?q=${encodeURIComponent(busca)}`)
-            .then(res => res.json())
-            .then(data => {
-                listaSugestoes.innerHTML = '';
-                if (data.length > 0) {
-                    listaSugestoes.classList.remove('d-none');
-                    data.forEach(local => {
-                        const item = document.createElement('button');
-                        item.type = 'button';
-                        item.className = 'list-group-item list-group-item-action border-0';
-                        item.innerHTML = `
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong class="text-dark">${local.nome}</strong><br>
-                                    <small class="text-muted">${local.logradouro} - ${local.bairro}</small>
-                                </div>
-                                ${local.status === 'historico' ? '<span class="badge bg-secondary">Histórico</span>' : ''}
-                            </div>`;
+            fetch(`/buscar_locais?q=${encodeURIComponent(busca)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!listaSugestoes) return;
+                    listaSugestoes.innerHTML = '';
 
-                        item.onclick = () => {
-                            inputNome.value = local.nome;
-                            hiddenId.value = local.id; // CAPTURA O ID DO BANCO
+                    if (data.length > 0) {
+                        listaSugestoes.classList.remove('d-none');
+                        data.forEach(local => {
+                            const item = document.createElement('button');
+                            item.type = 'button';
+                            item.className = 'list-group-item list-group-item-action border-0';
+                            item.innerHTML = `
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong class="text-dark">${local.nome}</strong><br>
+                                        <small class="text-muted">${local.logradouro} - ${local.bairro}</small>
+                                    </div>
+                                    ${local.status === 'historico' ? '<span class="badge bg-secondary">Histórico</span>' : ''}
+                                </div>`;
+
+                            item.onclick = () => {
+                                inputNome.value = local.nome;
+                                if (hiddenId) hiddenId.value = local.id;
+                                listaSugestoes.classList.add('d-none');
+                                if (camposExtra) camposExtra.classList.add('d-none');
+
+                                if (nomeSpan) nomeSpan.textContent = local.nome;
+                                if (secaoCurtidas) secaoCurtidas.classList.remove('d-none');
+                            };
+                            listaSugestoes.appendChild(item);
+                        });
+                    } else {
+                        // Opção de "Novo Local"
+                        const novo = document.createElement('button');
+                        novo.type = 'button';
+                        novo.className = 'list-group-item list-group-item-action text-primary fw-bold';
+                        novo.innerHTML = `<i class="bi bi-plus-circle me-2"></i> "${busca}" não encontrado. Cadastrar novo?`;
+                        novo.onclick = () => {
+                            inputNome.value = busca;
+                            if (hiddenId) hiddenId.value = '';
                             listaSugestoes.classList.add('d-none');
-                            camposExtra.classList.add('d-none'); // Esconde pois já temos os dados
-
-                            // Mostra a seção de experiência
-                            nomeSpan.textContent = local.nome;
-                            secaoCurtidas.classList.remove('d-none');
+                            if (camposExtra) camposExtra.classList.remove('d-none');
+                            if (nomeSpan) nomeSpan.textContent = busca;
+                            if (secaoCurtidas) secaoCurtidas.classList.remove('d-none');
                         };
-                        listaSugestoes.appendChild(item);
-                    });
-                } else {
-                    // Opção de "Novo Local"
-                    const novo = document.createElement('button');
-                    novo.type = 'button';
-                    novo.className = 'list-group-item list-group-item-action text-primary fw-bold';
-                    novo.innerHTML = `<i class="bi bi-plus-circle me-2"></i> "${busca}" não encontrado. Cadastrar novo?`;
-                    novo.onclick = () => {
-                        inputNome.value = busca;
-                        hiddenId.value = ''; // ID vazio indica novo cadastro
-                        listaSugestoes.classList.add('d-none');
-                        camposExtra.classList.remove('d-none'); // Abre campos de endereço
-                        nomeSpan.textContent = busca;
-                        secaoCurtidas.classList.remove('d-none');
-                    };
-                    listaSugestoes.appendChild(novo);
-                    listaSugestoes.classList.remove('d-none');
-                }
-            });
-    });
+                        listaSugestoes.appendChild(novo);
+                        listaSugestoes.classList.remove('d-none');
+                    }
+                });
+        });
+    }
+
+    // --- CONFIGURAÇÃO DO PREVIEW DE FOTO DE PERFIL ---
+    const inputFotoPerfil = document.getElementById('foto-perfil-input');
+    const fotoPreviewPerfil = document.getElementById('foto-preview');
+
+    if (inputFotoPerfil && fotoPreviewPerfil) {
+        inputFotoPerfil.addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    fotoPreviewPerfil.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // --- CONFIGURAÇÃO DO SEGUNDO INPUT DE FOTO (COMPATIBILIDADE) ---
+    const inputFotoGeral = document.getElementById('input-foto');
+    const btnUpload = document.getElementById('btn-upload-foto');
+    const nomeArquivo = document.getElementById('nome-arquivo');
+
+    if (inputFotoGeral) {
+        inputFotoGeral.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            const preview = document.getElementById('foto-preview');
+
+            if (file && preview) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    if (btnUpload) btnUpload.classList.remove('d-none');
+                    if (nomeArquivo) nomeArquivo.textContent = file.name;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
 });
 
-function selecionarLocal(local) {
-    inputNome.value = local.nome;
-    listaSugestoes.classList.add('d-none');
-    camposExtra.classList.add('d-none'); // Esconde campos de endereço pois já existe
-
-    // Abre a seção de "O que você curte"
-    nomeSelecionadoSpan.textContent = local.nome;
-    secaoCurtidas.classList.remove('d-none');
-}
-
-function prepararNovoLocal(nome) {
-    inputNome.value = nome;
-    listaSugestoes.classList.add('d-none');
-
-    // Mostra campos de endereço para o usuário preencher
-    camposExtra.classList.remove('d-none');
-
-    // Também mostra a seção de curtidas
-    nomeSelecionadoSpan.textContent = nome;
-    secaoCurtidas.classList.remove('d-none');
-}
-
-// --- 5. FUNÇÕES GLOBAIS ---
-
+// =========================================================================
+// 5. FUNÇÕES GLOBAIS DE ACIONAMENTO MANUAL
+// =========================================================================
 function selecionarLocal(nome) {
     const spanNome = document.getElementById('nome-local-selecionado');
     if (spanNome) spanNome.textContent = nome;
@@ -167,64 +196,10 @@ function abrirCadastroManual(termo) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("=== INICIANDO CONFIGURAÇÃO DO PREVIEW ===");
-
-    // Buscar o input de arquivo
-    const inputFoto = document.getElementById('foto-perfil-input');
-    const fotoPreview = document.getElementById('foto-preview');
-
-    // Verificar se encontrou os elementos
-    console.log("Input encontrado?", inputFoto);
-    console.log("Preview encontrado?", fotoPreview);
-
-    if (!inputFoto) {
-        console.error("❌ Campo de arquivo NÃO encontrado! IDs disponíveis:");
-        // Listar todos os inputs do formulário para debug
-        document.querySelectorAll('input').forEach(input => {
-            console.log("- Input ID:", input.id, "Type:", input.type);
-        });
-        return;
-    }
-
-    if (!fotoPreview) {
-        console.error("❌ Elemento de preview NÃO encontrado!");
-        return;
-    }
-
-    // Adicionar evento de change
-    inputFoto.addEventListener('change', function(event) {
-        console.log("✅ Evento 'change' disparado!");
-        visualizarFoto(this);
-    });
-
-    console.log("✅ Configuração concluída! Aguardando seleção de arquivo...");
-});
-
-document.getElementById('input-foto').addEventListener('change', function(event) {
-    const file = event.target.files[0];
-    const preview = document.getElementById('foto-preview');
-    const btnUpload = document.getElementById('btn-upload-foto');
-    const nomeArquivo = document.getElementById('nome-arquivo');
-
-    if (file) {
-        const reader = new FileReader();
-
-        reader.onload = function(e) {
-            // Atualiza o src da imagem com o conteúdo do arquivo
-            preview.src = e.target.result;
-            // Mostra o botão de confirmação
-            btnUpload.classList.remove('d-none');
-            // Atualiza o nome do arquivo
-            nomeArquivo.textContent = file.name;
-        }
-
-        reader.readAsDataURL(file);
-    }
-});
-
+// =========================================================================
+// 6. AUTENTICAÇÃO E CADASTRO BIOMÉTRICO (WEBAUTHN)
+// =========================================================================
 async function iniciarCadastroBiometrico(email, senha) {
-    // 1. Envia os dados para a rota que criamos acima
     const resposta = await fetch('/ativar-biometria', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,15 +214,12 @@ async function iniciarCadastroBiometrico(email, senha) {
     const dados = await resposta.json();
     const options = dados.options;
 
-    // 2. Converte as strings base64 do Flask para ArrayBuffer (Exigência do navegador)
     options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0));
     options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0));
 
     try {
-        // 3. A MÁGICA: Abre o Face ID no iPhone, a Digital no Android ou o PIN no Windows
         const credential = await navigator.credentials.create({ publicKey: options });
 
-        // 4. Prepara a resposta do sensor para enviar de volta ao Flask
         const dadosParaSalvar = {
             id: credential.id,
             rawId: btoa(String.fromCharCode.apply(null, new Uint8Array(credential.rawId))),
@@ -258,7 +230,6 @@ async function iniciarCadastroBiometrico(email, senha) {
             }
         };
 
-        // 5. Envia para uma rota de finalização para salvar na tabela 'credenciais_biometricas'
         const salvarResposta = await fetch('/salvar-biometria', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -276,3 +247,116 @@ async function iniciarCadastroBiometrico(email, senha) {
     }
 }
 
+// =========================================================================
+// 7. INTEGRAÇÃO DE CEP AUTOMÁTICO (MÓDULO CORE / EMPRESAS)
+// =========================================================================
+document.addEventListener('blur', function (event) {
+    if (event.target && event.target.id === 'cep') {
+        const inputCep = event.target;
+        let cep = inputCep.value.replace(/\D/g, '');
+
+        if (cep.length === 8) {
+            const campos = {
+                logradouro: document.getElementById('logradouro'),
+                bairro: document.getElementById('bairro'),
+                cidade: document.getElementById('cidade'),
+                estado: document.getElementById('estado'),
+                numero: document.getElementById('numero')
+            };
+
+            const toggleCampos = (status) => {
+                ['logradouro', 'bairro', 'cidade', 'estado'].forEach(id => {
+                    if (campos[id]) campos[id].disabled = status;
+                });
+            };
+
+            toggleCampos(true);
+            if (campos.logradouro) campos.logradouro.value = 'Buscando endereço...';
+
+            fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Falha na rede ao buscar CEP.');
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.erro) {
+                        if (campos.logradouro) campos.logradouro.value = data.logradouro;
+                        if (campos.bairro) campos.bairro.value = data.bairro;
+                        if (campos.cidade) campos.cidade.value = data.localidade;
+                        if (campos.estado) campos.estado.value = data.uf;
+
+                        if (campos.numero) campos.numero.focus();
+                    } else {
+                        alert('CEP não localizado no banco de dados postal. Por favor, preencha manualmente.');
+                        limparCamposEndereco(campos);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro na integração de CEP:', error);
+                    alert('Não foi possível conectar ao serviço de busca de CEP. Insira o endereço manualmente.');
+                    limparCamposEndereco(campos);
+                })
+                .finally(() => {
+                    toggleCampos(false);
+                });
+        }
+    }
+}, true);
+
+function limparCamposEndereco(campos) {
+    ['logradouro', 'bairro', 'cidade', 'estado'].forEach(id => {
+        if (campos[id]) campos[id].value = '';
+    });
+}
+
+/**
+ ==========================================================================================
+ 📌 SCRIPT CORE: GATILHO DE MUTAÇÃO VISUAL E PERSISTÊNCIA DO CLAIM
+ ==========================================================================================
+ Controla o envio do primeiro documento. Assim que o back-end responde com sucesso,
+ ele sinaliza ao usuário que o status do Claim mudou e que o vínculo territorial foi feito.
+ ==========================================================================================
+ */
+
+function enviarPrimeiroDocumento(event) {
+    event.preventDefault();
+
+    const form = event.target;
+    const btnSubmit = document.getElementById('btnAtivar');
+    const fileInput = document.getElementById('file_input');
+
+    if (fileInput.files.length === 0) {
+        alert("❌ Por favor, selecione um arquivo válido para prosseguir.");
+        return;
+    }
+
+    // Travamento do botão para evitar cliques duplicados (Double-Click Protection)
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Processando Ativação...`;
+
+    const formData = new FormData(form);
+
+    // Envia os dados para o endpoint que processará a mutação de status e gerará o Vínculo Core
+    fetch('/empresa/api/ativar-claim', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) throw new Error('Ocorreu um erro no servidor de homologação.');
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'success') {
+            alert("🚀 Sensacional! Primeiro documento recebido. Seu Claim mudou para 'em_andamento_com_dados' e seu perfil foi vinculado ao local.");
+            // Recarrega a página para liberar as próximas abas com o novo estado do banco
+            window.location.reload();
+        } else {
+            throw new Error(data.message);
+        }
+    })
+    .catch(error => {
+        alert(`❌ Falha na ativação: ${error.message}`);
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = `<i class="bi bi-cloud-arrow-up-fill me-1"></i> Concluir Ativação e Vincular`;
+    });
+}

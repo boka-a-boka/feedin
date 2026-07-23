@@ -1,0 +1,78 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Declaração de Responsabilidade Legal - FeedIn{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center m-0">
+        <div class="col-12" style="max-width: 650px;">
+
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden bg-dark text-white p-4 p-md-5 text-center">
+
+                <div class="mb-3">
+                    <i class="bi bi-shield-exclamation text-warning" style="font-size: 3.5rem;"></i>
+                </div>
+
+                <h4 class="fw-bold mb-3">Atenção e Responsabilidade Legal</h4>
+
+                <p class="text-light-subtle small mb-4">
+                    Processo de reivindicação iniciado para o estabelecimento:<br>
+                    <strong class="text-warning fs-5">{{ local.nome }}</strong>
+                </p>
+
+                {# O FILTRO DE FRAUDE (TEXTO JUSTIFICADO) #}
+                <div class="bg-secondary bg-opacity-25 rounded-3 p-3 text-start mb-4 border border-secondary border-opacity-50 small text-light-subtle lh-sm">
+                    <p class="mb-2 text-justify" style="text-align: justify;">
+                        A plataforma preza pela veracidade histórica e comercial de nossa cidade. Ao avançar, você iniciará uma <strong>declaração formal de propriedade</strong>. Informações falsas ou tentativas de fraude sobre marcas de terceiros estão sujeitas a sanções cíveis e criminais.
+                    </p>
+                    <p class="mb-2 text-justify" style="text-align: justify;">
+                        Seu IP (<span class="text-warning fw-mono">{{ processo.ip_solicitacao }}</span>) e dados de navegação serão vinculados ao processo. Caso este local não pertença a você ou à sua representação legal, você pode fechar esta janela agora sem nenhuma penalidade.
+                    </p>
+                    <p class="mb-0 text-warning text-justify" style="text-align: justify;">
+                        ⏳ <strong>Prazo de Validade:</strong> Você terá 5 dias para concluir os próximos passos. Se não concluir, o local voltará a ficar disponível para o público e o processo será cancelado.
+                    </p>
+                </div>
+
+                {# TEXTO DE APOIO DO CANAL SELECIONADO NO PASSO 1 #}
+                <p class="small text-muted mb-4">
+                    O link de validação será enviado via <strong class="text-white text-uppercase">{{ processo.canal_comunicacao }}</strong> para:<br>
+                    <span class="badge bg-light text-dark font-monospace fs-6 mt-1 d-inline-block text-truncate" style="max-width: 100%;">{{ processo.alvo_comunicacao }}</span>
+                </p>
+
+{# SAÍDA DE EMERGÊNCIA OU CONFIRMAÇÃO #}
+                <div class="d-flex flex-column gap-2 mt-2">
+                    <form action="{{ url_for('empresa.confirmar_e_disparar_claim', id_processo=processo.id) }}" method="POST" id="formConfirmarAlerta">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-warning text-dark fw-bold w-100 rounded-pill py-2" id="btnEnviarLink">
+                            Estou Ciente, Enviar Link de Validação
+                        </button>
+                    </form>
+
+                    {# 🎯 CORREÇÃO VISUAL: Alterado para btn-outline-light para aparecer claramente no fundo bg-dark #}
+                    <a href="{{ url_for('empresa.cancelar_intencao_recuo', id_processo=processo.id) }}" class="btn btn-outline-light btn-sm rounded-pill py-2 mt-1 fw-semibold text-decoration-none">
+                        ❌ Não sou o proprietário / Cancelar e Voltar
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('formConfirmarAlerta');
+    const btn = document.getElementById('btnEnviarLink');
+
+    if (form && btn) {
+        form.addEventListener('submit', function() {
+            setTimeout(() => {
+                btn.disabled = true;
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Disparando canal seguro...`;
+            }, 50);
+        });
+    }
+})();
+</script>
+{% endblock %}

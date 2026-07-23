@@ -1,0 +1,60 @@
+{% extends "empresa/base_empresa.html" %}
+{% block titulo %}Passo 3: Criar Credenciais de Acesso{% endblock %}
+
+{% block content %}
+<div class="container my-5" style="max-width: 500px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <!-- Barra de Progresso Visual -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between text-muted small fw-bold mb-2 px-1">
+            <span>Passo 1: Seleção</span>
+            <span>Passo 2: Verificação</span>
+            <span class="text-primary">🟢 Passo 3: Acesso</span>
+            <span>Passo 4: Ativação</span>
+        </div>
+        <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-primary" role="progressbar" style="width: 75%"></div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-2 bg-white">
+        <div class="card-body p-4">
+            
+            <div class="text-center mb-4">
+                <h4 class="fw-bold text-dark mb-1">Defina suas Credenciais</h4>
+                <p class="text-muted small">Crie sua senha master para gerenciar a marca <strong>{{ local_nome }}</strong>.</p>
+            </div>
+
+            <form method="POST" action="">
+                <!-- CSRF Token se usar Flask-WTF -->
+                {{ form.hidden_tag() if form else '' }}
+
+                <!-- E-mail ou Telefone fixado em modo Readonly para segurança -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary">Seu Identificador de Acesso (Login)</label>
+                    <input type="text" class="form-control rounded-3 bg-light text-muted border-light-subtle" value="{{ identificador_destino }}" readonly>
+                    <div class="form-text" style="font-size: 0.75rem;">Este será o dado utilizado para acessar o painel futuramente.</div>
+                </div>
+
+                <!-- Campo de Senha -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-dark">Crie uma Senha Forte</label>
+                    <input type="password" name="password" class="form-control rounded-3 border-light-subtle shadow-none" placeholder="Mínimo 8 caracteres" required minlength="8">
+                </div>
+
+                <!-- Confirmação de Senha -->
+                <div class="mb-4">
+                    <label class="form-label small fw-bold text-dark">Confirme sua Senha</label>
+                    <input type="password" name="confirm_password" class="form-control rounded-3 border-light-subtle shadow-none" placeholder="Digite a senha novamente" required>
+                </div>
+
+                <!-- BOTÃO AVANÇAR -->
+                <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2-5 shadow-sm">
+                    Salvar e Ir para Etapa de Ativação
+                </button>
+            </form>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

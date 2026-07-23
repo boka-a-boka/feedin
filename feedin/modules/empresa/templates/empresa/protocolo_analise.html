@@ -1,0 +1,55 @@
+{% extends "empresa/base_empresa.html" %}
+{% block title %}Solicitação em Análise | FeedIn Negócios{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 600px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white text-center mb-4">
+        <div class="card-body p-3">
+            
+            <div class="mb-4 text-warning">
+                <i class="bi bi-hourglass-split" style="font-size: 3.5rem;"></i>
+            </div>
+
+            <h4 class="fw-bold text-dark mb-2">Documentação Recebida com Sucesso!</h4>
+            <p class="text-muted small mb-4">
+                O protocolo de reivindicação para o estabelecimento <strong class="text-dark">{{ local.nome }}</strong> foi gerado e anexado ao seu perfil.
+            </p>
+
+            <div class="p-3 bg-light rounded-3 text-start mb-4 border border-light-subtle">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="small text-secondary fw-bold text-uppercase">Status do Requerimento</span>
+                    <span class="badge bg-warning text-dark rounded-pill px-2.5 py-1">Em Análise Humana</span>
+                </div>
+                <div class="text-dark small mb-1"><strong>Protocolo:</strong> <code class="text-secondary">{{ processo.token_hash[:8]|upper }}</code></div>
+                <div class="text-dark small"><strong>Previsão de Retorno:</strong> Até 48 horas úteis.</div>
+            </div>
+
+            <p class="text-secondary small mb-0" style="line-height: 1.4; text-align: justify;">
+                Nossa equipe de compliance fará o cruzamento dos documentos enviados (CNPJ e Endereço) com a base da Receita Federal e os registros municipais de Piracicaba para garantir a segurança jurídica da marca. Você receberá um alerta assim que a sua chave de gestão for homologada.
+            </p>
+
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <h6 class="fw-bold text-dark mb-3">Conheça os Recursos Disponíveis Após a Aprovação:</h6>
+        
+        <div class="row g-3">
+            <div class="col-100">
+                <div class="d-flex p-3 border rounded-3 bg-light bg-opacity-50">
+                    <div class="me-3 text-secondary">
+                        <i class="bi bi-calendar3 fs-3"></i>
+                    </div>
+                    <div>
+                        <span class="fw-bold text-dark d-block small">📅 Módulo Agenda de Balcão</span>
+                        <small class="text-muted d-block" style="font-size: 0.75rem;">Gerencie fluxos de atendimento, reservas e interações com a memória do cliente local.</small>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill mt-2" style="font-size: 0.65rem;">Módulo Adicional Opcional</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

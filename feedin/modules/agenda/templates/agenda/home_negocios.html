@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "agenda/base_agenda.html" %}
 
 {% block title %}FeedIn Negócios{% endblock %}
 
@@ -12,12 +12,12 @@
         height: 100%;
         background-color: #ffffff;
         z-index: 1050;
-        transform: translateX(-100%); /* Mantém o menu escondido à esquerda por padrão */
+        transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
         box-shadow: 4px 0 12px rgba(0,0,0,0.1);
     }
     .sidebar-pwa.active {
-        transform: translateX(0); /* Desliza para a tela quando ativo */
+        transform: translateX(0);
     }
     .sidebar-overlay-pwa {
         position: fixed;
@@ -45,9 +45,39 @@
         color: #000 !important;
         font-weight: 600;
     }
+    /* Estilo para os Botões Grandes de Concentração */
+    .btn-concentrador {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem 1rem;
+        border-radius: 1rem;
+        border: 1px solid #f0f0f0;
+        background: #ffffff;
+        text-decoration: none;
+        color: #212529;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    .btn-concentrador i {
+        font-size: 1.8rem;
+        margin-bottom: 0.5rem;
+    }
 </style>
 
-<div id="sidebar-menu" class="sidebar-pwa">
+<div id="sidebar-menu" class="sidebar-pwa d-flex flex-column">
+
+    {# 🎯 TOPO DO MENU: Se veio pelo HUB, exibe o cabeçalho mestre de retorno primeiro #}
+    {% if session.get('navegacao_via_hub') %}
+    <div class="p-2 border-bottom bg-gradient shadow-sm" style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%);">
+        <a href="{{ url_for('central_hub') }}" class="btn btn-sm btn-warning w-100 rounded-3 py-2 fw-bold d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-grid-3x3-gap-fill"></i> Voltar ao HUB
+        </a>
+    </div>
+    {% endif %}
 
     {% if session.get('modo_visao') == 'balcao' %}
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-dark text-white">
@@ -55,7 +85,9 @@
                 <h6 class="m-0 fw-bold text-warning"><i class="bi bi-shield-lock-fill me-2"></i>Modo Interno</h6>
                 <small class="text-muted" style="font-size: 0.65rem;">Nível de Acesso: {{ session.get('nivel_acesso_atual', 10) }}</small>
             </div>
-            <button id="btn-fechar-menu" class="btn btn-sm btn-outline-light border-0 rounded-circle"><i class="bi bi-x-lg"></i></button>
+            <button class="btn btn-sm btn-outline-light border-0 rounded-circle btn-fechar-menu">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
 
         {% if session.get('usuario_is_pioneiro') and session.get('nivel_acesso_atual') == 999 %}
@@ -74,19 +106,38 @@
                 <i class="bi bi-calendar3 me-3 text-primary"></i>Painel da Agenda
             </a>
 
+            <a href="{{ url_for('agenda.cadastro_balcao') }}" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-calculator me-3 text-success"></i>Lançar Atendimento Balcão
+            </a>
+
             {% if session.get('nivel_acesso_atual', 10) >= 666 %}
-            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted" disabled>
-                <i class="bi bi-scissors me-3 text-secondary"></i>Catálogo de Serviços <small>(Breve)</small>
-            </button>
+                <hr class="my-2 mx-3 text-muted">
+                <div class="px-4 py-1 text-muted fw-bold text-uppercase" style="font-size: 0.65rem;">Configurações de Marca</div>
+
+                <a href="/empresa/gerenciar/{{ session.get('empresa_id_atual') }}" class="list-group-item list-group-item-action py-2 px-4 border-0 text-dark small">
+                    <i class="bi bi-sliders me-3 text-secondary"></i>Identidade & Selo Digital
+                </a>
             {% endif %}
+
+            {% if session.get('nivel_acesso_atual', 10) >= 777 %}
+                <a href="/empresa/equipe/{{ session.get('empresa_id_atual') }}" class="list-group-item list-group-item-action py-2 px-4 border-0 text-dark small">
+                    <i class="bi bi-people me-3 text-secondary"></i>Gerenciar Equipe
+                </a>
+            {% endif %}
+
+            <hr class="my-2 mx-3 text-muted">
 
             <a href="{{ url_for('agenda.credenciamento_balcao') }}" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
                 <i class="bi bi-shop me-3 text-info"></i>Credenciar Novo Balcão
             </a>
 
+            <a href="/empresa/reivindicar" class="list-group-item list-group-item-action py-3 px-4 border-0 text-dark">
+                <i class="bi bi-patch-check-fill me-3 text-success"></i>Reivindicar Empresa (Claim)
+            </a>
+
             <hr class="my-2 mx-3 text-muted">
 
-            <a href="/balcao/sair" class="list-group-item list-group-item-action py-3 px-4 border-0 text-danger fw-bold">
+            <a href="{{ url_for('agenda.sair_modo_balcao') }}" class="list-group-item list-group-item-action py-3 px-4 border-0 text-danger fw-bold">
                 <i class="bi bi-fullscreen-exit me-3"></i>Voltar para a Cidade
             </a>
         </div>
@@ -94,15 +145,26 @@
     {% else %}
         <div class="p-3 border-bottom d-flex justify-content-between align-items-center bg-dark text-white">
             <h6 class="m-0 fw-bold"><i class="bi bi-grid-fill me-2"></i>Navegação</h6>
-            <button id="btn-fechar-menu" class="btn btn-sm btn-outline-light border-0 rounded-circle"><i class="bi bi-x-lg"></i></button>
+            <button class="btn btn-sm btn-outline-light border-0 rounded-circle btn-fechar-menu"><i class="bi bi-x-lg"></i></button>
         </div>
         <div class="list-group list-group-flush">
             <a href="/" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-house-door-fill me-3 text-secondary"></i>Início</a>
+            <a href="/empresa/reivindicar" class="list-group-item list-group-item-action py-3 px-4 border-0"><i class="bi bi-patch-check me-3 text-success"></i>Sou Proprietário (Claim)</a>
             <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-calendar-check-fill me-3 text-black-50"></i>Meus Horários</button>
-            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-star-fill me-3 text-black-50"></i>Favoritos</button>
-            <button class="list-group-item list-group-item-action py-3 px-4 border-0 text-muted text-start bg-transparent" disabled><i class="bi bi-award-fill me-3 text-black-50"></i>Minha Reputação</button>
         </div>
     {% endif %}
+
+    {# 🎯 RODAPÉ DO MENU: Gerencia dinamicamente o fechamento da sessão unificada #}
+    <div class="p-3 border-top mt-auto bg-light">
+        <a href="{{ url_for('agenda.logout') }}" class="btn btn-sm btn-outline-danger w-100 rounded-pill py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-box-arrow-right"></i>
+            {% if session.get('navegacao_via_hub') %}
+                Encerrar Sessão
+            {% else %}
+                Sair da Agenda
+            {% endif %}
+        </a>
+    </div>
 </div>
 <div id="sidebar-overlay" class="sidebar-overlay-pwa"></div>
 
@@ -115,7 +177,7 @@
             </button>
             <div>
                 <span class="text-muted small d-block" style="font-size: 0.75rem;">Central de Negócios em:</span>
-                <strong class="text-dark"><i class="bi bi-geo-alt-fill text-danger"></i> {{ cidade }} - {{ estado }}</strong>
+                <strong class="text-dark"><i class="bi bi-geo-alt-fill text-danger"></i> {{ cidade | default('Piracicaba') }} - {{ estado | default('SP') }}</strong>
             </div>
         </div>
         <button class="btn btn-sm bg-white border rounded-pill text-secondary px-3" style="font-size: 0.8rem;">Mudar</button>
@@ -130,6 +192,44 @@
         <div id="autocomplete-results" class="list-group position-absolute w-100 mt-1 shadow rounded-3 d-none" style="z-index: 1000; max-height: 250px; overflow-y: auto;"></div>
     </div>
 
+    {% if session.get('modo_visao') == 'balcao' %}
+    <div class="mb-4">
+        <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Painel Concentrador Operacional</h6>
+        <div class="row g-2">
+            <div class="col-6">
+                <a href="{{ url_for('agenda.dashboard') }}" class="btn-concentrador transition-hover border-primary-subtle bg-primary bg-opacity-10">
+                    <i class="bi bi-calendar3 text-primary"></i>
+                    <span>Painel Agenda</span>
+                </a>
+            </div>
+            <div class="col-6">
+                <a href="{{ url_for('agenda.cadastro_balcao') }}" class="btn-concentrador transition-hover border-success-subtle bg-success bg-opacity-10">
+                    <i class="bi bi-calculator text-success"></i>
+                    <span>Lançar Balcão</span>
+                </a>
+            </div>
+
+            {% if session.get('nivel_acesso_atual', 10) >= 666 %}
+            <div class="col-6">
+                <a href="/empresa/gerenciar/{{ session.get('empresa_id_atual') }}" class="btn-concentrador transition-hover">
+                    <i class="bi bi-sliders text-secondary"></i>
+                    <span>Configurar Marca</span>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if session.get('nivel_acesso_atual', 10) >= 777 %}
+            <div class="col-6">
+                <a href="/empresa/equipe/{{ session.get('empresa_id_atual') }}" class="btn-concentrador transition-hover">
+                    <i class="bi bi-people text-dark"></i>
+                    <span>Gerenciar Equipe</span>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="mb-4">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="fw-bold text-dark m-0" style="font-size: 0.95rem;">Acesso Rápido</h6>
@@ -142,7 +242,7 @@
                 </div>
             {% else %}
                 {% for fav in favoritos[:10] %}
-                <a href="/empresa/{{ fav.empresa.id }}" class="card text-decoration-none border shadow-sm text-center p-2 rounded-4 d-inline-block transition-hover bg-white" style="width: 105px; min-width: 105px; flex-shrink: 0;">
+                <a href="{{ url_for('agenda.acessar_estabelecimento', id_local_alvo=fav.empresa.id) }}" class="card text-decoration-none border shadow-sm text-center p-2 rounded-4 d-inline-block transition-hover bg-white" style="width: 105px; min-width: 105px; flex-shrink: 0;">
                     <span class="badge bg-light text-secondary text-uppercase mb-2 d-block text-truncate fw-semibold" style="font-size: 0.6rem; letter-spacing: 0.5px;">
                         {{ fav.empresa.categoria or "Serviço" }}
                     </span>
@@ -162,10 +262,11 @@
         <h6 class="fw-bold text-dark mb-2" style="font-size: 0.95rem;">Alertas e Atividades</h6>
         <div class="d-flex flex-column gap-2">
             {% for notif in notificacoes %}
-            <div class="p-3 bg-{{ notif.cor_base }} bg-opacity-10 border-start border-4 border-{{ notif.cor_base }} rounded-end-4 rounded-start-2 d-flex justify-content-between align-items-center shadow-sm">
+            {% set cor = notif.cor_base | default('primary') %}
+            <div class="p-3 bg-{{ cor }} bg-opacity-10 border-start border-4 border-{{ cor }} rounded-end-4 rounded-start-2 d-flex justify-content-between align-items-center shadow-sm">
                 <div class="d-flex align-items-center gap-3">
-                    <div class="p-2 bg-{{ notif.cor_base }} bg-opacity-20 text-{{ notif.cor_base }} rounded-circle d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
-                        <i class="bi {{ notif.icone }} fs-5"></i>
+                    <div class="p-2 bg-{{ cor }} bg-opacity-20 text-{{ cor }} rounded-circle d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                        <i class="bi {{ notif.icone | default('bi-bell-fill') }} fs-5"></i>
                     </div>
                     <div style="line-height: 1.3;">
                         <span class="text-secondary d-block fw-semibold" style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.5px;">{{ notif.titulo_tipo }}</span>
@@ -173,12 +274,12 @@
                     </div>
                 </div>
                 {% if notif.link_acao %}
-                <a href="{{ notif.link_acao }}" class="btn btn-sm btn-{{ notif.cor_base }} rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">Acompanhar</a>
+                <a href="{{ notif.link_acao }}" class="btn btn-sm btn-{{ cor }} rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">Acompanhar</a>
                 {% endif %}
             </div>
             {% else %}
             <div class="p-3 bg-light rounded-4 text-center border">
-                <p class="text-muted small m-0"><i class="bi bi-bell-slash me-2"></i>Você não tem nenhuma notificação ativa no momento.</p>
+                <p class="text-muted small m-0"><i class="bi bi-bell-slash me-2"></i>Você não tem nenhuma notificação activa no momento.</p>
             </div>
             {% endfor %}
         </div>
@@ -216,15 +317,33 @@
         </div>
     </div>
 
+    <div class="card bg-gradient border-0 shadow-sm mb-4 rounded-4 text-white" style="background: linear-gradient(135deg, #374151 0%, #111827 100%);">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-start gap-3">
+                <div class="p-3 bg-warning bg-opacity-10 text-warning rounded-4 border border-warning border-opacity-20">
+                    <i class="bi bi-shop fs-3"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold text-warning mb-1" style="font-size: 0.95rem;">Você é proprietário deste negócio?</h6>
+                    <p class="text-white-50 small mb-3" style="font-size: 0.8rem; line-height: 1.4;">
+                        Assuma a gestão do seu estabelecimento no catálogo oficial de Piracicaba e libere sua agenda de balcão para os moradores.
+                    </p>
+                    <a href="{{ url_for('empresa.reivindicar_local_fisico', id_local=session.get('local_id_atual', 1)) }}" class="btn btn-sm btn-warning fw-bold text-dark rounded-pill px-4" style="font-size: 0.75rem;">
+                        <i class="bi bi-shield-check me-1"></i> Reivindicar e Ativar Agenda
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 1. CONTROLE DO MENU LATERAL DESLIZÁVEL (GAVETA)
     const btnAbrir = document.getElementById('btn-abrir-menu');
-    const btnFechar = document.getElementById('btn-fechar-menu');
     const sidebar = document.getElementById('sidebar-menu');
     const overlay = document.getElementById('sidebar-overlay');
+    const botoesFechar = document.querySelectorAll('.btn-fechar-menu');
 
     function alternarMenu() {
         sidebar.classList.toggle('active');
@@ -232,11 +351,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (btnAbrir) btnAbrir.addEventListener('click', alternarMenu);
-    if (btnFechar) btnFechar.addEventListener('click', alternarMenu);
     if (overlay) overlay.addEventListener('click', alternarMenu);
 
+    botoesFechar.forEach(btn => {
+        btn.addEventListener('click', alternarMenu);
+    });
 
-    // 2. AUTOCOMPLETE ASSÍNCRONO COM DEBOUNCE
     const inputBusca = document.getElementById('busca-negocio');
     const resultadosContainer = document.getElementById('autocomplete-results');
     const btnLimpar = document.getElementById('btn-limpar-busca');
@@ -277,7 +397,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                         data.forEach(item => {
                             const itemLink = document.createElement('a');
-                            itemLink.href = `/empresa/${item.slug}`;
+                            itemLink.href = `/painel/${item.id}`;
                             itemLink.className = "list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 border-bottom-0";
 
                             itemLink.innerHTML = `
@@ -286,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div class="text-truncate" style="line-height: 1.2;">
                                     <strong class="text-dark d-block" style="font-size: 0.85rem;">${item.nome}</strong>
-                                    <span class="text-muted" style="font-size: 0.7rem; text-transform: uppercase;">${item.categoria}</span>
+                                    <span class="text-muted" style="font-size: 0.7 Rar; text-transform: uppercase;">${item.categoria}</span>
                                 </div>
                             `;
                             resultadosContainer.appendChild(itemLink);

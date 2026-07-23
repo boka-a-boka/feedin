@@ -1,0 +1,78 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block content %}
+<div class="container-fluid bg-light min-vh-100 d-flex align-items-center py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6">
+                
+                {# Card Central de Boas-Vindas #}
+                <div class="card border-0 shadow-lg rounded-4 overflow-hidden bg-white">
+                    
+                    {# Header com Identidade Visual #}
+                    <div class="bg-dark p-4 text-center border-bottom border-primary border-3">
+                        <div class="d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary rounded-circle mb-2" style="width: 60px; height: 60px;">
+                            <i class="bi bi-whatsapp fs-2 text-success"></i>
+                        </div>
+                        <h4 class="fw-bold text-white mb-0">Convite de Homologação Comercial</h4>
+                        <p class="text-muted small mb-0">Piracicaba Digital & Memória Urbana</p>
+                    </div>
+
+                    <div class="card-body p-4 p-md-5">
+                        <p class="text-secondary text-center mb-4">
+                            Identificamos o seu contato com o nosso assistente virtual. Você foi convidado a assumir o gerenciamento e a publicação do PWA oficial do seguinte espaço:
+                        </p>
+
+                        {# Bloco de Destaque do Estabelecimento Identificado #}
+                        <div class="p-3 bg-light rounded-4 border border-light-subtle mb-4 text-center">
+                            <span class="text-uppercase tracking-wider text-muted fw-bold d-block mb-1" style="font-size: 0.7rem;">Estabelecimento Mapeado</span>
+                            <h3 class="fw-black text-dark mb-1">{{ local.nome }}</h3>
+                            <p class="text-secondary small mb-0">
+                                <i class="bi bi-geo-alt-fill text-danger me-1"></i>{{ local.endereco or 'Endereço registrado na base core de Piracicaba' }}
+                            </p>
+                        </div>
+
+                        {# Alerta Educativo de Segurança #}
+                        <div class="alert alert-warning border-0 rounded-3 p-3 fs-7 mb-4">
+                            <div class="d-flex">
+                                <i class="bi bi-shield-lock-fill text-warning fs-5 me-2"></i>
+                                <div>
+                                    <strong>Acesso Protegido:</strong> Para garantir que você é o titular legítimo de <strong>{{ local.nome }}</strong>, será necessário criar suas credenciais de acesso e anexar um comprovante de compliance comercial no próximo passo.
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Ações de Direcionamento #}
+                        <div class="d-grid gap-3">
+                            {% if current_user.is_authenticated %}
+                                {# Caso o usuário já esteja logado no sistema por coincidência #}
+                                <a href="{{ url_for('empresa.painel_configuracao_empresa') }}" class="btn btn-primary btn-lg rounded-pill fw-bold shadow-sm py-2 fs-6">
+                                    Vincular à minha Conta Atual <i class="bi bi-arrow-right ms-2"></i>
+                                </a>
+                            {% else %}
+                                {# Fluxo Padrão: Força a criação do ecossistema de login amarrado ao token #}
+                                <a href="{{ url_for('auth.cadastro', proveniencia='whatsapp_token') }}" class="btn btn-primary btn-lg rounded-pill fw-bold shadow-sm py-2 fs-6">
+                                    <i class="bi bi-person-plus-fill me-2"></i>Criar Minha Conta de Gestor
+                                </a>
+                                
+                                <div class="text-center">
+                                    <span class="text-muted small">Já possui cadastro na plataforma? </span>
+                                    <a href="{{ url_for('auth.login') }}" class="text-primary small fw-bold text-decoration-none">Fazer Login</a>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    </div>
+
+                    {# Rodapé Institucional #}
+                    <div class="card-footer bg-light py-3 border-0 text-center">
+                        <small class="text-muted fs-8">Código Identificador do Convite: <code class="text-dark">{{ processo.token_validacao[:8] }}...</code></small>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container-fluid p-0 bg-light min-vh-100">
 
-    {# --- NAVBAR (Apenas Navegação) --- #}
+    {# --- NAVBAR INTERNA RICA (Controla a navegação do Painel) --- #}
     <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-3 py-4" style="min-height: 100px; z-index: 1050;">
         <div class="container-fluid d-flex justify-content-between align-items-center">
 
@@ -53,40 +53,29 @@
                 </div>
             </div>
 
-            {# --- ÁREA DE NOTIFICAÇÕES E SAIR (Lado Direito) --- #}
+            {# --- ÁREA DE NOTIFICAÇÕES E SAIR (Lado Direito da sua homepage.html) --- #}
             <div class="d-flex align-items-center gap-3">
-                <div class="dropdown">
-                    <button class="btn btn-white btn-sm rounded-pill px-3 shadow-sm position-relative border"
-                            type="button" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-bell-fill text-primary"></i>
-                        <span id="badge-notificacao" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger {{ 'd-none' if not notificacoes|length > 0 }}" style="font-size: 0.65rem;">
-                            {{ notificacoes|length }}
-                        </span>
-                    </button>
 
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 p-3 mt-2" aria-labelledby="notifDropdown" style="width: 300px;">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="fw-bold small">Notificações</span>
-                        </div>
-                        <div id="lista-notificacoes">
-                            {% for notif in notificacoes %}
-                                <div class="notificacao-item p-2 border-bottom small">
-                                    <strong>{{ notif.origem.username }}</strong> {{ notif.mensagem }}
-                                </div>
-                            {% else %}
-                                <p class="text-muted text-center small my-3">Nenhuma novidade.</p>
-                            {% endfor %}
-                        </div>
-                    </ul>
-                </div>
 
-                {# BOTÃO SAIR #}
+            {# 🎛️ GERENCIAMENTO DOS DOIS BOTÕES SIMULTÂNEOS #}
+            <div class="d-flex align-items-center gap-2">
+                {# Se o usuário veio pelo HUB, o botão amarelo aparece firme ao lado do Sair #}
+                {% if session.get('navegacao_via_hub') %}
+                    <a href="{{ url_for('central_hub') }}"
+                       class="btn btn-sm btn-warning rounded-pill px-3 fw-bold shadow-sm"
+                       style="font-size: 0.85rem; white-space: nowrap;">
+                        <i class="bi bi-grid-3x3-gap-fill me-1"></i> Voltar ao HUB
+                    </a>
+                {% endif %}
+
+                {# O botão de Encerrar Sessão/Sair fica sempre visível e persistente #}
                 <a href="{{ url_for('realizar_logout') }}"
-                   class="btn btn-sm rounded-pill px-3 shadow-sm fw-bold btn-sair-custom"
-                   style="background-color: #dc3545; color: #ffffff; border: none; transition: 0.3s;">
-                    <i class="bi bi-box-arrow-right me-1"></i> Sair
+                   class="btn btn-sm rounded-pill px-3 shadow-sm fw-bold text-white"
+                   style="background-color: #dc3545; border: none; font-size: 0.85rem; white-space: nowrap;">
+                    <i class="bi bi-box-arrow-right me-1"></i> Encerrar Sessão
                 </a>
             </div>
+
         </div>
     </nav>
 
@@ -99,95 +88,88 @@
         <div class="row justify-content-center">
             <div class="col-12 col-md-10 col-lg-8">
 
-            {# 1. SEÇÃO DE BOAS-VINDAS / RADAR DE CONEXÕES #}
-            {% if aba == 'feed' %}
-
-                {% if sugestoes %}
-                    <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
-                        <div class="card-body p-4 p-md-5">
-                            <div class="text-center mb-4">
-                                <h3 class="fw-bold text-primary">🎉 Bem-vindo, Pioneiro!</h3>
-                                <p class="text-muted">Conexões sugeridas em Piracicaba:</p>
+                {# 1. SEÇÃO DE BOAS-VINDAS / RADAR DE CONEXÕES #}
+                {% if aba == 'feed' %}
+                    {% if sugestoes %}
+                        <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
+                            <div class="card-body p-4 p-md-5">
+                                <div class="text-center mb-4">
+                                    <h3 class="fw-bold text-primary">🎉 Bem-vindo, Pioneiro!</h3>
+                                    <p class="text-muted">Conexões sugeridas em Piracicaba:</p>
+                                </div>
+                                <div id="carrosselPioneiros" class="carousel slide">
+                                    <div class="carousel-inner">
+                                        {% for item in sugestoes %}
+                                        <div class="carousel-item {% if loop.first %}active{% endif %}">
+                                            <div class="text-center px-md-5">
+                                                <img src="{{ url_for('static', filename='fotos_perfil/' + (item.usuario.foto_perfil or 'default.jpg')) }}"
+                                                     class="shadow mb-3 border border-2 border-primary"
+                                                     style="width: 70px; height: 70px; object-fit: cover; border-radius: 50%;">
+                                                <h5 class="fw-bold mb-1">{{ item.usuario.username }}</h5>
+                                                <form action="{{ url_for('conectar_pioneiro', id_destinatario=item.usuario.id) }}" method="POST">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold mt-3">Brindar Conexão</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <button class="carousel-control-prev" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="prev" style="filter: invert(1);"><span class="carousel-control-prev-icon"></span></button>
+                                    <button class="carousel-control-next" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="next" style="filter: invert(1);"><span class="carousel-control-next-icon"></span></button>
+                                </div>
                             </div>
-                            <div id="carrosselPioneiros" class="carousel slide">
-                                <div class="carousel-inner">
-                                    {% for item in sugestoes %}
-                                    <div class="carousel-item {% if loop.first %}active{% endif %}">
-                                        <div class="text-center px-md-5">
-                                            <img src="{{ url_for('static', filename='fotos_perfil/' + (item.usuario.foto_perfil or 'default.jpg')) }}"
-                                                 class="shadow mb-3 border border-2 border-primary"
-                                                 style="width: 70px; height: 70px; object-fit: cover; border-radius: 50%;">
-                                            <h5 class="fw-bold mb-1">{{ item.usuario.username }}</h5>
-                                            <form action="{{ url_for('conectar_pioneiro', id_destinatario=item.usuario.id) }}" method="POST">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold mt-3">Brindar Conexão</button>
-                                            </form>
+                        </div>
+                    {% else %}
+                        <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
+                            <div class="card-header bg-primary text-white p-3 border-0">
+                                <h5 class="m-0 fw-bold d-flex align-items-center">
+                                    <i class="bi bi-geo-alt-fill me-2"></i> Bem-vindo ao FeedIn!
+                                </h5>
+                            </div>
+                            <div class="card-body p-4 p-md-5 bg-white">
+                                <p class="text-dark fw-bold mb-2">Este é o seu ponto de partida para reviver as memórias de Piracicaba.</p>
+                                <p class="text-muted small mb-4">
+                                    Como você acabou de chegar, seu feed de sugestões está limpo. O sistema não adivinha quem você conhece, então você está no comando. Para ativar o seu "radar de lembranças" and fazer as sugestões de pessoas aparecerem, explore e preencha as abas do seu painel quando quiser:
+                                </p>
+                                <div class="row g-3 text-start mb-2">
+                                    <div class="col-md-4">
+                                        <div class="p-3 border rounded-3 bg-light h-100">
+                                            <h6 class="fw-bold text-primary mb-1"><i class="bi bi-person-badge me-1"></i> Aba Perfil</h6>
+                                            <small class="text-muted d-block">Insira os seus <strong>Apelidos</strong>. É por eles que velhos amigos da escola, do bairro ou do trabalho vão te encontrar.</small>
                                         </div>
                                     </div>
-                                    {% endfor %}
-                                </div>
-                                <button class="carousel-control-prev" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="prev" style="filter: invert(1);"><span class="carousel-control-prev-icon"></span></button>
-                                <button class="carousel-control-next" type="button" data-bs-target="#carrosselPioneiros" data-bs-slide="next" style="filter: invert(1);"><span class="carousel-control-next-icon"></span></button>
-                            </div>
-                        </div>
-                    </div>
-
-                {% else %}
-                    <div class="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden bg-white">
-                        <div class="card-header bg-primary text-white p-3 border-0">
-                            <h5 class="m-0 fw-bold d-flex align-items-center">
-                                <i class="bi bi-geo-alt-fill me-2"></i> Bem-vindo ao FeedIn!
-                            </h5>
-                        </div>
-                        <div class="card-body p-4 p-md-5 bg-white">
-                            <p class="text-dark fw-bold mb-2">Este é o seu ponto de partida para reviver as memórias de Piracicaba.</p>
-                            <p class="text-muted small mb-4">
-                                Como você acabou de chegar, seu feed de sugestões está limpo. O sistema não adivinha quem você conhece, então você está no comando. Para ativar o seu "radar de lembranças" and fazer as sugestões de pessoas aparecerem, explore e preencha as abas do seu painel quando quiser:
-                            </p>
-
-                            <div class="row g-3 text-start mb-2">
-                                <div class="col-md-4">
-                                    <div class="p-3 border rounded-3 bg-light h-100">
-                                        <h6 class="fw-bold text-primary mb-1"><i class="bi bi-person-badge me-1"></i> Aba Perfil</h6>
-                                        <small class="text-muted d-block">Insira os seus <strong>Apelidos</strong>. É por eles que velhos amigos da escola, do bairro ou do trabalho vão te encontrar.</small>
+                                    <div class="col-md-4">
+                                        <div class="p-3 border rounded-3 bg-light h-100">
+                                            <h6 class="fw-bold text-success mb-1"><i class="bi bi-tags me-1"></i> Aba Interesses</h6>
+                                            <small class="text-muted d-block">Marque seus gostos e temas locais (Samba, Antigos Engenhos). O motor do sistema usa isso para te aproximar de quem curte o mesmo.</small>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 border rounded-3 bg-light h-100">
-                                        <h6 class="fw-bold text-success mb-1"><i class="bi bi-tags me-1"></i> Aba Interesses</h6>
-                                        <small class="text-muted d-block">Marque seus gostos e temas locais (Samba, Antigos Engenhos). O motor do sistema usa isso para te aproximar de quem curte o mesmo.</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 border rounded-3 bg-light h-100">
-                                        <h6 class="fw-bold text-info mb-1"><i class="bi bi-building me-1"></i> Aba Locais</h6>
-                                        <small class="text-muted d-block">Aponte os locais históricos que você frequentou. O sistema vai te conectar com quem dividiu o mesmo espaço no passado.</small>
+                                    <div class="col-md-4">
+                                        <div class="p-3 border rounded-3 bg-light h-100">
+                                            <h6 class="fw-bold text-info mb-1"><i class="bi bi-building me-1"></i> Aba Locais</h6>
+                                            <small class="text-muted d-block">Aponte os locais históricos que você frequentou. O sistema vai te conectar com quem dividiu o mesmo espaço no passado.</small>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                            <div class="card-footer bg-light text-center py-3 border-0">
+                                <small class="text-muted"><i class="bi bi-info-circle me-1"></i> Não entendeu algum recurso? O funcionamento detalhado de cada engrenagem está explicado no menu <strong>FAQ</strong>.</small>
+                            </div>
                         </div>
-                        <div class="card-footer bg-light text-center py-3 border-0">
-                            <small class="text-muted"><i class="bi bi-info-circle me-1"></i> Não entendeu algum recurso? O funcionamento detalhado de cada engrenagem está explicado no menu <strong>FAQ</strong>.</small>
-                        </div>
-                    </div>
+                    {% endif %}
                 {% endif %}
 
-            {% endif %}
-
-            {# 2. CONTEÚDO DINÂMICO (Onde a mágica acontece) #}
+                {# 2. CONTEÚDO DINÂMICO #}
                 <div id="content-area">
                     {% if current_user.nivel_acesso < 10 %}
-                        {# FORÇA O FLUXO DE TRIAGEM DO NOVO USUÁRIO #}
                         {% if aba == 'preferencias' %}
                             {% include "partials/_painel_interesses.html" %}
                         {% elif aba == 'locais' %}
                             {% include "partials/_explorar_locais.html" %}
                         {% else %}
-                            {# CORREÇÃO: Chama o arquivo que gerencia as Fases 1 e 2 do Onboarding #}
                             {% include "partials/_perfil_onboarding.html" %}
                         {% endif %}
                     {% else %}
-                        {# USUÁRIOS LIBERADOS (NÍVEL >= 10) #}
                         {% if aba == 'feed' %}
                             {% for activity in atividades_recentes %}
                                 {% with atividade=activity, aba=aba %} {% include "partials/_feed_atividades.html" %} {% endwith %}
@@ -205,11 +187,12 @@
                         {% endif %}
                     {% endif %}
                 </div>
+
             </div>
         </div>
     </main>
 
-    {# NAVEGAÇÃO MOBILE (Injetado o ícone centralizado do QR Code) #}
+    {# NAVEGAÇÃO MOBILE #}
     {% if current_user.nivel_acesso >= 10 %}
         <nav class="d-md-none fixed-bottom bg-white border-top d-flex justify-content-around align-items-center py-3 shadow-lg rounded-top-4" style="z-index: 1040;">
             <a href="{{ url_for('dashboard', aba='feed') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'feed' else 'text-muted' }}">
@@ -218,14 +201,11 @@
             <a href="{{ url_for('dashboard', aba='locais') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'locais' else 'text-muted' }}">
                 <i class="bi bi-geo-alt{{ '-fill' if aba == 'locais' }} fs-4"></i>
             </a>
-
-            {# 🎯 ÍCONE CENTRAL: ACIONADOR DO QR CODE EM DISPOSITIVOS MÓVEIS #}
             <a href="#" class="text-center text-decoration-none text-primary" data-bs-toggle="modal" data-bs-target="#modalQRCode" style="margin-top: -6px;">
                 <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px;">
                     <i class="bi bi-qr-code-scan fs-4"></i>
                 </div>
             </a>
-
             <a href="{{ url_for('dashboard', aba='conexoes') }}" class="text-center text-decoration-none {{ 'text-primary' if aba == 'conexoes' else 'text-muted' }}">
                 <i class="bi bi-people{{ '-fill' if aba == 'conexoes' }} fs-4"></i>
             </a>
@@ -235,7 +215,7 @@
         </nav>
     {% endif %}
 
-    {# 🎯 MODAL UNIVERSAL DO QR CODE (Fica oculto e surge de forma suave) #}
+    {# MODAL UNIVERSAL DO QR CODE #}
     {% if current_user.nivel_acesso >= 10 %}
     <div class="modal fade" id="modalQRCode" tabindex="-1" aria-labelledby="modalQRCodeLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" style="max-width: 340px;">
@@ -246,11 +226,9 @@
                 </div>
                 <div class="modal-body text-center p-4">
                     <p class="text-muted small mb-3">Apresente este código para adicionar novas conexões na sua teia de confiança.</p>
-
                     <div class="bg-white p-3 d-inline-block rounded-3 border shadow-sm mb-3">
                         <img src="{{ qrcode_url }}" class="img-fluid" alt="QR Code Siga-me" style="width: 200px; height: 200px;">
                     </div>
-
                     <div class="text-muted text-break text-center border-0 p-2 rounded bg-light" style="font-size: 0.75rem;">
                         <strong>Seu link de indicação:</strong><br>
                         <span class="text-primary">{{ link_convite }}</span>

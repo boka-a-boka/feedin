@@ -1,61 +1,97 @@
-from flask import (url_for, redirect, render_template, flash, session, request,
-                   abort, Response, jsonify, current_app, send_from_directory, Blueprint, send_file,
-                   make_response)
-from feedin import app, database, bcrypt, csrf
-from flask_mail import Mail, Message
-from flask_login import login_required, login_user, logout_user, current_user
-from flask_wtf import FlaskForm
-from feedin.forms import (FormLogin, FormNewUser, FormPerfil, FormApelido, FormConvite, FormConexao, FormEsqueceuSenha,
-                          FormResetarSenha)
-from feedin.modules.agenda.models import ModHomologacaoEmpresa
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-from datetime import datetime, timezone, date, timedelta
-from zoneinfo import ZoneInfo
-from feedin.models import (Usuario, EstadoCivil, Generos, Apelidos, Perfil, Parentesco,
-                           GrauParentesco, MembroGrupo, GrupoSocial, Local, Conexoes, Memoria,
-                           AtividadeLocal, VinculoUsuarioLocal, Taxonomia, LocalMidia, Convite,
-                           taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
-                           PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
-                           AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
-                           CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio, HistoricoOcupacaoLocal,
-                           Cargo, ColaboradorContrato, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo)
-
-from feedin.utils import (salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura, salvar_imagem_capa,
-                          salvar_imagem_postagem, salvar_imagem_anuncio)
-
-from webauthn import (generate_registration_options, verify_registration_response, options_to_json,
-                      generate_authentication_options, verify_authentication_response)
-from webauthn.helpers.structs import PublicKeyCredentialDescriptor
-from werkzeug.security import generate_password_hash
-from flask_wtf.csrf import validate_csrf
-
-biometria_bp = Blueprint('biometria', __name__)
-
-# O WebAuthn precisa saber o domínio exato do seu app
-RP_ID = "boka-a-boka.com.br"  # Ou o subdomínio completo do FeedIn se preferir: "feedin.boka-a-boka.com.br"
-RP_NAME = "FeedIn"
-
-from urllib.parse import quote
-from functools import wraps
-from sqlalchemy import or_, func, asc, desc, and_, not_
-from sqlalchemy.orm import joinedload
-from cryptography.fernet import Fernet  # Para criptografia reversível
-from markupsafe import escape, Markup
-import secrets, os, re, io, csv, json, pytz, uuid, markdown, base64, random
-import qrcode
+import os
+import re
+import io
+import csv
+import json
+import uuid
+import base64
+import random
+import secrets
 from itertools import groupby
 from io import TextIOWrapper
+from datetime import datetime, timezone, date, timedelta
+from zoneinfo import ZoneInfo
+from urllib.parse import quote
+from functools import wraps
+from flask_mail import Message
+
+# 1. BIBLIOTECAS EXTERNAS ESPECÍFICAS
+import pytz
+import qrcode
+import markdown
+import requests
+import webauthn
 from PIL import Image, ImageOps
+from cryptography.fernet import Fernet
+from markupsafe import escape, Markup
 
+# 2. METODOLOGIAS DO FLASK, SEGURANÇA E EXTENSÕES
+from flask import (
+    url_for, redirect, render_template, flash, session, request,
+    abort, Response, jsonify, current_app, send_from_directory,
+    Blueprint, send_file, make_response, Flask
+)
+from flask_login import login_required, login_user, logout_user, current_user
+from flask_wtf import FlaskForm
+from flask_wtf.csrf import validate_csrf, CSRFProtect
+from flask_bcrypt import check_password_hash, generate_password_hash
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from werkzeug.routing.exceptions import BuildError
 
-mail = Mail(app)
-s = URLSafeTimedSerializer(app.config['SECRET_KEY'])
-app.secret_key = app.config['SECRET_KEY']
+# 3. CONEXÃO COM O MOTOR DO CORE (Vem de feedin)
+from feedin import database, bcrypt, csrf, mail  # Objetos centrais criados na Factory
+
+# 4. FORMULÁRIOS DO CORE (WTFORMS)
+from feedin.forms import (
+    FormLogin, FormNewUser, FormPerfil, FormApelido, FormConvite,
+    FormConexao, FormEsqueceuSenha, FormResetarSenha
+)
+
+# 5. WEBAUTHN (AUTENTICAÇÃO BIOMÉTRICA)
+from webauthn import (
+    generate_registration_options, verify_registration_response, options_to_json,
+    generate_authentication_options, verify_authentication_response
+)
+from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+
+# 6. BANCO DE DADOS (SQLALCHEMY ORM OPERATORS)
+from sqlalchemy import or_, func, asc, desc, and_, not_
+from sqlalchemy.orm import joinedload
+
+# 7. 🗄️ PERSISTÊNCIA: ENTIDADES DO BANCO DE DADOS (CORE + MÓDULOS PARCEIROS)
+from feedin.models import (
+    Usuario, EstadoCivil, Generos, Apelidos, Perfil, Parentesco,
+    GrauParentesco, MembroGrupo, GrupoSocial, Local, Conexoes, Memoria,
+    AtividadeLocal, VinculoUsuarioLocal, Taxonomia, LocalMidia, Convite,
+    taxonomia_conexoes, ConviteAdmin, IdentidadeCivil, Postagem, PostagemComentario,
+    PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
+    AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
+    CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio, HistoricoOcupacaoLocal,
+    Cargo, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo, ModulosSistema
+)
+from feedin.modules.empresa.models import ModHomologacaoEmpresa, CadastroFeriado
+from feedin.modules.auth.models import VinculoUsuarioEmpresa, ModVinculoModulo
+
+# 8. UTILITÁRIOS E FERRAMENTAS DE MANUTENÇÃO
+import feedin.utils as utils
+from feedin.utils import (
+    salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura,
+    salvar_imagem_capa, salvar_imagem_postagem, salvar_imagem_anuncio
+)
+from feedin.tools.manutencao import CaixaFerramentasManutencao
+
+# =========================================================================
+# ⚙️ CONFIGURAÇÕES ESTRUTURAIS DO CONTEXTO DO CORE
+# =========================================================================
+
+# O WebAuthn precisa saber o domínio exato do seu app
+RP_ID = "boka-a-boka.com.br"
+RP_NAME = "FeedIn"
 
 # Define o fuso horário de São Paulo (que abrange Piracicaba)
 fuso_sp = pytz.timezone('America/Sao_Paulo')
 
-# Supondo que você guardou sua chave na configuração do App ou variável de ambiente
+# Chave Mestra para Criptografia Reversível (Mantida por consistência legada)
 CHAVE_MESTRA = b'VUSlvfpIeAMtezp0VfI76eArKJ6f-Xp9UsPqmZDzxlI='
 fernet = Fernet(CHAVE_MESTRA)
 
@@ -72,15 +108,15 @@ def apenas_admin(f):
 
 
 def generate_confirmation_token(email):
-    serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
-    return serializer.dumps(email, salt=app.config['SECURITY_PASSWORD_SALT'])
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(email, salt=current_app.config['SECURITY_PASSWORD_SALT'])
 
 def confirm_token(token, expiration=3600):
-    serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     try:
         email = serializer.loads(
             token,
-            salt=app.config['SECURITY_PASSWORD_SALT'],
+            salt=current_app.config['SECURITY_PASSWORD_SALT'],
             max_age=expiration
         )
     except:
@@ -88,7 +124,7 @@ def confirm_token(token, expiration=3600):
     return email
 
 
-@app.before_request
+@current_app.before_request
 def verificar_obrigatoriedade_cpf():
     # Rotas que NÃO devem ser interceptadas (evita loop infinito)
     rotas_excecao = ['static', 'logout', 'processar_identidade', 'get_perfil']
@@ -100,7 +136,7 @@ def verificar_obrigatoriedade_cpf():
             return redirect(url_for('get_perfil', id_usuario=current_user.id, forcar_validacao=True))
 
 
-@app.route('/meu-cofre')
+@current_app.route('/meu-cofre')
 @login_required
 def exibir_cofre():
     # Buscamos o objeto de identidade vinculado ao usuário
@@ -118,17 +154,17 @@ def exibir_cofre():
                            data_verificacao=data_verificacao)
 
 
-@app.route('/sw.js')
+@current_app.route('/sw.js')
 def serve_sw():
-    return app.send_static_file('js/sw.js')
+    return current_app.send_static_file('js/sw.js')
 
 
-@app.route('/favicon.ico')
+@current_app.route('/favicon.ico')
 def favicon():
-    return app.send_static_file('imagens/favicon.png')
+    return current_app.send_static_file('imagens/favicon.png')
 
 
-@app.route('/alterar-senha', methods=['GET', 'POST'])
+@current_app.route('/alterar-senha', methods=['GET', 'POST'])
 @login_required
 def alterar_senha():
     if request.method == 'POST':
@@ -177,10 +213,10 @@ except ImportError:
 
 
 def obter_serializador():
-    return URLSafeTimedSerializer(app.config["SECRET_KEY"])
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
 
 
-@app.route('/esqueci-senha', methods=['GET', 'POST'])
+@current_app.route('/esqueci-senha', methods=['GET', 'POST'])
 def esqueci_senha():
     # 1. Instanciamos o formulário oficial do WTForms
     form = FormEsqueceuSenha()
@@ -209,7 +245,7 @@ def esqueci_senha():
     return render_template('esqueci_senha.html', form=form)
 
 
-@app.route('/resetar-senha/<token>', methods=['GET', 'POST'])
+@current_app.route('/resetar-senha/<token>', methods=['GET', 'POST'])
 def resetar_senha(token):
     s = obter_serializador()
     try:
@@ -250,7 +286,7 @@ def resetar_senha(token):
     return render_template('resetar_senha.html', token=token)
 
 
-@app.route('/confirmar-email/<token>')
+@current_app.route('/confirmar-email/<token>')
 def confirmar_email(token):
     # 1. Decodifica o token
     email = confirm_token(token)
@@ -283,25 +319,31 @@ def notify(message, type):
     flash(message, type)
 
 
-@app.route("/logout")
+@current_app.route("/logout")
 @login_required
 def realizar_logout():
+    # 1️⃣ Antes de limpar a sessão, checa se o usuário veio navegando pelo HUB
+    veio_do_hub = session.get('navegacao_via_hub', False)
 
+    # 2️⃣ Seu fluxo original de limpeza absoluta
+    logout_user()    # Remove do Flask-Login
+    session.clear()  # Limpa o dicionário da sessão (apaga também a bandeira)
 
-    logout_user()  # Remove do Flask-Login
-    session.clear()  # Limpa o dicionário da sessão
+    # 3️⃣ A CONDICIONAL DO HUB: Decide para onde apontar o redirecionamento
+    if veio_do_hub:
+        # Se veio pelo HUB, prepara para voltar ao concentrador
+        response = make_response(redirect(url_for('central_hub')))
+    else:
+        # Se acessou por atalho "por fora", mantém seu padrão de ir para a index
+        response = make_response(redirect(url_for('index')))
 
-    # Criamos a resposta de redirecionamento para a página inicial (index)
-    response = make_response(redirect(url_for('index')))
-
-    # FORÇA o navegador a invalidar o cookie de sessão
-    # O segredo para produção é garantir que os parâmetros batam com os do __init__.py
+    # 4️⃣ Seu motor original de invalidação forçada de cookies (Vital para Produção)
     response.set_cookie(
         'session',
         '',
         expires=0,
         httponly=True,
-        secure=True,  # Como você usa HTTPS, isso é vital
+        secure=True,  # Mantém a proteção HTTPS que você configurou
         samesite='Lax'
     )
 
@@ -309,7 +351,7 @@ def realizar_logout():
     return response
 
 
-@app.route("/login", methods=["GET", "POST"])
+@current_app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
         # Se logado e com CPF ok -> Feed. Se logado sem CPF -> Perfil (onde a modal aparecerá)
@@ -373,7 +415,7 @@ def login():
     return render_template('login.html', form=form_login, tem_biometria=tem_biometria)
 
 
-@biometria_bp.route('/biometria/login/opcoes', methods=['POST'])
+@current_app.route('/biometria/login/opcoes', methods=['POST'])
 def login_opcoes():
     """1. Gera o desafio de segurança para o celular tentar autenticar"""
     dados = request.get_json()
@@ -401,7 +443,7 @@ def login_opcoes():
     return options_to_json(opcoes)
 
 
-@biometria_bp.route('/biometria/login/verificar', methods=['POST'])
+@current_app.route('/biometria/login/verificar', methods=['POST'])
 def login_verificar():
     """2. Confere a resposta do Face ID e faz o login do usuário"""
     dados_resposta = request.get_json()
@@ -444,8 +486,8 @@ def login_verificar():
         return jsonify({'status': 'erro', 'mensagem': 'Falha na autenticação biométrica'}), 400
 
 
-@biometria_bp.route('/biometria/login/opcoes', methods=['POST'])
-def login_opcoes():
+@current_app.route('/biometria/login/opcoes', methods=['POST'])
+def biometria_login_opcoes():
     """1. Gera o desafio de segurança para o dispositivo do usuário tentar autenticar"""
     dados = request.get_json()
     email = dados.get('email')
@@ -471,8 +513,8 @@ def login_opcoes():
     return options_to_json(opcoes)
 
 
-@biometria_bp.route('/biometria/login/verificar', methods=['POST'])
-def login_verificar():
+@current_app.route('/biometria/login/verificar', methods=['POST'])
+def biometria_login_verificar():
     """2. Confere a resposta do sensor biométrico e realiza o login"""
     dados_resposta = request.get_json()
     desafio_salvo = session.get('authentication_challenge')
@@ -515,14 +557,14 @@ import os
 import base64
 from flask import request, jsonify, session, render_template
 from flask_login import login_required, current_user
-from feedin import app, database, bcrypt
+from feedin import database, bcrypt
 from feedin.models import Usuario, CredencialBiometrica
 
 
 # ==========================================
 # 1. CADASTRO: GERAR DESAFIO (ÁREA LOGADA) - CORRIGIDO!
 # ==========================================
-@app.route('/ativar-biometria', methods=['POST'])
+@current_app.route('/ativar-biometria', methods=['POST'])
 @csrf.exempt  # <--- ISSO É VITAL para o fetch do JavaScript funcionar
 @login_required
 def ativar_biometria():
@@ -567,7 +609,7 @@ def ativar_biometria():
 # ==========================================
 # 2. CADASTRO: SALVAR NO BANCO
 # ==========================================
-@app.route('/concluir-cadastro-biometria', methods=['POST'])
+@current_app.route('/concluir-cadastro-biometria', methods=['POST'])
 @csrf.exempt
 def concluir_cadastro_biometria():
     dados = request.get_json() or {}
@@ -610,7 +652,7 @@ def concluir_cadastro_biometria():
 # ==========================================
 # 3. LOGIN: GERAR DESAFIO (INVISÍVEL / COFRE)
 # ==========================================
-@app.route('/login-biometria-challenge', methods=['POST'])
+@current_app.route('/login-biometria-challenge', methods=['POST'])
 @login_required
 def login_biometrico_desafio():
     challenge_bytes = os.urandom(32)
@@ -641,7 +683,7 @@ def login_biometrico_desafio():
 # ==========================================
 # 4. LOGIN: VERIFICAR ASSINATURA E ENTRAR
 # ==========================================
-@app.route('/verificar-login-biometria', methods=['POST'])
+@current_app.route('/verificar-login-biometria', methods=['POST'])
 def verificar_login_biometria():
     dados = request.get_json() or {}
     challenge_salvo = session.get('login_challenge')
@@ -673,7 +715,7 @@ def verificar_login_biometria():
         return jsonify({"status": "erro", "mensagem": f"Erro interno: {str(e)}"}), 500
 
 
-@app.route('/login-biometrico', methods=['POST'])
+@current_app.route('/login-biometrico', methods=['POST'])
 def login_biometrico():
     print("DEBUG VPS: Tentativa de login via biometria iniciada!")
 
@@ -706,7 +748,7 @@ def login_biometrico():
         return jsonify({'status': 'erro', 'mensagem': f'Erro interno no servidor: {str(e)}'}), 500
 
 
-@app.route("/newuser", methods=["GET", "POST"])
+@current_app.route("/newuser", methods=["GET", "POST"])
 def newuser():
     logout_user()
     email_vindo_do_email = request.args.get('email_prefill', '')
@@ -757,7 +799,7 @@ def newuser():
                 )
 
                 # Regra de pioneiro baseada na data final do Beta
-                fim_beta = app.config.get('DATA_FIM_BETA')
+                fim_beta = current_app.config.get('DATA_FIM_BETA')
                 agora = datetime.now(timezone.utc)
 
                 if agora <= fim_beta:
@@ -788,7 +830,7 @@ def newuser():
 
             msg = Message(
                 'Confirme seu e-mail no FeedIn!',
-                sender=app.config.get('MAIL_USERNAME'),
+                sender=current_app.config.get('MAIL_USERNAME'),
                 recipients=[user_para_email.email]
             )
             msg.body = f'Olá {user_para_email.username}! Clique no link para ativar sua conta: {confirm_url}'
@@ -809,7 +851,7 @@ def newuser():
     return render_template("newuser.html", form=form_newuser, id_indicador=id_indicador_final)
 
 
-@app.template_filter('formatar_postagem')
+@current_app.template_filter('formatar_postagem')
 def formatar_postagem(texto):
     if not texto:
         return ""
@@ -829,7 +871,7 @@ def formatar_postagem(texto):
     return Markup(html_puro)
 
 
-@app.route("/", methods=["GET", "POST"])
+@current_app.route("/", methods=["GET", "POST"])
 def index():
     # 1. LÓGICA PARA USUÁRIOS LOGADOS
     if current_user.is_authenticated:
@@ -936,7 +978,7 @@ def index():
     )
 
 
-@app.route('/editar_perfil', methods=['POST'])
+@current_app.route('/editar_perfil', methods=['POST'])
 @login_required
 def editar_perfil():
     if request.method == 'POST':
@@ -1027,7 +1069,7 @@ def editar_perfil():
     return redirect(url_for('configuracoes', aba='perfil'))
 
 
-@app.route('/upload-foto-perfil', methods=['POST'])
+@current_app.route('/upload-foto-perfil', methods=['POST'])
 @login_required
 def upload_foto_perfil():
     file = request.files.get('foto_perfil')
@@ -1077,7 +1119,7 @@ def upload_foto_perfil():
     return redirect(url_for("get_perfil", id_usuario=current_user.id))
 
 
-@app.route("/upload_capa", methods=['POST'])
+@current_app.route("/upload_capa", methods=['POST'])
 @login_required
 def upload_capa():
     arquivo = request.files.get('foto_capa')
@@ -1098,11 +1140,34 @@ def upload_capa():
     return jsonify({"status": "error", "message": "Falha ao processar imagem"}), 400
 
 
-@app.route("/dashboard")
+from feedin.utils import preparar_entrada_modulo  # Importa do ponto unificado
+
+
+@current_app.route('/dashboard/core')
+@preparar_entrada_modulo(slug_modulo='core', rota_destino='/dashboard/core')
 @login_required
 def dashboard():
     # Engloba TODA a execução da rota para impedir o interceptador de barrar a tela
     with database.session.no_autoflush:
+
+        # =========================================================================
+        # 🎯 INJEÇÃO CIRÚRGICA CORRIGIDA: PERSISTÊNCIA DA VISIBILIDADE DO HUB
+        # =========================================================================
+        # 1. Se veio do hub com o parâmetro na URL, crava a sessão como ativa
+        if request.args.get('origem') == 'hub':
+            session['navegacao_via_hub'] = True
+
+        # 2. Se a sessão NÃO existe e ele acessou direto sem parâmetro, garante que tá limpa
+        elif 'navegacao_via_hub' not in session:
+            session.pop('navegacao_via_hub', None)
+        # =========================================================================
+
+        # =========================================================================
+        # 🎯 INJEÇÃO DO DESPACHO DE RETORNO DO HUB (PARTE 1)
+        # =========================================================================
+        # Recupera qual era a rota real que o usuário tentou acessar antes do login
+        proximo_passo = session.get('next_url', '/dashboard/core')
+
         # --- 1. INICIALIZAÇÃO UNIVERSAL ---
         aba_solicitada = request.args.get('aba')
         atividades_recentes, meus_grupos = [], []
@@ -1141,7 +1206,17 @@ def dashboard():
                 contagem_preferencias >= 10
         )
 
-        # --- 3. LÓGICA DE DIRECIONAMENTO ---
+        # =========================================================================
+        # 🎯 INJEÇÃO DO DESPACHO DE RETORNO DO HUB (PARTE 2 - CONDICIONAL)
+        # =========================================================================
+        # Se o usuário veio pelo HUB e já é qualificado ou Admin, despacha direto
+        # para o destino final sem reavaliar as abas locais da timeline.
+        if (onboarding_completo or current_user.nivel_acesso >= 10) and proximo_passo != '/dashboard/core':
+            # Evita loops: limpa a variável para os próximos cliques de navegação interna
+            session['next_url'] = '/dashboard/core'
+            return redirect(proximo_passo)
+
+        # --- 3. LÓGICA DE DIRECIONAMENTO (Mantém seu fluxo padrão se for onboarding) ---
         if current_user.nivel_acesso >= 10:
             aba = aba_solicitada if aba_solicitada else 'feed'
         else:
@@ -1192,10 +1267,6 @@ def dashboard():
                     hoje = datetime.now().date()
                     amigos = Usuario.query.filter(Usuario.id.in_(amigos_ids)).all()
                     for amigo in amigos:
-
-                        # 🔥 LINHA DE TESTE SEGURO: Descomente para forçar a exibição do card nos testes
-                        # amigo.perfil.data_nascimento = hoje
-
                         if amigo.perfil and amigo.perfil.data_nascimento:
                             try:
                                 nasc_este_ano = amigo.perfil.data_nascimento.replace(year=hoje.year)
@@ -1221,7 +1292,6 @@ def dashboard():
                 contador_respiro = 0
 
                 for atividade in atividades_recentes:
-                    # Proteção para não tentar injetar anúncio comercial no dicionário de aniversário
                     if isinstance(atividade, dict) and atividade.get('tipo_customizado') == 'aniversario':
                         continue
 
@@ -1331,7 +1401,7 @@ def dashboard():
                                link_convite=link_convite)
 
 
-@app.route('/promover_pioneiro/<int:usuario_id>')
+@current_app.route('/promover_pioneiro/<int:usuario_id>')
 @login_required
 def promover_pioneiro(usuario_id):
     # 1. Barreira de Segurança: Apenas superadmins (9999) prosseguem
@@ -1412,16 +1482,17 @@ def apenas_pioneiros(f):
     return decorated_function
 
 
-@app.route('/buscar_locais')
+@current_app.route('/buscar_locais')
 @login_required
 def buscar_locais():
     termo = request.args.get('q', '').strip()
     if len(termo) < 2: return jsonify([])
 
     try:
+        # 🎯 REGRA DEFINITIVA: Traz tudo, exceto o que for explicitamente 'bloqueado'
         locais = Local.query.filter(
             Local.nome.ilike(f'%{termo}%'),
-            Local.status_operacional == 'ativo'
+            Local.status_operacional != 'bloqueado'
         ).limit(10).all()
 
         resultado = []
@@ -1443,7 +1514,7 @@ def buscar_locais():
         return jsonify([]), 500
 
 
-@app.route('/api/buscar-interesses-onboarding')
+@current_app.route('/api/buscar-interesses-onboarding')
 @login_required
 def buscar_interesses_onboarding():
     try:
@@ -1476,7 +1547,7 @@ def buscar_interesses_onboarding():
         return jsonify([]), 200
 
 
-@app.route('/api/dashboard/taxonomia/adicionar', methods=['POST'])
+@current_app.route('/api/dashboard/taxonomia/adicionar', methods=['POST'])
 @login_required
 def adicionar_taxonomia_dashboard():
     dados = request.get_json()
@@ -1496,7 +1567,7 @@ def adicionar_taxonomia_dashboard():
     return jsonify({"status": "Estrela adicionada"}), 201
 
 
-@app.route('/api/dashboard/taxonomia/remover/<int:id>', methods=['DELETE'])
+@current_app.route('/api/dashboard/taxonomia/remover/<int:id>', methods=['DELETE'])
 @login_required
 def remover_taxonomia_dashboard(id):
     # Trava de segurança: Mínimo de 5
@@ -1509,7 +1580,7 @@ def remover_taxonomia_dashboard(id):
     return '', 204
 
 
-@app.route('/finalizar_onboarding_local', methods=['POST'])
+@current_app.route('/finalizar_onboarding_local', methods=['POST'])
 @login_required
 def finalizar_onboarding_local():
     # 1. PROCESSAMENTO DA TEIA (Vínculo de Convite)
@@ -1562,9 +1633,10 @@ def finalizar_onboarding_local():
     return redirect(url_for('dashboard', aba='preferencias'))
 
 
-@app.route("/finalizar-onboarding_gostos", methods=['POST'])
+@current_app.route("/finalizar-onboarding_gostos", methods=['POST'])
 @login_required
 def finalizar_onboarding_gostos():
+
     # 1. Captura os dados brutos do formulário (enviados pelo seu JS)
     ids_existentes = request.form.get('preferencias_ids')  # Ex: "1,4,12"
     nomes_novos = request.form.get('novos_termos')  # Ex: "Samba, TI, Churrasco"
@@ -1574,6 +1646,7 @@ def finalizar_onboarding_gostos():
     lista_novos = [n.strip() for n in nomes_novos.split(',') if n] if nomes_novos else []
 
     total_selecionado = len(lista_ids) + len(lista_novos)
+    usuario = current_user
 
     # Validação de segurança: o usuário precisa de 10 itens
     if total_selecionado < 10:
@@ -1619,6 +1692,36 @@ def finalizar_onboarding_gostos():
 
             perfil.gostos.append(pref_para_vincular)
 
+        # GATILHO UNIFICADO: Registra o acesso nativo ao Core na tabela universal
+
+        identidade = IdentidadeCivil.query.filter_by(usuario_id=usuario.id).first()
+
+        if identidade and identidade.cpf_hash:
+            hash_do_usuario = identidade.cpf_hash
+
+            # 2️⃣ VERIFICA SE O VÍNCULO JÁ EXISTE: Para evitar duplicidade se ele refizer o onboarding
+            vinculo_core_existente = ModVinculoModulo.query.filter_by(
+                cpf_hash=hash_do_usuario,
+                modulo_slug='core'
+            ).first()
+
+            # 3️⃣ CRIA O VÍNCULO NATIVO: Se não existir, insere na tabela universal
+            if not vinculo_core_existente:
+                novo_vinculo = ModVinculoModulo(
+                    cpf_hash=hash_do_usuario,
+                    modulo_slug='core',
+                    local_id=None,  # Core é global
+                    email_customizado=usuario.email,  # Usa o e-mail principal do cadastro do Core
+                    ativo=True
+                )
+                database.session.add(novo_vinculo)
+                database.session.commit()
+                print(
+                    f"✅ [ONBOARDING] Sucesso! Vínculo unificado ao 'core' registrado para o CPF Hash: {hash_do_usuario[:8]}")
+        else:
+            print(
+                f"⚠️ [ONBOARDING] Alerta: Usuário {usuario.id} concluiu o onboarding, mas nenhum registro de Identidade Civil foi encontrado!")
+
         # 3. FINALIZAÇÃO DO PIONEIRO E PROMOÇÃO
         # Agora que salvamos os gostos, promovemos o nível de acesso
         current_user.onboarding_concluido = True
@@ -1638,20 +1741,22 @@ def finalizar_onboarding_gostos():
         return redirect(url_for('dashboard', aba='preferencias'))
 
 
-# ROTA ATUALIZADA (ADICIONAR GRUPO / MEMÓRIA)
-@app.route("/processar-adicao-grupo", methods=['POST'])
+@current_app.route("/processar-adicao-grupo", methods=['POST'])
 @login_required
 def adicionar_grupo():
-    # 1. Captura de dados do formulário (Ficha Completa)
-    nome_input = request.form.get("nome")
+    # 🛠️ Inclusão da Model Epoca nos imports
+    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, GrupoSocial, MembroGrupo, Epoca
+    from sqlalchemy import func
+
+    # 1. Captura de dados do formulário
+    nome_input = request.form.get("nome", "").strip()
     logradouro_input = request.form.get("logradouro")
     bairro_input = request.form.get("bairro")
-    # Cidade destravada: tenta 'localizacao' ou 'cidade'
     cidade_input = request.form.get("localizacao") or request.form.get("cidade")
-    estado_input = request.form.get("estado", "SP")  # Padrão SP se vazio
+    estado_input = request.form.get("estado", "SP")
     esta_ativo_input = request.form.get("esta_ativo") == "1"
 
-    # Dados da Memória
+    # Dados da interação
     periodo_input = request.form.get("periodo")
     experiencia_input = request.form.get("experiencia_usuario")
 
@@ -1662,15 +1767,29 @@ def adicionar_grupo():
         return redirect(origem)
 
     try:
-        # 2. Local (Busca ou Cria com todos os detalhes)
-        # Buscamos por nome e cidade para evitar duplicatas básicas
+        # =========================================================================
+        # ⏱️ 🚀 MOTOR TEMPORAL: TRATAMENTO DA ÉPOCA SOBERANA
+        # =========================================================================
+        # Busca a época que está marcada como vigente no Core (Ex: Anos 2020 (Atual))
+        epoca_vigente = Epoca.query.filter_by(eh_vigente=True).first()
+        nome_epoca_padrao = epoca_vigente.nome_exibicao if epoca_vigente else "Época Atual"
+
+        # Se o formulário não enviou um período específico, usamos a época vigente do Core
+        if not periodo_input:
+            periodo_input = nome_epoca_padrao
+
+        # Se não houver relato do usuário, contextualizamos com a época
+        if not experiencia_input:
+            experiencia_input = f"Frequenta desde {nome_epoca_padrao}"
+        # =========================================================================
+
+        # 2. Local (Busca ou Cria)
         local = Local.query.filter(
             func.lower(Local.nome) == nome_input.lower(),
             func.lower(Local.cidade) == cidade_input.lower()
         ).first()
 
         if not local:
-            # Criamos o objeto Local com a ficha técnica completa para o Perfil_Local
             local = Local(
                 nome=nome_input,
                 logradouro=logradouro_input,
@@ -1681,51 +1800,63 @@ def adicionar_grupo():
                 id_indicador=current_user.id
             )
             database.session.add(local)
-            database.session.flush()  # Gera o ID do local para o passo seguinte
+            database.session.flush()
 
-        # 3. Grupo Social (A Memória em si - Vínculo Local + Período)
+        # 3. VinculoUsuarioLocal (Seguidor no Core com o carimbo do tempo dinâmico)
+        vinculo_core = VinculoUsuarioLocal.query.filter_by(
+            usuario_id=current_user.id,
+            local_id=local.id
+        ).first()
+
+        if not vinculo_core:
+            vinculo_core = VinculoUsuarioLocal(
+                usuario_id=current_user.id,
+                local_id=local.id,
+                experiencia=experiencia_input  # Armazena o contexto dinâmico da época
+            )
+            database.session.add(vinculo_core)
+        else:
+            vinculo_core.experiencia = experiencia_input
+
+        # 4. Grupo Social (A Memória baseada no período da tabela de Épocas)
         grupo = GrupoSocial.query.filter_by(id_local=local.id, periodo_referencia=periodo_input).first()
         if not grupo:
             grupo = GrupoSocial(id_local=local.id, periodo_referencia=periodo_input)
             database.session.add(grupo)
             database.session.flush()
 
-            # 4. Vínculo do Usuário (Membro do Grupo)
-            vinculo_existente = MembroGrupo.query.filter_by(id_usuario=current_user.id, id_grupo=grupo.id).first()
+        # 5. MembroGrupo (Vínculo na tabela relacional de membros)
+        vinculo_membro = MembroGrupo.query.filter_by(id_usuario=current_user.id, id_grupo=grupo.id).first()
 
-            if not vinculo_existente:
-                # 4a. Criamos apenas o vínculo (que o banco aceita)
-                novo_vinculo = MembroGrupo(
-                    id_usuario=current_user.id,
-                    id_grupo=grupo.id
-                )
-                database.session.add(novo_vinculo)
+        if not vinculo_membro:
+            novo_vinculo_membro = MembroGrupo(
+                id_usuario=current_user.id,
+                id_grupo=grupo.id,
+                id_local=local.id
+            )
+            database.session.add(novo_vinculo_membro)
 
-                # 4b. Criamos a Atividade (Onde o seu HTML já busca o relato)
-                if experiencia_input:
-                    # Verifique se o seu modelo chama 'Atividade' ou 'Postagem'
-                    # Baseado no seu HTML anterior, parece ser 'Atividade'
-                    nova_atividade = AtividadeLocal(
-                        id_criador=current_user.id,
-                        id_local=local.id,
-                        nome=f"Memória em {local.nome}",
-                        periodo_estimado=periodo_input,
-                        descricao=experiencia_input,
-                        data_criacao=datetime.now(timezone.utc)
-                    )
-                    database.session.add(nova_atividade)
+            # 6. Histórico na Linha do Tempo (AtividadeLocal)
+            nova_atividade = AtividadeLocal(
+                id_criador=current_user.id,
+                id_local=local.id,
+                nome=f"Memória em {local.nome}",
+                periodo_estimado=periodo_input,
+                descricao=experiencia_input,
+                data_criacao=datetime.now(timezone.utc)
+            )
+            database.session.add(nova_atividade)
 
-                database.session.commit()
-                flash(f"'{nome_input}' registrado com sucesso!", "success")
+        database.session.commit()
+        flash(f"Sua memória em '{nome_input}' foi registrada com sucesso!", "success")
 
     except Exception as e:
         database.session.rollback()
-        # Log do erro para debug (opcional)
-        print(f"Erro ao salvar: {e}")
-        flash(f"Erro ao salvar memória: {str(e)}", "danger")
+        print(f"Erro ao salvar com Época Soberana: {e}")
+        flash(f"Erro ao salvar histórico: {str(e)}", "danger")
         return redirect(origem)
 
-    # Lógica de Onboarding (5 memórias para seguir)
+    # Lógica de Onboarding de contagem mantida
     contagem = MembroGrupo.query.filter_by(id_usuario=current_user.id).count()
     if contagem == 5:
         return redirect(url_for('cadastrar_preferencias'))
@@ -1762,7 +1893,7 @@ def pega_papel(id_usuario):
 
 
 # NOVA ROTA ESTRATÉGICA
-@app.route("/processar-adicao-local-novo", methods=['POST'])
+@current_app.route("/processar-adicao-local-novo", methods=['POST'])
 @login_required
 def adicionar_local_novo():
     nome_input = request.form.get("nome", "").strip()
@@ -1807,7 +1938,7 @@ def adicionar_local_novo():
         return redirect(origem)
 
 
-@app.route('/seguir_local/<int:local_id>', methods=['POST'])
+@current_app.route('/seguir_local/<int:local_id>', methods=['POST'])
 @login_required
 def seguir_local(local_id):
     # Importamos o novo modelo UsuarioLocalEpoca
@@ -1883,7 +2014,7 @@ def seguir_local(local_id):
         return jsonify({"status": "error", "sucesso": False, "message": str(e)}), 500
 
 
-@app.route('/get_perfil/<int:id_usuario>', methods=['GET'])
+@current_app.route('/get_perfil/<int:id_usuario>', methods=['GET'])
 @login_required
 def get_perfil(id_usuario):
     if current_user.id != id_usuario:
@@ -1939,7 +2070,7 @@ def get_perfil(id_usuario):
     )
 
 
-@app.route('/adicionar_apelido', methods=['POST'])
+@current_app.route('/adicionar_apelido', methods=['POST'])
 @login_required
 def adicionar_apelido():
     try:
@@ -1976,7 +2107,7 @@ def adicionar_apelido():
     return redirect(url_for('configuracoes', aba='perfil'))
 
 
-@app.route('/excluir_apelido/<int:id_apelido>', methods=['GET', 'POST'])
+@current_app.route('/excluir_apelido/<int:id_apelido>', methods=['GET', 'POST'])
 @login_required
 def excluir_apelido(id_apelido):
     try:
@@ -2001,7 +2132,7 @@ def excluir_apelido(id_apelido):
     return redirect(url_for('configuracoes', aba='perfil'))
 
 
-@app.route('/editar_apelido/<int:id_apelido>', methods=['POST'])
+@current_app.route('/editar_apelido/<int:id_apelido>', methods=['POST'])
 @login_required
 def editar_apelido(id_apelido):
     apelido_obj = Apelidos.query.get_or_404(id_apelido)
@@ -2025,7 +2156,7 @@ def editar_apelido(id_apelido):
         return redirect(request.referrer or url_for('get_perfil', id_usuario=current_user.id))
 
 
-@app.route('/admin/mudar_nivel/<int:id_alvo>/<int:novo_nivel>')
+@current_app.route('/admin/mudar_nivel/<int:id_alvo>/<int:novo_nivel>')
 @login_required
 def mudar_nivel(id_alvo, novo_nivel):
     alvo = Usuario.query.get_or_404(id_alvo)
@@ -2041,7 +2172,7 @@ def mudar_nivel(id_alvo, novo_nivel):
     return redirect(url_for('admin_sistema'))
 
 
-@app.route('/admin/backup-database', methods=['GET'])
+@current_app.route('/admin/backup-database', methods=['GET'])
 def backup_database():
     # Caminho do seu banco de dados SQLite. Ajuste o nome do arquivo para o seu real (ex: instance/feedin.db)
     base_dir = os.path.abspath(os.path.dirname(__file__))
@@ -2061,7 +2192,7 @@ def backup_database():
         abort(404, description="Arquivo de banco de dados não encontrado.")
 
 
-@app.route("/convidar_parente", methods=['GET', 'POST'])
+@current_app.route("/convidar_parente", methods=['GET', 'POST'])
 @login_required
 def convidar_parente():
     # Extraímos o papel do usuário logado (ex: 10, 100, 999)
@@ -2097,7 +2228,7 @@ def convidar_parente():
     return render_template('convidar_parente.html', graus=graus, id_usuario=current_user.id, papel=papel_usuario)
 
 
-@app.route('/aceitar_conexao/<int:conexao_id>', methods=['POST'])
+@current_app.route('/aceitar_conexao/<int:conexao_id>', methods=['POST'])
 @login_required
 def aceitar_conexao(conexao_id):
     # 1. Localiza a conexão pendente
@@ -2142,7 +2273,7 @@ def aceitar_conexao(conexao_id):
     return redirect(url_for('dashboard', aba='conexoes'))
 
 
-@app.route('/desfazer_conexao/<int:usuario_id>', methods=['POST'])
+@current_app.route('/desfazer_conexao/<int:usuario_id>', methods=['POST'])
 @login_required
 def desfazer_conexao(usuario_id):
     """
@@ -2192,7 +2323,7 @@ def desfazer_conexao(usuario_id):
     return redirect(url_for('dashboard', aba='conexoes'))
 
 
-@app.route('/bloquear_usuario/<int:id_alvo>', methods=['POST'])
+@current_app.route('/bloquear_usuario/<int:id_alvo>', methods=['POST'])
 @login_required
 def bloquear_usuario(id_alvo):
     """
@@ -2254,7 +2385,7 @@ def bloquear_usuario(id_alvo):
     return redirect(url_for('dashboard', aba='conexoes'))
 
 
-@app.route("/responder_convite/<int:id_convite>/<string:acao>", methods=['POST', 'GET'])
+@current_app.route("/responder_convite/<int:id_convite>/<string:acao>", methods=['POST', 'GET'])
 @login_required
 def responder_convite(id_convite, acao):
     convite = Parentesco.query.get_or_404(id_convite)
@@ -2280,7 +2411,7 @@ def responder_convite(id_convite, acao):
     return redirect(url_for("dashboard", aba='feed'))
 
 
-@app.context_processor
+@current_app.context_processor
 def inject_global_vars():
     # Iniciamos o dicionário com os dados das tabelas auxiliares
     # (Eles podem estar disponíveis mesmo para visitantes, se necessário)
@@ -2363,7 +2494,7 @@ def sugerir_conexoes_reais(usuario_atual):
 
 
 #------------ Rota obrigatória para os beta-testers, a adição de locais, que servirão para concentrar novos usuários que chegarem
-@app.route('/primeiros-passos')
+@current_app.route('/primeiros-passos')
 @login_required
 def onboarding_pioneiro():
     if current_user.nivel_acesso < 10:
@@ -2378,7 +2509,7 @@ def onboarding_pioneiro():
                            usuario=current_user)
 
 
-@app.route('/concluir_etapa_pioneiro')
+@current_app.route('/concluir_etapa_pioneiro')
 @login_required
 def concluir_etapa_pioneiro():
     perfil = current_user.perfil
@@ -2508,7 +2639,7 @@ def enviar_solicitacao(id_destinatario):
 
     return redirect(url_for('dashboard'))
 
-@app.route("/cancelar-convite/<int:id_conexao>", methods=["POST"])
+@current_app.route("/cancelar-convite/<int:id_conexao>", methods=["POST"])
 @login_required
 def cancelar_convite(id_conexao):
     # Buscamos a conexão
@@ -2568,8 +2699,8 @@ def apenas_admin(f):
 
 # ------------> rota que renderiza a central e a rota específica que dispara o download do CSV da tabela "Locais".
 
-@app.route('/admin/dashboard')
-@app.route('/admin/dashboard/<int:pai_id>')
+@current_app.route('/admin/dashboard')
+@current_app.route('/admin/dashboard/<int:pai_id>')
 @login_required
 @apenas_admin  # Padronizado para segurança total do ecossistema
 def admin_sistema(pai_id=None):
@@ -2617,7 +2748,7 @@ def admin_sistema(pai_id=None):
     )
 
 
-@app.route('/admin/taxonomia/processar-pai', methods=['POST'])
+@current_app.route('/admin/taxonomia/processar-pai', methods=['POST'])
 @login_required
 @apenas_admin
 def admin_processar_pai():
@@ -2645,7 +2776,7 @@ def admin_processar_pai():
     return redirect(url_for('admin_sistema', pai_id=termo.id))
 
 
-@app.route('/admin/taxonomia/selecionar-pai/<int:pai_id>')
+@current_app.route('/admin/taxonomia/selecionar-pai/<int:pai_id>')
 @login_required
 @apenas_admin
 def admin_selecionar_pai_id(pai_id):
@@ -2657,7 +2788,7 @@ def admin_selecionar_pai_id(pai_id):
     return redirect(url_for('admin_sistema', pai_id=pai.id))
 
 
-@app.route('/admin/taxonomia/alternar-visibilidade/<int:pai_id>')
+@current_app.route('/admin/taxonomia/alternar-visibilidade/<int:pai_id>')
 @login_required
 @apenas_admin
 def admin_alternar_visibilidade_pai(pai_id):
@@ -2671,7 +2802,7 @@ def admin_alternar_visibilidade_pai(pai_id):
     return redirect(url_for('admin_sistema', pai_id=pai.id))
 
 
-@app.route('/admin/taxonomia/vincular-filho-existente/<int:pai_id>', methods=['POST'])
+@current_app.route('/admin/taxonomia/vincular-filho-existente/<int:pai_id>', methods=['POST'])
 @login_required
 def admin_vincular_filho_existente(pai_id):
     if current_user.nivel_acesso < 9999:
@@ -2703,7 +2834,7 @@ def admin_vincular_filho_existente(pai_id):
     return redirect(url_for('admin_sistema', pai_id=pai_id))
 
 
-@app.route('/admin/taxonomia/autocomplete')
+@current_app.route('/admin/taxonomia/autocomplete')
 @login_required
 @apenas_admin
 def admin_taxonomia_autocomplete():
@@ -2722,7 +2853,7 @@ def admin_taxonomia_autocomplete():
     return jsonify(lista_nomes)
 
 
-@app.route('/admin/taxonomia/inserir-filho-manual/<int:pai_id>', methods=['POST'])
+@current_app.route('/admin/taxonomia/inserir-filho-manual/<int:pai_id>', methods=['POST'])
 @login_required
 def admin_inserir_filho_manual(pai_id):
     if current_user.nivel_acesso < 9999:
@@ -2765,7 +2896,7 @@ def admin_inserir_filho_manual(pai_id):
     return redirect(url_for('admin_sistema', pai_id=pai_id))
 
 
-@app.route('/admin/taxonomia/vincular-pai-raiz/<int:pai_id>', methods=['POST'])
+@current_app.route('/admin/taxonomia/vincular-pai-raiz/<int:pai_id>', methods=['POST'])
 @login_required
 def admin_vincular_pai_raiz(pai_id):
     if current_user.nivel_acesso < 9999:
@@ -2815,7 +2946,7 @@ def admin_vincular_pai_raiz(pai_id):
     return redirect(url_for('admin_sistema', pai_id=pai_id))
 
 
-@app.route('/admin/importar-filhos-csv/<int:pai_id>', methods=['POST'])
+@current_app.route('/admin/importar-filhos-csv/<int:pai_id>', methods=['POST'])
 @login_required
 def admin_importar_filhos_csv(pai_id):
     if current_user.nivel_acesso < 9999:
@@ -2936,7 +3067,7 @@ def admin_delete_taxonomia(id):
     flash(f"Termo '{termo.nome}' removido com sucesso.", "success")
     return redirect(url_for('admin_sistema'))
 
-@app.route("/admin/exportar-locais")
+@current_app.route("/admin/exportar-locais")
 @login_required
 @apenas_admin
 def admin_exportar_locais():
@@ -2961,7 +3092,7 @@ def admin_exportar_locais():
     )
 
 
-@app.route("/admin/local/novo", methods=["GET", "POST"])
+@current_app.route("/admin/local/novo", methods=["GET", "POST"])
 @login_required
 @apenas_admin
 def admin_novo_local():
@@ -3162,7 +3293,7 @@ def obter_atividades_feed(usuario):
         print(f"Erro no feed: {e}")
         return []
 
-@app.route("/cadastrar_preferencias")
+@current_app.route("/cadastrar_preferencias")
 @login_required
 def cadastrar_preferencias():
     # Buscamos apenas as categorias PAI (onde id_pai é nulo)
@@ -3176,7 +3307,7 @@ def cadastrar_preferencias():
                            minhas_prefs_ids=minhas_prefs_ids)
 
 
-@app.route('/api/buscar-interesses')
+@current_app.route('/api/buscar-interesses')
 @login_required
 def buscar_interesses():
     termo = request.args.get('q', '').strip()
@@ -3191,7 +3322,7 @@ def buscar_interesses():
     return jsonify([{'id': t.id, 'nome': t.nome} for t in tags_globais])
 
 
-@app.route('/salvar_preferencias', methods=['POST'])
+@current_app.route('/salvar_preferencias', methods=['POST'])
 @login_required
 def salvar_preferencias():
     ids_raw = request.form.get('preferencias_ids', '')
@@ -3301,7 +3432,7 @@ def salvar_preferencias():
         return redirect(url_for('configuracoes', aba='preferencias'))
 
 
-@app.route("/remover-interesse/<int:id_interesse>", methods=["POST"])
+@current_app.route("/remover-interesse/<int:id_interesse>", methods=["POST"])
 @login_required
 def remover_interesse(id_interesse):
     interesse = Taxonomia.query.get_or_404(id_interesse)
@@ -3325,7 +3456,7 @@ def remover_interesse(id_interesse):
     return jsonify({"status": "erro", "msg": "Interesse não encontrado"}), 404
 
 
-@app.route('/admin/taxonomia/remover_raiz/<int:pai_id>/<int:raiz_id>', methods=['POST'])
+@current_app.route('/admin/taxonomia/remover_raiz/<int:pai_id>/<int:raiz_id>', methods=['POST'])
 @login_required
 def admin_remover_pai_raiz(pai_id, raiz_id):
     try:
@@ -3350,7 +3481,7 @@ def admin_remover_pai_raiz(pai_id, raiz_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route("/declinar-conexao/<int:id_conexao>", methods=["POST"])
+@current_app.route("/declinar-conexao/<int:id_conexao>", methods=["POST"])
 @login_required
 def declinar_conexao(id_conexao):
     conexao = Conexoes.query.get_or_404(id_conexao)
@@ -3390,7 +3521,7 @@ def obter_sugestoes_pioneiras(usuario_atual):
 
     # 1. Automação de Rigor (Mantido)
     total_pioneiros = Usuario.query.filter(Usuario.nivel_acesso >= 10).count()
-    modo_rigoroso = app.config.get('MODO_PRODUCAO') or (total_pioneiros > 100)
+    modo_rigoroso = current_app.config.get('MODO_PRODUCAO') or (total_pioneiros > 100)
 
     # 2. Lista de Exclusão (Mantido performático)
     relacoes_existentes = Conexoes.query.filter(
@@ -3578,7 +3709,7 @@ def obter_todas_sugestoes_aba(usuario_atual):
     return sorted(processados, key=lambda x: x['peso'], reverse=True)
 
 
-@app.route("/declinar-sugestao/<int:id_alvo>", methods=["POST"])
+@current_app.route("/declinar-sugestao/<int:id_alvo>", methods=["POST"])
 @login_required
 def declinar_sugestao(id_alvo):
     # Aqui você pode salvar em uma tabela de 'ignorado'
@@ -3586,7 +3717,7 @@ def declinar_sugestao(id_alvo):
     return "", 200 # Retorna vazio com status OK para o HTMX deletar o elemento
 
 
-@app.route("/conectar-pioneiro/<int:id_destinatario>", methods=["POST"])
+@current_app.route("/conectar-pioneiro/<int:id_destinatario>", methods=["POST"])
 @login_required
 def conectar_pioneiro(id_destinatario):
     # Lógica de banco de dados
@@ -3621,7 +3752,7 @@ def conectar_pioneiro(id_destinatario):
     return redirect(url_for('dashboard', aba='conexoes', tab='sugestoes'))
 
 
-@app.route("/boas-vindas-pioneiros")
+@current_app.route("/boas-vindas-pioneiros")
 @login_required
 def exibir_sugestoes_pioneiros():
     sugestoes = obter_sugestoes_pioneiras(current_user)
@@ -3676,7 +3807,7 @@ def buscar_afinidades_por_fiador(usuario, tag_nome):
     return afinidades_validadas
 
 
-@app.route('/sugerir_preferencia', methods=['POST'])
+@current_app.route('/sugerir_preferencia', methods=['POST'])
 @login_required
 def sugerir_preferencia():
     nome_sugerido = request.form.get('nome').strip().capitalize()
@@ -3701,7 +3832,7 @@ def sugerir_preferencia():
     return jsonify({"status": "existe", "msg": "Esta preferência já está em análise."})
 
 
-@app.route('/api/busca_taxonomia')
+@current_app.route('/api/busca_taxonomia')
 @login_required
 def busca_taxonomia():
     termo = request.args.get('q', '').strip()
@@ -3770,13 +3901,13 @@ def obter_destaque_comercial(categoria_alvo):
 
     return parceiro, outros_parceiros
 
-@app.context_processor
+@current_app.context_processor
 def inject_publicidade_fn():
     return dict(obter_publicidade_contextual=obter_publicidade_contextual)
 
 
 # Para que o Admin consiga moderar com eficiência, a rota precisa registrar quem sugeriu, criando um vínculo de confiança.
-@app.route('/sugerir_local', methods=['POST'])
+@current_app.route('/sugerir_local', methods=['POST'])
 @login_required
 def sugerir_local():
     # Coleta os dados que o usuário preencheu no "formulário de emergência"
@@ -3866,7 +3997,7 @@ def sugerir_local():
         return jsonify({"status": "erro", "message": str(e)}), 500
 
 
-@app.route('/editar_local/<int:local_id>', methods=['GET', 'POST'])
+@current_app.route('/editar_local/<int:local_id>', methods=['GET', 'POST'])
 @login_required
 def editar_local(local_id):
     local = Local.query.get_or_404(local_id)
@@ -3955,7 +4086,7 @@ def editar_local(local_id):
             return jsonify({'status': 'erro', 'message': f'Erro técnico ao salvar: {str(e)}'}), 500
 
 
-@app.route('/api/local/<int:local_id>/tags_ocultas')
+@current_app.route('/api/local/<int:local_id>/tags_ocultas')
 @login_required
 def tags_ocultas_local(local_id):
     try:
@@ -3993,7 +4124,7 @@ def tags_ocultas_local(local_id):
         return jsonify({'erro': str(e)}), 500
 
 
-@app.route('/api/seguir_tag_direto/<int:tag_id>', methods=['POST'])
+@current_app.route('/api/seguir_tag_direto/<int:tag_id>', methods=['POST'])
 @login_required
 def seguir_tag_direto(tag_id):
     try:
@@ -4012,7 +4143,7 @@ def seguir_tag_direto(tag_id):
         return jsonify({'sucesso': False, 'mensagem': 'Erro ao salvar interesse.'}), 500
 
 
-@app.route('/salvar_grupo_social', methods=['POST', 'GET'])
+@current_app.route('/salvar_grupo_social', methods=['POST', 'GET'])
 @login_required
 def salvar_grupo_social():
     local_id = request.form.get('local_id')
@@ -4084,7 +4215,7 @@ def salvar_grupo_social():
     return redirect(url_for('get_perfil', id_usuario=current_user.id, aba='memorias'))
 
 
-@app.route('/excluir_memoria/<int:id_vinculo>')
+@current_app.route('/excluir_memoria/<int:id_vinculo>')
 @login_required
 def excluir_memoria(id_vinculo):
     vinculo = VinculoUsuarioLocal.query.get_or_404(id_vinculo)
@@ -4108,7 +4239,7 @@ def excluir_memoria(id_vinculo):
     return redirect(url_for('get_perfil', id_usuario=current_user.id, aba='memorias'))
 
 
-@app.route('/editar_memoria/<int:id_vinculo>', methods=['POST'])
+@current_app.route('/editar_memoria/<int:id_vinculo>', methods=['POST'])
 @login_required
 def editar_memoria(id_vinculo):
     vinculo = VinculoUsuarioLocal.query.get_or_404(id_vinculo)
@@ -4196,7 +4327,7 @@ def incrementar_uso_taxonomia(termo_id):
     database.session.commit()
 
 
-@app.route('/gerar-convite', methods=['POST'])
+@current_app.route('/gerar-convite', methods=['POST'])
 @login_required
 def gerar_convite():
     # Captura os dados diretamente do request para unificar envio novo e reenvio da tabela
@@ -4255,7 +4386,7 @@ def gerar_convite():
         return redirect(url_for('dashboard', aba='configuracoes'))
 
 
-@app.route('/servir-foto-perfil/<int:usuario_id>')
+@current_app.route('/servir-foto-perfil/<int:usuario_id>')
 def servir_foto_perfil(usuario_id):
     usuario = Usuario.query.get(usuario_id)  # Usamos get para não dar 404 se o usuário sumir
 
@@ -4303,7 +4434,7 @@ def enviar_email_nutricao(nome, email, interesse):
 
     msg = Message(
         info['assunto'],
-        sender=app.config.get('MAIL_USERNAME'),
+        sender=current_app.config.get('MAIL_USERNAME'),
         recipients=[email]
     )
 
@@ -4376,7 +4507,7 @@ def estabelecer_vinculo_pioneiro(novo_usuario_id, id_pai, contexto_raw):
         print(f"Erro ao estabelecer vínculo: {e}")
 
 
-@app.route('/configuracoes')
+@current_app.route('/configuracoes')
 @login_required
 def configuracoes():
     # 1. LÓGICA DE NAVEGAÇÃO
@@ -4430,7 +4561,7 @@ def configuracoes():
 
 
 # rota para exibição do perfil
-@app.route("/perfil/<int:usuario_id>")
+@current_app.route("/perfil/<int:usuario_id>")
 @login_required
 def ver_perfil(usuario_id):
     user_alvo = Usuario.query.get_or_404(usuario_id)
@@ -4715,7 +4846,7 @@ def ver_perfil(usuario_id):
 from sqlalchemy.orm import joinedload
 
 
-@app.route('/local/<int:local_id>')
+@current_app.route('/local/<int:local_id>')
 @login_required
 def perfil_local(local_id):
     database.session.rollback()
@@ -4723,10 +4854,45 @@ def perfil_local(local_id):
     import random
     # INJETADO: Importação do modelo Epoca para alimentar a engenharia multitemporal
     from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, Taxonomia, Postagem, postagem_tags, Epoca
+    from feedin.modules.empresa.models import EseProcessoClaim
     from sqlalchemy.orm import joinedload
 
     # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos para evitar fadiga na VPS
     local = Local.query.get_or_404(local_id)
+
+    # Log 1: Identifica o ID recebido pela URL da rota
+    print(f"\n🔍 [TELEMETRIA] Carregando perfil para o Local ID recebido da rota: {local_id} (Tipo: {type(local_id)})")
+
+    local = Local.query.get_or_404(local_id)
+
+    # Log 2: Verifica os dados reais que estão guardados na instância do Local
+    print(
+        f"🏢 [TELEMETRIA] Dados do Banco -> Local.id: {local.id} | Nome: {local.nome} | id_empreendedor: {local.id_empreendedor} | status_operacional: {local.status_operacional}")
+
+    # Vamos buscar TODOS os registros desse local sem filtros para ver o que tem na tabela
+    todos_claims = EseProcessoClaim.query.filter_by(local_id=local_id).all()
+    print(
+        f"📊 [TELEMETRIA] Total de registros encontrados na tabela ese_processo_claim para este local: {len(todos_claims)}")
+
+    for c in todos_claims:
+        print(
+            f"   ├─ Claim ID: {c.id} | local_id no banco: {c.local_id} (Tipo: {type(c.local_id)}) | status_processo: '{c.status_processo}' | token: {c.token_validacao[:8]}...")
+
+    # 🔍 Executa a nossa consulta oficial de filtragem
+    ultimo_processo = EseProcessoClaim.query.filter(
+        EseProcessoClaim.local_id == local_id,
+        EseProcessoClaim.status_processo.in_(['em_andamento', 'concluido', 'suspeito_bloqueado'])
+    ).order_by(EseProcessoClaim.id.desc()).first()
+
+    status_atual = 'livre'
+    if ultimo_processo:
+        status_atual = ultimo_processo.status_processo
+        print(f"🎯 [TELEMETRIA] Capturado processo ativo com sucesso! Status selecionado: '{status_atual}'")
+    else:
+        print(
+            "⚠️ [TELEMETRIA] Nenhum processo ativo ('em_andamento', 'concluido') foi capturado no filtro oficial. Forçando status: 'livre'")
+
+    print(f"🚀 [TELEMETRIA] Injetando no Jinja2 -> status_claim='{status_atual}'\n")
 
     # 1. GARANTIA DE VARIÁVEIS
     tags_dos_amigos = []
@@ -4848,16 +5014,17 @@ def perfil_local(local_id):
                            exibir_como_flyer=True,
                            meus_interesses_ids=meus_interesses_ids,
                            rating_data=local.get_rating_data(),
+                           status_claim=status_atual,
                            epocas_todas=epocas_todas) # <-- ADICIONADO AQUI!
 
-@app.route('/local_v2/<int:local_id>')
+@current_app.route('/local_v2/<int:local_id>')
 @login_required
 def perfil_local_v2(local_id):
     from flask import redirect, url_for
     return redirect(url_for('perfil_local', local_id=local_id))
 
 
-@app.route('/locais')
+@current_app.route('/locais')
 @login_required
 def lista_locais():
     termo_busca = request.args.get('busca', '').strip()
@@ -4886,7 +5053,7 @@ def lista_locais():
                            termo_busca=termo_busca)
 
 
-@app.route("/admin/gerar-convite-pioneiro")
+@current_app.route("/admin/gerar-convite-pioneiro")
 @login_required
 @apenas_admin
 def admin_gerar_convite_pioneiro():
@@ -4915,7 +5082,7 @@ def descriptografar_cpf(cpf_banco):
     return fernet.decrypt(cpf_banco).decode()
 
 
-@app.route('/admin/reenviar-confirmacao/<int:usuario_id>')
+@current_app.route('/admin/reenviar-confirmacao/<int:usuario_id>')
 # @login_required  <-- Descomente se usar o Flask-Login para proteger a rota
 def admin_reenviar_confirmacao(usuario_id):
     # 1. Verifica se quem está logado é realmente admin (Regra de segurança)
@@ -4950,7 +5117,12 @@ def admin_reenviar_confirmacao(usuario_id):
     return redirect(url_for('central_admin'))  # Ajuste para o nome real da sua rota de admin
 
 
-@app.route('/processar_identidade', methods=['POST'])
+# TODO (Carlos): MIGRAR PARA AUTH MODULE NA SEMANA QUE VEM
+# Esta função está duplicada por razões de prazo.
+# Não alterar sem consultar o cronograma de refatoração.
+
+
+@current_app.route('/processar_identidade', methods=['POST'])
 @login_required
 def processar_identidade():
     # Para evitar UnboundLocalError com modelos em importações circulares
@@ -4990,7 +5162,7 @@ def processar_identidade():
         data_nasc_obj = datetime.strptime(data_nasc_str, '%Y-%m-%d').date()
 
         # Encriptação usando a chave da aplicação (Fernet)
-        cpf_protegido = app.fernet.encrypt(cpf_digitado.encode())
+        cpf_protegido = current_app.fernet.encrypt(cpf_digitado.encode())
 
         nova_identidade = IdentidadeCivil(
             usuario_id=current_user.id,
@@ -5048,7 +5220,7 @@ def processar_identidade():
 # Rotaresponsável por receber o texto, a foto, o ID do local (se houver) e as tags selecionadas.
 
 
-@app.route('/criar-postagem', methods=['POST'])
+@current_app.route('/criar-postagem', methods=['POST'])
 @login_required
 def criar_postagem():
     fuso_brasil = ZoneInfo("America/Sao_Paulo")
@@ -5205,7 +5377,7 @@ def criar_postagem():
     return redirect(request.referrer)
 
 
-@app.before_request
+@current_app.before_request
 def bloquear_usuarios_incompletos():
     if current_user and current_user.is_authenticated:
 
@@ -5231,7 +5403,7 @@ def bloquear_usuarios_incompletos():
             return redirect(url_for('get_perfil', id_usuario=current_user.id))
 
 
-@app.route("/editar_post/<int:post_id>", methods=['POST'])
+@current_app.route("/editar_post/<int:post_id>", methods=['POST'])
 @login_required
 def editar_post(post_id):
     from feedin.models import Postagem, UsuarioLocalEpoca
@@ -5341,7 +5513,7 @@ def editar_post(post_id):
     return redirect(request.referrer)
 
 
-@app.route('/postagem/<int:id_post>/repost', methods=['POST'])
+@current_app.route('/postagem/<int:id_post>/repost', methods=['POST'])
 @login_required
 def repostar_memoria(id_post):
     post_alvo = Postagem.query.get_or_404(id_post)
@@ -5375,7 +5547,7 @@ def repostar_memoria(id_post):
     return redirect(request.referrer or url_for('dashboard'))
 
 
-@app.route('/excluir_post/<int:post_id>', methods=['POST'])
+@current_app.route('/excluir_post/<int:post_id>', methods=['POST'])
 @login_required
 def excluir_post(post_id):
     from feedin.models import Postagem, UsuarioLocalEpoca
@@ -5434,7 +5606,7 @@ def excluir_post(post_id):
     return redirect(request.referrer)
 
 
-@app.route('/comentar_post/<int:post_id>', methods=['POST'])
+@current_app.route('/comentar_post/<int:post_id>', methods=['POST'])
 @login_required
 def comentar_post(post_id):
     post_alvo = Postagem.query.get_or_404(post_id)
@@ -5525,7 +5697,7 @@ def comentar_post(post_id):
         return jsonify({"status": "error", "message": "Erro ao comentário."}), 500
 
 
-@app.route('/reagir_post/<int:post_id>/<string:tipo>', methods=['POST'])
+@current_app.route('/reagir_post/<int:post_id>/<string:tipo>', methods=['POST'])
 @login_required
 def reagir_post(post_id, tipo):
     post = Postagem.query.get_or_404(post_id)
@@ -5592,7 +5764,7 @@ def reagir_post(post_id, tipo):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-@app.route('/excluir_comentario/<int:comentario_id>', methods=['POST'])
+@current_app.route('/excluir_comentario/<int:comentario_id>', methods=['POST'])
 @login_required
 def excluir_comentario(comentario_id):
     comentario = PostagemComentario.query.get_or_404(comentario_id)
@@ -5612,7 +5784,7 @@ from flask_login import current_user
 from flask import jsonify, request
 
 
-@app.route('/buscar_usuarios')
+@current_app.route('/buscar_usuarios')
 def buscar_usuarios():
     if not current_user.is_authenticated:
         return jsonify([])
@@ -5719,7 +5891,7 @@ def afinidade_entre_tags(tag_a_id, tag_b_id):
     return interseccao
 
 
-@app.route('/local/avaliar/<int:local_id>', methods=['POST'])
+@current_app.route('/local/avaliar/<int:local_id>', methods=['POST'])
 @login_required
 def avaliar_local(local_id):
     dados = request.get_json()
@@ -5775,7 +5947,7 @@ def avaliar_local(local_id):
         return jsonify({"sucesso": False, "mensagem": "Erro técnico ao salvar."}), 500
 
 
-@app.route('/local/reivindicar/<int:local_id>', methods=['POST'])
+@current_app.route('/local/reivindicar/<int:local_id>', methods=['POST'])
 @login_required
 def registrar_reivindicacao(local_id):
     # 1. Verifica se já existe um pedido pendente desse usuário para esse local
@@ -5802,7 +5974,7 @@ def registrar_reivindicacao(local_id):
     return redirect(url_for('perfil_local', local_id=local_id))
 
 
-@app.route('/postagem/<int:id_postagem>/solicitar_marcacao', methods=['POST'])
+@current_app.route('/postagem/<int:id_postagem>/solicitar_marcacao', methods=['POST'])
 @login_required
 @csrf.exempt
 def solicitar_marcacao(id_postagem):
@@ -5862,7 +6034,7 @@ def solicitar_marcacao(id_postagem):
     return jsonify({'status': 'success', 'message': 'Solicitação enviada!'})
 
 
-@app.route('/remover_minha_marcacao/<int:id_post>', methods=['POST'])
+@current_app.route('/remover_minha_marcacao/<int:id_post>', methods=['POST'])
 @login_required
 def remover_minha_marcacao(id_post):
     """
@@ -5890,7 +6062,7 @@ def remover_minha_marcacao(id_post):
     return redirect(request.referrer or url_for('dashboard'))
 
 
-@app.route('/marcacao/<int:id_marcacao>/aceitar', methods=['POST'])
+@current_app.route('/marcacao/<int:id_marcacao>/aceitar', methods=['POST'])
 @login_required
 def aceitar_marcacao(id_marcacao):
     """O dono da postagem aprova a marcação solicitada por outro usuário."""
@@ -5951,7 +6123,7 @@ def aceitar_marcacao(id_marcacao):
     return redirect(request.referrer or url_for('dashboard'))
 
 
-@app.route('/marcacao/<int:id_marcacao>/recusar', methods=['POST'])
+@current_app.route('/marcacao/<int:id_marcacao>/recusar', methods=['POST'])
 @login_required
 def recusar_marcacao(id_marcacao):
     """O dono da postagem rejeita a solicitação de marcação.
@@ -6142,7 +6314,7 @@ def obter_publicidade_contextual(pub, local_contexto_id=None):
         return anuncio_destaque
 
 
-@app.route('/feed')
+@current_app.route('/feed')
 @login_required
 def exibir_feed():
     # 1. Busca as postagens reais do banco
@@ -6202,7 +6374,7 @@ def exibir_feed():
     return render_template('feed.html', atividade_lista=postagens_do_feed)
 
 
-@app.route('/admin/configurar-anuncio/<int:taxonomia_id>', methods=['POST'])
+@current_app.route('/admin/configurar-anuncio/<int:taxonomia_id>', methods=['POST'])
 @login_required
 @apenas_admin
 def admin_configurar_anuncio(taxonomia_id):
@@ -6263,7 +6435,7 @@ def admin_configurar_anuncio(taxonomia_id):
     return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
 
 
-@app.route('/anuncio/clique/<int:anuncio_id>')
+@current_app.route('/anuncio/clique/<int:anuncio_id>')
 @login_required
 def registrar_clique(anuncio_id):
     # 1. Recupera o anúncio clicado
@@ -6300,7 +6472,7 @@ def registrar_clique(anuncio_id):
     return redirect(url_for('ver_perfil', usuario_id=anuncio.local_id))
 
 
-@app.route("/consertar-banco")
+@current_app.route("/consertar-banco")
 @login_required
 def consertar_banco_seguro():
     # Garante que só você (Carlos) tenha acesso, baseado no seu nível de admin
@@ -6355,7 +6527,7 @@ UPLOAD_COMPLIANCE_DIR = os.path.join(os.getcwd(), 'storage', 'compliance')
 os.makedirs(UPLOAD_COMPLIANCE_DIR, exist_ok=True)
 
 
-@app.route('/local/<int:id_local>/reivindicar/enviar', methods=['POST'])
+@current_app.route('/local/<int:id_local>/reivindicar/enviar', methods=['POST'])
 @login_required
 def enviar_documentos_homologacao(id_local):
     local = Local.query.get_or_404(id_local)
@@ -6420,7 +6592,7 @@ def enviar_documentos_homologacao(id_local):
 
 # CONECTAR USUÁRIOS SILENCIOSAMENTE, UTILIZANDO QR CODE "
 
-@app.route('/conectar/<int:id_padrinho>')
+@current_app.route('/conectar/<int:id_padrinho>')
 def conectar_silencioso(id_padrinho):
     # 1. Cria a resposta base apontando para a sua URL principal (raiz do sistema)
     # Mudando para redirecionamento externo para garantir que bata na sua URL de produção ou homologação
@@ -6456,7 +6628,7 @@ def conectar_silencioso(id_padrinho):
     return resposta
 
 
-@app.route('/convite/<int:id_padrinho>')
+@current_app.route('/convite/<int:id_padrinho>')
 def processar_convite_unificado(id_padrinho):
     # 1. Garante que o padrinho existe
     padrinho = Usuario.query.get_or_404(id_padrinho)
@@ -6490,3 +6662,248 @@ def criar_conexao(id_remetente, id_destinatario):
         database.session.commit()
         return True
     return False
+
+
+@current_app.route('/hub', methods=['GET', 'POST'])
+def central_hub():
+    """
+    HUB CONCENTRADOR UNIFICADO
+    Se logado: Renderiza a central de cards dark premium baseada na tabela de vínculos.
+    Se deslogado: Intercepta e renderiza a tela de login isolada e escura do HUB com CSRF.
+    """
+    from flask import request, render_template, redirect, url_for, session, flash
+    from flask_wtf.csrf import generate_csrf
+
+    # 1️⃣ CASO DE USO A: O USUÁRIO JÁ ESTÁ AUTENTICADO (Em qualquer módulo)
+    if current_user.is_authenticated:
+        usuario_logado = current_user
+        modulos_visiveis = []
+
+        # O elo universal imutável que o usuário autenticado possui
+        hash_para_busca = getattr(usuario_logado, 'cpf_hash', None)
+
+        if hash_para_busca:
+            hash_limpo = str(hash_para_busca).strip().lower()
+
+            # 🔍 DIAGNÓSTICOS MANTIDOS PARA SEU CONTROLE NO PYCHARM
+            vinculos_reais = database.session.query(ModVinculoModulo).filter_by(cpf_hash=hash_limpo).all()
+            print(f"\n🔍 [DIAGNÓSTICO HUB] Vínculos físicos na tabela para este hash: {[v.modulo_slug for v in vinculos_reais]}")
+
+            modulos_usuario = database.session.query(ModulosSistema).join(
+                ModVinculoModulo, ModVinculoModulo.modulo_slug == ModulosSistema.slug
+            ).filter(
+                ModVinculoModulo.cpf_hash == hash_limpo,
+                ModVinculoModulo.ativo == True,
+                ModulosSistema.ativo == True
+            ).all()
+
+            print(f"⚙️ [DIAGNÓSTICO HUB] Módulos que passaram pelo JOIN e estão ATIVOS: {[m.slug for m in modulos_usuario]}")
+
+            for modulo in modulos_usuario:
+                try:
+                    # 🎯 CORREÇÃO CIRÚRGICA: Injeta o rastro 'origem=hub' dinamicamente em todos os links gerados
+                    url_modulo = url_for(modulo.endpoint, origem='hub')
+
+                    modulos_visiveis.append({
+                        'nome': modulo.nome,
+                        'icone': modulo.icone,
+                        'descricao': modulo.descricao,
+                        'url': url_modulo,
+                        'cor': modulo.cor_hex
+                    })
+                except BuildError:
+                    print(f"⚠️ [DIAGNÓSTICO HUB] O módulo '{modulo.slug}' ia aparecer, mas FOI PULADO porque o endpoint '{modulo.endpoint}' está errado.")
+                    continue
+
+        # Ordena alfabeticamente e entrega para o template de CARDS
+        modulos_visiveis = sorted(modulos_visiveis, key=lambda k: k['nome'])
+        return render_template('hub_concentrador.html', modulos=modulos_visiveis)
+
+    # 2️⃣ CASO DE USO B: O USUÁRIO ESTÁ DESCONECTADO (Processa o Login do HUB)
+    if request.method == 'POST':
+        email = request.form.get('email')
+        senha = request.form.get('senha')
+
+        print(f"\n📥 [RASTREIO HUB] Tentativa de login recebida. Email enviado: {email}")
+
+        # 🔑 BUSCA UNIVERSAL: Procura o usuário na tabela global pelo e-mail
+        usuario = Usuario.query.filter_by(email=email).first()
+
+        if usuario:
+            print(f"👤 [RASTREIO HUB] Usuário localizado no Banco. ID: {usuario.id}")
+
+            # 🔐 TRATATIVA BCRYPT: Validação do hash de segurança padrão do seu ecossistema
+            try:
+                # Importa o mecanismo do Flask-Bcrypt ou da biblioteca padrão do seu venv
+                try:
+                    from feedin import bcrypt
+                    senha_valida = bcrypt.check_password_hash(usuario.senha, senha)
+                except ImportError:
+                    import bcrypt
+                    senha_valida = bcrypt.check_password_hash(usuario.senha.encode('utf-8'), senha.encode('utf-8'))
+
+                if senha_valida:
+                    print("✅ [RASTREIO HUB] Senha validada com sucesso via Bcrypt! Efetuando login_user...")
+                    login_user(usuario)
+                    print(f"🔄 [RASTREIO HUB] Redirecionando... Autenticado? {current_user.is_authenticated}")
+                    return redirect(url_for('central_hub'))
+                else:
+                    print("❌ [RASTREIO HUB] Senha incorreta de acordo com a validação Bcrypt.")
+                    flash('Credenciais inválidas para o ecossistema FeedIn!.', 'danger')
+
+            except Exception as e:
+                print(f"⚠️ [RASTREIO HUB] Erro ao processar a checagem do Bcrypt: {e}")
+                flash('Erro interno ao validar credenciais.', 'danger')
+        else:
+            print("❌ [RASTREIO HUB] Usuário não encontrado no banco de dados com esse e-mail.")
+            flash('Credenciais inválidas para o ecossistema FeedIn!.', 'danger')
+
+    # Passa a chave dinâmica 'csrf_token' gerada na hora para o HTML de login se proteger
+    return render_template('login_hub.html', csrf_token=generate_csrf())
+
+
+@current_app.context_processor
+def injetar_identidade_visual_modulo():
+    """
+    🎛️ INJETOR CENTRAL DE CONTEXTO: Roda a cada requisição e define, baseado na URL,
+    qual é a cor ativa que o layout pai (base_empresa, base_auth, etc) deve vestir.
+    """
+    cor_padrao = '#111827'
+    try:
+        caminho_limpo = request.path.strip('/')
+        # ✏️ CORREÇÃO DO DIGITO: Mudado de 'camino_limpo' para 'caminho_limpo'
+        primeiro_segmento = caminho_limpo.split('/')[0] if caminho_limpo else None
+
+        if primeiro_segmento:
+            modulo = ModulosSistema.query.filter_by(slug=primeiro_segmento, ativo=True).first()
+            if modulo:
+                return dict(cor_ativa_sistema=modulo.cor_hex)
+    except Exception as e:
+        print(f"⚠️ [CONTEXT PROCESSOR] Erro ao ler cor do módulo: {e}")
+
+    return dict(cor_ativa_sistema=cor_padrao)
+
+
+@current_app.context_processor
+def injetar_identidade_visual_modulo():
+    """
+    🎛️ INJETOR CENTRAL DE CONTEXTO: Roda a cada requisição e define, baseado na URL,
+    qual é a cor ativa que o layout pai (base_empresa, base_auth, etc) deve vestir.
+    """
+    cor_padrao = '#111827'
+    try:
+        caminho_limpo = request.path.strip('/')
+        primeiro_segmento = caminho_limpo.split('/')[0] if caminho_limpo else None
+
+        if primeiro_segmento:
+            modulo = ModulosSistema.query.filter_by(slug=primeiro_segmento, ativo=True).first()
+            if modulo:
+                return dict(cor_ativa_sistema=modulo.cor_hex)
+    except Exception as e:
+        print(f"⚠️ [CONTEXT PROCESSOR] Erro ao ler cor do módulo: {e}")
+
+    return dict(cor_ativa_sistema=cor_padrao)
+
+
+@current_app.context_processor
+def injetar_identidade_visual_modulo():
+    """
+    🎛️ INJETOR CENTRAL DE CONTEXTO: Roda a cada requisição e define, baseado na URL,
+    qual é a cor ativa que o layout pai (base_empresa, base_auth, etc) deve vestir.
+    """
+    cor_padrao = '#111827'
+    try:
+        caminho_limpo = request.path.strip('/')
+        primeiro_segmento = caminho_limpo.split('/')[0] if caminho_limpo else None
+
+        if primeiro_segmento:
+            modulo = ModulosSistema.query.filter_by(slug=primeiro_segmento, ativo=True).first()
+            if modulo:
+                return dict(cor_ativa_sistema=modulo.cor_hex)
+    except Exception as e:
+        print(f"⚠️ [CONTEXT PROCESSOR] Erro ao ler cor do módulo: {e}")
+
+    return dict(cor_ativa_sistema=cor_padrao)
+
+
+"""
+==========================================================================================
+📌 UTILITÁRIOS: AUTOMAÇÃO DE CALENDÁRIO CIVIL & HIGIENIZAÇÃO DE BANCO DE DADOS
+==========================================================================================
+Este arquivo contém as rotinas automáticas de sustentação do ecossistema de tempo.
+Sua principal função é manter a tabela 'cadastro_feriado' populada de forma enxuta,
+garantindo que o banco de dados não sofra com dados redundantes ou esquecimento humano.
+
+Estratégias Aplicadas:
+  - Consumo assíncrono/síncrono da BrasilAPI baseada em dados oficiais do governo.
+  - Varredura de anos passados para deleção automática (Higienização sob demanda).
+==========================================================================================
+"""
+
+def popular_feriados_ano_corrente(ano=None):
+    """
+    🚀 ALIMENTAÇÃO AUTOMÁTICA DE CALENDÁRIO VIA API PÚBLICA
+    --------------------------------------------------------------------------------------
+    Consome o endpoint da BrasilAPI para o ano vigente. Faz a conversão das strings de
+    data para objetos nativos 'Date' do Python e faz a checagem de existência atômica
+    para impedir a duplicação de dados nas tabelas do sistema.
+    """
+    if ano is None:
+        ano = datetime.now().year
+
+    url = f"https://brasilapi.com.br/api/feriados/v1/{ano}"
+
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            print(f"[-] Falha na comunicação com BrasilAPI. Status: {response.status_code}")
+            return False
+
+        feriados_api = response.json()
+        novos_registros = 0
+
+        for f in feriados_api:
+            data_formatada = datetime.strptime(f['date'], "%Y-%m-%d").date()
+            feriado_existe = CadastroFeriado.query.filter_by(data=data_formatada).first()
+
+            if not feriado_existe:
+                novo_feriado = CadastroFeriado(
+                    nome=f['name'],
+                    data=data_formatada,
+                    abrangencia='nacional',
+                    localidade='BR'
+                )
+                database.session.add(novo_feriado)
+                novos_registros += 1
+
+        if novos_registros > 0:
+            database.session.commit()
+            print(f"[+] Sucesso! {novos_registros} feriados nacionais de {ano} integrados ao banco.")
+        else:
+            print("[*] Calendário do ano vigente já estava totalmente atualizado.")
+
+        return True
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"[-] Erro crítico na rotina de automação de calendário: {str(e)}")
+        return False
+
+
+def limpar_feriados_antigos():
+    """
+    🧹 HIGIENIZAÇÃO DE BANCO DE DADOS (ANTI-ACÚMULO DE RESÍDUOS ELETRÔNICOS)
+    --------------------------------------------------------------------------------------
+    Executa a remoção completa de registros de feriados de anos que já se passaram.
+    Garante o cumprimento do padrão enxuto acordado na arquitetura do FeedIn.
+    """
+    ano_atual = datetime.now().year
+    try:
+        database.session.query(CadastroFeriado).filter(
+            CadastroFeriado.data < datetime(ano_atual, 1, 1).date()
+        ).delete()
+        database.session.commit()
+        print("[+] Higienização de calendário concluída. Banco limpo e otimizado.")
+    except Exception as e:
+        database.session.rollback()
+        print(f"[-] Falha ao expurgar resíduos de anos anteriores: {str(e)}")

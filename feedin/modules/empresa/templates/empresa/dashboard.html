@@ -1,0 +1,192 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block content %}
+<div class="container-fluid p-0 bg-light min-vh-100">
+    
+    {# NAVBAR DE CONTEXTO JURÍDICO & STATUS DO CLAIM #}
+    <div class="bg-dark text-white py-3 px-4 shadow-sm border-bottom border-primary">
+        <div class="container d-flex justify-content-between align-items-center flex-wrap g-3">
+            <div>
+                <h5 class="fw-bold m-0"><i class="bi bi-building shadow-sm text-primary me-2"></i>Gestão Empresarial: {{ empresa.nome }}</h5>
+                <span class="fs-7 text-muted">
+                    Estatuto do Processo: 
+                    {% if empresa.status_homologacao == 'aguardando_dados' %}
+                        <span class="badge bg-danger animate-pulse">Claim Pendente de Ativação</span>
+                    {% elif empresa.status_homologacao == 'analise' %}
+                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Aguardando Carimbo da Moderação</span>
+                    {% else %}
+                        <span class="badge bg-success"><i class="bi bi-patch-check-fill me-1"></i>Homologado & Ativo</span>
+                    {% endif %}
+                </span>
+            </div>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-sm btn-outline-light rounded-pill px-3"><i class="bi bi-grid-fill me-1"></i> Painel Geral</a>
+        </div>
+    </div>
+
+    <div class="container py-4">
+        <div class="row g-4">
+            
+            {# NAV LATERAL PADRONIZADA DO MÓDULO #}
+            <div class="col-12 col-md-4 col-lg-3">
+                <div class="card border-0 shadow-sm rounded-4 p-3 bg-white position-sticky" style="top: 20px;">
+                    <div class="nav flex-column nav-pills gap-2" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                        <button class="nav-link active text-start rounded-3 fw-bold py-2.5" id="tab-passo1" data-bs-toggle="pill" data-bs-target="#panel-passo1" type="button" role="tab">
+                            <i class="bi bi-card-text me-2"></i>1. Dados do Negócio
+                        </button>
+                        <button class="nav-link text-start rounded-3 fw-bold py-2.5" id="tab-passo2" data-bs-toggle="pill" data-bs-target="#panel-passo2" type="button" role="tab">
+                            <i class="bi bi-shield-check me-2"></i>2. Arquivos de Validação
+                        </button>
+                        <button class="nav-link text-start rounded-3 fw-bold py-2.5" id="tab-passo3" data-bs-toggle="pill" data-bs-target="#panel-passo3" type="button" role="tab">
+                            <i class="bi bi-palette2 me-2"></i>3. Estética do PWA
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {# ÁREA CENTRAL DE CONTEÚDO E ENTRADA DE INPUTS #}
+            <div class="col-12 col-md-8 col-lg-9">
+                <div class="tab-content card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white" id="v-pills-tabContent">
+                    
+                    {# BLOCO 1: DADOS BÁSICOS #}
+                    <div class="tab-pane fade show active" id="panel-passo1" role="tabpanel">
+                        <h4 class="fw-bold text-dark mb-1">Identidade do Estabelecimento</h4>
+                        <p class="text-muted small mb-4">Informações cadastrais sincronizadas com o banco.</p>
+                        <form onsubmit="persistirDadosFormulario(event, 'identidade')">
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Razão Comercial / Nome de Fachada</label>
+                                <input type="text" name="nome" class="form-control rounded-3" value="{{ empresa.nome }}" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm">Salvar Alterações</button>
+                        </form>
+                    </div>
+
+                    {# BLOCO 2: COMPLIANCE ARQUIVOS #}
+                    <div class="tab-pane fade" id="panel-passo2" role="tabpanel">
+                        <h4 class="fw-bold text-dark mb-1">Esteira de Documentação Segura</h4>
+                        <p class="text-muted small mb-4">Envie os comprovantes para disparar o gatilho de ativação do vínculo.</p>
+                        <div class="p-4 bg-light rounded-4 border border-dashed text-center">
+                            <i class="bi bi-cloud-arrow-up text-primary fs-1 d-block mb-2"></i>
+                            <label class="form-label small fw-bold">Documento Fiscal ou Contrato Social</label>
+                            <input type="file" onchange="executarUploadAssincrono(this, 'comprovante')" class="form-control form-control-sm mx-auto w-auto d-block mt-2">
+                        </div>
+                    </div>
+
+                    {# BLOCO 3: SELETOR DE CORES INTELIGENTE (Foco na Facilidade de UX) #}
+                    <div class="tab-pane fade" id="panel-passo3" role="tabpanel">
+                        <h4 class="fw-bold text-dark mb-1">Identidade Visual Simplificada</h4>
+                        <p class="text-muted small mb-4">Escolha as cores que mais se aproximam do seu logotipo. **Não precisa saber códigos ou Hexadecimais.**</p>
+                        
+                        <form onsubmit="persistirDadosFormulario(event, 'pwa')">
+                            <label class="form-label small fw-bold text-secondary mb-2">Sugestões de Combinações Recomendadas</label>
+                            <div class="row g-2 mb-4">
+                                <div class="col-6 col-md-4">
+                                    <button type="button" onclick="aplicarPaletaSugestao('#1E3A8A', '#3B82F6')" class="btn btn-outline-light w-100 p-2 text-start rounded-3 border d-flex align-items-center justify-content-between bg-white text-dark">
+                                        <span class="fs-7 fw-bold">Corporativo Blue</span>
+                                        <div class="d-flex gap-1">
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#1E3A8A;"></div>
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#3B82F6;"></div>
+                                        </div>
+                                    </button>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <button type="button" onclick="aplicarPaletaSugestao('#991B1B', '#F59E0B')" class="btn btn-outline-light w-100 p-2 text-start rounded-3 border d-flex align-items-center justify-content-between bg-white text-dark">
+                                        <span class="fs-7 fw-bold">Alimentação / Gastro</span>
+                                        <div class="d-flex gap-1">
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#991B1B;"></div>
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#F59E0B;"></div>
+                                        </div>
+                                    </button>
+                                </div>
+                                <div class="col-6 col-md-4">
+                                    <button type="button" onclick="aplicarPaletaSugestao('#065F46', '#10B981')" class="btn btn-outline-light w-100 p-2 text-start rounded-3 border d-flex align-items-center justify-content-between bg-white text-dark">
+                                        <span class="fs-7 fw-bold">Sustentável / Verde</span>
+                                        <div class="d-flex gap-1">
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#065F46;"></div>
+                                            <div class="rounded-circle" style="width:15px; height:15px; background:#10B981;"></div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 p-3 bg-light rounded-4 border mb-4">
+                                <div class="col-6">
+                                    <label class="form-label small fw-bold">Cor Principal da Marca</label>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="color" id="picker-primaria" class="form-control form-control-color border-0 rounded-circle shadow-sm" style="width: 45px; height: 45px;" value="{{ empresa.cor_primaria or '#111827' }}" oninput="sincronizarTextoHex('picker-primaria', 'hex-primaria')">
+                                        <div>
+                                            <span class="fs-7 text-muted d-block">Clique na bola para escolher</span>
+                                            <input type="text" name="cor_primaria" id="hex-primaria" class="form-control form-control-sm bg-white border-0 fw-bold fs-7 text-center text-muted" style="width: 90px;" value="{{ empresa.cor_primaria or '#111827' }}" readonly>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small fw-bold">Cor de Destaque (Botões)</label>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="color" id="picker-secundaria" class="form-control form-control-color border-0 rounded-circle shadow-sm" style="width: 45px; height: 45px;" value="{{ empresa.cor_secundaria or '#6B7280' }}" oninput="sincronizarTextoHex('picker-secundaria', 'hex-secundaria')">
+                                        <div>
+                                            <span class="fs-7 text-muted d-block">Clique na bola para escolher</span>
+                                            <input type="text" name="cor_secundaria" id="hex-secundaria" class="form-control form-control-sm bg-white border-0 fw-bold fs-7 text-center text-muted" style="width: 90px;" value="{{ empresa.cor_secundaria or '#6B7280' }}" readonly>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm">Confirmar Identidade Visual</button>
+                        </form>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+// 🎨 ENGINE DE ABSTRAÇÃO DE CORES PARA O EMPREENDEDOR
+function sincronizarTextoHex(pickerId, textId) {
+    const picker = document.getElementById(pickerId);
+    const textInput = document.getElementById(textId);
+    textInput.value = picker.value.toUpperCase();
+}
+
+function aplicarPaletaSugestao(corPrimaria, corSecundaria) {
+    document.getElementById('picker-primaria').value = corPrimaria;
+    document.getElementById('hex-primaria').value = corPrimaria.toUpperCase();
+    
+    document.getElementById('picker-secundaria').value = corSecundaria;
+    document.getElementById('hex-secundaria').value = corSecundaria.toUpperCase();
+}
+
+// 🌐 SINC ASSÍNCRONO PARCIAL
+function persistirDadosFormulario(event, target) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    formData.append('target_block', target);
+
+    fetch('/empresa/api/salvar-input', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => alert(data.message))
+    .catch(err => console.error(err));
+}
+
+function ejecutarUploadAssincrono(input, type) {
+    if (!input.files.length) return;
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+    formData.append('file_type', type);
+
+    fetch('/empresa/api/salvar-input', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => { alert(data.message); location.reload(); })
+    .catch(err => console.error(err));
+}
+</script>
+{% endblock %}

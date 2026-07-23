@@ -1,0 +1,52 @@
+{% extends "base_agenda.html" %}
+
+{% block title %}Senha de Equipe - FeedIn{% endblock %}
+
+{% block content %}
+<div class="container py-5 px-4" style="max-width: 480px; font-family: system-ui, -apple-system, sans-serif;">
+    
+    <div class="text-center mb-5 animate__animated animate__fadeIn">
+        <div class="bg-dark text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow" style="width: 72px; height: 72px; background: linear-gradient(135deg, #212529 0%, #343a40 100%);">
+            <i class="bi bi-shield-lock-fill fs-2 text-warning"></i>
+        </div>
+        <h4 class="fw-bold text-dark m-0">Acesso Interno</h4>
+        <p class="text-muted small mt-1">Olá, <span class="text-dark fw-semibold">{{ usuario.nome }}</span>. Confirme sua senha de equipe.</p>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <form action="{{ url_for('agenda.desafiar_senha_equipe', usuario_id=usuario.id) }}" method="POST">
+            
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="mb-4">
+                <label for="senha_equipe" class="form-label fw-bold text-secondary small mb-2">Sua Senha do Portal:</label>
+                <div class="input-group bg-light rounded-3 p-1 border border-light-subtle align-items-center">
+                    <span class="input-group-text bg-transparent border-0 text-muted ps-2 pe-1"><i class="bi bi-key-fill fs-5"></i></span>
+                    <input type="password" id="senha_equipe" name="senha_equipe" class="form-control bg-transparent border-0 shadow-none py-2" placeholder="••••••••" required autofocus>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-dark w-100 rounded-pill py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2 transition-hover">
+                Confirmar Entrar <i class="bi bi-box-arrow-in-right"></i>
+            </button>
+        </form>
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('agenda.identificar_usuario') }}" class="text-decoration-none text-muted small">
+            <i class="bi bi-arrow-left me-1"></i> Entrar com outro e-mail
+        </a>
+    </div>
+
+</div>
+
+<style>
+    .transition-hover {
+        transition: all 0.2s ease-in-out;
+    }
+    .transition-hover:active {
+        transform: scale(0.98);
+        filter: brightness(1.2);
+    }
+</style>
+{% endblock %}

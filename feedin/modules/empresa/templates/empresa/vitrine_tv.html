@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canal FeedIn - {{ ese_empresa.nome }}</title>
+
+    <!-- Bootstrap 5 & Ícones -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+
+    <!-- Google Fonts - Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        html, body {
+            background-color: #0c0c0c !important;
+            color: #f8f9fa !important;
+            font-family: 'Inter', sans-serif;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        .canal-container {
+            height: 100vh;
+            padding: 1.5rem;
+        }
+
+        /* 📺 DIMENSIONAMENTO EXATO 70% / 30% */
+        .col-esquerda-70 {
+            width: 70% !important;
+            height: 100%;
+        }
+
+        .col-direita-30 {
+            width: 30% !important;
+            height: 100%;
+        }
+
+        /* HUB MULTIMÍDIA (Publicações internas + Propaganda FeedIn) */
+        .hub-multimidia {
+            height: 60%; /* Ganhou mais destaque vertical */
+            background: #000000;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid #222;
+        }
+
+        /* PAINEL DA AGENDA VIVA */
+        .painel-agenda-viva {
+            height: calc(40% - 1.5rem);
+            background: #141414;
+            border-radius: 20px;
+            padding: 1.5rem;
+            border: 1px solid #222;
+        }
+
+        /* 📊 TABELA FIXA DE PREÇOS (30%) */
+        .painel-precos-fixo {
+            background: #111111;
+            border-radius: 24px;
+            padding: 1.8rem;
+            height: 100%;
+            border: 1px solid #2d2d2d;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .scroll-precos {
+            height: calc(100vh - 390px); /* Tabela se adapta perfeitamente ao espaço */
+            overflow-y: hidden;
+        }
+
+        .titulo-grupo {
+            color: #ff334b;
+            border-bottom: 2px solid #333333;
+            letter-spacing: 1px;
+            font-size: 1.4rem;
+        }
+
+        .servico-linha {
+            font-size: 1.25rem;
+            border-bottom: 1px dashed #222;
+            padding: 8px 0;
+        }
+
+        .preco-destaque {
+            color: #00e676;
+            font-weight: 800;
+        }
+
+        /* 📱 DUPLO QR CODE NO RODAPÉ */
+        .qr-box {
+            background: #ffffff;
+            padding: 8px;
+            border-radius: 14px;
+            display: inline-block;
+            border: 3px solid #333;
+        }
+        .qr-box.agenda { border-color: #ff334b; }
+        .qr-box.pagar { border-color: #00e676; }
+
+        .tag-status-agenda {
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="canal-container container-fluid">
+    <div class="row h-100 g-4 flex-nowrap">
+
+        <!-- 📺 LADO ESQUERDA: HUB DINÂMICO (70%) -->
+        <div class="col-esquerda-70 d-flex flex-column gap-4">
+
+            <!-- Player de Vídeo ou Carrossel de Cards FeedIn -->
+            <div class="hub-multimidia position-relative">
+                <!-- Mantive o player exemplo, mas aqui aplicaremos o loop de cards de imagens locais do banco -->
+                <iframe width="100%" height="100%"
+                        src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&loop=1&playlist=dQw4w9WgXcQ&controls=0&showinfo=0"
+                        frameborder="0" allow="autoplay; encrypted-media" style="object-fit: cover;">
+                </iframe>
+            </div>
+
+            <!-- Módulo da Agenda Viva (Próximos Horários) -->
+            <div class="painel-agenda-viva">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="m-0 text-white fw-bold"><i class="bi bi-calendar3 text-danger me-2"></i> Horários da Agenda</h4>
+                    <span class="badge bg-danger font-monospace text-uppercase">Painel Ativo</span>
+                </div>
+
+                <div class="row g-2">
+                    <!-- Exemplo 1 -->
+                    <div class="col-12 d-flex justify-content-between align-items-center p-2 rounded-3 bg-dark bg-opacity-50 border border-secondary border-opacity-10">
+                        <div class="d-flex align-items-center gap-3">
+                            <strong class="fs-5 text-white-50 font-monospace">14:30</strong>
+                            <span class="fs-5 fw-semibold text-white">Carlos Cesar O.</span>
+                        </div>
+                        <span class="tag-status-agenda bg-secondary bg-opacity-20 text-light text-uppercase">Em Atendimento</span>
+                    </div>
+
+                    <!-- Exemplo 2 -->
+                    <div class="col-12 d-flex justify-content-between align-items-center p-2 rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25">
+                        <div class="d-flex align-items-center gap-3">
+                            <strong class="fs-5 text-danger font-monospace">15:15</strong>
+                            <span class="fs-5 text-white-50">Vaga Disponível</span>
+                        </div>
+                        <span class="tag-status-agenda bg-danger text-white text-uppercase"><i class="bi bi-phone me-1"></i> Agendar</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 📊 LADO DIREITO: MODELO DE PREÇOS FIXO (30%) -->
+        <div class="col-dash col-top col-direita-30">
+            <div class="painel-precos-fixo">
+
+                <!-- Cabeçalho Curto -->
+                <div class="d-flex justify-content-between align-items-center border-bottom border-secondary border-opacity-25 pb-2">
+                    <div>
+                        <h2 class="fw-black m-0 text-white fs-4" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ ese_empresa.nome }}</h2>
+                        <span class="text-white-50 small font-monospace" style="font-size: 0.75rem;">TABELA OFICIAL</span>
+                    </div>
+                    {% if ese_empresa.logo %}
+                    <img src="/empresa/static/uploads/empresas/{{ ese_empresa.id }}/branding/{{ ese_empresa.logo }}" alt="Logo" style="max-height: 40px;">
+                    {% endif %}
+                </div>
+
+                <!-- Lista de Preços Com Rolagem Automática Controlada -->
+                <div class="scroll-precos my-2" id="listaServicos">
+                    {% for grupo in grupos %}
+                    <div class="grupo-bloco mb-3">
+                        <h3 class="titulo-grupo fw-bold text-uppercase pb-1 mb-1">{{ grupo.nome_grupo }}</h3>
+                        <div class="d-flex flex-column">
+                            {% for servico in grupo.precos %}
+                            <div class="d-flex justify-content-between align-items-center servico-linha">
+                                <span class="fw-semibold text-white-50" style="font-size: 1.15rem;">{{ servico.servico_taxonomia.nome }}</span>
+                                <span class="preco-destaque" style="font-size: 1.2rem;">R$ {{ "%.2f"|format(servico.novo_valor) }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- 📱 PAINEL DE CHECKOUT: DUPLO QR CODE -->
+                <div class="border-top border-secondary border-opacity-25 pt-2">
+                    <div class="row g-1 text-center">
+
+                        <!-- QR Code 1: Agendamento -->
+                        <div class="col-6 border-end border-secondary border-opacity-25 pe-1">
+                            <div class="qr-box agenda mb-1">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={{ url_checkout_balcao|urlencode }}" style="width: 85px; height: 85px;">
+                            </div>
+                            <strong class="d-block text-white" style="font-size: 0.8rem;"><i class="bi bi-calendar-plus text-danger"></i> 1. AGENDAR</strong>
+                            <small class="text-white-50 d-block" style="font-size: 0.7rem; line-height: 1.1;">Ver agenda e horários</small>
+                        </div>
+
+                        <!-- QR Code 2: Checkout de Balcão -->
+                        <div class="col-6 ps-1">
+                            <div class="qr-box pagar mb-1">
+                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={{ url_checkout_balcao|urlencode }}" style="width: 85px; height: 85px;">
+                            </div>
+                            <strong class="d-block text-white" style="font-size: 0.8rem;"><i class="bi bi-wallet2 text-success"></i> 2. PAGAR CONTA</strong>
+                            <small class="text-white-50 d-block" style="font-size: 0.7rem; line-height: 1.1;">Pague o comando atual</small>
+                        </div>
+
+                    </div>
+
+                    <!-- Propaganda & CDC Casados no Rodapé -->
+                    <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-secondary border-opacity-10 text-muted" style="font-size: 0.7rem;">
+                        <span><i class="bi bi-shield-check text-success"></i> Notas CDC.</span>
+                        <span class="font-monospace text-uppercase">Powered by <strong>FeedIn</strong></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// Lógica de sincronização com o banco de dados
+let timestampOriginal = "{{ data_atualizacao.strftime('%Y-%m-%d %H:%M:%S') }}";
+setInterval(function() {
+    fetch("{{ url_for('empresa.verificar_atualizacao_tabela', empresa_id=ese_empresa.id) }}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.timestamp_atual && data.timestamp_atual !== timestampOriginal) window.location.reload();
+        }).catch(err => console.error(err));
+}, 15000);
+
+// Rolagem automática
+window.addEventListener('load', function() {
+    const container = document.getElementById('listaServicos');
+    if (container.scrollHeight > container.clientHeight) {
+        let velocidade = 1; let delayPasso = 50; let direcao = 1; let operacaoAtiva = true;
+        setInterval(function() {
+            if (!operacaoAtiva) return;
+            if (direcao === 1) {
+                container.scrollTop += velocidade;
+                if (container.scrollTop >= (container.scrollHeight - container.clientHeight)) {
+                    operacaoAtiva = false; setTimeout(() => { direcao = -1; operacaoAtiva = true; }, 4000);
+                }
+            } else {
+                container.scrollTop -= velocidade * 2;
+                if (container.scrollTop <= 0) {
+                    operacaoAtiva = false; setTimeout(() => { direcao = 1; operacaoAtiva = true; }, 4000);
+                }
+            }
+        }, delayPasso);
+    }
+});
+</script>
+
+</body>
+</html>

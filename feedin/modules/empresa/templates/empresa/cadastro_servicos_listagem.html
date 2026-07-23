@@ -1,0 +1,186 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Serviços Oferecidos{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .resultado-busca-item {
+        cursor: pointer;
+        transition: background 0.15s ease;
+    }
+    .resultado-busca-item:hover {
+        background-color: #f8f9fa;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 600px;">
+
+        {# 🔙 VOLTAR AO MENU (Botão Escuro Padronizado) #}
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('empresa.menu_servicos_precos', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Menu">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="badge bg-danger-subtle text-danger rounded-pill fw-bold" style="font-size: 0.65rem;">Etapa 1 de 3</span>
+        </div>
+
+        {# 📝 FORMULÁRIO DE CADASTRO #}
+        <div class="bg-white p-3.5 rounded-4 shadow-sm border border-secondary-subtle mb-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="bi bi-plus-circle-fill text-danger me-2"></i>Adicionar Serviço Oferecido</h6>
+
+            <form action="{{ url_for('empresa.salvar_servico_empresa', empresa_id=ese_empresa.id) }}" method="POST" id="formServico">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {# BUSCA INTELIGENTE TAXONOMIA #}
+                <div class="mb-3 position-relative">
+                    <label class="form-label small fw-semibold text-dark mb-1">Buscar ou Criar Nome do Serviço</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" id="campoBuscaTaxonomia" name="termo_servico" class="form-control border border-secondary-subtle border-start-0" placeholder="Ex: Corte feminino, Barboterapia..." autocomplete="off" required>
+                    </div>
+                    {# container para exibir os resultados do autocomplete em tempo real #}
+                    <div id="resultadosAutocomplete" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
+                </div>
+
+                {# DESCRIÇÃO PERSONALIZADA DO SERVIÇO #}
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-dark mb-1">Descrição do Serviço (Opcional)</label>
+                    <textarea name="descricao_servico" class="form-control border border-secondary-subtle" rows="2" placeholder="Ex: Lavagem com shampoo especial, secagem estruturada e finalização." style="font-size: 0.85rem;"></textarea>
+                </div>
+
+                {# DURAÇÃO PADRÃO #}
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-dark mb-1">Tempo de Duração Estimado</label>
+                    <div class="input-group" style="max-width: 150px;">
+                        <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-clock"></i></span>
+                        <input type="text" name="tempo_duracao" class="form-control border border-secondary-subtle border-start-0 text-center fw-bold" placeholder="00:30" v-maska data-maska="##:##" value="00:30" required>
+                    </div>
+                    <div class="form-text" style="font-size: 0.65rem;">Formato HH:mm (Horas e minutos).</div>
+                </div>
+
+                <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold py-2 mt-2" style="font-size: 0.85rem;">
+                    <i class="bi bi-check2-circle me-1"></i> Salvar e Adicionar à Grade
+                </button>
+            </form>
+        </div>
+
+        {# 📋 LISTAGEM DE SERVIÇOS JÁ ATRIBUÍDOS #}
+        <div class="bg-white p-3.5 rounded-4 shadow-sm border border-secondary-subtle">
+            <h6 class="fw-bold text-dark mb-3 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-grid-3x3-gap-fill text-danger me-2"></i>Sua Grade de Serviços</span>
+                <span class="badge bg-light text-dark border rounded-pill small fw-normal" style="font-size: 0.65rem;">{{ servicos_cadastrados|length }} cadastrado(s)</span>
+            </h6>
+
+            {% if servicos_cadastrados %}
+                <div class="d-flex flex-column gap-2">
+                    {% for servico in servicos_cadastrados %}
+                        <div class="p-3 border border-secondary-subtle rounded-4 d-flex justify-content-between align-items-center bg-light-subtle">
+                            <div class="pe-2">
+                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">{{ servico.servico_taxonomia.nome }}</h6>
+                                {% if servico.descricao_servico %}
+                                    <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">{{ servico.descricao_servico }}</p>
+                                {% endif %}
+                                <div class="mt-1 d-flex align-items-center gap-2">
+                                    <span class="badge bg-dark-subtle text-dark-emphasis rounded-pill" style="font-size: 0.6rem;"><i class="bi bi-clock me-1"></i>{{ servico.tempo_duracao }}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <form action="{{ url_for('empresa.excluir_servico_empresa', empresa_id=ese_empresa.id, servico_id=servico.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover este serviço oferecido?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-circle border-0 p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-trash3-fill"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-journal-x fs-2 d-block mb-2"></i>
+                    <span class="small">Nenhum serviço cadastrado ainda. Use o buscador acima para começar.</span>
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+{# 🛠️ SCRIPT DE AUTOCOMPLETE DINÂMICO PARA A TAXONOMIA #}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const campoBusca = document.getElementById("campoBuscaTaxonomia");
+    const containerResultados = document.getElementById("resultadosAutocomplete");
+
+    // Injeta a URL base gerada dinamicamente pelo Flask
+    const urlBuscaBase = "{{ url_for('empresa.api_buscar_taxonomia') }}";
+
+    campoBusca.addEventListener("input", function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            containerResultados.classList.add("d-none");
+            containerResultados.innerHTML = "";
+            return;
+        }
+
+        // Faz a requisição na URL correta resolvida pela Blueprint do Flask
+        fetch(`${urlBuscaBase}?q=${encodeURIComponent(query)}&categoria=Serviço`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Erro na requisição de busca");
+                }
+                return response.json();
+            })
+            .then(data => {
+                containerResultados.innerHTML = "";
+                if (data.length > 0) {
+                    data.forEach(item => {
+                        const div = document.createElement("div");
+                        div.className = "list-group-item list-group-item-action resultado-busca-item py-2 px-3 small border-0 border-bottom bg-white";
+                        div.innerHTML = `<i class="bi bi-tag-fill text-muted me-2"></i><strong>${item.nome}</strong>`;
+                        div.addEventListener("click", function() {
+                            campoBusca.value = item.nome;
+                            containerResultados.classList.add("d-none");
+                        });
+                        containerResultados.appendChild(div);
+                    });
+                } else {
+                    const div = document.createElement("div");
+                    div.className = "list-group-item text-muted py-2 px-3 small border-0 bg-white";
+                    div.innerHTML = `<i class="bi bi-plus-circle text-danger me-2"></i>Criar novo termo: "<strong>${query}</strong>"`;
+                    div.addEventListener("click", function() {
+                        campoBusca.value = query;
+                        containerResultados.classList.add("d-none");
+                    });
+                    containerResultados.appendChild(div);
+                }
+                containerResultados.classList.remove("d-none");
+            })
+            .catch(error => {
+                console.error("Erro no Autocomplete:", error);
+            });
+    });
+
+    // Fecha a lista ao clicar fora do campo de busca
+    document.addEventListener("click", function(e) {
+        if (e.target !== campoBusca) {
+            containerResultados.classList.add("d-none");
+        }
+    });
+});
+</script>
+{% endblock %}

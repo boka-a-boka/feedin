@@ -1,0 +1,89 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Estúdio de Design - {{ local.nome }}{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white p-6 rounded-2xl shadow-md my-6">
+    <div class="border-b pb-4 mb-6">
+        <h1 class="text-xl font-bold text-gray-900">Estúdio de Design</h1>
+        <p class="text-sm text-gray-500">Defina a identidade visual e a ordem das informações na sua vitrine.</p>
+    </div>
+
+    <form action="{{ url_for('empresa.customizar_layout_avancado', empresa_id=local.id) }}" method="POST" class="space-y-6">
+        {# 🛡️ GATILHO DE COMPLIANCE E SEGURANÇA CONTRA FRAUDE (CSRF) #}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <div>
+            <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3">🎨 Paleta de Cores do PWA</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Cor Principal (Botões e Destaques)</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="picker_primaria" name="cor_primaria" value="{{ local.cor_primaria if local.cor_primaria else '#3b82f6' }}" class="h-10 w-12 rounded border cursor-pointer">
+                        <span id="hex_primaria" class="text-xs font-mono text-gray-600">{{ local.cor_primaria if local.cor_primaria else '#3b82f6' }}</span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Cor Secundária (Cabeçalhos e Menus)</label>
+                    <div class="flex items-center space-x-2">
+                        <input type="color" id="picker_secundaria" name="cor_secundaria" value="{{ local.cor_secundaria if local.cor_secundaria else '#1e3a8a' }}" class="h-10 w-12 rounded border cursor-pointer">
+                        <span id="hex_secundaria" class="text-xs font-mono text-gray-600">{{ local.cor_secundaria if local.cor_secundaria else '#1e3a8a' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <hr class="border-gray-100">
+
+        <div>
+            <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3">📐 Alinhamento da Logomarca</h3>
+            <div class="grid grid-cols-3 gap-2">
+                <label class="border p-3 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50">
+                    <input type="radio" name="alinhamento_logo" value="esquerda" {% if local.alinhamento_logo != 'centro' and local.alinhamento_logo != 'oculto' %}checked{% endif %} class="mb-1">
+                    <span class="text-xs font-medium text-gray-700">Esquerda</span>
+                </label>
+                <label class="border p-3 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50">
+                    <input type="radio" name="alinhamento_logo" value="centro" {% if local.alinhamento_logo == 'centro' %}checked{% endif %} class="mb-1">
+                    <span class="text-xs font-medium text-gray-700">Centralizado</span>
+                </label>
+                <label class="border p-3 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50">
+                    <input type="radio" name="alinhamento_logo" value="oculto" {% if local.alinhamento_logo == 'oculto' %}checked{% endif %} class="mb-1">
+                    <span class="text-xs font-medium text-gray-700">Ocultar</span>
+                </label>
+            </div>
+        </div>
+
+        <hr class="border-gray-100">
+
+        <div>
+            <h3 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3">📑 Arquitetura da Página</h3>
+            <label class="block text-xs text-gray-500 mb-2">Qual bloco de conteúdo deve aparecer em primeiro destaque para os clientes?</label>
+            <select name="exibir_historia_primeiro" class="w-full p-3 border border-gray-200 rounded-xl outline-none text-sm bg-white focus:ring-2 focus:ring-blue-500">
+                <option value="0" {% if not local.exibir_historia_primeiro %}selected{% endif %}>🚀 Bloco Operacional (Agendamentos e Serviços Diretos)</option>
+                <option value="1" {% if local.exibir_historia_primeiro %}selected{% endif %}>📖 Bloco de Memória Social (Nossa História e Fundação)</option>
+            </select>
+        </div>
+
+        <div class="pt-4 flex items-center justify-end space-x-3">
+            <a href="{{ url_for('empresa.vitrine_institucional', empresa_id=local.id) }}"
+               class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition">
+                Cancelar
+            </a>
+            <button type="submit"
+                    class="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-xl transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 outline-none">
+                Aplicar Design
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Atualiza dinamicamente o texto em formato HEX ao arrastar a cor (Melhoria de UX)
+    document.getElementById('picker_primaria').addEventListener('input', function(e) {
+        document.getElementById('hex_primaria').innerText = e.target.value;
+    });
+    document.getElementById('picker_secundaria').addEventListener('input', function(e) {
+        document.getElementById('hex_secundaria').innerText = e.target.value;
+    });
+</script>
+{% endblock %}

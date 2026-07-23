@@ -1,0 +1,367 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Escala Semanal do Colaborador{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .bloco-dia {
+        transition: background-color 0.2s ease;
+    }
+    .bloco-dia:hover {
+        background-color: #fcfbfa;
+    }
+    .input-fora-limite {
+        border-color: #dc3545 !important;
+        background-color: #fff8f8 !important;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 position-relative">
+
+    {# 🎯 BOTÃO VOLTAR PADRÃO #}
+    <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+       class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow"
+       style="width: 40px; height: 40px; background-color: #212529; position: absolute; top: 24px; left: 24px; z-index: 1050;"
+       title="Voltar">
+        <i class="bi bi-arrow-left text-white fs-5"></i>
+    </a>
+
+    <div class="container py-3" style="max-width: 620px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 🏢 TOPO DE IDENTIFICAÇÃO + RESUMO COMPACTO DA GRADE DA EMPRESA #}
+        <div class="bg-white p-3.5 rounded-4 shadow-sm border border-2 border-gray-300 mb-3" style="margin-top: 45px;">
+            <div class="text-center border-bottom pb-2 mb-2">
+                <h5 class="fw-bold text-dark m-0">{{ ese_empresa.nome }}</h5>
+                <p class="text-muted small m-0 mt-1">
+                    Configuração de Escala — <strong class="text-dark">{{ nome_colaborador }}</strong>
+                </p>
+            </div>
+
+            {# ⏱️ Card Compacto com os Limites do Estabelecimento #}
+            <div class="bg-light p-2.5 rounded-3 border">
+                <div class="d-flex align-items-center justify-content-between cursor-pointer"
+                     data-bs-toggle="collapse" data-bs-target="#collapseGradeEmpresa" aria-expanded="false">
+                    <span class="fw-semibold text-secondary small" style="font-size: 0.78rem;">
+                        <i class="bi bi-shop me-1 text-primary"></i> Teto Operacional / Grade Comercial da Empresa
+                    </span>
+                    <i class="bi bi-chevron-down small text-muted"></i>
+                </div>
+
+                <div class="collapse show mt-2 pt-2 border-top" id="collapseGradeEmpresa">
+                    <div class="row g-1 text-center" style="font-size: 0.72rem;">
+                        {% for dia_id in [1, 2, 3, 4, 5, 6, 0] %}
+                            {% set lim = grade_empresa_map.get(dia_id) %}
+                            <div class="col">
+                                <div class="p-1 rounded {% if lim %}bg-white border{% else %}bg-gray-200 text-muted{% endif %}">
+                                    <strong class="d-block text-dark">{{ DIAS_SEMANA_SIGLA.get(dia_id) }}</strong>
+                                    {% if lim %}
+                                        <span class="text-success fw-semibold">{{ lim.abertura.strftime('%H:%M') }}</span><br>
+                                        <span class="text-danger fw-semibold">{{ lim.fechamento.strftime('%H:%M') }}</span>
+                                    {% else %}
+                                        <span class="text-muted">Fechado</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ⏱️ CARD PRINCIPAL DA JORNADA #}
+        <div class="card shadow-sm border-2 border-gray-300 rounded-4 p-4 bg-white">
+            <div class="d-flex align-items-center mb-4 pb-3 border-bottom">
+                <div class="p-2.5 bg-primary-subtle text-primary rounded-3 me-3">
+                    <i class="bi bi-calendar-week fs-4"></i>
+                </div>
+                <div>
+                    <h5 class="fw-bold m-0 text-dark" style="font-size: 1.1rem;">Escala Semanal de Presença</h5>
+                    <p class="text-muted m-0 small" style="font-size: 0.78rem;">
+                        Informe os dias e horários reais em que este colaborador estará disponível na unidade.
+                    </p>
+                </div>
+            </div>
+
+            <form method="POST" id="formEscala" onsubmit="return validarFormularioAntesDeEnviar(event)">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                {# 📅 MATRIZ DE DIAS #}
+                <div class="border rounded-4 overflow-hidden bg-white mb-4">
+                    {% for dia_id in [1, 2, 3, 4, 5, 6, 0] %}
+                        {% set dia_nome = DIAS_SEMANA.get(dia_id) %}
+                        {% set registro = escala_map.get(dia_id) %}
+                        {% set lim_empresa = grade_empresa_map.get(dia_id) %}
+                        {% set empresa_abre = true if lim_empresa else false %}
+                        {% set ativo = true if (registro and empresa_abre) else false %}
+
+                        <div class="bloco-dia p-3 {% if not loop.last %}border-bottom{% endif %} {% if not empresa_abre %}bg-light opacity-75{% endif %}"
+                             id="bloco_dia_{{ dia_id }}"
+                             data-empresa-abre="{{ '1' if empresa_abre else '0' }}"
+                             data-limite-min="{{ lim_empresa.abertura.strftime('%H:%M') if lim_empresa else '' }}"
+                             data-limite-max="{{ lim_empresa.fechamento.strftime('%H:%M') if lim_empresa else '' }}">
+
+                            {# LINHA 1: Switch, Nome do Dia e Status/Atalhos #}
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="form-check form-switch me-2">
+                                        <input class="form-check-input" type="checkbox" role="switch"
+                                               id="switch_{{ dia_id }}" name="trabalha_{{ dia_id }}" value="1"
+                                               {% if ativo %}checked{% endif %}
+                                               {% if not empresa_abre %}disabled{% endif %}
+                                               onchange="toggleInputs('{{ dia_id }}')">
+                                    </div>
+                                    <label class="fw-bold text-dark mb-0" style="font-size: 0.9rem;" for="switch_{{ dia_id }}">
+                                        {{ dia_nome }}
+                                    </label>
+
+                                    {% if not empresa_abre %}
+                                        <span class="badge bg-secondary ms-2" style="font-size: 0.65rem;">Empresa Fechada</span>
+                                    {% endif %}
+                                </div>
+
+                                {% if dia_id == 1 and empresa_abre %}
+                                    <button type="button" class="btn btn-link text-decoration-none p-0 text-primary"
+                                            style="font-size: 0.72rem; font-weight: 600;"
+                                            onclick="replicarSegunda()">
+                                        <i class="bi bi-copy me-1"></i>Replicar p/ Dias Úteis
+                                    </button>
+                                {% endif %}
+                            </div>
+
+                            {# LINHAS DE DIGITAÇÃO DE HORÁRIO REAL #}
+                            {% if empresa_abre %}
+                                <div id="inputs_dia_{{ dia_id }}" class="ps-2 {% if not ativo %}d-none{% endif %}">
+
+                                    {# Parte 1: Entrada -> Almoço #}
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-sm p-0 d-flex align-items-center justify-content-center btn-limpar-faixa"
+                                                style="width: 26px; height: 26px; border-radius: 6px;"
+                                                title="Limpar 1º Período"
+                                                onclick="limparFaixa('{{ dia_id }}', 'p1')">
+                                            <i class="bi bi-trash" style="font-size: 0.8rem;"></i>
+                                        </button>
+
+                                        <span class="text-muted small fw-semibold" style="width: 55px; font-size: 0.75rem;">Parte 1:</span>
+
+                                        <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none input-horario"
+                                               style="width: 95px; font-size: 0.82rem;"
+                                               id="p1_entrada_{{ dia_id }}" name="p1_entrada_{{ dia_id }}"
+                                               value="{{ registro.p1_entrada if registro else '08:00' }}"
+                                               {% if not ativo %}disabled{% endif %}
+                                               onchange="validarHorarioDia('{{ dia_id }}')">
+
+                                        <span class="text-muted small" style="font-size: 0.75rem;">até</span>
+
+                                        <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none input-horario"
+                                               style="width: 95px; font-size: 0.82rem;"
+                                               id="p1_saida_{{ dia_id }}" name="p1_saida_{{ dia_id }}"
+                                               value="{{ registro.p1_saida if registro else '12:00' }}"
+                                               {% if not ativo %}disabled{% endif %}
+                                               onchange="validarHorarioDia('{{ dia_id }}')">
+                                    </div>
+
+                                    {# Parte 2: Volta -> Saída #}
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button"
+                                                class="btn btn-outline-danger btn-sm p-0 d-flex align-items-center justify-content-center btn-limpar-faixa"
+                                                style="width: 26px; height: 26px; border-radius: 6px;"
+                                                title="Limpar 2º Período"
+                                                onclick="limparFaixa('{{ dia_id }}', 'p2')">
+                                            <i class="bi bi-trash" style="font-size: 0.8rem;"></i>
+                                        </button>
+
+                                        <span class="text-muted small fw-semibold" style="width: 55px; font-size: 0.75rem;">Parte 2:</span>
+
+                                        <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none input-horario"
+                                               style="width: 95px; font-size: 0.82rem;"
+                                               id="p2_entrada_{{ dia_id }}" name="p2_entrada_{{ dia_id }}"
+                                               value="{{ registro.p2_entrada if registro else '13:00' }}"
+                                               {% if not ativo %}disabled{% endif %}
+                                               onchange="validarHorarioDia('{{ dia_id }}')">
+
+                                        <span class="text-muted small" style="font-size: 0.75rem;">até</span>
+
+                                        <input type="time" class="form-control form-control-sm rounded-3 text-center border-gray-300 shadow-none input-horario"
+                                               style="width: 95px; font-size: 0.82rem;"
+                                               id="p2_saida_{{ dia_id }}" name="p2_saida_{{ dia_id }}"
+                                               value="{{ registro.p2_saida if registro else '18:00' }}"
+                                               {% if not ativo %}disabled{% endif %}
+                                               onchange="validarHorarioDia('{{ dia_id }}')">
+                                    </div>
+
+                                    {# Alerta Dinâmico de Extrapolação do Teto da Empresa #}
+                                    <div class="text-danger small mt-1.5 d-none" id="msg_erro_{{ dia_id }}" style="font-size: 0.72rem;">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                        <span id="txt_erro_msg_{{ dia_id }}">Horário fora da grade da empresa (<strong id="txt_limite_{{ dia_id }}"></strong>)</span>
+                                    </div>
+
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+
+                {# 💾 AÇÃO #}
+                <div class="text-end">
+                    <button type="submit" class="btn btn-primary px-4 rounded-pill fw-bold" style="font-size: 0.85rem;">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Escala Semanal
+                    </button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function limparFaixa(diaId, faixa) {
+    const inputEntrada = document.getElementById(`${faixa}_entrada_${diaId}`);
+    const inputSaida = document.getElementById(`${faixa}_saida_${diaId}`);
+
+    if (inputEntrada) {
+        inputEntrada.value = '';
+        inputEntrada.classList.remove('input-fora-limite');
+    }
+    if (inputSaida) {
+        inputSaida.value = '';
+        inputSaida.classList.remove('input-fora-limite');
+    }
+
+    validarHorarioDia(diaId);
+}
+
+function toggleInputs(diaId) {
+    const isChecked = document.getElementById('switch_' + diaId).checked;
+    const container = document.getElementById('inputs_dia_' + diaId);
+    if (!container) return;
+
+    const inputs = container.querySelectorAll('input');
+
+    if (isChecked) {
+        container.classList.remove('d-none');
+        inputs.forEach(i => i.disabled = false);
+        validarHorarioDia(diaId);
+    } else {
+        container.classList.add('d-none');
+        inputs.forEach(i => {
+            i.disabled = true;
+            i.classList.remove('input-fora-limite');
+        });
+        const msgErro = document.getElementById('msg_erro_' + diaId);
+        if (msgErro) msgErro.classList.add('d-none');
+    }
+}
+
+function validarHorarioDia(diaId) {
+    const bloco = document.getElementById('bloco_dia_' + diaId);
+    const switchDia = document.getElementById('switch_' + diaId);
+    if (!switchDia || !switchDia.checked) return true;
+
+    const limMin = bloco.getAttribute('data-limite-min');
+    const limMax = bloco.getAttribute('data-limite-max');
+
+    const p1In = document.getElementById('p1_entrada_' + diaId);
+    const p1Out = document.getElementById('p1_saida_' + diaId);
+    const p2In = document.getElementById('p2_entrada_' + diaId);
+    const p2Out = document.getElementById('p2_saida_' + diaId);
+
+    const msgErro = document.getElementById('msg_erro_' + diaId);
+    const txtLimite = document.getElementById('txt_limite_' + diaId);
+    const txtErroMsg = document.getElementById('txt_erro_msg_' + diaId);
+
+    // Limpa destaque de erros anteriores
+    [p1In, p1Out, p2In, p2Out].forEach(el => el && el.classList.remove('input-fora-limite'));
+
+    let temErro = false;
+    let mensagemCustomizada = '';
+
+    const vP1In = p1In ? p1In.value : '';
+    const vP1Out = p1Out ? p1Out.value : '';
+    const vP2In = p2In ? p2In.value : '';
+    const vP2Out = p2Out ? p2Out.value : '';
+
+    // Encontra menor entrada e maior saída preenchidas
+    const entradas = [vP1In, vP2In].filter(v => v !== '');
+    const saidas = [vP1Out, vP2Out].filter(v => v !== '');
+
+    const menorEntrada = entradas.length > 0 ? entradas.sort()[0] : null;
+    const maiorSaida = saidas.length > 0 ? saidas.sort().reverse()[0] : null;
+
+    // Validação com o teto da empresa
+    if (limMin && menorEntrada && menorEntrada < limMin) {
+        if (vP1In === menorEntrada) p1In.classList.add('input-fora-limite');
+        if (vP2In === menorEntrada) p2In.classList.add('input-fora-limite');
+        temErro = true;
+    }
+
+    if (limMax && maiorSaida && maiorSaida > limMax) {
+        if (vP1Out === maiorSaida) p1Out.classList.add('input-fora-limite');
+        if (vP2Out === maiorSaida) p2Out.classList.add('input-fora-limite');
+        temErro = true;
+    }
+
+    if (temErro) {
+        if (txtLimite) txtLimite.innerText = `${limMin} às ${limMax}`;
+        if (msgErro) msgErro.classList.remove('d-none');
+        return false;
+    } else {
+        if (msgErro) msgErro.classList.add('d-none');
+        return true;
+    }
+}
+
+function validarFormularioAntesDeEnviar(e) {
+    let tudoValido = true;
+    const dias = [1, 2, 3, 4, 5, 6, 0];
+
+    dias.forEach(diaId => {
+        const valido = validarHorarioDia(diaId);
+        if (!valido) tudoValido = false;
+    });
+
+    if (!tudoValido) {
+        e.preventDefault();
+        alert('Atenção: Existem horários configurados fora do limite de funcionamento da empresa. Por favor, corrija os campos destacados em vermelho.');
+        return false;
+    }
+    return true;
+}
+
+function replicarSegunda() {
+    const diasSemanaUtil = [2, 3, 4, 5];
+    const segundaAtiva = document.getElementById('switch_1').checked;
+
+    if (!segundaAtiva) return;
+
+    const p1In = document.getElementById('p1_entrada_1').value;
+    const p1Out = document.getElementById('p1_saida_1').value;
+    const p2In = document.getElementById('p2_entrada_1').value;
+    const p2Out = document.getElementById('p2_saida_1').value;
+
+    diasSemanaUtil.forEach(diaId => {
+        const bloco = document.getElementById('bloco_dia_' + diaId);
+        const empresaAbre = bloco.getAttribute('data-empresa-abre') === '1';
+
+        if (empresaAbre) {
+            const switchDia = document.getElementById('switch_' + diaId);
+            if (!switchDia.checked) {
+                switchDia.checked = true;
+                toggleInputs(diaId);
+            }
+
+            document.getElementById('p1_entrada_' + diaId).value = p1In;
+            document.getElementById('p1_saida_' + diaId).value = p1Out;
+            document.getElementById('p2_entrada_' + diaId).value = p2In;
+            document.getElementById('p2_saida_' + diaId).value = p2Out;
+
+            validarHorarioDia(diaId);
+        }
+    });
+}
+</script>
+{% endblock %}

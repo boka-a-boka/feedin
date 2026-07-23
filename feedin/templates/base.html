@@ -5,16 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no">
     <title>FeedIn! - {% block titulo %}{% endblock %}</title>
 
-    <!-- Chamada para o Manifesto -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
 
-    <!-- Configurações específicas para iOS (Safari) -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="FeedIn">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='imagens/icon-512.png') }}">
+    <link class="apple-touch-icon" href="{{ url_for('static', filename='imagens/icon-512.png') }}">
 
-    <!-- CSS: Bootstrap, Bi-Icons, FontAwesome -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -42,41 +39,40 @@
 </head>
 <body class="d-flex flex-column h-100">
 
-{# A NAVBAR SÓ APARECE SE NÃO ESTIVERMOS NA HOMEPAGE E SE NÃO ESTIVER AUTENTICADO #}
-{# ALTERAÇÃO NA BASE.HTML #}
+{# 🛡️ LOGICA DA BASE: A navbar externa SÓ existe para quem está deslogado e nas páginas institucionais #}
+{% if request.endpoint in ['index', 'landing', 'login', 'newuser', 'registro'] %}
 
-{# Oculta o menu padrão se for a homepage logada OU a index pública de visitantes #}
-{% if request.endpoint not in ['homepage', 'index', 'landing'] %}
-    {% if not current_user.is_authenticated %}
-    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-2" style="min-height: 80px;">
+    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-2" style="min-height: 80px; z-index: 1030;">
         <div class="container-fluid d-flex align-items-center justify-content-between">
 
-            <a class="navbar-brand d-flex align-items-center" href="/" style="margin-top: -8px;">
-                <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" alt="Logo" width="35" height="35" class="me-1 shadow-sm">
-                <span class="fw-bold text-primary" style="letter-spacing: -1.5px; font-size: 1.15rem;">FEEDIN!</span>
-            </a>
+            {# LADO ESQUERDO: Identidade visual externa #}
+            <div class="d-flex align-items-center gap-3">
+                <a class="navbar-brand d-flex align-items-center" href="/" style="margin-top: -8px;">
+                    <img src="{{ url_for('static', filename='fotos/logo-feedin.jpg') }}" alt="Logo" width="35" height="35" class="me-1 shadow-sm">
+                    <span class="fw-bold text-primary" style="letter-spacing: -1.5px; font-size: 1.15rem;">FEEDIN!</span>
+                </a>
+            </div>
 
+            {# LADO DIREITO: Botões estritos para quem está de fora #}
             <div class="d-flex align-items-center gap-1">
-                {% if request.endpoint not in ['login'] %}
-                    <a href="{{ url_for('login') }}"
-                       class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm"
-                       style="background-color: #28a745; color: #ffffff; border: none; font-size: 0.85rem;">
-                        Entrar
-                    </a>
-                {% endif %}
-
-                {% if request.endpoint not in ['newuser', 'registro'] %}
-                    <a href="{{ url_for('newuser') }}"
-                       class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm"
-                       style="background-color: #1e3c72; color: #ffffff; border: 1px solid #1e3c72; font-size: 0.85rem;">
-                        Criar conta
+                {% if not current_user.is_authenticated %}
+                    {% if request.endpoint not in ['login'] %}
+                        <a href="{{ url_for('login') }}" class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm" style="background-color: #28a745; color: #ffffff; border: none; font-size: 0.85rem;">Entrar</a>
+                    {% endif %}
+                    {% if request.endpoint not in ['newuser', 'registro'] %}
+                        <a href="{{ url_for('newuser') }}" class="btn btn-sm rounded-pill px-3 fw-bold shadow-sm" style="background-color: #1e3c72; color: #ffffff; border: 1px solid #1e3c72; font-size: 0.85rem;">Criar conta</a>
+                    {% endif %}
+                {% else %}
+                    {# Se por acaso o usuário estiver logado mas caiu na Landing, mostra apenas o Sair limpo #}
+                    <a href="{{ url_for('realizar_logout') }}" class="btn btn-sm btn-danger text-white rounded-pill px-3 fw-bold shadow-sm" style="font-size: 0.85rem;">
+                        <i class="bi bi-box-arrow-right me-1"></i> Encerrar Sessão
                     </a>
                 {% endif %}
             </div>
 
         </div>
     </nav>
-    {% endif %}
+
 {% endif %}
 
     {# MENSAGENS FLASH (Alertas) #}
@@ -121,10 +117,8 @@
         </footer>
     {% endif %}
 
-<!-- SCRIPTS GLOBAIS DO SISTEMA (Nunca são apagados) -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Auto-close para alertas após 5 segundos
         setTimeout(() => {
             document.querySelectorAll('.alert').forEach(a => {
                 const alert = bootstrap.Alert.getOrCreateInstance(a);
@@ -132,16 +126,38 @@
             });
         }, 5000);
 
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('FeedIn PWA registrado com sucesso!', reg))
-            .catch(err => console.log('Erro ao registrar PWA:', err));
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('FeedIn PWA registrado com sucesso!', reg))
+                .catch(err => console.log('Erro ao registrar PWA:', err));
+            });
+        }
+
+        let acionadorInstalacaoPWA = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            acionadorInstalacaoPWA = e;
+            document.dispatchEvent(new CustomEvent('pwaProntoParaInstalar'));
+            console.log("💾 [PWA GLOBAL] Sistema operacional pronto e aguardando clique para instalação.");
         });
-      }
+
+        async function executarInstalacaoPWA() {
+            if (!acionadorInstalacaoPWA) {
+                alert("O aplicativo já está instalado ou seu navegador não suporta esta função no momento.");
+                return;
+            }
+            acionadorInstalacaoPWA.prompt();
+            const { outcome } = await acionadorInstalacaoPWA.userChoice;
+            console.log(`💻 [PWA] Resposta do usuário para instalação: ${outcome}`);
+            if (outcome === 'accepted') {
+                acionadorInstalacaoPWA = null;
+                document.dispatchEvent(new CustomEvent('pwaInstaladoComSucesso'));
+            }
+        }
     </script>
 
-    <!-- BLOCO PARA SCRIPTS ESPECÍFICOS DE CADA PÁGINA -->
     {% block scripts %}{% endblock %}
 </body>
 </html>

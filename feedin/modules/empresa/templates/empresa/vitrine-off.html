@@ -1,0 +1,185 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}{{ local.nome }} - Vitrine FeedIn{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --cor-primaria: {{ local.cor_primaria if local.cor_primaria else '#2563eb' }};
+        --cor-secundaria: {{ local.cor_secundaria if local.cor_secundaria else '#1e3a8a' }};
+    }
+    .btn-custom-primario {
+        background-color: var(--cor-primaria);
+    }
+    .btn-custom-primario:hover {
+        filter: brightness(0.9);
+    }
+    .text-custom-secundario {
+        color: var(--cor-secundaria);
+    }
+    .bg-gradient-custom {
+        background-image: linear-gradient(to right, var(--cor-primaria), var(--cor-secundaria));
+    }
+</style>
+
+{# 🚥 INTERCEPTOR DE MÁQUINA DE ESTADOS DO PROPRIETÁRIO #}
+{% if processo and processo.status_processo in ['em_andamento', 'preenchimento_dados', 'em_auditoria'] %}
+<div class="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 px-6 py-4 shadow-sm">
+    <div class="flex items-start space-x-3">
+        <span class="text-amber-600 text-xl mt-0.5">🛠️</span>
+        <div class="flex-1">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xs font-bold text-amber-800 uppercase tracking-wider">Modo Designer / Configuração Ativo</h4>
+                <span class="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-bold rounded-full uppercase tracking-tight">
+                    Status: {{ processo.status_processo }}
+                </span>
+            </div>
+            <p class="text-xs text-amber-700 mt-1 leading-relaxed">
+                Você possui privilégios de pleiteante. As alterações de layout, cores e narrativa estão visíveis para você estruturar seu PWA assincronamente.
+            </p>
+
+            {# Link rápido de retorno para ele continuar editando sem se perder #}
+            <div class="mt-3">
+                <a href="{{ url_for('empresa.dashboard_empresa') }}" class="inline-flex items-center text-xs font-bold text-amber-900 underline hover:text-amber-900">
+                    <span class="mr-1">⚙️</span> Voltar ao Painel de Edição
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% elif local.status_homologacao == 'aprovado_provisorio' %}
+{# Mantém o seu fallback original caso o status mude direto no Local #}
+<div class="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-start space-x-3">
+    <span class="text-amber-500 text-lg mt-0.5">⚠️</span>
+    <div class="flex-1">
+        <h4 class="text-xs font-bold text-amber-800 uppercase tracking-wider">Modo de Configuração Ativo</h4>
+        <p class="text-xs text-amber-700 mt-0.5 leading-relaxed">
+            Sua empresa está liberada para ajustes de layout, horários e história.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+<div class="max-w-md mx-auto bg-white min-h-screen shadow-md rounded-t-2xl overflow-hidden pb-12">
+
+    <div class="relative h-56 w-full bg-gray-200 balance-bg">
+        {% if local.caminho_fachada %}
+            <img src="{{ url_for('static', filename=local.caminho_fachada) }}" class="w-full h-full object-cover" alt="Fachada de {{ local.nome }}">
+        {% else %}
+            <div class="w-full h-full bg-gradient-custom"></div>
+        {% endif %}
+
+        <div class="absolute -bottom-10 border-4 border-white overflow-hidden bg-white shadow-md rounded-xl h-20 w-20
+            {% if local.alinhamento_logo == 'centro' %} left-1/2 -translate-x-1/2
+            {% elif local.alinhamento_logo == 'oculto' %} hidden
+            {% else %} left-6 {% endif %}">
+
+            {% if local.caminho_logo %}
+                <img src="{{ url_for('static', filename=local.caminho_logo) }}" class="w-full h-full object-cover" alt="Logo de {{ local.nome }}">
+            {% else %}
+                <div class="w-full h-full flex items-center justify-center bg-gray-800 text-white font-bold text-xl">
+                    {{ local.nome[:2]|upper }}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="pt-14 px-6 pb-4">
+        <h1 class="text-2xl font-bold text-gray-900">{{ local.nome }}</h1>
+        {% if local.ano_fundacao %}
+            <span class="inline-block mt-0.5 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-md">
+                Desde {{ local.ano_fundacao }}
+            </span>
+        {% endif %}
+        <p class="text-sm text-gray-500 flex items-center mt-2">
+            <span class="mr-1">📍</span> {{ local.logradouro }}, {{ local.numero }} - {{ local.bairro }}, {{ local.cidade }}
+        </p>
+    </div>
+
+    <hr class="border-gray-100 mx-6">
+
+    <div class="px-6 py-4 space-y-6">
+
+        {% if local.exibir_historia_primeiro %}
+            {% if local.historia or local.missao %}
+                <div class="space-y-4">
+                    {% if local.historia %}
+                        <div>
+                            <h3 class="text-xs font-bold text-custom-secundario uppercase tracking-wider mb-1">Nossa História</h3>
+                            <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{{ local.historia }}</p>
+                        </div>
+                    {% endif %}
+
+                    {% if local.missao %}
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <h3 class="text-xs font-bold text-custom-secundario uppercase tracking-wider mb-1">Nosso Propósito</h3>
+                            <p class="text-sm text-gray-600 italic">"{{ local.missao }}"</p>
+                        </div>
+                    {% endif %}
+                </div>
+                <hr class="border-gray-100">
+            {% endif %}
+        {% endif %}
+
+        <div class="text-gray-700 text-sm space-y-2">
+            <h3 class="text-xs font-bold text-custom-secundario uppercase tracking-wider mb-1">Contato e Informações</h3>
+            <p><strong>📞 Telefone:</strong> {{ local.telefone if local.telefone else 'Não informado' }}</p>
+            {% if local.valores %}
+                <p><strong>✨ Valores:</strong> <span class="text-gray-600 text-xs">{{ local.valores }}</span></p>
+            {% endif %}
+        </div>
+
+        {% if not local.exibir_historia_primeiro %}
+            {% if local.historia or local.missao %}
+                <hr class="border-gray-100">
+                <div class="space-y-4">
+                    {% if local.historia %}
+                        <div>
+                            <h3 class="text-xs font-bold text-custom-secundario uppercase tracking-wider mb-1">Nossa História</h3>
+                            <p class="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{{ local.historia }}</p>
+                        </div>
+                    {% endif %}
+
+                    {% if local.missao %}
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <h3 class="text-xs font-bold text-custom-secundario uppercase tracking-wider mb-1">Nosso Propósito</h3>
+                            <p class="text-sm text-gray-600 italic">"{{ local.missao }}"</p>
+                        </div>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% endif %}
+
+    </div>
+
+{# 🏁 SEÇÃO DE AÇÕES ADAPTADA AO PERFIL #}
+    <div class="px-6 pt-2 pb-6 space-y-3">
+
+        {# 🎨 Botão A: Se ele for o dono em onboarding, ganha o botão master de customização visual #}
+        {% if processo and processo.status_processo in ['em_andamento', 'preenchimento_dados', 'simulacao_pendente', 'em_auditoria'] %}
+            <a href="{{ url_for('empresa.customizar_layout_avancado', empresa_id=local.id) }}"
+               class="w-full flex items-center justify-center p-3 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold rounded-xl shadow-sm transition gap-2 text-sm text-center">
+                <span>🎨</span> Customizar Identidade Visual (Balcão)
+            </a>
+        {% endif %}
+
+        {# 🚀 Botão B: Se ele for um colaborador da equipe já homologada, exibe o Cockpit do Balcão #}
+        {% if contrato %}
+            <a href="{{ url_for('agenda.acessar_estabelecimento', id_local_alvo=local.id) }}"
+               class="w-full flex items-center justify-center p-3 bg-zinc-900 text-white font-medium rounded-xl shadow-sm hover:bg-zinc-800 transition text-center text-sm">
+                🚀 Entrar no Cockpit ({{ contrato.papel_nome|upper }})
+            </a>
+        {% endif %}
+
+        {# 🗓️ Botão C: Exibe a reserva de horários APENAS para quem NÃO é gestor (Usuários comuns / Clientes) #}
+        {% if not contrato and not processo %}
+            <a href="{{ url_for('agenda.agendar_servico', empresa_id=local.id) }}"
+               class="w-full flex items-center justify-center p-3 btn-custom-primario text-white font-medium rounded-xl shadow-sm transition text-center text-sm">
+                🗓️ Reservar um Horário
+            </a>
+        {% endif %}
+
+    </div>
+
+</div>
+{% endblock %}

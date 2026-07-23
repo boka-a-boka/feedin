@@ -1,0 +1,126 @@
+{% extends "empresa/base_empresa.html" %}
+{% block content %}
+<div class="container my-4 py-2">
+    
+    <div class="p-4 rounded-4 text-white mb-4 shadow-sm" style="background: linear-gradient(135deg, {{ empresa.cor_pwa or '#212529' }} 0%, #1c1f22 100%);">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-white rounded-circle p-1 shadow-inner d-flex align-items-center justify-content-center" style="width: 70px; height: 70px;">
+                    {% if empresa and empresa.url_logomarca %}
+                        <img src="{{ empresa.url_logomarca }}" alt="Logo" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                        <i class="bi bi-shop text-dark" style="font-size: 2rem;"></i>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="badge rounded-pill bg-white text-dark small fw-bold px-3 mb-1">Ambiente Ativo</span>
+                    <h3 class="fw-bold mb-0">{{ empresa.nome|default('Minha Empresa') }}</h3>
+                </div>
+            </div>
+
+            <a href="#" class="btn btn-sm btn-outline-light rounded-pill px-3 fw-bold opacity-50" title="Funcionalidade em desenvolvimento">
+                <i class="bi bi-arrow-left-right me-1"></i> Alternar Estabelecimento
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-8">
+            <h5 class="fw-bold text-secondary mb-3"><i class="bi bi-grid-fill me-2"></i>Operação do Estabelecimento</h5>
+
+            <div class="row g-3">
+                <div class="col-6 col-md-4">
+                    <a href="{{ url_for('empresa.concluir_passo_4') }}" class="card btn-acao-direta border-0 shadow-sm rounded-4 text-center p-4 h-100 d-flex flex-column align-items-center justify-content-center text-decoration-none">
+                        <div class="icon-box bg-light-primary text-primary rounded-4 mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; background-color: #eef2ff;">
+                            <i class="bi bi-gear-fill" style="font-size: 1.8rem;"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Configurações</h6>
+                        <span class="text-muted small">Dados e PWA</span>
+                    </a>
+                </div>
+
+                <div class="col-6 col-md-4">
+                    <a href="#" class="card btn-acao-direta border-0 shadow-sm rounded-4 text-center p-4 h-100 d-flex flex-column align-items-center justify-content-center text-decoration-none opacity-50 cursor-not-allowed" style="pointer-events: none;">
+                        <div class="icon-box bg-light-success text-success rounded-4 mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; background-color: #f0fdf4;">
+                            <i class="bi bi-tags-fill" style="font-size: 1.8rem;"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Produtos</h6>
+                        <span class="text-muted small">Cardápio/Serviços</span>
+                    </a>
+                </div>
+
+                <div class="col-6 col-md-4">
+                    <a href="#" class="card btn-acao-direta border-0 shadow-sm rounded-4 text-center p-4 h-100 d-flex flex-column align-items-center justify-content-center text-decoration-none opacity-50 cursor-not-allowed" style="pointer-events: none;">
+                        <div class="icon-box bg-light-info text-info rounded-4 mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; background-color: #ecfeff;">
+                            <i class="bi bi-people-fill" style="font-size: 1.8rem;"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Equipe</h6>
+                        <span class="text-muted small">Cargos e Acessos</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <h5 class="fw-bold text-secondary mb-3"><i class="bi bi-person-bounding-box me-2"></i>Minha Conta & App</h5>
+
+            <div class="card border-0 shadow-sm rounded-4 p-4 mb-3">
+                <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold text-uppercase" style="width: 48px; height: 48px; font-size: 1.2rem;">
+                        {{ current_user.username[:2] if current_user.username else 'US' }}
+                    </div>
+                    <div>
+                        <h6 class="fw-bold text-dark mb-0">{{ current_user.username|default('Usuário FeedIn') }}</h6>
+                        <p class="text-muted small mb-0">{{ current_user.email }}</p>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <a href="#" class="btn btn-light rounded-pill fw-bold text-start px-3 py-2 text-muted border-0 style-btn-menu" title="Gerenciamento via módulo Auth (Em breve)">
+                        <i class="bi bi-person-gear me-2 text-secondary"></i> Meus Dados (Em breve)
+                    </a>
+
+                    <button id="btn-instalar-pwa-gerencial" onclick="executarInstalacaoPWA()" class="btn btn-warning rounded-pill fw-bold text-start px-3 py-2 border-0 d-none">
+                        <i class="bi bi-phone-vibrate-fill me-2"></i> Criar Atalho no Celular
+                    </button>
+
+                    <span id="txt-pwa-instalado" class="text-success small fw-bold px-3 py-1 d-none">
+                        <i class="bi bi-check-circle-fill me-1"></i> Aplicativo já instalado
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-acao-direta {
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+    }
+    .btn-acao-direta:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.08) !important;
+    }
+    .style-btn-menu:hover {
+        background-color: #e9ecef !important;
+    }
+    .cursor-not-allowed {
+        cursor: not-allowed !important;
+    }
+</style>
+
+<script>
+    // Conecta as pontas com o script global do PWA (injetado na base)
+    document.addEventListener('pwaProntoParaInstalar', () => {
+        document.getElementById('btn-instalar-pwa-gerencial')?.classList.remove('d-none');
+    });
+    document.addEventListener('pwaInstaladoComSucesso', () => {
+        document.getElementById('btn-instalar-pwa-gerencial')?.classList.add('d-none');
+        document.getElementById('txt-pwa-instalado')?.classList.remove('d-none');
+    });
+    if (window.acionadorInstalacaoPWA) {
+        document.getElementById('btn-instalar-pwa-gerencial')?.classList.remove('d-none');
+    }
+</script>
+{% endblock %}

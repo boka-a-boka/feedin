@@ -1,0 +1,87 @@
+{% extends "auth/base_auth.html" %}
+
+{% block title %}Validar Identidade - {{ modulo_info.nome if modulo_info else 'Core' }}{% endblock %}
+
+{% block content %}
+<div class="container py-5 animate__animated animate__fadeIn">
+    <div class="text-center mb-4">
+        <div class="text-primary mb-2" style="font-size: 2.5rem;">
+            <i class="bi bi-shield-lock-fill"></i>
+        </div>
+        <h2 class="fw-bold text-dark">Segurança e Privacidade</h2>
+        <p class="text-muted mx-auto" style="max-width: 480px;">
+            {# 🪐 Ajuste dinâmico de saudação para suportar usuários logados e deslogados #}
+            {% if current_user.is_authenticated %}
+                Olá, <strong>{{ current_user.username }}</strong>!
+            {% elif email_temporario %}
+                Olá, <strong>{{ email_temporario }}</strong>!
+            {% else %}
+                Olá!
+            {% endif %}
+            Para garantir o atendimento à <strong>LGPD</strong> e a integridade da nossa rede em Piracicaba, valide sua identidade oficial abaixo.
+        </p>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 500px; background-color: white;">
+        <form action="{{ url_for('auth.processar_identidade', next_url=request.args.get('next_url', '')) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            {# 🔑 O SEGREDO CONTRA A SESSÃO EXPIRADA: Carrega o e-mail invisível no payload do POST #}
+            <input type="hidden" name="email_transporte" value="{{ email_temporario }}">
+
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary small">Nome Completo (como no documento)</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="bi bi-person-fill"></i></span>
+                    <input type="text" name="nome_real" class="form-control" placeholder="Ex: JOÃO DA SILVA" required style="height: 50px;">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary small">Número do CPF</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="bi bi-person-badge-fill"></i></span>
+                    <input type="text" name="cpf" id="cpf_autonomo" class="form-control" placeholder="000.000.000-00" required style="height: 50px;">
+                </div>
+            </div>
+
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label fw-bold text-secondary small">Data de Nascimento</label>
+                    <input type="date" name="data_nascimento" class="form-control" required style="height: 50px;">
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-bold text-secondary small">Gênero</label>
+                    <select name="genero" class="form-select" required style="height: 50px;">
+                        <option value="">Selecione...</option>
+                        {% for g in generos %}
+                            <option value="{{ g.id }}">{{ g.genero }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-check mb-4 bg-light p-3 rounded ms-0">
+                <input class="form-check-input ms-1 me-2" type="checkbox" id="checkLGPD" required>
+                <label class="form-check-label small text-muted" for="checkLGPD">
+                    Compreendo que meus dados são encriptados de ponta a ponta e tratados estritamente para segurança e validação civil na plataforma.
+                </label>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-dark btn-lg rounded-pill fw-bold py-3 shadow-sm">
+                    <i class="bi bi-check-circle-fill me-2"></i>FINALIZAR E ENTRAR NO SISTEMA
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Máscara reativa de CPF injetada nativamente (Mantida idêntica)
+    document.getElementById('cpf_autonomo')?.addEventListener('input', function (e) {
+        var x = e.target.value.replace(/\D/g, '').match(/(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,2})/);
+        e.target.value = !x[2] ? x[1] : x[1] + '.' + x[2] + (x[3] ? '.' + x[3] : '') + (x[4] ? '-' + x[4] : '');
+    });
+</script>
+{% endblock %}

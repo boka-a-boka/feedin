@@ -61,31 +61,48 @@
     }
 </style>
 
-{# HERO SECTION #}
-<section class="local-hero shadow">
-    <a href="javascript:history.back()" class="btn-voltar-feedin shadow-sm" title="Voltar">
+{# SEÇÃO HERO CUSTOMIZÁVEL (ROUPAGEM DA EMPRESA SE EXISTIR) #}
+<section class="local-hero shadow"
+         style="{% if local.caminho_fachada %}background-image: url('{{ url_for('static', filename=local.caminho_fachada) }}'); background-size: cover; background-position: center;{% else %}background: linear-gradient(135deg, {{ local.cor_primaria if local.cor_primaria else '#212529' }} 0%, {{ local.cor_secundaria if local.cor_secundaria else '#343a40' }} 100%);{% endif %}">
+
+    {# Camada de contraste para legibilidade caso haja imagem de fachada #}
+    {% if local.caminho_fachada %}
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 1;"></div>
+    {% endif %}
+
+    <a href="javascript:history.back()" class="btn-voltar-feedin shadow-sm" title="Voltar" style="z-index: 10; position: relative;">
         <i class="bi bi-arrow-left fs-5"></i>
     </a>
 
-    <div class="local-info-overlay">
+    <div class="local-info-overlay" style="z-index: 5; position: relative;">
         <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
-            <div>
-                <h1 class="display-5 mb-1">{{ local.nome }}</h1>
-                <p class="lead mb-2" style="font-size: 1rem; opacity: 0.9;">
-                    <i class="fas fa-map-marker-alt me-2 text-warning"></i>
-                    {{ local.logradouro }}{% if local.numero %}, {{ local.numero }}{% endif %} — {{ local.bairro }}
-                </p>
 
-                <div class="d-flex gap-2">
-                    {% if local.esta_ativo %}
-                        <span class="badge bg-success rounded-pill px-3"><i class="bi bi-check-circle me-1"></i>Em Atividade</span>
-                    {% else %}
-                        <span class="badge bg-secondary rounded-pill px-3"><i class="bi bi-archive me-1"></i>Memória Histórica</span>
-                    {% endif %}
+            {# Bloco de Identidade: Suporta inserção da Logo Corporativa inline #}
+            <div class="d-flex align-items-center gap-3 flex-wrap flex-md-nowrap">
+                {% if local.caminho_logo and local.alinhamento_logo != 'oculto' %}
+                    <div class="bg-white p-1 rounded-4 shadow-sm border border-light-subtle overflow-hidden flex-shrink-0" style="width: 90px; height: 90px;">
+                        <img src="{{ url_for('static', filename=local.caminho_logo) }}" class="w-full h-full rounded-3" style="object-fit: cover; width: 100%; height: 100%;">
+                    </div>
+                {% endif %}
 
-                    <span class="badge bg-light text-dark border rounded-pill px-3">
-                        <i class="bi bi-people-fill me-1"></i> {{ local.atividades|length }} Seguidores
-                    </span>
+                <div>
+                    <h1 class="display-5 mb-1 fw-bold text-white">{{ local.nome }}</h1>
+                    <p class="lead mb-2" style="font-size: 1rem; opacity: 0.95; color: #f8f9fa;">
+                        <i class="fas fa-map-marker-alt me-2 text-warning"></i>
+                        {{ local.logradouro }}{% if local.numero %}, {{ local.numero }}{% endif %} — {{ local.bairro }}
+                    </p>
+
+                    <div class="d-flex gap-2">
+                        {% if local.esta_ativo %}
+                            <span class="badge bg-success rounded-pill px-3"><i class="bi bi-check-circle me-1"></i>Em Atividade</span>
+                        {% else %}
+                            <span class="badge bg-secondary rounded-pill px-3"><i class="bi bi-archive me-1"></i>Memória Histórica</span>
+                        {% endif %}
+
+                        <span class="badge bg-light text-dark border rounded-pill px-3">
+                            <i class="bi bi-people-fill me-1"></i> {{ local.atividades|length }} Seguidores
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -107,17 +124,19 @@
                         <button type="button" onclick="enviarAvaliacaoCompleta()" class="btn btn-sm btn-warning fw-bold">Salvar Memória</button>
                     </div>
                 </div>
+
                 <div class="d-flex gap-2 justify-content-md-end justify-content-center align-items-center flex-wrap">
+
+                    {# 🔵 1. BOTÃO DE RELACIONAMENTO SOCIAL (SEGUIR) #}
                     {% if not usuario_segue %}
-                        {# Se não segue, abre o modal para escolher as épocas #}
                         <button type="button"
                                 data-bs-toggle="modal"
                                 data-bs-target="#modalEscolherEpocas"
-                                class="btn btn-light btn-lg rounded-pill px-4 shadow fw-bold text-primary">
+                                class="btn btn-light btn-lg rounded-pill px-4 shadow fw-bold"
+                                style="color: {{ local.cor_primaria if local.cor_primaria else '#0d6efd' }};">
                             <i class="fas fa-plus me-2"></i>Seguir Local
                         </button>
                     {% else %}
-                        {# Se já segue, dispara a remoção direta imediatamente #}
                         <button type="button"
                                 onclick="prepararSeguirDireto('{{ local.id }}', true)"
                                 class="btn btn-outline-light btn-lg rounded-pill px-4 fw-bold">
@@ -125,14 +144,37 @@
                         </button>
                     {% endif %}
 
-                    {# BOTÃO COMPLEMENTAR: EDITAR LOCAL (Blindado contra BuildError) #}
+                    {# 🔑 ESTEIRA DE GOVERNANÇA E REIVINDICAÇÃO (FOCO 100% NA ESE_PROCESSO_CLAIM) #}
+                    {% if status_claim == 'em_andamento' %}
+                        <div class="alert alert-warning border-0 rounded-pill shadow-sm py-2 px-3 d-flex align-items-center gap-2 mb-0" role="alert" style="font-size: 0.85rem;">
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                            <span class="text-dark fw-bold">Validação em Andamento</span>
+                        </div>
+
+                    {% elif status_claim == 'concluido' %}
+                        <button type="button" class="btn btn-success btn-lg rounded-pill px-4 shadow-sm fw-bold" disabled>
+                            <i class="bi bi-patch-check-fill me-2"></i> Empresa Verificada
+                        </button>
+
+                    {% elif status_claim == 'suspeito_bloqueado' %}
+                        <div class="alert alert-danger border-0 rounded-pill shadow-sm py-2 px-3 d-flex align-items-center gap-2 mb-0" role="alert" style="font-size: 0.85rem;">
+                            <i class="bi bi-shield-lock-fill text-danger"></i>
+                            <span class="text-dark fw-bold">Página Suspensa</span>
+                        </div>
+
+                    {% else %}
+                        <button type="button" class="btn btn-warning btn-lg rounded-pill px-4 shadow fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#modalIniciarClaim">
+                            <i class="bi bi-patch-check me-2"></i>Este local é seu?
+                        </button>
+                    {% endif %}
+
+                    {# ✏️ 3. EDITAR LOCAL #}
                     <a href="{{ url_for('editar_local', local_id=local.id) }}"
                        class="btn btn-outline-light btn-lg rounded-pill px-3 shadow-sm"
                        title="Editar Informações do Local">
                         <i class="bi bi-pencil-square"></i>
                     </a>
                 </div>
-            </div>
             </div>
         </div>
     </div>
@@ -142,6 +184,54 @@
 <div class="container mt-4">
     <div class="row">
         <div class="col-lg-8">
+
+            {# 💬 NOVA SEÇÃO: AVALIAÇÕES E DEPOIMENTOS DA COMUNIDADE #}
+            <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white">
+                <div class="d-flex items-center justify-content-between mb-3 border-bottom pb-2">
+                    <h5 class="fw-bold mb-0 text-secondary" style="font-size: 1.1rem;">
+                        <i class="bi bi-chat-square-quote-fill me-2" style="color: {{ local.cor_primaria if local.cor_primaria else '#6c757d' }};"></i>Relatos do Estabelecimento
+                    </h5>
+                    <span class="badge bg-light text-muted border rounded-pill">✨ Avaliações Recentes</span>
+                </div>
+
+                {% if avaliacoes %}
+                    <div class="row g-3">
+                        {% for avaliacao in avaliacoes %}
+                            <div class="col-12">
+                                <blockquote class="p-3 rounded-4 border-0 mb-0 position-relative animate__animated animate__fadeIn"
+                                            style="background-color: #f8f9fa; border-left: 4px solid {{ local.cor_primaria if local.cor_primaria else '#6c757d' }} !important;">
+
+                                    <p class="text-secondary italic mb-3" style="font-size: 0.9rem; font-style: italic;">
+                                        "{{ avaliacao.comentario }}"
+                                    </p>
+
+                                    <div class="d-flex align-items-center justify-content-between pt-2 border-t border-light border-top">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <img src="{{ url_for('servir_foto_perfil', usuario_id=avaliacao.id_criador) }}"
+                                                 class="rounded-circle border"
+                                                 width="32" height="32"
+                                                 style="object-fit: cover;">
+                                            <div>
+                                                <h6 class="mb-0 small fw-bold text-dark">
+                                                    {{ avaliacao.criador.perfil.nome_completo if avaliacao.criador and avaliacao.criador.perfil else avaliacao.criador.username }}
+                                                </h6>
+                                                <small class="text-muted" style="font-size: 0.65rem;">@{{ avaliacao.criador.username }}</small>
+                                            </div>
+                                        </div>
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill px-2 py-1 style-stars font-medium" style="font-size: 0.7rem;">
+                                            ⭐ {{ avaliacao.nota }} / 5
+                                        </span>
+                                    </div>
+                                </blockquote>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="py-3 text-center">
+                        <p class="text-muted mb-0 small"><i class="bi bi-chat-dots me-1"></i> Nenhuma avaliação estruturada ainda. Registre uma nota no painel acima para inaugurar as memórias deste local!</p>
+                    </div>
+                {% endif %}
+            </div>
 
             {# PAINEL CONTADOR E EXPLICATIVO DIDÁTICO #}
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -168,7 +258,6 @@
             {# LOOP DA TIMELINE UNIFICADO E ADAPTADO #}
             {% for item_post in atividades %}
                 <div class="col-12">
-                    {# Isolamos o contexto exatamente como é feito no perfil público #}
                     {% with atividade = item_post, post_obj = item_post.objeto_original, context_origem = 'perfil_local', exibir_como_flyer = True %}
                         {% set post = post_obj %}
                         {% include "partials/cards/card_postagem_universal.html" %}
@@ -177,7 +266,7 @@
             {% else %}
                 <div class="text-center py-5 bg-light rounded-4 border-dashed animate__animated animate__fadeIn">
                     <i class="bi bi-journal-text text-muted" style="font-size: 3rem;"></i>
-                    <p class="text-muted mt-3 mb-0">Nenhuma história ou atividade registrada ainda neste local.</p>
+                    <p class="text-muted mt-3 mb-0">Nenhuma história ou activity registrada ainda neste local.</p>
                 </div>
             {% endfor %}
         </div>
@@ -202,7 +291,7 @@
                                     <h6 class="mb-0 small fw-bold text-truncate text-dark">
                                         {{ atividade.criador.perfil.nome_completo if atividade.criador and atividade.criador.perfil else atividade.criador.username }}
                                     </h6>
-                                    <p class="text-primary mb-0 small">@{{ atividade.criador.username }}</p>
+                                    <p class="mb-0 small" style="color: {{ local.cor_primaria if local.cor_primaria else '#0d6efd' }};">@{{ atividade.criador.username }}</p>
                                 </a>
                                 <small class="text-muted" style="font-size: 0.6rem;">Desde {{ atividade.data_criacao.strftime('%m/%y') }}</small>
                             </div>
@@ -211,110 +300,240 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
-        {# MODAL DE SELEÇÃO DE ÉPOCAS (GRAFO ESPAÇO-TEMPORAL) #}
-        <div class="modal fade" id="modalEscolherEpocas" tabindex="-1" aria-labelledby="modalEscolherEpocasLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-sm">
-                <div class="modal-content rounded-4 border-0 shadow">
-                    <div class="modal-header border-0 pb-0">
-                        <h5 class="modal-title fw-bold text-secondary" id="modalEscolherEpocasLabel">Em que épocas frequenta?</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted small mb-3">Selecione os períodos em que você viveu ou vive histórias no **{{ local.nome }}** para construir seu painel de memórias.</p>
+{# =========================================================================
+   📦 MODAL INICIAL DE REIVINDICAÇÃO (FASE 1 - DADOS EMPRESARIAIS E LOCAÇÃO)
+   ========================================================================= #}
+<div class="modal fade" id="modalIniciarClaim" tabindex="-1" aria-labelledby="modalIniciarClaimLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
 
-                        <form id="formEscolherEpocas">
-                            <div class="d-flex flex-column gap-2">
-                                {# Passamos epocas_todas vindas da rota do back-end ordenada por ordem_cronologica #}
-                                {% if epocas_todas %}
-                                    {% for ep in epocas_todas %}
-                                        <div class="form-check p-2 rounded border bg-light d-flex align-items-center justify-content-between" style="padding-left: 2.5rem !important;">
-                                            <div>
-                                                <input class="form-check-input checkbox-epoca-item" type="checkbox" name="epocas[]" value="{{ ep.id }}" id="epoca_{{ ep.id }}" {% if ep.eh_vigente %}checked{% endif %}>
-                                                <label class="form-check-label fw-bold small text-dark" for="epoca_{{ ep.id }}">
-                                                    {{ ep.nome_exibicao }}
-                                                </label>
-                                            </div>
-                                            {% if ep.eh_vigente %}
-                                                <span class="badge bg-primary rounded-pill" style="font-size: 0.6rem;">Atual</span>
-                                            {% endif %}
-                                        </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <p class="small text-danger text-center">Nenhum período cronológico encontrado.</p>
-                                {% endif %}
+            <div class="modal-header border-0 bg-dark text-white py-3">
+                <h5 class="modal-title fw-bold small text-uppercase tracking-wider mb-0">
+                    <i class="bi bi-building-gear me-2 text-warning"></i> Atualizar Dados e Iniciar Gestão
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form action="{{ url_for('empresa.registrar_intencao_claim', id_local=local.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="modal-body p-4 bg-white">
+                    <div class="row g-3">
+
+                        {# ◼️ SEÇÃO 1: PERFIL DA EMPRESA #}
+                        <div class="col-12 mb-2">
+                            <div class="bg-dark text-white px-3 py-2 rounded-2 fw-bold small text-uppercase tracking-wide">
+                                1. Identidade da Empresa
                             </div>
-                        </form>
-                    </div>
-                    <div class="modal-footer border-0 pt-0 d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" onclick="prepararSeguirDireto('{{ local.id }}', false)" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Confirmar e Seguir</button>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary mb-1">Nome Fantasia / Comercial *</label>
+                            <input type="text" name="nome_empresa" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required value="{{ local.nome }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary mb-1">Documento Oficial (CPF ou CNPJ) *</label>
+                            <input type="text" name="documento_oficial" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="Ex: 00.000.000/0001-00">
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold text-secondary mb-1">Categoria Principal (Taxonomia) *</label>
+                            <input type="text" name="categoria_empresa" id="categoria_autocomplete" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="Digite para buscar..." list="datalist_taxonomia" autocomplete="off">
+                            <datalist id="datalist_taxonomia"></datalist>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-secondary mb-1">Data de Fundação / Cadastro</label>
+                            <input type="date" name="data_fundacao_empresa" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle">
+                        </div>
+
+                        {# ◼️ SEÇÃO 2: ENDEREÇO ATUALIZADO #}
+                        <div class="col-12 mt-4 mb-2">
+                            <div class="bg-dark text-white px-3 py-2 rounded-2 fw-bold small text-uppercase tracking-wide">
+                                2. Localização Oficial Corrigida
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-secondary mb-1">CEP *</label>
+                            <input type="text" name="cep_empresa" id="cep" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="13400-000" onblur="if(typeof buscarCep === 'function') buscarCep(this.value);">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary mb-1">Logradouro *</label>
+                            <input type="text" name="logradouro_empresa" id="logradouro" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="Rua / Avenida...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-secondary mb-1">Número Oficial *</label>
+                            <input type="text" name="numero_empresa" id="numero" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="Ex: 150">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-secondary mb-1">Bairro *</label>
+                            <input type="text" name="bairro_empresa" id="bairro" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-secondary mb-1">Cidade *</label>
+                            <input type="text" name="cidade_empresa" id="cidade" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required value="Piracicaba">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-secondary mb-1">Estado *</label>
+                            <input type="text" name="estado_empresa" id="estado" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required value="SP">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-secondary mb-1">Compl.</label>
+                            <input type="text" name="complemento_empresa" id="complemento" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" placeholder="Sala/Bl.">
+                        </div>
+
+                        {# ◼️ SEÇÃO 3: CANAL DE CONTATO PREFERENCIAL #}
+                        <div class="col-12 mt-4 mb-2">
+                            <div class="bg-dark text-white px-3 py-2 rounded-2 fw-bold small text-uppercase tracking-wide">
+                                3. Canais de Contato e Preferência
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary mb-1">Novo E-mail Comercial / Contato *</label>
+                            <input type="email" name="email_contato" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="comercial@empresa.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary mb-1">WhatsApp de Contato *</label>
+                            <input type="tel" name="whatsapp_contato" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="(19) 99999-9999">
+                        </div>
+
+                        <div class="col-12 bg-light p-3 rounded-3 mt-2 border border-light-subtle">
+                            <label class="form-label small fw-bold text-dark mb-2">Por qual via prefere receber o retorno da nossa equipe?</label>
+                            <div class="d-flex flex-column gap-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="via_preferencial" id="via_login" value="email_login" checked>
+                                    <label class="form-check-label small text-secondary" for="via_login">
+                                        E-mail da sua conta de acesso ativa: <strong>{{ current_user.email }}</strong>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="via_preferencial" id="via_comercial" value="email_comercial">
+                                    <label class="form-check-label small text-secondary" for="via_comercial">
+                                        O novo E-mail Comercial informado acima
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="via_preferencial" id="via_whatsapp" value="whatsapp">
+                                    <label class="form-check-label small text-secondary" for="via_whatsapp">
+                                        Mensagem direta via WhatsApp
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
+
+                <div class="modal-footer border-0 bg-light py-3 d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-semibold" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-dark rounded-pill px-4 fw-bold">Gravar Cadastro e Avançar</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+{# MODAL DE SELEÇÃO DE ÉPOCAS (GRAFO ESPAÇO-TEMPORAL) #}
+<div class="modal fade" id="modalEscolherEpocas" tabindex="-1" aria-labelledby="modalEscolherEpocasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-secondary" id="modalEscolherEpocasLabel">Em que épocas frequenta?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Selecione os períodos em que você viveu ou vive histórias no **{{ local.nome }}** para construir seu painel de memórias.</p>
+
+                <form id="formEscolherEpocas">
+                    <div class="d-flex flex-column gap-2">
+                        {% if epocas_todas %}
+                            {% for ep in epocas_todas %}
+                                <div class="form-check p-2 rounded border bg-light d-flex align-items-center justify-content-between" style="padding-left: 2.5rem !important;">
+                                    <div>
+                                        <input class="form-check-input checkbox-epoca-item" type="checkbox" name="epocas[]" value="{{ ep.id }}" id="epoca_{{ ep.id }}" {% if ep.eh_vigente %}checked{% endif %}>
+                                        <label class="form-check-label fw-bold small text-dark" for="epoca_{{ ep.id }}">
+                                            {{ ep.nome_exibicao }}
+                                        </label>
+                                    </div>
+                                    {% if ep.eh_vigente %}
+                                        <span class="badge bg-primary rounded-pill" style="font-size: 0.6rem;">Atual</span>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="small text-danger text-center">Nenhum período cronológico encontrado.</p>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0 pt-0 d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" onclick="prepararSeguirDireto('{{ local.id }}', false)" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" style="background-color: {{ local.cor_primaria if local.cor_primaria else '#0d6efd' }}; border-color: {{ local.cor_primaria if local.cor_primaria else '#0d6efd' }};">Confirmar e Seguir</button>
             </div>
         </div>
+    </div>
+</div>
 
-        {# MODAL DE EDIÇÃO DE POSTAGEM (COMPLETAMENTE REMAPEADO E COMPATÍVEL COM TODOS OS CAMPOS) #}
-        <div class="modal fade" id="modalEditarPost" tabindex="-1" aria-labelledby="modalEditarPostLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content rounded-4 border-0 shadow">
-                    <div class="modal-header border-0 pb-0">
-                        <h5 class="modal-title fw-bold text-secondary" id="modalEditarPostLabel">Editar sua História</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <form id="formEditarPost" method="POST" action="" enctype="multipart/form-data">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="modal-body">
-
-                            <div class="mb-3">
-                                <label for="inputConteudoPost" class="form-label small text-muted fw-bold">Sua memória:</label>
-                                <textarea class="form-control rounded-3" id="inputConteudoPost" name="conteudo" rows="4" required></textarea>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="inputLocalFalsoBusca" class="form-label small text-muted fw-bold">Vincular a qual estabelecimento?</label>
-
-                                {# Input visível onde o usuário digita e o navegador filtra instantaneamente #}
-                                <input type="text" class="form-control rounded-3" id="inputLocalFalsoBusca" list="listaLocaisSeguidos" placeholder="Digite para buscar entre os locais que você segue...">
-
-                                {# O ID real do Local (que o Flask espera receber no POST) fica guardado de forma segura aqui #}
-                                <input type="hidden" id="selectLocalPost" name="id_local" value="0">
-
-                                {# Lista nativa de autocomplete alimentada pelo banco em ordem alfabética #}
-                                <datalist id="listaLocaisSeguidos">
-                                    <option data-id="0" value="— Sem Local Vinculado (História Livre) —"></option>
-                                    {% if locais_seguidos %}
-                                        {% for loc in locais_seguidos %}
-                                            <option data-id="{{ loc.id }}" value="{{ loc.nome }}"></option>
-                                        {% endfor %}
-                                    {% endif %}
-                                </datalist>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="selectEpocaPost" class="form-label small text-muted fw-bold">Em qual período isso aconteceu?</label>
-                                <select class="form-select rounded-3" id="selectEpocaPost" name="id_epoca">
-                                    {% if epocas_todas %}
-                                        {% for ep in epocas_todas %}
-                                            <option value="{{ ep.id }}">{{ ep.nome_exibicao }}</option>
-                                        {% endfor %}
-                                    {% endif %}
-                                </select>
-                            </div>
-
-                            <div class="mb-2">
-                                <label for="inputImagemPost" class="form-label small text-muted fw-bold">Substituir Imagem Ilustrativa (Opcional):</label>
-                                <input type="file" class="form-control rounded-3" id="inputImagemPost" name="imagem_post" accept="image/*">
-                            </div>
-
-                        </div>
-                        <div class="modal-footer border-0 pt-0 d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
-                            <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Alterações</button>
-                        </div>
-                    </form>
-                </div>
+{# MODAL DE EDIÇÃO DE POSTAGEM #}
+<div class="modal fade" id="modalEditarPost" tabindex="-1" aria-labelledby="modalEditarPostLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-secondary" id="modalEditarPostLabel">Editar sua História</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            <form id="formEditarPost" method="POST" action="" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+
+                    <div class="mb-3">
+                        <label for="inputConteudoPost" class="form-label small text-muted fw-bold">Sua memória:</label>
+                        <textarea class="form-control rounded-3" id="inputConteudoPost" name="conteudo" rows="4" required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="inputLocalFalsoBusca" class="form-label small text-muted fw-bold">Vincular a qual estabelecimento?</label>
+                        <input type="text" class="form-control rounded-3" id="inputLocalFalsoBusca" list="listaLocaisSeguidos" placeholder="Digite para buscar entre os locais que você segue...">
+                        <input type="hidden" id="selectLocalPost" name="id_local" value="0">
+
+                        <datalist id="listaLocaisSeguidos">
+                            <option data-id="0" value="— Sem Local Vinculado (História Livre) —"></option>
+                            {% if locais_seguidos %}
+                                {% for loc in locais_seguidos %}
+                                    <option data-id="{{ loc.id }}" value="{{ loc.nome }}"></option>
+                                {% endfor %}
+                            {% endif %}
+                        </datalist>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="selectEpocaPost" class="form-label small text-muted fw-bold">Em qual período isso aconteceu?</label>
+                        <select class="form-select rounded-3" id="selectEpocaPost" name="id_epoca">
+                            {% if epocas_todas %}
+                                {% for ep in epocas_todas %}
+                                    <option value="{{ ep.id }}">{{ ep.nome_exibicao }}</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label for="inputImagemPost" class="form-label small text-muted fw-bold">Substituir Imagem Ilustrativa (Opcional):</label>
+                        <input type="file" class="form-control rounded-3" id="inputImagemPost" name="imagem_post" accept="image/*">
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0 pt-0 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Alterações</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -343,12 +562,12 @@
     </div>
 </div>
 
-{# --- BOTÃO FLUTUANTE VOLTAR AO TOPO ADAPTADO PARA O PERFIL LOCAL --- #}
+{# --- BOTÃO FLUTUANTE VOLTAR AO TOPO --- #}
 {% if atividades|length >= 3 %}
     <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1040;">
         <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-lg text-nowrap text-white"
                 onclick="voltarAoTopo()"
-                style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
+                style="background: linear-gradient(135deg, {{ local.cor_primaria if local.cor_primaria else '#0d6efd' }} 0%, {{ local.cor_secundaria if local.cor_secundaria else '#0a58ca' }} 100%); border: none; font-size: 0.9rem; padding: 10px 20px;">
             <i class="bi bi-arrow-up-circle-fill me-2 text-white"></i>Voltar ao Topo
         </button>
     </div>
@@ -356,321 +575,114 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
+# 2. O bloco de script com monitoramento em tempo real #}
 <script>
-/**
- * Captura os dados do Card Universal e monta o ecossistema do Modal de Edição Completa
- */
-// 📝 FUNÇÃO DE EDIÇÃO - ADAPTADA PARA O SELECT TRADICIONAL DE FRICÇÃO
-function abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAtual) {
-    const formEditar = document.getElementById('formEditarPost');
-    if (formEditar) { formEditar.action = `/editar_post/${postId}`; }
+document.addEventListener('DOMContentLoaded', function () {
+    const meuModal = document.getElementById('modalIniciarClaim');
+    const formClaim = document.getElementById('formIniciarClaim');
 
-    const textareaConteudo = document.getElementById('inputConteudoPost');
-    if (textareaConteudo) {
-        textareaConteudo.value = conteudoAtual;
-        textareaConteudo.style.height = "auto";
-        textareaConteudo.style.height = (textareaConteudo.scrollHeight) + "px";
-    }
+// --- 🛡️ TRAVA CONTRA DUPLO POST NO SUBMIT (CORRIGIDA) ---
+    if (formClaim) {
+        formClaim.addEventListener('submit', function(e) {
+            const botaoSalvar = formClaim.querySelector('button[type="submit"]');
 
-    const selectEpoca = document.getElementById('selectEpocaPost');
-    if (selectEpoca && idEpocaAtual) { selectEpoca.value = idEpocaAtual; }
-
-    // No select tradicional, basta injetar o ID direto que o HTML se posiciona sozinho!
-    const selectLocal = document.getElementById('selectLocalPost');
-    if (selectLocal) {
-        selectLocal.value = idLocalAtual || "0";
-    }
-
-    const modalElement = document.getElementById('modalEditarPost');
-    if (modalElement) {
-        const meuModal = new bootstrap.Modal(modalElement);
-
-        modalElement.addEventListener('shown.bs.modal', function () {
-            if (textareaConteudo) {
-                textareaConteudo.style.height = "auto";
-                textareaConteudo.style.height = (textareaConteudo.scrollHeight) + "px";
-                textareaConteudo.focus();
-            }
-        }, { once: true });
-
-        meuModal.show();
-    }
-}
-
-/**
- * 🛡️ INTERCEPTADOR DE SEGURANÇA CONTRA SYNTAXERROR
- * Lê os atributos "data-*" do botão do card para evitar quebra de aspas ou enters do texto.
- */
-function dispararEdicaoPeloCard(elementoBotao) {
-    const postId = elementoBotao.getAttribute('data-post-id');
-    const conteudoAtual = elementoBotao.getAttribute('data-conteudo');
-    const idEpocaAtual = elementoBotao.getAttribute('data-epoca');
-    const idLocalAtual = elementoBotao.getAttribute('data-local');
-
-    // Repassa os dados limpos para a abertura do modal
-    abrirModalEditarPostagem(postId, conteudoAtual, idEpocaAtual, idLocalAtual);
-}
-
-/**
- * Trata o disparo assíncrono para a sua rota de exclusão física ou lógica
- */
-function confirmarExclusaoPostagem(postId) {
-    if (confirm("Você tem certeza de que deseja remover permanentemente esta história da linha do tempo?")) {
-        const csrfToken = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
-
-        $.ajax({
-            url: `/excluir_post/${postId}`,
-            method: 'POST',
-            data: { csrf_token: csrfToken },
-            success: function(response) {
-                // Força o reload para limpar a timeline instantaneamente
-                window.location.reload();
-            },
-            error: function(xhr) {
-                console.error("Erro na remoção da postagem:", xhr.responseText);
-                // Caso a sua rota execute redirect(request.referrer) em vez de JSON, recarregamos de qualquer forma
-                window.location.reload();
+            if (botaoSalvar) {
+                // Joga a desabilitação para o próximo ciclo de execução (1ms)
+                // Isso garante que o formulário seja postado antes do botão congelar
+                setTimeout(() => {
+                    botaoSalvar.disabled = true;
+                    botaoSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Salvando dados...`;
+                }, 1);
             }
         });
     }
-}
 
-/**
- * 🏷️ MOTOR DE AFINIDADES: Abre o modal de conexões e tags do Repost
- */
-function abrirModalAfinidadesRepost(repostId) {
-    const formAfinidades = document.getElementById('formAfinidadesRepost');
-    if (formAfinidades) {
-        formAfinidades.action = `/repost/afinidades/${repostId}`;
-    }
+    // --- 🪐 GERENCIAMENTO DO MODAL (ESTEIRA ÚNICA) ---
+    if (meuModal) {
+        meuModal.addEventListener('shown.bs.modal', function () {
+            console.log('📦 Modal totalmente visível. Configurando inputs unificados...');
 
-    const modalElement = document.getElementById('modalAfinidadesRepost');
-    if (modalElement) {
-        const meuModal = new bootstrap.Modal(modalElement);
-        meuModal.show();
-    } else {
-        console.log("Aguardando container #modalAfinidadesRepost para o ID:", repostId);
-    }
-}
+            const inputCategoria = document.getElementById('categoria_autocomplete');
+            const dataListTaxonomia = document.getElementById('datalist_taxonomia');
+            const inputCep = document.getElementById('cep');
+            let debounceTimer;
 
-/**
- * 🛡️ FUNÇÃO ESPELHO: Elimina erros de Uncaught ReferenceError gerados por cache dos cards antigos
- */
-function abrirModalEditarAfinidadesRepost(repostId) {
-    abrirModalAfinidadesRepost(repostId);
-}
+            // --- 🗂️ FLUXO DE TAXONOMIA AUTOCOMPLETE ---
+            if (inputCategoria && dataListTaxonomia) {
+                inputCategoria.removeEventListener('input', lidarComTaxonomia);
+                inputCategoria.addEventListener('input', lidarComTaxonomia);
 
-function reagirPostagem(postId, tipoReacao) {
-    if (window.event) window.event.preventDefault();
-    const urlReacao = "/reagir_post/" + postId + "/" + tipoReacao;
-    const $contCurti = $('#contagem-curti-' + postId);
-    const $contNaoCurti = $('#contagem-nao-curti-' + postId);
-
-    if ($(`#contagem-curti-${postId}`).parent().data('loading')) return;
-    $(`#contagem-curti-${postId}`).parent().data('loading', true);
-
-    $.ajax({
-        url: urlReacao,
-        method: 'POST',
-        data: { csrf_token: "{{ csrf_token() }}" },
-        success: function(response) {
-            if (response.status === "success") {
-                if ($contCurti.length) $contCurti.text(response.novo_total_curti);
-                if ($contNaoCurti.length) $contNaoCurti.text(response.novo_total_nao_curti);
-                window.location.reload();
+                // Evita que o 'Enter' ou clique de seleção na lista dispare nova busca
+                inputCategoria.addEventListener('change', function() {
+                    clearTimeout(debounceTimer);
+                });
             }
-        },
-        error: function(xhr) {
-            console.error("Erro ao registrar reação:", xhr.responseText);
-        },
-        complete: function() {
-            $(`#contagem-curti-${postId}`).parent().data('loading', false);
-        }
-    });
-}
 
-function registrarReacaoSocial(postId, tipoReacao) {
-    reagirPostagem(postId, tipoReacao);
-}
-
-function abrirComentarios(postId) {
-    $('#modalPostId').val(postId);
-    $('#textoComentario').val('');
-    const modalElement = document.getElementById('modalComentario');
-    if (modalElement) {
-        const meuModal = new bootstrap.Modal(modalElement);
-        meuModal.show();
-        modalElement.addEventListener('shown.bs.modal', function () {
-            document.getElementById('textoComentario').focus();
-        }, { once: true });
-    }
-}
-
-function enviarComentarioPeloModal() {
-    enviarComentarioModal();
-}
-
-function enviarComentarioModal() {
-    const postId = $('#modalPostId').val();
-    const texto = $('#textoComentario').val().trim();
-    if (!texto) {
-        alert("Por favor, escreva algo para comentar.");
-        return;
-    }
-
-    $.ajax({
-        url: "/comentar_post/" + postId,
-        method: 'POST',
-        data: { texto: texto, csrf_token: "{{ csrf_token() }}" },
-        success: function(response) {
-            if (response.status === "success") {
-                const modalElement = document.getElementById('modalComentario');
-                if (bootstrap.Modal.getInstance(modalElement)) {
-                    bootstrap.Modal.getInstance(modalElement).hide();
+            function lidarComTaxonomia(e) {
+                // 🎯 Se o input foi gerado por uma seleção (clique ou enter no datalist),
+                // a propriedade inputType vem vazia ou indefinida no evento nativo. Abortamos na hora.
+                if (!e.inputType && e.inputType !== "") {
+                    console.log('🎯 Seleção detectada via Datalist. Abortando requisição repetida.');
+                    return;
                 }
-                location.reload();
-            } else {
-                alert("Erro ao publicar comentário: " + response.message);
+
+                const busca = e.target.value ? e.target.value.trim() : '';
+                clearTimeout(debounceTimer);
+
+                if (busca.length < 3) {
+                    dataListTaxonomia.innerHTML = '';
+                    return;
+                }
+
+                debounceTimer = setTimeout(() => {
+                    console.log(`📡 Buscando no banco por: "${busca}"`);
+                    const urlApi = `/empresa/api/taxonomia?q=${encodeURIComponent(busca)}&_=${new Date().getTime()}`;
+
+                    fetch(urlApi)
+                        .then(response => {
+                            if (!response.ok) throw new Error("Erro na requisição.");
+                            return response.json();
+                        })
+                        .then(data => {
+                            dataListTaxonomia.innerHTML = '';
+                            if (!data || data.length === 0) return;
+
+                            data.forEach(item => {
+                                const option = document.createElement('option');
+                                option.value = item;
+                                dataListTaxonomia.appendChild(option);
+                            });
+                        })
+                        .catch(error => console.error('❌ Erro no fetch de taxonomia:', error));
+                }, 400);
             }
-        },
-        error: function(xhr) {
-            alert("Erro ao enviar comentário para o servidor.");
-        }
-    });
-}
 
-let notaSelecionada = 0;
-$(document).ready(function() {
-    $(document).on('click', '#rating-container i', function() {
-        const podeAvaliar = $('#rating-container').data('pode-avaliarem') === true || $('#rating-container').data('pode-avaliar') === "true";
-        if (!podeAvaliar) {
-            alert("Você precisa seguir este local para poder avaliar!");
-            return;
-        }
-        notaSelecionada = $(this).data('value');
-        $('#rating-container i').each(function(index) {
-            $(this).toggleClass('fas', index < notaSelecionada).toggleClass('far', index >= notaSelecionada);
+            // --- 📡 FLUXO DO CEP (VIACEP) ---
+            if (inputCep) {
+                inputCep.addEventListener('blur', function () {
+                    const cep = this.value.replace(/\D/g, '');
+                    if (cep.length === 8) {
+                        console.log(`📡 Buscando endereço para o CEP: ${cep}`);
+                        fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                            .then(res => res.json())
+                            .then(dados => {
+                                if (!dados.erro) {
+                                    if(document.getElementById('logradouro')) document.getElementById('logradouro').value = dados.logradouro;
+                                    if(document.getElementById('bairro')) document.getElementById('bairro').value = dados.bairro;
+                                    if(document.getElementById('cidade')) document.getElementById('cidade').value = dados.localidade;
+                                    if(document.getElementById('estado')) document.getElementById('estado').value = dados.uf;
+                                    console.log('✅ Campos do endereço preenchidos via API.');
+                                } else {
+                                    console.warn('⚠️ CEP não encontrado.');
+                                }
+                            })
+                            .catch(err => console.error('❌ Erro ao buscar CEP:', err));
+                    }
+                });
+            }
         });
-        $('#feedback-container').removeClass('d-none').hide().fadeIn();
-    });
-
-    // O ouvinte antigo do inputFalsoBusca foi removido daqui para evitar conflitos!
+    }
 });
-
-function enviarAvaliacaoCompleta() {
-    const texto = $('#feedback-texto').val().trim();
-    if (texto.length < 5) {
-        alert("Conte um pouco mais sobre sua experiência (mínimo 5 caracteres).");
-        return;
-    }
-    fetch(`/local/avaliar/{{ local.id }}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': "{{ csrf_token() }}"
-        },
-        body: JSON.stringify({ nota: notaSelecionada, feedback: texto })
-    })
-    .then(r => r.json())
-    .then(data => {
-        alert(data.mensagem);
-        if (data.sucesso) location.reload();
-    });
-}
-
-function cancelarAvaliacao() {
-    $('#feedback-container').fadeOut();
-}
-
-function prepararSeguirDireto(localId, jaSegue) {
-    const token = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
-    let dadosPayload = { csrf_token: token };
-
-    if (!jaSegue) {
-        let epocasMarcadas = [];
-        $('.checkbox-epoca-item:checked').each(function() {
-            epocasMarcadas.push($(this).val());
-        });
-
-        if (epocasMarcadas.length === 0) {
-            alert("Por favor, selecione ao menos uma época para registrar sua biografia neste local.");
-            return;
-        }
-        dadosPayload['epocas[]'] = epocasMarcadas;
-    }
-
-    $.ajax({
-        url: "/seguir_local/" + localId,
-        method: 'POST',
-        data: dadosPayload,
-        success: function(response) {
-            if (response.status === "success" || response.sucesso) {
-                window.location.reload();
-            } else {
-                alert("Aviso: " + (response.message || "Não foi possível alterar o vínculo."));
-            }
-        },
-        error: function(xhr) {
-            console.error("Erro na comunicação com o servidor:", xhr.responseText);
-            alert("Erro de comunicação com o servidor ao processar o vínculo.");
-        }
-    });
-}
-
-function abrirModalTagsOcultas(localId) {
-    const $lista = $('#lista-tags-ocultas');
-    $lista.html('<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-primary"></div></div>');
-    const modalElement = document.getElementById('modalTagsOcultas');
-    const meuModal = new bootstrap.Modal(modalElement);
-    meuModal.show();
-
-    $.getJSON(`/api/local/${localId}/tags_ocultas`, function(tags) {
-        if (!tags.length) {
-            $lista.html('<p class="text-muted text-center small my-2">Nenhum tema oculto restante!</p>');
-            return;
-        }
-        $lista.empty();
-        tags.forEach(function(tag) {
-            const itemHtml = `
-                <button type="button" onclick="window.ativarEPassarASeguirTag(${tag.id}, this)"
-                        class="btn btn-outline-secondary btn-sm text-start w-100 px-3 py-2 d-flex justify-content-between align-items-center rounded-3 position-relative border-dashed"
-                        style="font-size: 0.85rem; transition: all 0.2s;">
-                    <span><i class="bi bi-hash text-muted"></i><strong>${tag.nome}</strong></span>
-                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.7rem;">${tag.total} ${tag.total > 1 ? 'posts' : 'post'}</span>
-                </button>`;
-            $lista.append(itemHtml);
-        });
-    }).fail(function() {
-        $lista.html('<p class="text-danger text-center small my-2">Erro ao carregar temas.</p>');
-    });
-}
-
-window.ativarEPassarASeguirTag = function(tagId, elementoBotao) {
-    if ($(elementoBotao).data('processando')) return;
-    $(elementoBotao).data('processando', true).prop('disabled', true).addClass('opacity-50');
-    const csrfToken = "{{ csrf_token() }}" || $('input[name=csrf_token]').val();
-
-    $.ajax({
-        url: `/api/seguir_tag_direto/${tagId}`,
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
-        success: function(response) {
-            if (response.sucesso) {
-                $(elementoBotao).removeClass('btn-outline-secondary border-dashed').addClass('btn-success text-white').html('<span><i class="bi bi-check-lg me-1"></i> Tema Adicionado!</span>');
-                setTimeout(function() { location.reload(); }, 600);
-            } else {
-                alert(response.mensagem || "Não foi possível seguir este tema.");
-                $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
-            }
-        },
-        error: function(xhr) {
-            $(elementoBotao).data('processando', false).prop('disabled', false).removeClass('opacity-50');
-        }
-    });
-};
-
-function voltarAoTopo() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
 </script>
+
 {% endblock %}

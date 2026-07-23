@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Acesso Urbana | Módulo de Serviços{% endblock %}</title>
+
+    <!-- LINKS ATUALIZADOS E ULTRAESTÁVEIS DO BOOTSTRAP 5 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    {% block extra_css %}
+        <link rel="stylesheet" href="{{ url_for('agenda.static', filename='css/agenda_auth.css') }}">
+    {% endblock %}
+
+    <style>
+    :root {
+        /* 🎨 ALIMENTAÇÃO DINÂMICA: O HTML apenas entrega a cor que o Python calculou
+           para o CSS global consumir. Todo o resto já está centralizado no seu .css */
+        --biz-primary: {{ cor_ativa_sistema|default('#111827') }};
+    }
+    </style>
+</head>
+<body>
+
+    <!-- Wrapper que força a centralização vertical e horizontal -->
+    <div class="wrapper-principal">
+        <div style="width: 100%; max-width: 480px;">
+
+            <!-- Área de Alertas -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} p-3 mb-4 rounded-3 small shadow-sm" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Conteúdo da Tela -->
+            {% block content %}{% endblock %}
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Variável global que vai guardar o gatilho de instalação do sistema operacional
+        let acionadorInstalacaoPWA = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Impede o navegador de abrir o banner padrão/nativo dele automaticamente
+            e.preventDefault();
+
+            // Guarda o evento para ser usado quando o usuário clicar no seu botão customizado
+            acionadorInstalacaoPWA = e;
+
+            // Dispara um evento customizado avisando que o app está pronto para ser instalado.
+            // Isso serve para habilitar dinamicamente os botões escondidos nas telas de ajuda/configuração.
+            document.dispatchEvent(new CustomEvent('pwaProntoParaInstalar'));
+
+            console.log("💾 [PWA GLOBAL] Sistema operacional pronto e aguardando clique para instalação.");
+        });
+
+        // Função global que qualquer botão do sistema pode chamar via onclick
+        async function executarInstalacaoPWA() {
+            if (!acionadorInstalacaoPWA) {
+                alert("O aplicativo já está instalado ou seu navegador não suporta esta função no momento.");
+                return;
+            }
+
+            // Dispara a janela nativa de confirmação do sistema operacional (Android/iOS/Windows)
+            acionadorInstalacaoPWA.prompt();
+
+            // Aguarda a escolha do usuário
+            const { outcome } = await acionadorInstalacaoPWA.userChoice;
+            console.log(`💻 [PWA] Resposta do usuário para instalação: ${outcome}`);
+
+            // Se ele aceitou, limpamos o gatilho pois o app já virou nativo
+            if (outcome === 'accepted') {
+                acionadorInstalacaoPWA = null;
+                // Opcional: recarrega ou esconde os botões de instalação do sistema
+                document.dispatchEvent(new CustomEvent('pwaInstaladoComSucesso'));
+            }
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

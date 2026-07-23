@@ -1,0 +1,79 @@
+{% extends "empresa/base_empresa.html" %}
+{% block content %}
+
+<div class="bg-warning text-dark text-center py-2 fw-bold shadow-sm sticky-top" style="z-index: 1030; top: 56px;">
+    <i class="bi bi-shield-check me-2"></i> Passo 4 de 4: Conclua sua homologação comercial para liberar seu painel
+</div>
+
+<div class="container mt-5 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <h3 class="fw-bold text-dark mb-1">Configuração de Identidade e PWA</h3>
+                <p class="text-muted small">Configure como a sua marca se apresentará na linha do tempo social do FeedIn! de Piracicaba.</p>
+                <hr class="text-black-50">
+
+                <form action="{{ url_for('empresa.concluir_passo_4') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="row g-4">
+                        <div class="col-12">
+                            <h6 class="text-uppercase fw-bold text-secondary small mb-2">1. Dados Importados da Base</h6>
+                            <div class="p-3 bg-light rounded-3 border">
+                                <p class="mb-1 small"><strong>Razão / Nome Fantasia:</strong> {{ empresa.nome }}</p>
+                                <p class="mb-0 small"><strong>Documento Cadastrado:</strong> {{ empresa.documento_oficial }}</p>
+                            </div>
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <h6 class="text-uppercase fw-bold text-secondary small mb-3">2. Sua História & Presença Digital</h6>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-secondary">A Biografia / História do Estabelecimento</label>
+                            <textarea name="historia_empresa" class="form-control rounded-3 shadow-none text-dark" rows="4" required placeholder="Conte a história do seu negócio, curiosidades ou o que faz ele ser um marco local..."></textarea>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary">Slug Customizado da URL (Link Único)</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted small">feedin.com.br/</span>
+                                <input type="text" name="slug_url" class="form-control rounded-end shadow-none" required placeholder="ex: salao-tilyns" pattern="[a-z0-8\-]+">
+                            </div>
+                            <div class="form-text" style="font-size: 0.65rem;">Apenas letras minúsculas, números e hífen.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-secondary">Cor Temática Principal do PWA</label>
+                            <input type="color" name="cor_pwa" class="form-control form-control-sm form-control-color w-100 rounded-3 shadow-none border" value="#0d6efd" title="Escolha a cor da sua marca">
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <h6 class="text-uppercase fw-bold text-secondary small mb-2">3. Segurança Jurídica</h6>
+                            <div class="p-3 bg-danger-subtle rounded-3 border border-danger-subtle text-dark mb-3">
+                                <h6 class="fw-bold mb-1" style="font-size: 0.85rem;"><i class="bi bi-shield-fill-exclamation me-1"></i> Termo de Auto-Responsabilidade Jurídica</h6>
+                                <p class="mb-0 text-secondary" style="font-size: 0.75rem; text-align: justify;">
+                                    Ao concluir este preenchimento, eu declaro sob as penas da lei civil e criminal brasileira que detenho os poderes legais, societários ou procuratórios para assumir a gestão e o controle administrativo e comercial deste estabelecimento na plataforma FeedIn!. Estou ciente de que qualquer falsidade documental ou ideológica resultará no bloqueio imediato da página e responsabilização legal pertinente.
+                                </p>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="aceite_juridico" id="aceite_juridico" required>
+                                <label class="form-check-label small fw-bold text-dark" for="aceite_juridico">
+                                    Aceito formalmente o Termo de Responsabilidade Jurídica e dou fé às informações prestadas.
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="submit" class="btn btn-dark rounded-pill px-5 fw-bold btn-lg shadow-sm">
+                            <i class="bi bi-rocket-takeoff-fill me-2 text-warning"></i> Concluir e Ativar Jornada
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Configurar Preços{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .card-grupo-tabela {
+        border: 2px solid #e9e6dd !important;
+        transition: all 0.2s ease;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 650px;">
+
+        {# 🔙 VOLTAR AO MENU (Botão Escuro Padronizado) #}
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('empresa.menu_servicos_precos', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Menu">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="badge bg-danger-subtle text-danger rounded-pill fw-bold" style="font-size: 0.65rem;">Etapa 2 de 3</span>
+        </div>
+
+        {# 📊 CABEÇALHO & AÇÕES DE GRUPO #}
+        <div class="bg-white p-3.5 rounded-4 shadow-sm border border-secondary-subtle mb-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h6 class="fw-bold text-dark m-0"><i class="bi bi-cash-coin text-danger me-2"></i>Tabela de Valores & Vitrine</h6>
+                    <p class="text-muted m-0 mt-1" style="font-size: 0.75rem;">Defina os preços e organize os grupos que aparecerão na TV da recepção.</p>
+                </div>
+                <button class="btn btn-outline-danger btn-sm rounded-pill fw-bold text-nowrap" data-bs-toggle="modal" data-bs-target="#modalGerenciarGrupos" style="font-size: 0.72rem;">
+                    <i class="bi bi-folder-plus me-1"></i> Criar Grupo
+                </button>
+            </div>
+        </div>
+
+        {# 📋 EXIBIÇÃO DA TABELA (ESTRUTURA DINÂMICA) #}
+        {% if servicos_oferecidos %}
+
+            {# CASO O USUÁRIO JÁ TENHA CRIADO GRUPOS #}
+            {% if grupos %}
+                <div class="d-flex flex-column gap-3">
+                    {% for grupo in grupos %}
+                        <div class="card card-grupo-tabela bg-white p-3 rounded-4 shadow-sm">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                                <span class="fw-bold text-danger text-uppercase tracking-wider" style="font-size: 0.75rem;"><i class="bi bi-tags-fill me-1"></i> {{ grupo.nome_grupo }}</span>
+                                <button class="btn btn-link text-muted p-0 text-decoration-none" data-bs-toggle="modal" data-bs-target="#modalVincular-{{ grupo.id }}" style="font-size: 0.72rem;">
+                                    <i class="bi bi-plus-circle me-1"></i>Vincular Serviços
+                                </button>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle m-0" style="font-size: 0.85rem;">
+                                    <tbody>
+                                        {% for item in grupo.servicos %}
+                                            {% set preco_obj = precos_atuais.get(item.taxonomia_id) %}
+                                            <tr>
+                                                <td class="py-2 ps-0">
+                                                    <span class="fw-bold text-dark d-block">{{ item.servico_taxonomia.nome }}</span>
+                                                    <span class="text-muted d-block" style="font-size: 0.68rem;"><i class="bi bi-clock me-1"></i>{{ item.tempo_duracao }}</span>
+                                                </td>
+                                                <td class="text-end py-2">
+                                                    {% if preco_obj %}
+                                                        <span class="fw-bold text-success">R$ {{ "%.2f"|format(preco_obj.novo_valor) }}</span>
+                                                    {% else %}
+                                                        <span class="badge bg-danger-subtle text-danger rounded-pill" style="font-size: 0.65rem;">Sem valor</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="text-end py-2 pe-0" style="width: 70px;">
+                                                    <button class="btn btn-light btn-sm rounded-circle p-1" data-bs-toggle="modal" data-bs-target="#modalPreco-{{ item.taxonomia_id }}">
+                                                        <i class="bi bi-pencil-square text-secondary"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+            {# CASO PADRÃO: SEM GRUPOS CONFIGURADOSA - LISTAGEM ALFABÉTICA DIRETA #}
+            {% else %}
+                <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle m-0" style="font-size: 0.85rem;">
+                            <thead>
+                                <tr class="text-muted" style="font-size: 0.75rem;">
+                                    <th scope="col" class="border-0 pb-3">Serviço (A-Z)</th>
+                                    <th scope="col" class="border-0 pb-3 text-end" style="width: 120px;">Preço Atual</th>
+                                    <th scope="col" class="border-0 pb-3 text-end" style="width: 80px;">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in servicos_oferecidos %}
+                                    {% set preco_obj = precos_atuais.get(item.taxonomia_id) %}
+                                    <tr>
+                                        <td class="py-3">
+                                            <span class="fw-bold text-dark d-block">{{ item.servico_taxonomia.nome }}</span>
+                                            <span class="text-muted d-block" style="font-size: 0.68rem;"><i class="bi bi-clock me-1"></i>Duração: {{ item.tempo_duracao }}</span>
+                                        </td>
+                                        <td class="text-end py-3">
+                                            {% if preco_obj %}
+                                                <span class="fw-bold text-success" style="font-size: 0.9rem;">R$ {{ "%.2f"|format(preco_obj.novo_valor) }}</span>
+                                            {% else %}
+                                                <span class="badge bg-danger-subtle text-danger rounded-pill" style="font-size: 0.65rem;">Sem valor</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end py-3">
+                                            <button class="btn btn-outline-danger btn-sm rounded-pill fw-bold" data-bs-toggle="modal" data-bs-target="#modalPreco-{{ item.taxonomia_id }}" style="font-size: 0.72rem; padding: 4px 10px;">
+                                                Definir
+                                            </button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+
+        {% else %}
+            <div class="text-center py-5 text-muted bg-white rounded-4 shadow-sm border border-secondary-subtle">
+                <i class="bi bi-journal-x fs-2 d-block mb-2"></i>
+                <span class="small d-block">Você ainda não tem serviços cadastrados.</span>
+                <a href="{{ url_for('empresa.cadastro_servicos_listagem', empresa_id=ese_empresa.id) }}" class="btn btn-sm btn-danger rounded-pill fw-bold mt-3">Cadastrar Serviços</a>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+
+{# 🛠️ MODAL DE CRIAÇÃO DE GRUPO #}
+<div class="modal fade" id="modalGerenciarGrupos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold text-dark"><i class="bi bi-folder-plus text-danger me-2"></i>Criar Grupo de Exibição</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('empresa.associar_grupo', empresa_id=ese_empresa.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body py-3">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-dark mb-1">Nome do Grupo</label>
+                        <input type="text" name="nome_grupo" class="form-control border border-secondary-subtle text-center fw-bold" placeholder="Ex: Cabelo, Barba, Tratamentos" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill fw-semibold btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger rounded-pill fw-bold btn-sm px-3">Salvar Grupo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# 📌 LOOP DE MODAIS DE ATRELAÇÃO (SÓ ATIVA SE HOUVER GRUPOS) #}
+{% if grupos %}
+    {% for grupo in grupos %}
+    <div class="modal fade" id="modalVincular-{{ grupo.id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 450px;">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h6 class="modal-title fw-bold text-dark"><i class="bi bi-link-45deg text-danger me-2"></i>Vincular a: {{ grupo.nome_grupo }}</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{{ url_for('empresa.vincular_servicos_grupo', empresa_id=ese_empresa.id, grupo_id=grupo.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-body py-3">
+                        <p class="text-muted small mb-3">Selecione abaixo os serviços precificados que pertencem a este grupo de exibição:</p>
+
+                        <div class="d-flex flex-column gap-2">
+                            {% for item in servicos_oferecidos %}
+                                <label class="d-flex justify-content-between align-items-center p-2 rounded-3 border bg-light-subtle style-checkbox-item" style="cursor: pointer;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <input type="checkbox" name="servicos_ids" value="{{ item.id }}" class="form-check-input border-2" {% if item.grupo_id == grupo.id %}checked{% endif %}>
+                                        <span class="small fw-semibold text-dark ms-1">{{ item.servico_taxonomia.nome }}</span>
+                                    </div>
+                                    <span class="badge bg-white border text-muted small">R$ {{ "%.2f"|format(precos_atuais.get(item.taxonomia_id).novo_valor|default(0.0)) }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-light rounded-pill fw-semibold btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-danger rounded-pill fw-bold btn-sm px-3">Atualizar Vínculos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% endif %}
+
+{# 📌 MODAL DE AJUSTE DE PREÇO INDIVIDUAL #}
+{% for item in servicos_oferecidos %}
+    {% set preco_obj = precos_atuais.get(item.taxonomia_id) %}
+    <div class="modal fade" id="modalPreco-{{ item.taxonomia_id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h6 class="modal-title fw-bold text-dark"><i class="bi bi-calculator text-danger me-2"></i>Ajustar Preço</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('empresa.salvar_preco_servico', empresa_id=ese_empresa.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="taxonomia_id" value="{{ item.taxonomia_id }}">
+
+                    <div class="modal-body py-3">
+                        <div class="text-center p-3 bg-light-subtle border rounded-3 mb-3">
+                            <span class="text-muted d-block small">Serviço Selecionado</span>
+                            <strong class="text-dark d-block fs-6 mt-1">{{ item.servico_taxonomia.nome }}</strong>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold text-dark mb-1">Novo Preço (R$)</label>
+                            <input type="text" name="novo_valor" class="form-control border border-secondary-subtle text-center fw-bold fs-5" placeholder="0,00" value="{% if preco_obj %}{{ '%.2f'|format(preco_obj.novo_valor)|replace('.', ',') }}{% endif %}" required>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold text-dark mb-1">Motivo / Observação (Opcional)</label>
+                            <textarea name="observacao" class="form-control border border-secondary-subtle" rows="2" placeholder="Ex: Reajuste anual inflacionário." style="font-size: 0.8rem;">{% if preco_obj and preco_obj.observacao %}{{ preco_obj.observacao }}{% endif %}</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-light rounded-pill fw-semibold btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-danger rounded-pill fw-bold btn-sm px-3">Confirmar Alteração</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
+{% endblock %}

@@ -1,0 +1,358 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Botão Voltar Padrão do Módulo -->
+    <div class="mb-3">
+        <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+    </div>
+
+    <!-- Cabeçalho em Linhas (Empilhado) -->
+    <div class="mb-4">
+        <h3 class="fw-bold mb-1">Exceções e Recessos</h3>
+
+        <div class="fs-5 text-primary fw-semibold mb-1">
+            {% if contrato %}
+                {{ contrato.detalhes_pessoais.nome_exibicao_pwa if (contrato.detalhes_pessoais and contrato.detalhes_pessoais.nome_exibicao_pwa) else (contrato.detalhes_pessoais.nome_completo if contrato.detalhes_pessoais else 'Colaborador #' ~ contrato.id) }}
+            {% else %}
+                {{ empresa.nome_fantasia }}
+            {% endif %}
+        </div>
+
+        <p class="text-muted mb-0">Gestão de feriados, férias, ausências parciais e horários especiais de funcionamento.</p>
+    </div>
+
+    <!-- Linha do Botão de Ação (Centralizado em Azul) -->
+    <div class="text-center mb-4">
+        <button type="button" class="btn btn-primary btn-lg px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalExcecao" onclick="limparFormularioModal()">
+            <i class="bi bi-plus-lg me-1"></i> Nova Exceção / Recesso
+        </button>
+    </div>
+
+    <!-- SEÇÃO DE CARDS (Substituindo a Tabela Antiga) -->
+    <div class="row g-3">
+        {% for item in lista_excecoes %}
+            {% set hoje = datetime.now().date() if datetime else None %}
+
+            <!-- Lógica Visual do Estado Temporal -->
+            {% set eh_futuro = item.data_inicio > hoje if hoje else false %}
+            {% set eh_passado = item.data_fim < hoje if hoje else false %}
+            {% set eh_hoje = not eh_futuro and not eh_passado %}
+
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-2 {% if eh_hoje %}border-success bg-success-subtle bg-opacity-10{% elif eh_passado %}border-light-subtle opacity-75 bg-light{% else %}border-primary-subtle{% endif %}">
+                    <div class="card-body d-flex flex-column justify-content-between">
+
+                        <div>
+                            <!-- Cabeçalho do Card: Status Temporal e Tipo -->
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    {% if item.tipo.value == 'recesso' %}
+                                        <span class="badge bg-danger text-white me-1">Recesso / Ausência</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark me-1">Horário Especial</span>
+                                    {% endif %}
+
+                                    {% if eh_hoje %}
+                                        <span class="badge bg-success text-white animate__animated animate__pulse animate__infinite">
+                                            <i class="bi bi-play-circle me-1"></i>Em Andamento
+                                        </span>
+                                    {% elif eh_passado %}
+                                        <span class="badge bg-secondary text-white">Cumprido</span>
+                                    {% else %}
+                                        <span class="badge bg-primary text-white">Agendado</span>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Ação de Exclusão -->
+                                <form action="{{ url_for('empresa.excluir_excecao', excecao_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Deseja realmente remover esta exceção?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Remover registro">
+                                        <i class="bi bi-trash fs-6"></i>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Título do Motivo -->
+                            <h5 class="fw-bold mb-2 text-dark">{{ item.motivo_titulo }}</h5>
+
+                            <!-- Período / Datas -->
+                            <div class="small text-muted mb-2">
+                                <i class="bi bi-calendar-event me-1 text-primary"></i>
+                                {% if item.data_inicio == item.data_fim %}
+                                    <strong>{{ item.data_inicio.strftime('%d/%m/%Y') }}</strong>
+                                {% else %}
+                                    <strong>{{ item.data_inicio.strftime('%d/%m/%Y') }}</strong> até <strong>{{ item.data_fim.strftime('%d/%m/%Y') }}</strong>
+                                {% endif %}
+                            </div>
+
+                            <!-- Detalhamento de Escopo e Horários -->
+                            <div class="p-2 rounded bg-white border mb-2 small">
+                                {% if item.considera_horario %}
+                                    <div class="text-warning-emphasis fw-semibold">
+                                        <i class="bi bi-clock-history me-1"></i> Ausência Parcial (Bloqueio)
+                                    </div>
+                                    <div class="text-muted">
+                                        Das {{ item.hora_inicio_excecao.strftime('%H:%M') if item.hora_inicio_excecao else '--:--' }}
+                                        às {{ item.hora_fim_excecao.strftime('%H:%M') if item.hora_fim_excecao else '--:--' }}
+                                    </div>
+                                {% elif item.trabalha %}
+                                    <div class="text-success fw-semibold">
+                                        <i class="bi bi-clock me-1"></i> Expediente Especial
+                                    </div>
+                                    <div class="text-muted">
+                                        {{ item.inicio_expediente.strftime('%H:%M') if item.inicio_expediente else '--:--' }} -
+                                        {{ item.fim_expediente.strftime('%H:%M') if item.fim_expediente else '--:--' }}
+                                    </div>
+                                {% else %}
+                                    <div class="text-secondary fw-semibold">
+                                        <i class="bi bi-dash-circle me-1"></i> Dia Todo Sem Expediente
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Justificativa -->
+                            {% if item.justificativa %}
+                                <p class="card-text small text-muted fst-italic mb-0">
+                                    "{{ item.justificativa }}"
+                                </p>
+                            {% endif %}
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Estado Vazio -->
+            <div class="col-12">
+                <div class="text-center py-5 bg-light rounded border border-dashed">
+                    <i class="bi bi-calendar-x fs-1 text-muted d-block mb-2"></i>
+                    <h5 class="text-muted fw-normal mb-0">Nenhuma exceção ou recesso registrado até o momento.</h5>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- ================================================================================= -->
+<!-- MODAL DE CADASTRO UNIFICADO (MANTIDO CONFORME SUA ESTRUTURA ORIGINAL) -->
+<!-- ================================================================================= -->
+<div class="modal fade" id="modalExcecao" tabindex="-1" aria-labelledby="modalExcecaoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="modalExcecaoLabel">Cadastrar Exceção ou Recesso</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form id="formExcecaoCalendario" method="POST" action="{{ url_for('empresa.salvar_excecao', empresa_id=empresa.id) }}">
+                <input type="hidden" id="excecao_id" name="excecao_id">
+                <input type="hidden" id="contrato_id" name="contrato_id" value="{{ contrato.id if contrato else '' }}">
+                <input type="hidden" id="empresa_id" name="empresa_id" value="{{ empresa.id }}">
+                <input type="hidden" id="considera_horario" name="considera_horario" value="false">
+
+                <div class="modal-body">
+
+                    <!-- Banner de Feedback Preditivo -->
+                    <div id="feedback_inteligente_data" class="alert alert-info d-none py-2 mb-3" style="font-size: 0.875rem;" role="alert">
+                        <i class="bi bi-info-circle me-1"></i> <span id="feedback_texto"></span>
+                    </div>
+
+                    <!-- Linha 1: Tipo e Escopo -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <label for="tipo" class="form-label fw-semibold">Tipo de Ocorrência</label>
+                            <select class="form-select" id="tipo" name="tipo" required>
+                                <option value="recesso" selected>Recesso / Ausência</option>
+                                <option value="excecao">Trabalho em Horário Especial</option>
+                            </select>
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold">Escopo da Ausência/Bloqueio</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="escopo_tipo" id="escopo_dia_todo" value="dia_todo" checked onchange="gerenciarApresentacaoCampos()">
+                                <label class="btn btn-outline-primary" for="escopo_dia_todo">Dia / Período Todo</label>
+
+                                <input type="radio" class="btn-check" name="escopo_tipo" id="escopo_faixa_hora" value="faixa_hora" onchange="gerenciarApresentacaoCampos()">
+                                <label class="btn btn-outline-primary" for="escopo_faixa_hora">Faixa de Horário</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Linha 2: Título / Motivo -->
+                    <div class="mb-3">
+                        <label for="motivo_titulo" class="form-label fw-semibold">Título / Motivo *</label>
+                        <input type="text" class="form-control" id="motivo_titulo" name="motivo_titulo"
+                               placeholder="Ex: Férias, Consulta Médica, Feriado Municipal, Plantão" required maxlength="100">
+                    </div>
+
+                    <!-- Linha 3: Período de Datas -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="data_inicio" class="form-label fw-semibold">Data Inicial *</label>
+                            <input type="date" class="form-control" id="data_inicio" name="data_inicio" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="data_fim" class="form-label fw-semibold">Data Final *</label>
+                            <input type="date" class="form-control" id="data_fim" name="data_fim" required>
+                            <div id="help_data_fim" class="form-text">Para apenas 1 dia, repita a data inicial.</div>
+                        </div>
+                    </div>
+
+                    <!-- Bloco A: Faixa de Horários -->
+                    <div id="painel_faixa_horarios" class="card card-body bg-light border-0 mb-3 d-none">
+                        <h6 class="fw-bold mb-2 text-primary"><i class="bi bi-clock-history me-1"></i> Ausência Parcial em Faixa de Horário</h6>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label for="hora_inicio_excecao" class="form-label small mb-1 fw-semibold">Indisponível Das:</label>
+                                <input type="time" class="form-control" id="hora_inicio_excecao" name="hora_inicio_excecao">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="hora_fim_excecao" class="form-label small mb-1 fw-semibold">Até As:</label>
+                                <input type="time" class="form-control" id="hora_fim_excecao" name="hora_fim_excecao">
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            ℹ️ Fora desta faixa estipulada, a escala normal de atendimento continuará normalmente ativa no dia.
+                        </small>
+                    </div>
+
+                    <!-- Linha 4: Checkbox "Trabalha" -->
+                    <div id="wrapper_trabalha_check" class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="trabalha_check" name="trabalha" value="1" onchange="gerenciarApresentacaoCampos()">
+                        <label class="form-check-label fw-semibold" for="trabalha_check">
+                            Haverá expediente/trabalho neste período (Horário Especial)?
+                        </label>
+                    </div>
+
+                    <!-- Bloco B: Horários de Expediente Especial -->
+                    <div id="bloco_horarios" class="card card-body bg-light border-0 mb-3 d-none">
+                        <h6 class="fw-bold mb-3 text-success"><i class="bi bi-calendar-week me-1"></i> Horários de Funcionamento do Dia Especial</h6>
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">1ª Entrada</label>
+                                <input type="time" class="form-control form-control-sm" id="inicio_expediente" name="inicio_expediente">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">1ª Saída (Intervalo)</label>
+                                <input type="time" class="form-control form-control-sm" id="inicio_intervalo" name="inicio_intervalo">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">2ª Entrada</label>
+                                <input type="time" class="form-control form-control-sm" id="fim_intervalo" name="fim_intervalo">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small mb-1">2ª Saída</label>
+                                <input type="time" class="form-control form-control-sm" id="fim_expediente" name="fim_expediente">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Linha 5: Justificativa -->
+                    <div class="mb-3">
+                        <label for="justificativa" class="form-label fw-semibold">Justificativa / Observações</label>
+                        <textarea class="form-control" id="justificativa" name="justificativa" rows="2"
+                                  placeholder="Detalhamento adicional sobre o motivo da exceção ou recesso..."></textarea>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-circle me-1"></i> Salvar Exceção
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts Utilitários -->
+<script>
+    function gerenciarApresentacaoCampos() {
+        const radioFaixaHora = document.getElementById('escopo_faixa_hora').checked;
+        const checkTrabalha = document.getElementById('trabalha_check').checked;
+
+        const consideraHorarioHidden = document.getElementById('considera_horario');
+        const painelFaixaHorarios = document.getElementById('painel_faixa_horarios');
+        const wrapperTrabalhaCheck = document.getElementById('wrapper_trabalha_check');
+        const blocoHorarios = document.getElementById('bloco_horarios');
+        const inputDataInicio = document.getElementById('data_inicio');
+        const inputDataFim = document.getElementById('data_fim');
+        const helpDataFim = document.getElementById('help_data_fim');
+
+        consideraHorarioHidden.value = radioFaixaHora ? "true" : "false";
+
+        if (radioFaixaHora) {
+            painelFaixaHorarios.classList.remove('d-none');
+            wrapperTrabalhaCheck.classList.add('d-none');
+            blocoHorarios.classList.add('d-none');
+            document.getElementById('trabalha_check').checked = false;
+
+            if (inputDataInicio.value) {
+                inputDataFim.value = inputDataInicio.value;
+            }
+            inputDataFim.readOnly = true;
+            helpDataFim.innerText = "Para ausências por faixa de horário, a regra aplica-se em 1 único dia.";
+        } else {
+            painelFaixaHorarios.classList.add('d-none');
+            wrapperTrabalhaCheck.classList.remove('d-none');
+            inputDataFim.readOnly = false;
+            helpDataFim.innerText = "Para apenas 1 dia, repita a data inicial.";
+
+            if (checkTrabalha) {
+                blocoHorarios.classList.remove('d-none');
+            } else {
+                blocoHorarios.classList.add('d-none');
+            }
+        }
+    }
+
+    document.getElementById('data_inicio').addEventListener('change', async function() {
+        const dataVal = this.value;
+        const dtFim = document.getElementById('data_fim');
+        const radioFaixaHora = document.getElementById('escopo_faixa_hora').checked;
+
+        if (radioFaixaHora || !dtFim.value) {
+            dtFim.value = dataVal;
+        }
+
+        if (!dataVal) return;
+
+        const empresaId = document.getElementById('empresa_id').value;
+        const contratoId = document.getElementById('contrato_id').value;
+
+        try {
+            const resp = await fetch(`/api/avaliar-data-excecao?empresa_id=${empresaId}&contrato_id=${contratoId}&data=${dataVal}`);
+            if (resp.ok) {
+                const res = await resp.json();
+
+                document.getElementById('tipo').value = res.sugestao_tipo;
+                document.getElementById('trabalha_check').checked = res.trabalha_default;
+
+                if (res.motivo_sugerido && !document.getElementById('motivo_titulo').value) {
+                    document.getElementById('motivo_titulo').value = res.motivo_sugerido;
+                }
+
+                const banner = document.getElementById('feedback_inteligente_data');
+                const feedbackTexto = document.getElementById('feedback_texto');
+                feedbackTexto.innerText = res.mensagem_contexto;
+                banner.classList.remove('d-none');
+
+                gerenciarApresentacaoCampos();
+            }
+        } catch (err) {
+            console.error("Erro ao avaliar data preditiva:", err);
+        }
+    });
+
+    function limparFormularioModal() {
+        document.getElementById('excecao_id').value = '';
+        document.getElementById('formExcecaoCalendario').reset();
+        document.getElementById('feedback_inteligente_data').classList.add('d-none');
+        document.getElementById('data_fim').readOnly = false;
+        gerenciarApresentacaoCampos();
+    }
+</script>
+{% endblock %}

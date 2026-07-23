@@ -1,38 +1,63 @@
-{% extends "base.html" %}
+{% extends "base_agenda.html" %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{{ url_for('agenda.static', filename='css/agenda_auth.css') }}">
+{% endblock %}
+
+{% block title %}Acesso ao Painel | Módulo de Serviços{% endblock %}
 
 {% block content %}
-<div class="container py-5 px-4" style="max-width: 480px; font-family: system-ui, sans-serif;">
-    
-    <div class="text-center mb-5 animate__animated animate__fadeIn">
-        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-sm" style="width: 70px; height: 70px;">
-            <i class="bi bi-calendar3 fs-2"></i>
+<div class="auth-card-blindado">
+
+    <div class="text-center" style="margin-bottom: 40px;">
+        <div class="auth-icon-wrapper shadow-sm" style="display: inline-flex; align-items: center; justify-content: center; width: 90px; height: 90px; border-radius: 50%;">
+            <i class="bi bi-building-gear"></i>
         </div>
-        <h4 class="fw-bold text-dark m-0">Agendamentos FeedIn</h4>
-        <p class="text-muted small">Sua cidade, seus horários, sem complicação.</p>
+        <h2 class="auth-title" style="font-weight: 700; margin-top: 24px; margin-bottom: 8px; font-size: 24px;">Módulo de Serviços</h2>
+        <p class="auth-subtitle" style="font-size: 14px; margin: 0; padding: 0 10px;">Insira suas credenciais para acessar os agendamentos urbanos</p>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-        <form action="{{ url_for('agenda.identificar_usuario') }}" method="POST">
+    <form action="{{ url_for('auth.login') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-
-            <div class="mb-4">
-                <label for="email_login" class="form-label fw-bold text-secondary small">Para começar, digite seu E-mail:</label>
-                <div class="input-group bg-light rounded-3 p-1 border">
-                    <span class="input-group-text bg-transparent border-0 text-muted"><i class="bi bi-envelope-fill fs-5"></i></span>
-                    <input type="email" id="email_login" name="email_login" class="form-control bg-transparent border-0 shadow-none" placeholder="exemplo@email.com" required>
-                </div>
+        <div style="margin-bottom: 24px;">
+            <label class="auth-label" style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">E-mail de Acesso</label>
+            <div class="input-group-custom">
+                <span class="input-group-text-custom"><i class="bi bi-envelope"></i></span>
+                <input type="email" class="form-control-custom com-icone" id="email_login" name="email_login"
+                       value="{{ email_retornado if email_retornado else '' }}" placeholder="seuemail@provedor.com" required>
             </div>
+        </div>
 
-            <button type="submit" class="btn btn-primary w-100 rounded-pill py-2.5 fw-bold shadow-sm">
-                Avançar <i class="bi bi-arrow-right ms-2"></i>
+        <div style="margin-bottom: 40px;">
+            <label class="auth-label" style="display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Senha de Acesso</label>
+            <div class="input-group-custom">
+                <span class="input-group-text-custom"><i class="bi bi-key"></i></span>
+                <input type="password" class="form-control-custom com-icone" id="senha_login" name="senha_login" placeholder="Sua senha de acesso" required>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 32px;">
+            <button type="submit" class="btn-auth-primary shadow-sm">
+                Entrar no Painel <i class="bi bi-box-arrow-in-right" style="margin-left: 8px;"></i>
             </button>
-        </form>
-    </div>
+        </div>
 
-    <div class="text-center mt-5">
-        <a href="/ajuda" class="text-decoration-none text-muted small"><i class="bi bi-question-circle me-1"></i>Precisa de ajuda para acessar?</a>
-    </div>
+        <div class="auth-footer-divider" style="padding-top: 24px; text-align: center;">
+            {% if mostrar_botao_cadastro %}
+                <p class="auth-subtitle" style="font-size: 14px; margin-bottom: 16px;">Não possui uma conta de serviços nesta cidade?</p>
+                <a href="{{ url_for('auth.cadastro_inicio', email_inicial=email_retornado) }}" class="btn-auth-secondary"
+                   style="display: block; text-decoration: none; padding: 14px; font-weight: 600; border-radius: 8px; font-size: 14px;">
+                    <i class="bi bi-person-plus-fill" style="margin-right: 8px;"></i> Criar minha Conta na Agenda
+                </a>
+            {% else %}
+                <a href="{{ url_for('agenda.home_negocios') }}" class="auth-link-visitor"
+                   style="display: block; text-decoration: none; font-size: 14px; font-weight: 600; margin-top: 24px; text-align: center;">
+                    <i class="bi bi-geo-alt" style="margin-right: 4px;"></i> Entrar apenas como visitante
+                </a>
+            {% endif %}
+        </div>
 
+    </form>
 </div>
 {% endblock %}

@@ -1,0 +1,11 @@
+{% extends "emails/nutricao_base.html" %}
+
+{% block corpo %}
+Você iniciou o processo de reivindicação e controle comercial do estabelecimento <strong>{{ local.nome }}</strong> na plataforma FeedIn!.
+
+A veracidade comercial e histórica de nossa cidade é um pilar inegociável para nós. Para assegurar que a gestão desta página pertença legitimamente a você ou à sua representação legal, clique no botão abaixo para criar suas credenciais exclusivas de acesso e vincular a empresa à sua conta.
+
+Por motivos de segurança, este link é privado e possui um <strong>prazo de validade estrito de {{ prazo_dias }} dias</strong>. Caso a validação não ocorra dentro deste período, a solicitação será cancelada por decurso de prazo.
+{% endblock %}
+
+{% block texto_botao %}CONFIRMAR PROPRIEDADE E CRIAR CONTA{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "empresa/base_empresa.html" %}
+{% block content %}
+
+<div class="container my-5 py-3">
+    <!-- Cabeçalho de Boas-Vindas -->
+    <div class="text-center mb-5">
+        <h2 class="fw-bold text-dark mb-2">Olá, {{ current_user.nome }}!</h2>
+        <p class="text-muted">Selecione qual estabelecimento você deseja gerenciar e configurar no momento.</p>
+    </div>
+
+    <!-- Grade de Cards Verticais Estilo Botões Grandes -->
+    <div class="row g-4 justify-content-center">
+        {% for empresa in empresas %}
+        <div class="col-12 col-md-6 col-lg-4">
+            <!-- O card inteiro funciona como um grande botão clicável -->
+            <a href="{{ url_for('empresa.alternar_ambiente_empresa', empresa_id=empresa.id) }}" 
+               class="text-decoration-none text-dark d-block card border-0 shadow-sm rounded-4 overflow-hidden h-100 position-relative card-ambiente"
+               style="transition: transform 0.2s, box-shadow 0.2s;">
+                
+                <!-- Faixa Superior com a Cor Temática do PWA da Empresa -->
+                <div style="height: 12px; background-color: {{ empresa.cor_pwa or '#6c757d' }};"></div>
+                
+                <div class="card-body p-4 text-center d-flex flex-column align-items-center justify-content-between">
+                    <!-- Logomarca ou Avatar Identificador -->
+                    <div class="mb-3 d-flex align-items-center justify-content-center bg-light rounded-circle shadow-inner" style="width: 90px; height: 90px;">
+                        {% if empresa.url_logomarca %}
+                            <img src="{{ empresa.url_logomarca }}" alt="Logo {{ empresa.nome }}" class="rounded-circle" style="width: 100%; height: 100%; object-fit: cover;">
+                        {% else %}
+                            <!-- Fallback visual caso ainda não possua logo -->
+                            <i class="bi bi-shop text-secondary" style="font-size: 2.5rem;"></i>
+                        {% endif %}
+                    </div>
+
+                    <!-- Informações de Identificação Rápida -->
+                    <div>
+                        <h4 class="fw-bold text-dark mb-1 text-truncate" style="max-width: 240px;">{{ empresa.nome }}</h4>
+                        <span class="badge rounded-pill bg-light text-secondary border px-3 py-1 mb-2">
+                            {{ empresa.categoria or 'Comércio Local' }}
+                        </span>
+                        
+                        <!-- Mostra o status para o empreendedor saber se precisa de atenção -->
+                        {% if empresa.status_homologacao == 'aguardando_validacao_tecnica' %}
+                            <p class="text-warning small mb-0 fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i> Homologação Pendente</p>
+                        {% else %}
+                            <p class="text-success small mb-0"><i class="bi bi-check-circle-fill me-1"></i> Operação Ativa</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Indicador de Ação Inferior -->
+                    <div class="mt-4 w-100 pt-3 border-top border-light text-primary fw-bold small">
+                        Acessar Painel Gerencial <i class="bi bi-arrow-right-short ms-1"></i>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Efeito Simples de Hover para os Botões Grandes -->
+<style>
+    .card-ambiente:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 1rem 3rem rgba(0,0,0,.12) !important;
+    }
+</style>
+
+{% endblock %}

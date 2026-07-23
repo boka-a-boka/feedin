@@ -1,0 +1,150 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Gerar Link de Cadastro{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4">
+    <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# ⬅️ BOTÃO DE RETORNO PADRÃO PWA #}
+        <div class="d-flex align-items-center mb-3">
+            <a href="{{ url_for('empresa.configurar_jornadas_tela', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 38px; height: 38px;"
+               title="Voltar ao Painel Jornadas">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="fw-bold text-dark fs-6">Link de Cadastro Novo Colaborador</span>
+        </div>
+
+        {# 🟢 PAINEL DE LINK GERADO COM SUCESSO #}
+        {% if link_gerado %}
+        <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-success mb-4 text-center">
+            <div class="p-2 bg-success text-white rounded-circle d-inline-block mb-2" style="width: 48px; height: 48px;">
+                <i class="bi bi-check-lg fs-3"></i>
+            </div>
+            <h5 class="fw-bold text-dark m-0">Link Criado com Sucesso!</h5>
+            <p class="text-muted small mt-1 mb-3">
+                O pré-cadastro de <strong>{{ nome_colaborador }}</strong> foi registrado. Copie o link abaixo e envie ao profissional pelo canal de sua preferência.
+            </p>
+
+            {# CAMPO DO LINK E BOTÃO COPIAR #}
+            <div class="input-group mb-3">
+                <input type="text" id="inputLinkConvite" class="form-control bg-light border-2 rounded-start-3 text-muted small" value="{{ link_gerado }}" readonly>
+                <button class="btn btn-dark rounded-end-3 px-3 fw-semibold" type="button" id="btnCopiar" onclick="copiarLinkConvite()">
+                    <i class="bi bi-clipboard me-1" id="iconeCopiar"></i> <span id="textoCopiar">Copiar</span>
+                </button>
+            </div>
+
+            {# ALERTA TEMPORÁRIO DE SUCESSO NA CÓPIA #}
+            <div id="alertaCopiado" class="alert alert-success py-2 px-3 small rounded-3 d-none align-items-center justify-content-center gap-2 m-0">
+                <i class="bi bi-check-circle-fill"></i> Link copiado para a área de transferência!
+            </div>
+
+            {# BOX ORIENTATIVO DO PROCESSO #}
+            <div class="alert alert-light border text-start rounded-3 mt-3 p-3 mb-0" style="font-size: 0.82rem;">
+                <h6 class="fw-bold text-dark mb-1" style="font-size: 0.85rem;"><i class="bi bi-info-circle text-primary me-1"></i> Próximos Passos:</h6>
+                <ol class="ps-3 m-0 text-secondary">
+                    <li class="mb-1">Envie o link acima diretamente para o candidato (WhatsApp, E-mail, Telegram, etc).</li>
+                    <li class="mb-1">O candidato acessará o formulário para validar os dados civis e completar a ficha cadastral.</li>
+                    <li>Após a conclusão do candidato, avance para o <strong>Passo 2 (Cargo &amp; Habilidades)</strong> no painel da equipe.</li>
+                </ol>
+            </div>
+        </div>
+        {% endif %}
+
+        {# 📝 FORMULÁRIO DE IDENTIFICAÇÃO CIVIL #}
+        {% if not link_gerado %}
+        <form method="POST" class="d-flex flex-column gap-3">
+
+            {# 🛡️ CSRF TOKEN OBRIGATÓRIO #}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-gray-300">
+
+                <div class="text-center mb-4">
+                    <div class="p-2 bg-dark text-white rounded-3 d-inline-block mb-2">
+                        <i class="bi bi-person-vcard fs-4"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark m-0">Identificação Oficial</h5>
+                    <p class="text-muted small m-0 mt-1">Informe os dados exatamente como constam no documento oficial para garantir a consistência do convite.</p>
+                </div>
+
+                {# CAIXA INFORMATIVA INICIAL #}
+                <div class="bg-light p-3 rounded-3 border mb-3" style="font-size: 0.8rem;">
+                    <i class="bi bi-shield-check text-dark me-1"></i>
+                    <span class="text-secondary">O FeedIn não enviará mensagens automáticas. Ao confirmar, um link exclusivo será gerado para você copiar e enviar ao futuro colaborador.</span>
+                </div>
+
+                {# NOME COMPLETO #}
+                <div class="mb-3">
+                    <label class="form-label small text-muted fw-semibold">Nome Completo</label>
+                    <input type="text" name="nome_completo" class="form-control border-2 rounded-3" placeholder="Ex: João da Silva Santos" required>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    {# CPF #}
+                    <div class="col-7">
+                        <label class="form-label small text-muted fw-semibold">CPF (somente números)</label>
+                        <input type="text" name="cpf" class="form-control border-2 rounded-3" placeholder="00000000000" required maxlength="14">
+                    </div>
+                    {# DATA DE NASCIMENTO #}
+                    <div class="col-5">
+                        <label class="form-label small text-muted fw-semibold">Data de Nasc.</label>
+                        <input type="date" name="data_nascimento" class="form-control border-2 rounded-3" required>
+                    </div>
+                </div>
+
+            </div>
+
+            <button type="submit" class="btn btn-dark w-100 rounded-pill py-2.5 fw-semibold shadow-sm">
+                <i class="bi bi-link-45deg me-1"></i> Validar e Gerar Link de Cadastro
+            </button>
+        </form>
+        {% endif %}
+
+    </div>
+</div>
+
+<script>
+function copiarLinkConvite() {
+    const inputLink = document.getElementById('inputLinkConvite');
+    const alertaCopiado = document.getElementById('alertaCopiado');
+    const btnCopiar = document.getElementById('btnCopiar');
+    const iconeCopiar = document.getElementById('iconeCopiar');
+    const textoCopiar = document.getElementById('textoCopiar');
+
+    inputLink.select();
+    inputLink.setSelectionRange(0, 99999);
+
+    navigator.clipboard.writeText(inputLink.value).then(() => {
+        alertaCopiado.classList.remove('d-none');
+        alertaCopiado.classList.add('d-flex');
+
+        btnCopiar.classList.remove('btn-dark');
+        btnCopiar.classList.add('btn-success');
+        iconeCopiar.className = 'bi bi-check2-all me-1';
+        textoCopiar.innerText = 'Copiado!';
+
+        setTimeout(() => {
+            alertaCopiado.classList.remove('d-flex');
+            alertaCopiado.classList.add('d-none');
+
+            btnCopiar.classList.remove('btn-success');
+            btnCopiar.classList.add('btn-dark');
+            iconeCopiar.className = 'bi bi-clipboard me-1';
+            textoCopiar.innerText = 'Copiar';
+        }, 3000);
+    }).catch(err => {
+        console.error('Erro ao copiar link: ', err);
+    });
+}
+</script>
+{% endblock %}

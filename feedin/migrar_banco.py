@@ -1,28 +1,28 @@
 from feedin import app, database
 
 
-def executar_migracao():
+def executar_migracao_indice():
     with app.app_context():
-        print("Iniciando checagem da estrutura do banco de dados...")
+        print("Iniciando injeção de índice de performance na tabela taxonomia...")
 
         try:
-            # Comando SQL nativo para injetar a nova coluna de anúncios
-            # O SQLite aceita isso instantaneamente porque ela permite valores nulos (NULL)
+            # Comando SQL nativo para criar o índice focado em buscas textuais
+            # O 'COLLATE NOCASE' obriga o SQLite a indexar o texto ignorando maiúsculas/minúsculas
             database.session.execute(database.text(
-                "ALTER TABLE locais ADD COLUMN url_flyer VARCHAR(255) NULL;"
+                "CREATE INDEX IF NOT EXISTS idx_taxonomia_nome ON taxonomia (nome COLLATE NOCASE);"
             ))
             database.session.commit()
-            print("🌟 Sucesso! Coluna 'url_flyer' injetada com segurança.")
-            print("Os 656 registros foram preservados intactos.")
+            print("🌟 Sucesso! Índice 'idx_taxonomia_nome' injetado e ativado com segurança.")
+            print("A tabela de taxonomia agora está otimizada para buscas rápidas em tempo de digitação.")
 
         except Exception as e:
             database.session.rollback()
-            # Se a coluna já existir (porque você rodou o script duas vezes sem querer), ele avisa aqui
-            if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
-                print("Aviso: A coluna 'url_flyer' já existe no banco de dados. Nenhuma alteração foi necessária.")
+            # Tratamento de segurança caso o índice por algum motivo já exista no arquivo físico
+            if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
+                print("Aviso: O índice já existe no banco de dados. Nenhuma alteração foi necessária.")
             else:
-                print(f"Erro crítico na migração: {e}")
+                print(f"Erro crítico na migração do índice: {e}")
 
 
 if __name__ == '__main__':
-    executar_migracao()
+    executar_migracao_indice()

@@ -1,0 +1,32 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Setup Inicial - {{ local.nome }}{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white p-6 rounded-2xl shadow-md my-6 border-2 border-blue-100">
+    <div class="mb-6 text-center">
+        <span class="text-4xl">🏢</span>
+        <h1 class="text-xl font-bold text-gray-900 mt-2">Ativação do Estabelecimento</h1>
+        <p class="text-sm text-gray-500 mt-1">Parabéns! Sua titularidade sobre o local <strong>{{ local.nome }}</strong> foi pré-aprovada. Defina seu expediente padrão para ativar suas credenciais de Dono.</p>
+    </div>
+
+    <form action="{{ url_for('empresa.setup_inicial_dono', empresa_id=local.id) }}" method="POST" class="space-y-4">
+        
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Seu Início de Expediente</label>
+            <input type="time" name="hora_inicio_expediente" required value="08:00"
+                   class="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Seu Término de Expediente</label>
+            <input type="time" name="hora_fim_expediente" required value="18:00"
+                   class="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <button type="submit" class="w-full p-3 bg-blue-600 text-white font-medium rounded-xl shadow-sm hover:bg-blue-700 transition mt-6">
+            Confirmar Auto-Cadastro e Assumir Empresa 🚀
+        </button>
+    </form>
+</div>
+{% endblock %}

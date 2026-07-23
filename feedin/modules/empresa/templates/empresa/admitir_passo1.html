@@ -1,0 +1,62 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Passo 1 - Disparar Convite{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .form-control:focus {
+        border-color: #212529 !important;
+        box-shadow: 0 0 0 0.25rem rgba(33, 37, 41, 0.15) !important;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-3">
+    <div class="container" style="max-width: 600px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 🧭 BARRA SUPERIOR PADRONIZADA #}
+        <div class="d-flex align-items-center mb-4 bg-white p-3 rounded-4 shadow-sm border border-2 border-gray-200">
+            <a href="{{ url_for('empresa.equipe_jornadas', empresa_id=ese_empresa.id) }}" class="btn btn-dark rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;" title="Voltar">
+                <i class="bi bi-arrow-left text-white fs-5"></i>
+            </a>
+            <div class="ms-3">
+                <h6 class="fw-bold text-dark m-0">Passo 1: Enviar Vínculo</h6>
+                <p class="text-muted m-0" style="font-size: 0.7rem;">Coleta inicial de dados de acesso</p>
+            </div>
+        </div>
+
+        {# FORMULÁRIO #}
+        <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-gray-200">
+            <div class="alert alert-light border border-1 py-2 px-3 rounded-3 mb-4 text-muted" style="font-size: 0.75rem;">
+                <i class="bi bi-envelope-paper-fill text-secondary me-1"></i>
+                O profissional receberá um link seguro para preencher dados civis e bancários. O cargo e as atividades serão atrelados no passo 2 assim que ele concluir.
+            </div>
+
+            <form action="{{ url_for('empresa.admitir_passo1', empresa_id=ese_empresa.id, contrato_id=contrato.id) }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark small">Nome Identificador</label>
+                    <input type="text" class="form-control rounded-3" name="nome_provisorio" value="{{ contrato.nome_provisorio or '' }}" placeholder="Ex: João da Silva (Barbeiro)" required autocomplete="off">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark small">E-mail Corporativo/Pessoal</label>
+                    <input type="email" class="form-control rounded-3" name="email_destino" value="{{ contrato.email_destino or '' }}" placeholder="nome@email.com" required autocomplete="off">
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label fw-bold text-dark small">WhatsApp de Notificação</label>
+                    <input type="tel" class="form-control rounded-3" name="whatsapp_destino" value="{{ contrato.whatsapp_destino or '' }}" placeholder="(19) 99999-9999">
+                </div>
+
+                <button type="submit" class="btn btn-dark w-100 fw-bold py-2.5 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-send-fill fs-6"></i> Disparar Acesso à Ficha
+                </button>
+            </form>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

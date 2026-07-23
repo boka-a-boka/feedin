@@ -1,0 +1,156 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Parâmetros de Operação{% endblock %}
+
+{% block content %}
+<style>
+    /* 🎨 Fundo Acetinado Premium PWA */
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+
+    /* Efeito tátil refinado nos cards */
+    .card-operacao-direta {
+        transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+        cursor: pointer;
+        border-color: rgba(0,0,0,0.08) !important;
+    }
+    .card-operacao-direta:hover {
+        background-color: #fcfbfa !important;
+    }
+    .card-operacao-direta:active {
+        transform: scale(0.98);
+        background-color: #f3f1e9 !important;
+    }
+
+    /* Badge sutil de Homologação */
+    .badge-status-onboarding {
+        font-size: 0.62rem;
+        letter-spacing: 0.5px;
+        background-color: rgba(0, 0, 0, 0.05);
+        color: #555555;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+</style>
+
+<div class="container py-3 fundo-acetinado-pwa position-relative" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif; border-radius: 24px;">
+
+    {# 🎯 BOTÃO VOLTAR PADRÃO ESCURO FEEDIN (Corrigido e Forçado contra interferências de base.html) #}
+    <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+       class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow"
+       style="width: 40px; height: 40px; background-color: #212529 !important; color: #ffffff !important; position: absolute; top: 24px; left: 24px; z-index: 1050;"
+       title="Voltar">
+        <i class="bi bi-arrow-left text-white fs-5"></i>
+    </a>
+
+    {# 🏢 CABEÇALHO LIMPO (Com espaçamento compensando o botão flutuante acima) #}
+    <div class="card border-0 bg-white p-3 rounded-4 shadow-sm border mb-4" style="margin-top: 50px;">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+
+                {# Identidade Direta do Estabelecimento #}
+                <div class="d-flex align-items-center gap-2">
+                    {% if ese_empresa.logomarca %}
+                        <img src="{{ url_for('empresa.static', filename=ese_empresa.logomarca) }}" alt="Logo" class="rounded-3 border object-fit-contain" style="width: 40px; height: 40px; background-color: #fcfbfa;">
+                    {% else %}
+                        <div class="rounded-3 border d-flex align-items-center justify-content-center text-uppercase fw-bold text-secondary" style="width: 40px; height: 40px; background-color: #f6f4ee; font-size: 1rem;">
+                            {{ ese_empresa.nome[0] }}
+                        </div>
+                    {% endif %}
+                    <div>
+                        <strong class="text-dark d-block" style="font-size: 0.95rem; font-weight: 700; line-height: 1.2;">{{ ese_empresa.nome }}</strong>
+                        <span class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.1;">{{ categoria_nome }} • {{ ese_empresa.cidade }}/{{ ese_empresa.estado }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {# Metadados Alinhados à Direita #}
+            <div class="text-end" style="line-height: 1.1;">
+                <span class="text-muted d-block mb-1" style="font-size: 0.58rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Painel Operacional</span>
+                <span class="badge badge-status-onboarding fw-semibold py-1 px-2 rounded-pill"><i class="bi bi-shield-lock-fill me-1 text-warning"></i>Pleiteante</span>
+            </div>
+        </div>
+    </div>
+
+    {# ⚙️ LISTA DE CONFIGURAÇÕES DIRETAS #}
+    <div class="d-flex flex-column gap-2 mb-4">
+
+        {# CARD 1: Calendário e Exceções #}
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="window.location.href='{{ url_for('empresa.gerenciar_calendario', empresa_id=ese_empresa.id) }}'">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
+                        <i class="bi bi-calendar3 fs-5" style="color: {{ ese_empresa.cor_primaria or '#111827' }};"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark" style="font-size: 0.88rem;">Calendário e Exceções</strong>
+                        <span class="text-muted d-block" style="font-size: 0.75rem; line-height: 1.2;">Gerencie recessos e feriados locais de atendimento.</span>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+            </div>
+        </div>
+
+        {# CARD 2: Termos de Uso #}
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Regulamentos de convivência e aceite de termos em desenvolvimento para a fase Beta.')">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
+                        <i class="bi bi-file-earmark-text-fill fs-5" style="color: {{ ese_empresa.cor_primaria or '#111827' }};"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark" style="font-size: 0.88rem;">Termos de Uso do Ecossistema</strong>
+                        <span class="text-muted d-block" style="font-size: 0.75rem; line-height: 1.2;">Regras de convivência do balcão e termos contratuais.</span>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+            </div>
+        </div>
+
+        {# CARD 3: LGPD #}
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Termos de conformidade com LGPD em desenvolvimento.')">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
+                        <i class="bi bi-shield-lock-fill fs-5" style="color: {{ ese_empresa.cor_primaria or '#111827' }};"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark" style="font-size: 0.88rem;">Privacidade de Dados (LGPD)</strong>
+                        <span class="text-muted d-block" style="font-size: 0.75rem; line-height: 1.2;">Configurações de privacidade e salvaguarda da memória social.</span>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+            </div>
+        </div>
+
+        {# CARD 4: Suporte Técnico #}
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Suporte técnico FeedIn local.')">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
+                        <i class="bi bi-headset fs-5" style="color: {{ ese_empresa.cor_primaria or '#111827' }};"></i>
+                    </div>
+                    <div>
+                        <strong class="d-block text-dark" style="font-size: 0.88rem;">Suporte ao Empreendedor</strong>
+                        <span class="text-muted d-block" style="font-size: 0.75rem; line-height: 1.2;">Canal direto de apoio e resolução de dúvidas de balcão.</span>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted fs-6 ms-2"></i>
+            </div>
+        </div>
+
+    </div>
+
+    {# 🚪 BLOCO DE SESSÃO DO MÓDULO #}
+    <div class="card border-0 bg-transparent text-center mt-5">
+        <div class="d-flex flex-column gap-2 px-3">
+            <a href="{{ url_for('empresa.logout') }}" class="btn btn-sm btn-outline-danger rounded-pill py-2.5 mx-auto fw-semibold d-flex align-items-center justify-content-center gap-2 w-75 shadow-sm" style="font-size: 0.78rem;">
+                <i class="bi bi-box-arrow-right"></i>
+                Sair do Módulo Empresa
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

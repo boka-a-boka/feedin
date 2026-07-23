@@ -1,0 +1,142 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Passo 2 - Cargo e Habilidades{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .form-control:focus {
+        border-color: #212529 !important;
+        box-shadow: 0 0 0 0.25rem rgba(33, 37, 41, 0.15) !important;
+    }
+    .checkbox-atividade {
+        display: none;
+    }
+    .label-atividade {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background-color: #fff;
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .checkbox-atividade:checked + .label-atividade {
+        border-color: #198754;
+        background-color: #f8fffb;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-3">
+    <div class="container" style="max-width: 600px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 🧭 BARRA SUPERIOR PADRONIZADA #}
+        <div class="d-flex align-items-center mb-4 bg-white p-3 rounded-4 shadow-sm border border-2 border-gray-200">
+            <a href="{{ url_for('empresa.equipe_jornadas', empresa_id=ese_empresa.id) }}" class="btn btn-dark rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;" title="Voltar">
+                <i class="bi bi-arrow-left text-white fs-5"></i>
+            </a>
+            <div class="ms-3">
+                <h6 class="fw-bold text-dark m-0">Passo 2: Perfil &amp; Atividades</h6>
+                <p class="text-muted m-0" style="font-size: 0.7rem;">Definição técnica do integrante</p>
+            </div>
+        </div>
+
+        <form action="{{ url_for('empresa.configurar_passo2', empresa_id=ese_empresa.id, contrato_id=contrato.id) }}" method="POST">
+            
+            {# BLOCO DO CARGO COM AUTOCOMPLETE ANCORADO NO TOPO #}
+            <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-gray-200 mb-3">
+                <label for="cargo_atuacao" class="form-label fw-bold text-dark mb-1">Cargo de Atuação</label>
+                <p class="text-muted m-0 mb-3" style="font-size: 0.72rem;">Digite e selecione um cargo existente ou crie um novo digitando livremente.</p>
+                
+                <input type="text" class="form-control rounded-3 py-2.5" id="cargo_atuacao" name="cargo_atuacao" 
+                       value="{{ contrato.cargo.nome_cargo if contrato.cargo else '' }}" 
+                       placeholder="Ex: Barbeiro Senior, Recepcionista..." list="cargosSugestoes" autocomplete="off" required>
+                
+                {# Datalist alimentado via JS #}
+                <datalist id="cargosSugestoes"></datalist>
+            </div>
+
+            {# BLOCO DO MAPEAMENTO DE HABILIDADES / SERVIÇOS #}
+            <div class="bg-white p-4 rounded-4 shadow-sm border border-2 border-gray-200 mb-4">
+                <label class="form-label fw-bold text-dark mb-1">Atividades e Serviços Pertinentes</label>
+                <p class="text-muted m-0 mb-3" style="font-size: 0.72rem;">Marque as tarefas acordadas para este colaborador realizar no estabelecimento.</p>
+
+                <div class="d-flex flex-column gap-2">
+                    {# Loop simulado com o Jinja (Adapte para o seu objeto de taxonomias/serviços) #}
+                    {# {% for atividade in atividades_empresa %} #}
+                    <div>
+                        <input type="checkbox" name="atividades[]" value="1" id="ativ_1" class="checkbox-atividade" checked>
+                        <label for="ativ_1" class="label-atividade">
+                            <div>
+                                <span class="fw-semibold text-dark d-block" style="font-size: 0.85rem;">Corte de Cabelo Degradê</span>
+                                <small class="text-muted" style="font-size: 0.7rem;">Serviço Operacional Habitual</small>
+                            </div>
+                            <i class="bi bi-check-circle-fill text-success fs-5 check-icon"></i>
+                        </label>
+                    </div>
+
+                    <div>
+                        <input type="checkbox" name="atividades[]" value="2" id="ativ_2" class="checkbox-atividade">
+                        <label for="ativ_2" class="label-atividade">
+                            <div>
+                                <span class="fw-semibold text-dark d-block" style="font-size: 0.85rem;">Barboterapia Completa</span>
+                                <small class="text-muted" style="font-size: 0.7rem;">Serviço com Toalha Quente e Estética</small>
+                            </div>
+                            <i class="bi bi-circle text-secondary fs-5 check-icon"></i>
+                        </label>
+                    </div>
+                    {# {% endfor %} #}
+                </div>
+            </div>
+
+            {# BOTÃO DE SALVAMENTO UNIFICADO NO RODAPÉ #}
+            <button type="submit" class="btn btn-success w-100 fw-bold py-2.5 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-bookmark-check-fill fs-5"></i> Salvar Perfil Profissional
+            </button>
+
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const cargoInput = document.getElementById('cargo_atuacao');
+    const datalist = document.getElementById('cargosSugestoes');
+
+    // Escuta a digitação para trazer os cargos cadastrados no banco via AJAX/Fetch
+    cargoInput.addEventListener('input', function() {
+        const query = this.value;
+        if (query.length < 2) return;
+
+        fetch(`/empresa/{{ ese_empresa.id }}/buscar-cargos?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                datalist.innerHTML = ''; // Limpa sugestões anteriores
+                data.forEach(cargoNome => {
+                    const option = document.createElement('option');
+                    option.value = cargoNome;
+                    datalist.appendChild(option);
+                });
+            });
+    });
+
+    // Mudança visual dinâmica dos cards de atividade ao marcar/desmarcar
+    const checkboxes = document.querySelectorAll('.checkbox-atividade');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            const icon = this.nextElementSibling.querySelector('.check-icon');
+            if (this.checked) {
+                icon.className = "bi bi-check-circle-fill text-success fs-5 check-icon";
+            } else {
+                icon.className = "bi bi-circle text-secondary fs-5 check-icon";
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

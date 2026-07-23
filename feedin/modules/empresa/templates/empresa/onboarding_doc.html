@@ -1,0 +1,153 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Envio de Documentação{% endblock %}
+
+{% block content %}
+<style>
+    /* Fundo Acetinado Contínuo para tirar o ofuscamento do monitor */
+    .fundo-acetinado-form {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    /* Inputs com alto contraste para monitores com muito brilho */
+    .input-alto-contraste {
+        background-color: #f8f9fa !important;
+        border: 2px solid #a1a1a1 !important;
+        color: #1a1a1a !important;
+        font-weight: 500 !important;
+    }
+    .input-alto-contraste:focus {
+        background-color: #ffffff !important;
+        border-color: #0d6efd !important;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    }
+</style>
+
+<div class="fundo-acetinado-form w-100 py-4">
+    <div class="container" style="max-width: 750px; font-family: system-ui, -apple-system, sans-serif;">
+
+        <!-- Cabeçalho -->
+        <div class="text-center mb-4">
+            <span class="badge bg-warning-subtle text-warning-emphasis fw-bold mb-2 px-3 py-1.5 border border-warning-subtle rounded-pill">
+                FASE PLEITEANTE — ETAPA 2
+            </span>
+            <h4 class="fw-black text-dark m-0">Documentação de Homologação</h4>
+            <p class="text-muted small mt-1">Por favor, insira os dados cadastrais e anexe os comprovantes para liberação dos módulos.</p>
+        </div>
+
+        <!-- Card do Formulário com Bordas Bem Definidas -->
+        <div class="bg-white p-4 p-md-5 rounded-4 shadow-sm border border-2 border-secondary-subtle">
+
+            <!-- IMPORTANTE: O enctype="multipart/form-data" é obrigatório para o upload funcionar! -->
+            <form method="POST" action="{{ url_for('empresa.enviar_documentacao') }}" enctype="multipart/form-data">
+                {{ form.csrf_token }}
+
+                <!-- 1. SEÇÃO: DADOS CADASTRAIS -->
+                <div class="mb-4 pb-4 border-bottom border-2">
+                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-file-earmark-text-fill me-2 text-secondary"></i> Dados da Empresa</h6>
+
+                    <!-- Campo Razão Social: EXPANDIDO EM 100% DA LARGURA -->
+                    <div class="mb-4 w-100">
+                        {{ form.razao_social.label(class="form-label fw-bold text-dark small mb-1") }}
+                        {{ form.razao_social(class="form-control form-control-lg input-alto-contraste rounded-3 w-100", placeholder="Digite a Razão Social ou Nome Completo Completo") }}
+                        {% for error in form.razao_social.errors %}
+                            <div class="text-danger fw-bold small mt-1">⚠️ {{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Bloco Combinado: CNPJ e CPF (Alternáveis no Backend) -->
+                    <div class="row g-3 p-3 rounded-3 mb-3 border border-warning-subtle" style="background-color: #fffdf5;">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-dark small mb-1" for="cnpj_input">CNPJ <span class="text-muted fw-normal">(Se houver PJ)</span></label>
+                            {{ form.cnpj(class="form-control input-alto-contraste rounded-3", placeholder="00.000.000/0000-00", id="cnpj_input") }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-dark small mb-1" for="cpf_input">CPF do Responsável <span class="text-muted fw-normal">(Obrigatório para PF)</span></label>
+                            {{ form.cpf_responsavel(class="form-control input-alto-contraste rounded-3", placeholder="000.000.000-00", id="cpf_input") }}
+                        </div>
+                        <div class="col-12 mt-1">
+                            <span class="text-muted" style="font-size: 0.7rem;">* Nota: Se for a sua primeira empresa, você pode fornecer apenas o CPF. Próximas empresas exigirão CNPJ.</span>
+                        </div>
+                    </div>
+
+                    <!-- E-mail de Contato -->
+                    <div class="mb-2">
+                        {{ form.email_contato.label(class="form-label fw-bold text-dark small mb-1") }}
+                        {{ form.email_contato(class="form-control input-alto-contraste rounded-3", placeholder="exemplo@email.com") }}
+                        {% for error in form.email_contato.errors %}
+                            <div class="text-danger fw-bold small mt-1">⚠️ {{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- 2. SEÇÃO: UPLOADS DE ARQUIVOS -->
+                <div class="mb-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-upload me-2 text-secondary"></i> Anexar Comprovantesf</h6>
+
+                    <div class="row g-3">
+                        <!-- Comprovante de Endereço -->
+                        <div class="col-md-6">
+                            <div class="p-3 border border-2 border-dashed rounded-3 text-center bg-light">
+                                {{ form.comprovante_endereco.label(class="form-label fw-bold text-dark small d-block mb-2") }}
+                                {{ form.comprovante_endereco(class="form-control form-control-sm input-alto-contraste") }}
+                            </div>
+                        </div>
+
+                        <!-- Documentação Fiscal -->
+                        <div class="col-md-6">
+                            <div class="p-3 border border-2 border-dashed rounded-3 text-center bg-light">
+                                {{ form.documento_comercial.label(class="form-label fw-bold text-dark small d-block mb-2") }}
+                                {{ form.documento_comercial(class="form-control form-control-sm input-alto-contraste") }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. AÇÕES DOS BOTÕES (FORMATADOS, COLORIDOS E DIRECIONADOS AO HUB) -->
+                <div class="d-flex justify-content-end gap-3 pt-3 border-top border-2">
+
+                    <!-- Botão Cancelar: Volta direto para o Hub sem salvar nada -->
+                    <a href="{{ url_for('empresa.hub_onboarding') }}" class="btn btn-light border border-2 border-secondary text-dark fw-bold px-4 py-2 rounded-3">
+                        Cancelar
+                    </a>
+
+                    <!-- Botão Enviar: Envia o formulário, aciona o backend e depois o backend joga pro Hub -->
+                    <button type="submit" class="btn fw-black text-white px-4 py-2 rounded-3 shadow-sm" style="background-color: #111827; border: 2px solid #111827;">
+                        Enviar para Análise ✓
+                    </button>
+
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts de Máscara Automática para CPF/CNPJ -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const cpfInput = document.getElementById('cpf_input');
+        const cnpjInput = document.getElementById('cnpj_input');
+
+        if(cpfInput) {
+            cpfInput.addEventListener('input', function(e) {
+                let v = e.target.value.replace(/\D/g, "");
+                v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                v = v.replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                e.target.value = v.substring(0, 14);
+            });
+        }
+
+        if(cnpjInput) {
+            cnpjInput.addEventListener('input', function(e) {
+                let v = e.target.value.replace(/\D/g, "");
+                v = v.replace(/^(\d{2})(\d)/, "$1.$2");
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3");
+                v = v.replace(/\.(\d{3})(\d)/, ".$1/$2");
+                v = v.replace(/(\d{4})(\d)/, "$1-$2");
+                e.target.value = v.substring(0, 18);
+            });
+        }
+    });
+</script>
+{% endblock %}

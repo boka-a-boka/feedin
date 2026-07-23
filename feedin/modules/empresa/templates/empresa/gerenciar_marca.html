@@ -1,0 +1,114 @@
+{% extends "empresa/base_empresa.html" %}
+{% block title %}Configurar Marca | Painel FeedIn{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 700px; font-family: system-ui, -apple-system, sans-serif;">
+    <a href="/negocios" class="text-decoration-none text-muted small d-inline-flex align-items-center mb-3 transition-colors hover:text-dark">
+        <i class="bi bi-arrow-left me-2"></i> Voltar para o Dashboard
+    </a>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white mb-4">
+
+        <div class="mb-4 border-bottom pb-3">
+            <h4 class="fw-bold text-dark mb-1">Gerenciamento da Marca</h4>
+            <p class="text-muted small mb-0">Controle a memória identitária, os valores e o design do seu estabelecimento.</p>
+        </div>
+
+        <form method="POST" action="">
+            <!-- Caso use Flask-WTF -->
+            {{ form.hidden_tag() if form else '' }}
+
+            <!-- SEÇÃO A: DADOS OFICIAIS (BLINDADOS) -->
+            <div class="p-4 bg-light rounded-4 mb-4 border border-light-subtle">
+                <div class="d-flex align-items-center mb-3">
+                    <i class="bi bi-lock-fill text-secondary me-2"></i>
+                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.5px;">Base de Homologação</span>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <label class="form-label small fw-bold text-secondary">Nome Fantasia / Comercial</label>
+                        <input type="text" class="form-control rounded-3 shadow-none bg-white border-light-subtle text-muted" value="{{ empresa.nome }}" readonly>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold text-secondary">Categoria Principal</label>
+                        <input type="text" class="form-control rounded-3 shadow-none bg-white border-light-subtle text-muted" value="{{ empresa.categoria }}" readonly>
+                    </div>
+                    <div class="col-12 mt-2">
+                        <p class="text-muted mb-0" style="font-size: 0.7rem;"><i class="bi bi-info-circle me-1"></i> Dados contratuais. Para alterações estruturais de marca, contate o suporte.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEÇÃO B: MEMÓRIA E DNA DO NEGÓCIO -->
+            <div class="mb-4">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-book text-secondary me-2"></i>Profundidade Identitária</h6>
+
+                {% if nivel_usuario >= 888 %}
+                    <div class="mb-4">
+                        <label class="form-label small fw-bold text-dark">História da Ocupação / Trajetória</label>
+                        <p class="text-muted" style="font-size: 0.8rem;">Resgate a memória da sua marca e a relação dela com este ponto urbano.</p>
+                        <textarea name="historia_ocupacao" class="form-control rounded-3 shadow-sm border-light-subtle" rows="4" placeholder="Conte a história do negócio...">{{ empresa.historia_ocupacao or '' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark">Missão e Valores Culturais</label>
+                        <textarea name="missao_valores" class="form-control rounded-3 shadow-sm border-light-subtle" rows="2" placeholder="Qual o manifesto do seu estabelecimento com a comunidade?">{{ empresa.missao_valores or '' }}</textarea>
+                    </div>
+                {% else %}
+                    <!-- Visualização para níveis menores de equipe -->
+                    <div class="p-3 bg-body-tertiary rounded-3 small">
+                        <p class="mb-2 text-secondary"><strong>História:</strong> {{ empresa.historia_ocupacao or 'Ainda não registrada.' }}</p>
+                        <p class="mb-0 text-secondary"><strong>Valores:</strong> {{ empresa.missao_valores or 'Ainda não definidos.' }}</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- SEÇÃO C: AMBIENTE PWA E DESIGN -->
+            {% if nivel_usuario >= 666 %}
+            <div class="mb-4 pt-4 border-top">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-palette text-secondary me-2"></i>Design do Ambiente (PWA)</h6>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-dark">Domínio Próprio Web (Opcional)</label>
+                        <input type="text" name="dominio_web" value="{{ empresa.dominio_web or '' }}" class="form-control rounded-3 shadow-sm border-light-subtle" placeholder="ex: www.suamarca.com.br">
+                        <div class="form-text" style="font-size: 0.7rem;">Links de redes sociais não são aceitos.</div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <label class="form-label small fw-bold text-dark">Cor Primária</label>
+                        <input type="color" name="cor_primaria" value="{{ empresa.cor_primaria or '#111827' }}" class="form-control form-control-color w-100 rounded-3 shadow-sm border-light-subtle p-1" style="height: 40px;" title="Escolha sua cor principal">
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <label class="form-label small fw-bold text-dark">Cor Secundária</label>
+                        <input type="color" name="cor_secundaria" value="{{ empresa.cor_secundaria or '#6B7280' }}" class="form-control form-control-color w-100 rounded-3 shadow-sm border-light-subtle p-1" style="height: 40px;" title="Escolha sua cor secundária">
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- BOTÃO SALVAR -->
+            <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold py-3 shadow-sm mt-2">
+                Salvar Configurações da Marca
+            </button>
+        </form>
+
+        <!-- ZONA DE PERIGO (APENAS LEVEL 999) -->
+        {% if nivel_usuario == 999 %}
+        <div class="mt-5 pt-4 border-top border-danger border-opacity-25">
+            <div class="p-4 bg-danger bg-opacity-10 rounded-4 border border-danger border-opacity-25">
+                <h6 class="fw-bold text-danger mb-2 small text-uppercase"><i class="bi bi-exclamation-triangle-fill me-2"></i> Zona de Desativação</h6>
+                <p class="text-danger text-opacity-75 mb-3" style="font-size: 0.85rem; line-height: 1.4;">
+                    Esta é uma ação de alto impacto. Desabilitar a empresa interrompe o acesso ao PWA e oculta a marca do Core, mantendo apenas o registro histórico do local.
+                </p>
+                <form method="POST" action="{{ url_for('empresa.desabilitar', id=empresa.id) }}" onsubmit="return confirm('ATENÇÃO: Tem certeza absoluta que deseja desabilitar sua empresa do ecossistema FeedIn?');">
+                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill px-4 fw-bold shadow-sm">
+                        Desabilitar Estabelecimento
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

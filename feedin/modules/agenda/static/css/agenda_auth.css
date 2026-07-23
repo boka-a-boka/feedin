@@ -1,0 +1,181 @@
+/* CSS de Emergência e Blindagem: Se a CDN falhar, essas regras garantem o design */
+body {
+    background-color: #f1f5f9 !important; /* Um fundo cinza bem claro para o card destacar */
+    color: #0f172a !important;            /* Texto principal quase preto, máxima leitura */
+}
+
+/* Garante centralização absoluta na tela na força bruta */
+.wrapper-principal {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100vh !important;
+    width: 100% !important;
+    padding: 40px 20px !important;
+    box-sizing: border-box !important;
+}
+
+/* Garante que o card nunca fique esticado ou deformado */
+.auth-card-blindado img {
+    max-width: 140px !important;  /* ✨ Ajuste esse número (ex: 160px, 180px) até o tamanho te agradar */
+    width: 100% !important;
+    height: auto !important;
+    margin-bottom: 15px !important;
+    display: inline-block !important;
+}
+
+/* Inputs imponentes e altos, com efeito de foco garantido */
+.form-control-custom {
+    padding: 14px 16px !important;
+    font-size: 16px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    background-color: #ffffff !important;
+}
+
+.input-group-custom {
+    display: flex !important;
+    width: 100% !important;
+}
+
+.input-group-text-custom {
+    background-color: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    border-right: none !important;
+    color: #64748b !important;
+    padding: 0 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    border-radius: 8px 0 0 8px !important;
+}
+
+.form-control-custom.com-icone {
+    border-radius: 0 8px 8px 0 !important;
+}
+
+/* Botão Principal */
+.btn-auth-primary {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 14px 24px !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    width: 100% !important;
+    cursor: pointer !important;
+    text-align: center !important;
+    display: inline-block !important;
+    text-decoration: none !important;
+}
+/* =========================================================================
+   ✨ EFEITOS DE INTERATIVIDADE E COR (O TOQUE FINAL)
+   ========================================================================= */
+
+/* 1. Efeito de Foco nos Inputs: Borda Grafite e Iluminação Sutil */
+.form-control-custom:focus {
+    outline: none !important;
+    border-color: #64748b !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 0 0 4px rgba(100, 116, 139, 0.15) !important;
+}
+
+/* Garante que o ícone do input também mude de cor para acompanhar o foco do campo */
+.input-group-custom:focus-within .input-group-text-custom {
+    border-color: #64748b !important;
+    color: #0f172a !important; /* Ícone fica mais escuro e nítido */
+    background-color: #f1f5f9 !important; /* Fundo do ícone ganha destaque */
+}
+
+/* 2. Efeito ao passar o mouse no Botão Principal (Hover) */
+.btn-auth-primary {
+    transition: all 0.2s ease-in-out !important; /* Transição macia de cor */
+}
+
+.btn-auth-primary:hover {
+    background-color: #1e293b !important; /* Tom de cinza escuro/asfalto ao passar o mouse */
+    transform: translateY(-1px); /* Leve elevação visual premium */
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15) !important;
+}
+
+/* 3. Efeito no Link de Visitante e Botão de Cadastro Secundário */
+.auth-card-blindado a {
+    transition: color 0.2s ease-in-out, background-color 0.2s ease-in-out !important;
+}
+
+/* Se o botão de criar conta estiver visível, ele inverte as cores elegantemente no mouse */
+.auth-card-blindado a[href*="cadastro"]:hover {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+}
+
+/* O link de visitante ganha um tom mais escuro e sublinhado discreto */
+.auth-card-blindado a:not([class]):hover {
+    color: #0f172a !important;
+    text-decoration: underline !important;
+}
+
+/* =========================================================================
+   🎨 CENTRALIZAÇÃO DA PALETA DE CORES (SEM SUJEIRA NO HTML)
+   ========================================================================= */
+
+/* Aumenta o círculo ao redor do ícone e dá um contraste forte no fundo */
+.auth-icon-wrapper {
+    background-color: #0f172a !important; /* ✨ Mudamos para asfalto escuro para dar presença */
+    border: 2px solid #e2e8f0 !important;
+    width: 72px !important;               /* ✨ Aumentamos o tamanho do círculo de 60px para 72px */
+    height: 72px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin-bottom: 20px !important;
+}
+
+/* Controla o tamanho e a cor do ícone de dentro do círculo */
+.auth-icon-wrapper i {
+    color: #ffffff !important;            /* ✨ Ícone fica branco para contrastar com o fundo escuro */
+    font-size: 32px !important;           /* ✨ Aumentamos o tamanho bruto do ícone (da fonte) */
+    line-height: 1 !important;
+}
+
+/* Elementos de Texto do Cabeçalho e Labels */
+.auth-title {
+    color: #0f172a !important; /* Título forte e imponente */
+}
+
+.auth-subtitle {
+    color: #334155 !important; /* ✨ Mudamos de #64748b para #334155 (Cinza Grafite Escuro) */
+}
+
+.auth-label {
+    color: #1e293b !important; /* ✨ Mudamos para um tom bem mais escuro para o usuário ler a label sem forçar a vista */
+}
+
+/* Divisória do Rodapé */
+.auth-footer-divider {
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+/* Botão Secundário (Criar Conta) */
+.btn-auth-secondary {
+    border: 1px solid #0f172a !important;
+    color: #0f172a !important;
+    background-color: transparent !important;
+    transition: all 0.2s ease-in-out !important;
+}
+.btn-auth-secondary:hover {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+}
+
+/* Link de Visitante */
+.auth-link-visitor {
+    color: #64748b !important;
+    transition: color 0.2s ease-in-out !important;
+}
+.auth-link-visitor:hover {
+    color: #0f172a !important;
+    text-decoration: underline !important;
+}

@@ -1,4 +1,4 @@
-# C:\Users\Estava-La01\PycharmProjects\ProjetoFeedIn\feedin\criadb_FeedIn_Core.py
+# C:\Users\Estava-La01\PycharmProjects\ProjetoFeedIn\feedin\atualiza_tabela_cliente.py
 import sqlite3
 import os
 
@@ -12,47 +12,65 @@ print(f"🎯 CONECTANDO AO BANCO OFICIAL: {DB_PATH}")
 conexao = sqlite3.connect(DB_PATH)
 cursor = conexao.cursor()
 
-# 2. Scripts SQL para criar as duas tabelas da estrutura profissional
-script_cargos = """
-CREATE TABLE IF NOT EXISTS cargos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome_cargo TEXT NOT NULL UNIQUE
+# 2. Comando para limpar a tabela desalinhada antiga
+script_drop = "DROP TABLE IF EXISTS mod_cadastro_cliente;"
+
+# 3. Script SQL estruturado exatamente igual ao seu db.Model (ModCadastroCliente) com UUID4
+# 🌟 ALTERAÇÃO: O ID agora é VARCHAR(36) PRIMARY KEY sem AUTOINCREMENT numérico
+script_create_cliente = """
+CREATE TABLE mod_cadastro_cliente (
+    id VARCHAR(36) PRIMARY KEY,
+    usuario_id INTEGER UNIQUE,
+    nome TEXT NOT NULL,
+    email TEXT UNIQUE,
+    whatsapp TEXT NOT NULL,
+    data_nascimento DATE,
+    cpf_hash TEXT UNIQUE NOT NULL,
+    cpf_encrypted BLOB NOT NULL,
+    username_modulo TEXT UNIQUE NOT NULL,
+    senha_hash TEXT NOT NULL,
+    status_conta TEXT DEFAULT 'ativo',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (usuario_id) REFERENCES usuario (id)
 );
 """
 
-script_contratos = """
-CREATE TABLE IF NOT EXISTS colaborador_contratos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    id_usuario INTEGER NOT NULL,
-    id_local INTEGER NOT NULL,
-    id_cargo INTEGER NOT NULL,
-    data_contratacao DATETIME NOT NULL,
-    data_desligamento DATETIME,
-    hora_inicio_expediente TEXT NOT NULL,
-    hora_fim_expediente TEXT NOT NULL,
-    status_profissional TEXT DEFAULT 'ativo',
-    FOREIGN KEY (id_usuario) REFERENCES usuario (id),
-    FOREIGN KEY (id_local) REFERENCES locais (id),
-    FOREIGN KEY (id_cargo) REFERENCES cargos (id)
-);
+# 4. Criação manual dos índices para manter a performance idêntica ao SQLAlchemy
+script_indices = """
+CREATE INDEX IF NOT EXISTS ix_mod_cadastro_cliente_email ON mod_cadastro_cliente (email);
+CREATE INDEX IF NOT EXISTS ix_mod_cadastro_cliente_cpf_hash ON mod_cadastro_cliente (cpf_hash);
 """
 
 try:
-    print("🔄 Injetando tabela 'cargos'...")
-    cursor.execute(script_cargos)
+    print("🔄 Removendo tabela antiga 'mod_cadastro_cliente' (se houver)...")
+    cursor.execute(script_drop)
 
-    print("🔄 Injetando tabela 'colaborador_contratos' com regras de expediente...")
-    cursor.execute(script_contratos)
+    print("🔄 Injetando nova tabela 'mod_cadastro_cliente' unificada com padrão UUID...")
+    cursor.execute(script_create_cliente)
 
-    # Grava as alterações no disco
+    print("⚡ Criando índices de performance (email e cpf_hash)...")
+    cursor.executescript(script_indices)
+
+    # Grava as alterações no disco de forma efetiva
     conexao.commit()
     print("💾 Alterações persistidas com sucesso no arquivo oficial!")
 
     # Validação no catálogo do SQLite
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cargos', 'colaborador_contratos');")
-    tabelas_criadas = cursor.fetchall()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = 'mod_cadastro_cliente';")
+    tabela_criada = cursor.fetchone()
 
-    print(f"📊 Confirmação do Banco: Tabelas ativas -> {[t[0] for t in tabelas_criadas]}")
+    # 🔑 Validação das colunas físicas
+    if tabela_criada:
+        print(f"📊 Confirmação do Banco: Tabela '{tabela_criada[0]}' está ATIVA e alinhada!")
+
+        # Exibe as colunas criadas para sua total segurança antes de rodar o app
+        cursor.execute("PRAGMA table_info(mod_cadastro_cliente);")
+        colunas = cursor.fetchall()
+        print("📋 Estrutura física atualizada no banco:")
+        for col in colunas:
+            print(f"   -> Coluna: {col[1]} ({col[2]})")
+    else:
+        print("⚠️ Atenção: A tabela não foi localizada no catálogo após a execução.")
 
 except Exception as e:
     print(f"💥 Erro na execução do SQL: {e}")

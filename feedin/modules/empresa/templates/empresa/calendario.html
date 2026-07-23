@@ -1,0 +1,869 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Calendário de Operação - {{ ese_empresa.nome }}{% endblock %}
+
+{% block content %}
+<style>
+    /* 🎨 Fundo Acetinado Premium PWA */
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+
+    .grid-semana {
+        display: grid !important;
+        grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
+        gap: 6px !important; /* Cria o espaçamento perfeito para as bordas não sumirem */
+        width: 100%;
+    }
+
+    .dia-calendario {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-sizing: border-box; /* Garante que a borda fique CONTRATADA dentro do cálculo do tamanho */
+    }
+
+    .dia-calendario:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08) !important;
+        z-index: 2; /* Faz a célula sobressair ao passar o mouse */
+    }
+
+    /* Forçador de quebra de linha para segurança de texto longo */
+    .text-truncate-2-lines {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ==========================================
+       🚨 DESTAQUES VISUAIS DOS DIAS (REESTILIZADOS)
+       ========================================== */
+    .dia-feriado-nacional {
+        border: 2px solid #dc3545 !important;
+        background-color: rgba(220, 53, 69, 0.08) !important;
+    }
+    .dia-feriado-regional {
+        border: 2px solid #0dcaf0 !important;
+        background-color: rgba(13, 202, 240, 0.08) !important;
+    }
+    .dia-efemeride {
+        border: 2px solid #fd7e14 !important;
+        background-color: rgba(253, 126, 20, 0.08) !important;
+    }
+    .fluxo-quinto-dia {
+        border: 2px solid #0d6efd !important;
+        background-color: rgba(13, 110, 253, 0.04) !important;
+    }
+    .fluxo-dia-20 {
+        border: 2px solid #6f42c1 !important;
+        background-color: rgba(111, 66, 193, 0.04) !important;
+    }
+    .fluxo-mensalistas {
+        border: 2px solid #198754 !important;
+        background-color: rgba(25, 135, 84, 0.04) !important;
+    }
+
+    /* Indicadores de fluxo na base das células */
+    .ponto-indicador {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        display: inline-block;
+        margin: 0 1px;
+    }
+
+    /* Badge sutil de Homologação */
+    .badge-status-onboarding {
+        font-size: 0.62rem;
+        letter-spacing: 0.5px;
+        background-color: rgba(0, 0, 0, 0.05);
+        color: #555555;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+
+    /* Estilo customizado para o Switch de Aniversário */
+    .form-switch .form-check-input-success:checked {
+        background-color: #198754;
+        border-color: #198754;
+    }
+
+    /* Efeito de Overlay Escuro para o Modal Customizado */
+    .modal-backdrop-custom {
+        background-color: rgba(0, 0, 0, 0.5) !important;
+        backdrop-filter: blur(4px);
+    }
+
+    /* Botão de Efemérides com Laranja Avermelhado no hover/ativo */
+    .btn-outline-orange {
+        color: #fd7e14;
+        border-color: #fd7e14;
+    }
+    .btn-outline-orange:hover, .btn-outline-orange:active {
+        background-color: #fd7e14 !important;
+        color: #fff !important;
+    }
+</style>
+
+<div class="container py-3 fundo-acetinado-pwa" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif; border-radius: 24px;">
+
+    {# 🎯 CABEÇALHO #}
+    <div class="card border-0 bg-white p-3 rounded-4 shadow-sm border mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                <a href="{{ url_for('empresa.configuracoes_auxiliares', empresa_id=ese_empresa.id) }}"
+                   class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                   style="width: 40px; height: 40px; background-color: #212529;" title="Voltar">
+                    <i class="bi bi-arrow-left text-white fs-5"></i>
+                </a>
+
+                <div>
+                    <strong class="text-dark d-block" style="font-size: 0.95rem; font-weight: 700; line-height: 1.2;">📅 Calendário Comercial</strong>
+                    <span class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.1;">{{ ese_empresa.nome }}</span>
+                </div>
+            </div>
+
+            <div class="text-end" style="line-height: 1.1;">
+                {# 💜 BOTÃO GERENCIAR INTEGRADO NO CABEÇALHO: Elegante e compacto #}
+                <button class="btn btn-sm text-white rounded-pill px-2.5 py-1.5 fw-bold text-nowrap shadow-sm d-flex align-items-center gap-1"
+                        data-bs-toggle="modal" data-bs-target="#modalGerenciar" style="font-size: 0.65rem; background-color: #6f42c1;">
+                    <i class="bi bi-sliders"></i> Gerenciar
+                </button>
+            </div>
+        </div>
+
+        {# 🎂 CONTROLE DE DIVULGAÇÃO DO ANIVERSÁRIO #}
+        <div class="border-top mt-3 pt-2 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-cake2 text-success fs-6"></i>
+                <span class="text-dark fw-semibold" style="font-size: 0.75rem;">Celebrar/divulgar aniversário da empresa</span>
+            </div>
+            <div class="form-check form-switch m-0">
+                <input class="form-check-input form-check-input-success" type="checkbox" role="switch" id="switch_celebrar_aniversario"
+                       {% if ese_empresa.celebrar_aniversario %}checked{% endif %}
+                       onchange="atualizarStatusAniversario(this.checked)" style="cursor: pointer;">
+            </div>
+        </div>
+    </div>
+
+    {# 🎛️ BARRA DE AÇÕES HORIZONTAL (Restaurada ao visual original simétrico de 4 colunas) #}
+    <div class="card border-0 bg-white p-2 rounded-4 shadow-sm border mb-3">
+        <div class="d-flex justify-content-between align-items-center gap-1" role="group" aria-label="Ações do Calendário">
+
+            {# Botão Único: Exceções e Recessos #}
+            <a href="{{ url_for('empresa.excecoes_empresa', empresa_id=ese_empresa.id) }}"
+               class="btn btn-outline-primary border-0 rounded-3 py-2 px-1 flex-fill d-flex flex-column align-items-center justify-content-center text-decoration-none"
+               style="font-size: 0.68rem; transition: all 0.2s;">
+                <i class="bi bi-calendar-range fs-6 mb-1"></i>
+                <span class="fw-bold">Exceções e Recessos</span>
+            </a>
+
+            {# Botão 3: Feriados #}
+            <button class="btn btn-outline-info border-0 rounded-3 py-2 px-1 flex-fill d-flex flex-column align-items-center justify-content-center"
+                    type="button" data-bs-toggle="modal" data-bs-target="#modalFeriados" style="font-size: 0.68rem; transition: all 0.2s;">
+                <i class="bi bi-tools fs-6 mb-1"></i>
+                <span class="fw-bold">Feriados</span>
+            </button>
+
+            {# Botão 4: Efemérides #}
+            <button class="btn btn-outline-orange border-0 rounded-3 py-2 px-1 flex-fill d-flex flex-column align-items-center justify-content-center"
+                    type="button" data-bs-toggle="modal" data-bs-target="#modalEfemerides" style="font-size: 0.68rem; transition: all 0.2s;">
+                <i class="bi bi-balloon-heart fs-6 mb-1"></i>
+                <span class="fw-bold">Efemérides</span>
+            </button>
+
+        </div>
+    </div>
+
+    {# 🔄 NAVEGAÇÃO DE MESES #}
+    <div class="card border-0 bg-white p-2.5 rounded-4 shadow-sm border mb-3">
+        <div class="d-flex align-items-center justify-content-between">
+            <a href="?mes={{ mes_anterior }}&ano={{ ano_anterior }}" class="btn btn-sm btn-light border rounded-3 px-2 py-1.5" style="font-size: 0.78rem;">
+                <i class="bi bi-chevron-left"></i> Ant.
+            </a>
+            <span class="fw-bold text-dark text-uppercase text-center" style="font-size: 0.88rem; min-width: 120px; letter-spacing: 0.5px;">
+                {{ nome_mes_atual }} / {{ ano_atual }}
+            </span>
+            <a href="?mes={{ proximo_mes }}&ano={{ proximo_ano }}" class="btn btn-sm btn-light border rounded-3 px-2 py-1.5" style="font-size: 0.78rem;">
+                Próx. <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+
+    {# 📅 GRID DO CALENDÁRIO #}
+    <div class="card border-0 bg-white p-3 rounded-4 shadow-sm border mb-4">
+
+        {# Dias da Semana #}
+        <div class="grid-semana text-center fw-bold text-muted mb-2 text-uppercase" style="font-size: 0.65rem; letter-spacing: 0.5px;">
+            <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+        </div>
+
+{# Corpo do Calendário #}
+        <div class="d-flex flex-column gap-2">
+            {% for semana in semanas %}
+            <div class="grid-semana d-flex gap-1 justify-content-between">
+                {% for dia in semana %}
+                    {% if dia.numero == '' or dia.numero == 0 %}
+                        <div class="bg-light rounded-3 opacity-25 w-100" style="min-height: 85px;"></div>
+                    {% else %}
+
+                        {% set classe_visual = "" %}
+                        {% if dia.numero in feriados_do_mes %}
+                            {% set f = feriados_do_mes[dia.numero] %}
+                            {% if f.abrangencia == 'nacional' %}
+                                {% set classe_visual = "dia-feriado-nacional" %}
+                            {% elif f.abrangencia == 'municipal' or f.abrangencia == 'estadual' %}
+                                {% set classe_visual = "dia-feriado-regional" %}
+                            {% endif %}
+                        {% endif %}
+
+                        {% if classe_visual == "" %}
+                            {% if dia.numero == fluxo_financeiro.quinto_dia_util %}
+                                {% set classe_visual = "fluxo-quinto-dia" %}
+                            {% elif dia.numero == fluxo_financeiro.dia_20 %}
+                                {% set classe_visual = "fluxo-dia-20" %}
+                            {% elif dia.numero == fluxo_financeiro.dia_1 or dia.numero == fluxo_financeiro.ultimo_dia %}
+                                {% set classe_visual = "fluxo-mensalistas" %}
+                            {% endif %}
+                        {% endif %}
+
+                        <div class="dia-calendario rounded-3 p-2 d-flex flex-column justify-content-between position-relative transition-all w-100 shadow-sm border {{ classe_visual }}
+                                    {% if dia.status == 'fechado' %} bg-danger-subtle text-danger-emphasis border-danger border-opacity-50
+                                    {% elif dia.status == 'aberto_especial' %} bg-success-subtle text-success-emphasis border-success border-opacity-50
+                                    {% else %} bg-white text-dark border-light-subtle {% endif %}"
+                             style="min-height: 85px; height: auto; overflow: hidden; cursor: pointer;">
+
+                            {# 1. TOPO DA CÉLULA: Número e Badges de Status/Feriado #}
+                            <div class="d-flex justify-content-between align-items-start w-100 mb-1">
+                                <span class="fw-bold {% if dia.status == 'fechado' or dia.status == 'aberto_especial' %}text-dark{% else %}text-secondary{% endif %}" style="font-size: 0.9rem; line-height: 1;">
+                                    {{ dia.numero }}
+                                </span>
+
+                                <div class="d-flex gap-1 align-items-center">
+                                    {% if dia.status == 'fechado' %}
+                                        <i class="bi bi-x-circle-fill text-danger" style="font-size: 0.7rem;" title="{{ dia.motivo }}"></i>
+                                    {% elif dia.status == 'aberto_especial' %}
+                                        <i class="bi bi-check-circle-fill text-success" style="font-size: 0.7rem;" title="{{ dia.motivo }}"></i>
+                                    {% endif %}
+
+                                    {% if dia.numero in feriados_do_mes %}
+                                        {% set f = feriados_do_mes[dia.numero] %}
+                                        {% if f.abrangencia == 'nacional' %}
+                                            <span class="badge bg-danger p-0 rounded-circle" style="width: 6px; height: 6px;" title="Feriado Nacional: {{ f.nome }}"></span>
+                                        {% elif f.abrangencia == 'municipal' or f.abrangencia == 'estadual' %}
+                                            <span class="badge bg-info p-0 rounded-circle" style="width: 6px; height: 6px;" title="Feriado Regional: {{ f.nome }}"></span>
+                                        {% elif f.abrangencia == 'comercial' %}
+                                            <span class="badge bg-secondary p-0 rounded-circle" style="width: 6px; height: 6px;" title="Comercial: {{ f.nome }}"></span>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </div>
+
+{# 2. MEIO DA CÉLULA: O que acontece neste dia (NUNCA OMITIR) #}
+                            <div class="w-100 flex-grow-1 d-flex flex-column justify-content-start gap-1 my-1">
+
+                                {# A) Motivo de Exceção/Recesso #}
+                                {% if dia.motivo %}
+                                    <p class="text-start m-0 fw-semibold text-truncate-2-lines text-danger" style="font-size: 0.58rem; line-height: 1.1; max-width: 100%;">
+                                        📌 {{ dia.motivo }}
+                                    </p>
+                                {% endif %}
+
+                                {# B) Nome do Feriado (Sempre visível se existir) #}
+                                {% if dia.numero in feriados_do_mes %}
+                                    {% set f = feriados_do_mes[dia.numero] %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle text-start p-1 fw-bold text-truncate"
+                                          style="font-size: 0.55rem; line-height: 1; max-width: 100%;"
+                                          title="{{ f.nome }}">
+                                        🎉 {{ f.nome }}
+                                    </span>
+                                {% endif %}
+
+                                {# C) Nome das Efemérides (Sempre visíveis se existirem) #}
+                                {% if efemerides_do_mes and dia.numero in efemerides_do_mes %}
+                                    {% set efem = efemerides_do_mes[dia.numero] %}
+                                    {% if efem is sequence and efem is not string and efem is not mapping %}
+                                        {% for e_item in efem %}
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle text-start p-1 fw-bold text-truncate"
+                                                  style="font-size: 0.55rem; line-height: 1; max-width: 100%;"
+                                                  title="{{ e_item.nome if e_item.nome else e_item }}">
+                                                🎈 {{ e_item.nome if e_item.nome else e_item }}
+                                            </span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle text-start p-1 fw-bold text-truncate"
+                                              style="font-size: 0.55rem; line-height: 1; max-width: 100%;"
+                                              title="{{ efem.nome if efem.nome else efem }}">
+                                            🎈 {{ efem.nome if efem.nome else efem }}
+                                        </span>
+                                    {% endif %}
+                                {% elif dia.efemeride_nome %}
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle text-start p-1 fw-bold text-truncate"
+                                          style="font-size: 0.55rem; line-height: 1; max-width: 100%;"
+                                          title="{{ dia.efemeride_nome }}">
+                                        🎈 {{ dia.efemeride_nome }}
+                                    </span>
+                                {% endif %}
+
+                            </div>
+
+                            {# 3. RODAPÉ DA CÉLULA: Indicadores Sutis do Termômetro #}
+                            <div class="d-flex justify-content-between align-items-center w-100 mt-1 pt-1 border-top border-light border-opacity-10">
+                                <div class="d-flex gap-1 align-items-center" style="line-height: 1;">
+                                    {% if dia.numero == fluxo_financeiro.quinto_dia_util %}
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle p-0 px-1" style="font-size: 0.5rem;" title="5º Dia Útil (Injeção Salarial)">5º DU</span>
+                                    {% endif %}
+                                    {% if dia.numero == fluxo_financeiro.dia_20 %}
+                                        <span class="badge text-purple p-0 px-1 border" style="background-color: #f3ebf9; color: #6f42c1; border-color: #d6bbf1 !important; font-size: 0.5rem;" title="Dia 20 (Vale Salarial)">Dia 20</span>
+                                    {% endif %}
+                                    {% if dia.numero == fluxo_financeiro.dia_1 or dia.numero == fluxo_financeiro.ultimo_dia %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle p-0 px-1" style="font-size: 0.5rem;" title="Turnover do Mês">Fluxo</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    {# 📋 RESUMO DETALHADO DO MÊS (Mobile / Touch Friendly) #}
+    <div class="card border-0 bg-white p-3 rounded-4 shadow-sm border mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-list-stars text-primary fs-5"></i>
+                <h5 class="fw-bold m-0 text-dark" style="font-size: 0.9rem;">Destaques & Programação do Mês</h5>
+            </div>
+            <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.65rem;">
+                {{ nome_mes_atual }} / {{ ano_atual }}
+            </span>
+        </div>
+
+        <div class="d-flex flex-column gap-2">
+            {% set total_eventos = namespace(qtd=0) %}
+
+            {% for semana in semanas %}
+                {% for dia in semana %}
+                    {% if dia.numero != '' and dia.numero != 0 %}
+
+                        {% set tem_excecao = dia.status in ['fechado', 'aberto_especial'] or dia.motivo %}
+                        {% set tem_feriado = dia.numero in feriados_do_mes %}
+                        {% set tem_efemerides = (efemerides_do_mes and dia.numero in efemerides_do_mes) or dia.efemeride_nome %}
+
+                        {# O dia entra na lista se tiver exceção, feriado ou efeméride #}
+                        {% if tem_excecao or tem_feriado or tem_efemerides %}
+                            {% set total_eventos.qtd = total_eventos.qtd + 1 %}
+
+                            <div class="p-2.5 rounded-3 bg-light border border-light-subtle d-flex flex-column gap-1">
+
+                                {# Data + Badges de Status + Tags do Termômetro #}
+                                <div class="d-flex flex-wrap align-items-center gap-1.5">
+                                    <span class="badge bg-dark text-white rounded-2 px-2 py-1 fw-bold" style="font-size: 0.7rem;">
+                                        Dia {{ "%02d"|format(dia.numero) }}
+                                    </span>
+
+                                    {# Status da Empresa #}
+                                    {% if dia.status == 'fechado' %}
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold" style="font-size: 0.65rem;">
+                                            <i class="bi bi-x-circle-fill me-1"></i>Empresa Fechada
+                                        </span>
+                                    {% elif dia.status == 'aberto_especial' %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle fw-semibold" style="font-size: 0.65rem;">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Horário Especial
+                                        </span>
+                                    {% endif %}
+
+                                    {# Tags de Termômetro de Consumo (Coexistência) #}
+                                    {% if dia.numero == fluxo_financeiro.quinto_dia_util %}
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-normal" style="font-size: 0.62rem;">
+                                            💰 5º Dia Útil
+                                        </span>
+                                    {% endif %}
+                                    {% if dia.numero == fluxo_financeiro.dia_20 %}
+                                        <span class="badge text-purple border fw-normal" style="background-color: #f3ebf9; color: #6f42c1; border-color: #d6bbf1 !important; font-size: 0.62rem;">
+                                            💳 Dia 20 (Vale)
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                                {# 1. Motivo/Recesso #}
+                                {% if dia.motivo %}
+                                    <div class="text-dark fw-semibold ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
+                                        📌 <span class="text-secondary">Observação:</span> {{ dia.motivo }}
+                                    </div>
+                                {% endif %}
+
+                                {# 2. Feriado #}
+                                {% if tem_feriado %}
+                                    {% set f = feriados_do_mes[dia.numero] %}
+                                    <div class="text-danger fw-semibold ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
+                                        🎉 <span class="fw-bold">Feriado {{ f.abrangencia|capitalize }}:</span> {{ f.nome }}
+                                    </div>
+                                {% endif %}
+
+                                {# 3. Efemérides (Com suporte a múltiplas no mesmo dia) #}
+                                {% if efemerides_do_mes and dia.numero in efemerides_do_mes %}
+                                    {% set lista_efem = efemerides_do_mes[dia.numero] %}
+                                    {% if lista_efem is sequence and lista_efem is not string and lista_efem is not mapping %}
+                                        {% for efem in lista_efem %}
+                                            <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
+                                                🎈 <span class="fw-bold">Efeméride:</span> {{ efem.nome if efem.nome else efem }}
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
+                                            🎈 <span class="fw-bold">Efeméride:</span> {{ lista_efem.nome if lista_efem.nome else lista_efem }}
+                                        </div>
+                                    {% endif %}
+                                {% elif dia.efemeride_nome %}
+                                    <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
+                                        🎈 <span class="fw-bold">Efeméride:</span> {{ dia.efemeride_nome }}
+                                    </div>
+                                {% endif %}
+
+                            </div>
+                        {% endif %}
+
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+
+            {% if total_eventos.qtd == 0 %}
+                <div class="text-muted text-center py-3 bg-light rounded-3" style="font-size: 0.75rem; border: 1px dashed #dee2e6;">
+                    <i class="bi bi-calendar-check d-block fs-5 text-secondary mb-1"></i>
+                    Nenhum recesso, exceção ou efeméride marcada para este mês.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# 💡 LEGENDA DO TERMÔMETRO FINANCEIRO #}
+    <div class="card border-0 bg-white p-3 rounded-4 shadow-sm border mb-4">
+        <h5 class="fw-bold mb-2 text-dark" style="font-size: 0.9rem;">💡 Termômetro de Consumo</h5>
+        <div class="d-flex flex-column gap-2.5">
+            <div class="d-flex gap-3 align-items-start">
+                <span class="badge bg-primary text-white rounded-3 p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; min-width: 32px;">
+                    <i class="bi bi-wallet2 fs-6"></i>
+                </span>
+                <div>
+                    <strong class="text-dark d-block" style="font-size: 0.8rem;">5º Dia Útil (Dia {{ fluxo_financeiro.quinto_dia_util }})</strong>
+                    <span class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Pico máximo de consumo mensal (CLT). Perfeito para campanhas de vendas e ações diretas.</span>
+                </div>
+            </div>
+
+            <div class="d-flex gap-3 align-items-start border-top pt-2.5">
+                <span class="badge rounded-3 p-2 d-flex align-items-center justify-content-center text-white" style="width: 32px; height: 32px; min-width: 32px; background-color: #6f42c1;">
+                    <i class="bi bi-piggy-bank fs-6"></i>
+                </span>
+                <div>
+                    <strong class="d-block" style="font-size: 0.8rem; color: #6f42c1;">Dia do "Vale" (Dia 20)</strong>
+                    <span class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Adiantamento salarial (empresas privadas). Excelente para o fôlego comercial da quinzena.</span>
+                </div>
+            </div>
+
+            <div class="d-flex gap-3 align-items-start border-top pt-2.5">
+                <span class="badge bg-success text-white rounded-3 p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; min-width: 32px;">
+                    <i class="bi bi-bank fs-6"></i>
+                </span>
+                <div>
+                    <strong class="text-success d-block" style="font-size: 0.8rem;">Mensalistas (Dias 1 e {{ fluxo_financeiro.ultimo_dia }})</strong>
+                    <span class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">Funcionalismo público, aposentados, pensionistas e prestadores de serviço autônomos.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div> {# 📌 FIM DO CONTAINER PRINCIPAL (fundo-acetinado-pwa) #}
+
+
+{# ========================================================= #}
+{# 🎛️ MODAIS DE CADASTRO (AÇÕES RÁPIDAS)                   #}
+{# ========================================================= #}
+
+{# MODAL 1: EXCEÇÕES #}
+<div class="modal fade modal-backdrop-custom" id="modalExcecao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 480px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+            <div class="modal-header border-0 p-0 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar-plus text-primary fs-5"></i>
+                    <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.88rem;">Apontar Exceção / Horário Especial</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <p class="text-muted mb-3" style="font-size: 0.72rem; line-height: 1.2;">Abra a empresa em um feriado ou defina horários diferenciados de funcionamento para uma data específica.</p>
+
+                <form method="POST" action="{{ url_for('empresa.salvar_excecao', empresa_id=ese_empresa.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Data de Referência</label>
+                            <input type="date" name="data" class="form-control form-control-sm rounded-3" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Trabalha no Dia?</label>
+                            <select name="trabalha" class="form-select form-select-sm rounded-3" style="font-size: 0.75rem;">
+                                <option value="true" selected>Sim (Trabalha)</option>
+                                <option value="false">Não (Fechado)</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Horário Abertura</label>
+                            <input type="time" name="hora_inicio" class="form-control form-control-sm rounded-3" style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Horário Fechamento</label>
+                            <input type="time" name="hora_fim" class="form-control form-control-sm rounded-3" style="font-size: 0.75rem;">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-light border rounded-3 px-3 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-sm btn-primary rounded-3 px-3 fw-bold" style="font-size: 0.75rem;">Confirmar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# MODAL 2: RECESSOS #}
+<div class="modal fade modal-backdrop-custom" id="modalRecesso" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 480px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+            <div class="modal-header border-0 p-0 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar-x text-danger fs-5"></i>
+                    <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.88rem;">Programar Recesso do Estabelecimento</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <p class="text-muted mb-3" style="font-size: 0.72rem; line-height: 1.2;"> Declare períodos contínuos onde a empresa estará totalmente fechada por motivos de recesso ou férias coletivas.</p>
+
+                <form method="POST" action="{{ url_for('empresa.salvar_recesso', empresa_id=ese_empresa.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Data de Início</label>
+                            <input type="date" name="data_inicio" class="form-control form-control-sm rounded-3" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Data de Término</label>
+                            <input type="date" name="data_fim" class="form-control form-control-sm rounded-3" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Motivo do Fechamento</label>
+                            <input type="text" name="motivo" class="form-control form-control-sm rounded-3" placeholder="Ex: Reforma ou Férias Coletivas" required style="font-size: 0.75rem;">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-light border rounded-3 px-3 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-sm btn-danger rounded-3 px-3 fw-bold" style="font-size: 0.75rem;">Confirmar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# MODAL 3: FERIADOS LOCAIS #}
+<div class="modal fade modal-backdrop-custom" id="modalFeriados" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 480px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+            <div class="modal-header border-0 p-0 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-tools text-info fs-5"></i>
+                    <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.88rem;">Manutenção de Feriados Customizados</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <p class="text-muted mb-3" style="font-size: 0.72rem; line-height: 1.2;">Adicione feriados específicos da sua praça de atuação que não constam no calendário padrão nacional.</p>
+
+                <form method="POST" action="{{ url_for('empresa.salvar_feriado', empresa_id=ese_empresa.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Nome do Feriado</label>
+                            <input type="text" name="nome" class="form-control form-control-sm rounded-3" placeholder="Ex: Padroeiro da Cidade" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Dia</label>
+                            <input type="number" name="dia" min="1" max="31" class="form-control form-control-sm rounded-3" placeholder="13" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Mês</label>
+                            <select name="mes" class="form-select form-select-sm rounded-3" style="font-size: 0.75rem;">
+                                <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+                                <option value="4">Abr</option><option value="5">Mai</option><option value="6" selected>Jun</option>
+                                <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+                                <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Abrangência</label>
+                            <select name="abrangencia" class="form-select form-select-sm rounded-3" style="font-size: 0.75rem;">
+                                <option value="municipal" selected>Municipal</option>
+                                <option value="estadual">Estadual</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-light border rounded-3 px-3 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-sm btn-info text-white rounded-3 px-3 fw-bold" style="font-size: 0.75rem;">Confirmar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# MODAL 4: EFEMÉRIDES #}
+<div class="modal fade modal-backdrop-custom" id="modalEfemerides" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 480px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+            <div class="modal-header border-0 p-0 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-balloon-heart text-orange fs-5" style="color: #fd7e14;"></i>
+                    <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.88rem;">Efemérides do Dia</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <p class="text-muted mb-3" style="font-size: 0.72rem; line-height: 1.2;">
+                    <strong>O que são efemérides?</strong> São datas de relevância histórica, comemorações de nicho ou marcos sazonais excelentes para criar laços com seu público.
+                </p>
+
+                <form method="POST" action="{{ url_for('empresa.salvar_efemeride', empresa_id=ese_empresa.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Nome do Evento / Marco Comemorativo</label>
+                            <input type="text" name="nome" class="form-control form-control-sm rounded-3" placeholder="Ex: Dia Nacional do Samba" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Dia</label>
+                            <input type="number" name="dia" min="1" max="31" class="form-control form-control-sm rounded-3" required style="font-size: 0.75rem;">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Mês</label>
+                            <select name="mes" class="form-select form-select-sm rounded-3" style="font-size: 0.75rem;">
+                                <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+                                <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+                                <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+                                <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Breve Relato / Curiosidade (Opcional)</label>
+                            <textarea name="breve_relato" rows="3" class="form-control form-control-sm rounded-3" placeholder="Compartilhe um fato curioso ou contexto sobre este marco..." style="font-size: 0.75rem; resize: none;"></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Link de Conteúdo Oficial / Wikipédia (Opcional)</label>
+                            <input type="url" name="link_oficial" class="form-control form-control-sm rounded-3" placeholder="https://exemplo.com/historia" style="font-size: 0.75rem;">
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 justify-content-end">
+                        <button type="button" class="btn btn-sm btn-light border rounded-3 px-3 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-sm text-white rounded-3 px-3 fw-bold" style="font-size: 0.75rem; background-color: #fd7e14;">Cadastrar Efeméride</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{# ========================================================= #}
+{# 🗂️ MODAL CENTRAL DE GERENCIAMENTO DE LANÇAMENTOS         #}
+{# ========================================================= #}
+<div class="modal fade" id="modalGerenciar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable px-3" style="max-width: 480px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+
+            <div class="modal-header border-0 p-0 mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-sliders text-purple fs-5" style="color: #6f42c1;"></i>
+                    <h6 class="modal-title fw-bold text-dark m-0" style="font-size: 0.88rem;">Gerenciar Lançamentos</h6>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-0 pe-1">
+                {# Seção de Recessos #}
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-1.5 mb-2 pb-1 border-bottom border-light">
+                        <i class="bi bi-calendar-x text-danger" style="font-size: 0.85rem;"></i>
+                        <span class="fw-bold text-secondary" style="font-size: 0.72rem; letter-spacing: 0.5px; text-uppercase;">Recessos (Ordem de Data)</span>
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                        {% for r in recessos_listados %}
+                        <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light border border-light-subtle">
+                            <div class="text-start">
+                                <strong class="text-dark d-block" style="font-size: 0.75rem;">{{ r.motivo }}</strong>
+                                <span class="text-muted" style="font-size: 0.68rem;">
+                                    <i class="bi bi-calendar3 me-1"></i>{{ r.data_inicio.strftime('%d/%m/%Y') }} até {{ r.data_fim.strftime('%d/%m/%Y') }}
+                                </span>
+                            </div>
+                            <div class="d-flex gap-1">
+                                {# 🔄 Note o data-bs-dismiss="modal" para fechar este antes de abrir o de edição #}
+                                <button class="btn btn-sm btn-white border p-1 px-2 text-secondary rounded-3" style="font-size: 0.7rem;" data-bs-toggle="modal" data-bs-target="#modalEditarRecesso{{ r.id }}" data-bs-dismiss="modal">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('empresa.excluir_recesso', empresa_id=ese_empresa.id, recesso_id=r.id) }}" onsubmit="return confirm('Deseja realmente remover este recesso?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-white border p-1 px-2 text-danger rounded-3" style="font-size: 0.7rem;">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-2 bg-light rounded-3" style="font-size: 0.7rem; border: 1px dashed #dee2e6;">
+                            Nenhum recesso programado.
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Seção de Efemérides #}
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-1.5 mb-2 pb-1 border-bottom border-light">
+                        <i class="bi bi-balloon-heart text-orange" style="color: #fd7e14; font-size: 0.85rem;"></i>
+                        <span class="fw-bold text-secondary" style="font-size: 0.72rem; letter-spacing: 0.5px; text-uppercase;">Efemérides Culturais</span>
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                        {% for e in efemerides_listadas %}
+                        <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light border border-light-subtle">
+                            <div class="text-start">
+                                <strong class="text-dark d-block" style="font-size: 0.75rem;">{{ e.nome }}</strong>
+                                <span class="text-muted" style="font-size: 0.68rem;">
+                                    <i class="bi bi-calendar-event me-1"></i>Dia {{ e.dia }}/{{ e.mes }}
+                                </span>
+                            </div>
+                            <div class="d-flex gap-1">
+                                {# 🔄 Note o data-bs-dismiss="modal" para fechar este antes de abrir o de edição #}
+                                <button class="btn btn-sm btn-white border p-1 px-2 text-secondary rounded-3" style="font-size: 0.7rem;" data-bs-toggle="modal" data-bs-target="#modalEditarEfemeride{{ e.id }}" data-bs-dismiss="modal">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('empresa.excluir_efemeride', empresa_id=ese_empresa.id, efemeride_id=e.id) }}" onsubmit="return confirm('Deseja remover esta efeméride?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-white border p-1 px-2 text-danger rounded-3" style="font-size: 0.7rem;">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="text-muted text-center py-2 bg-light rounded-3" style="font-size: 0.7rem; border: 1px dashed #dee2e6;">
+                            Nenhuma efeméride cadastrada.
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer border-0 p-0 mt-3 d-flex justify-content-end">
+                <button type="button" class="btn btn-sm btn-light border rounded-3 px-3 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{# ========================================================= #}
+{# 🔄 MODAIS INDIVIDUAIS DE EDIÇÃO (DINÂMICOS POR ID)        #}
+{# ========================================================= #}
+
+{# 1. Modais de Edição de Recessos #}
+{% for r in recessos_listados %}
+<div class="modal fade" id="modalEditarRecesso{{ r.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 440px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 p-3 shadow-lg">
+            <form method="POST" action="{{ url_for('empresa.editar_recesso', empresa_id=ese_empresa.id, recesso_id=r.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <h6 class="fw-bold mb-3" style="font-size: 0.88rem;">Editar Período de Recesso</h6>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Início</label>
+                        <input type="date" name="data_inicio" value="{{ r.data_inicio.strftime('%Y-%m-%d') }}" class="form-control form-control-sm rounded-3" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Término</label>
+                        <input type="date" name="data_fim" value="{{ r.data_fim.strftime('%Y-%m-%d') }}" class="form-control form-control-sm rounded-3" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Motivo</label>
+                        <input type="text" name="motivo" value="{{ r.motivo }}" class="form-control form-control-sm rounded-3" required>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-end">
+                    {# 🔄 "Voltar" reabre o modal de gerenciamento principal perfeitamente #}
+                    <button type="button" class="btn btn-sm btn-light border rounded-3" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modalGerenciar">Voltar</button>
+                    <button type="submit" class="btn btn-sm btn-danger rounded-3 text-white fw-bold" style="font-size: 0.75rem;">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{# 2. Modais de Edição de Efemérides #}
+{% for e in efemerides_listadas %}
+<div class="modal fade" id="modalEditarEfemeride{{ e.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered px-3" style="max-width: 460px; margin: auto;">
+        <div class="modal-content border-0 rounded-4 p-3 shadow-lg">
+            <form method="POST" action="{{ url_for('empresa.editar_efemeride', empresa_id=ese_empresa.id, efemeride_id=e.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <h6 class="fw-bold mb-3" style="font-size: 0.88rem;">Editar Efeméride</h6>
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Nome do Evento</label>
+                        <input type="text" name="nome" value="{{ e.nome }}" class="form-control form-control-sm rounded-3" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Dia</label>
+                        <input type="number" name="dia" value="{{ e.dia }}" min="1" max="31" class="form-control form-control-sm rounded-3" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Mês</label>
+                        <select name="mes" class="form-select form-select-sm rounded-3">
+                            {% for m in range(1, 13) %}
+                                <option value="{{ m }}" {% if e.mes == m %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Relato Histórico</label>
+                        <textarea name="breve_relato" rows="3" class="form-control form-control-sm rounded-3" style="resize:none;">{{ e.breve_relato or '' }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-dark fw-bold mb-1" style="font-size: 0.68rem;">Link Oficial</label>
+                        <input type="url" name="link_oficial" value="{{ e.link_oficial or '' }}" class="form-control form-control-sm rounded-3">
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-end">
+                    {# 🔄 "Voltar" reabre o modal de gerenciamento principal perfeitamente #}
+                    <button type="button" class="btn btn-sm btn-light border rounded-3" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modalGerenciar">Voltar</button>
+                    <button type="submit" class="btn btn-sm rounded-3 text-white fw-bold" style="background-color: #fd7e14; font-size: 0.75rem;">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% block scripts %}
+{% endblock %}
+
+{% endblock %}

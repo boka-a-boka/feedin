@@ -1,0 +1,42 @@
+{% extends "auth/base_auth.html" %}
+
+{% block title %}Cadastro - {{ modulo_info.nome if modulo_info else 'Core' }}{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+    <div class="mb-3 text-center">
+        <h6 class="fw-bold m-0 text-dark">Criar Nova Conta</h6>
+        <p class="text-muted small m-0">Defina suas credenciais iniciais de acesso</p>
+    </div>
+
+    <form method="POST" action="">
+        {# 🟢 CORREÇÃO: Token global injetado diretamente como input oculto, sem depender da variável 'form' #}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">E-mail de Acesso</label>
+            <input type="email" name="email" class="form-control rounded-3 text-lowercase" value="{{ email_inicial or '' }}" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">Senha</label>
+            <input type="password" name="senha" class="form-control rounded-3" required>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">Confirme a Senha</label>
+            <input type="password" name="confirma_senha" class="form-control rounded-3" required>
+        </div>
+
+        <button type="submit" class="btn btn-biz-primary w-100 py-2 rounded-3 fw-semibold shadow-sm mb-3">
+            Avançar e Concluir
+        </button>
+
+        <div class="text-center">
+            <a href="{{ url_for('auth.login', next_url=next_url) }}" class="text-decoration-none small fw-semibold text-biz-primary">
+                Já tem uma conta? Faça login.
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

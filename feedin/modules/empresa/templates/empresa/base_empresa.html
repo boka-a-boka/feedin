@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Acesso Urbana | Módulo Empresas & Negócios{% endblock %}</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    <style>
+    :root {
+        /* 🎨 ALIMENTAÇÃO DINÂMICA DO MÓDULO */
+        --biz-primary: {{ modulos_sistema.cor_hex if modulos_sistema else '#111827' }};
+
+        /* 🦎 MODO CAMALEÃO: Se houver empresa ativa no contexto, assume as cores dela. Caso contrário, herda o padrão do módulo */
+        --cor-primaria: {{ empresa.cor_primaria if (empresa and empresa.cor_primaria) else (modulos_sistema.cor_hex if modulos_sistema else '#111827') }};
+        --cor-secundaria: {{ empresa.cor_secundaria if (empresa and empresa.cor_secundaria) else '#6B7280' }};
+
+        /* Tons suaves (transparência de ~8% a 15% via HEX) para caixas de ícones e alertas sem quebrar contraste */
+        --cor-primaria-suave: var(--cor-primaria)15;
+        --cor-secundaria-suave: var(--cor-secundaria)15;
+    }
+
+    /* Regras de infraestrutura visual para garantir a centralização limpa da casca */
+    body, html { height: 100%; background-color: #f8f9fa; }
+
+    .wrapper-principal {
+        min-height: 100vh;
+        display: flex;
+        flex-column: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    /* 🛡️ CLASSE CAMALEÃO EVOLUTIVA: Aplica o limite de largura apenas em fluxos de onboarding/login.
+       No Dashboard ou telas operacionais, sobrescrevemos essa classe para 'container-fluid' ou largura total */
+    .conteudo-responsivo {
+        width: 100%;
+        /* Permite que telas cheias passem max-width: none via bloco se necessário */
+        max-width: {% block max_width_wrapper %}480px{% endblock %};
+    }
+
+    .fs-7 { font-size: 0.85rem; }
+
+    /* Utilitários baseados no módulo */
+    .text-biz-primary { color: var(--biz-primary) !important; }
+    .btn-biz-primary { background-color: var(--biz-primary); color: #fff; }
+    .btn-biz-primary:hover { filter: brightness(0.9); color: #fff; }
+
+    /* 🌟 COMPONENTES DINÂMICOS DO PERFIL EMPRESA */
+    .bg-empresa-primaria { background-color: var(--cor-primaria) !important; }
+    .text-empresa-primaria { color: var(--cor-primaria) !important; }
+    .icon-box.bg-light-primary {
+        background-color: var(--cor-primaria-suave) !important;
+        color: var(--cor-primaria) !important;
+    }
+    </style>
+</head>
+<body>
+
+    <div class="wrapper-principal">
+        <div class="conteudo-responsivo">
+
+            {# HEADER DINÂMICO DO MÓDULO (Alimentado pela tabela ModulosSistema ou pela Logo da Empresa se já selecionada) #}
+            <div class="text-center mb-4">
+                <div class="d-inline-flex p-3 bg-white text-biz-primary rounded-4 shadow-sm border mb-2">
+                    {% if empresa and empresa.logomarca %}
+                        <img src="{{ url_for('empresa.static', filename=empresa.logomarca) }}"
+                             alt="Logo {{ empresa.nome }}" 
+                             class="rounded-circle"
+                             style="width: 50px; height: 50px; object-fit: cover;">
+                    {% else %}
+                        <i class="{{ modulos_sistema.icone if modulos_sistema else 'bi-building' }}" style="font-size: 2.5rem;"></i>
+                    {% endif %}
+                </div>
+                <h5 class="fw-bold m-0 text-dark">{{ empresa.nome if empresa else (modulos_sistema.nome if modulos_sistema else 'Módulo Empresas & Negócios') }}</h5>
+                <p class="text-muted small px-3 m-0">{{ 'Gerenciamento ativo do seu estabelecimento.' if empresa else (modulos_sistema.descricao if modulos_sistema else 'Gerencie seu estabelecimento comercial.') }}</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' and category != 'message' else 'danger' }} p-3 mb-4 rounded-3 small shadow-sm border-0" role="alert">
+                            <i class="bi bi-info-circle-fill me-2"></i> {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let acionadorInstalacaoPWA = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            acionadorInstalacaoPWA = e;
+            document.dispatchEvent(new CustomEvent('pwaProntoParaInstalar'));
+            console.log("💾 [PWA GLOBAL] Sistema operacional pronto e aguardando clique para instalação.");
+        });
+
+        async function executarInstalacaoPWA() {
+            if (!acionadorInstalacaoPWA) {
+                alert("O aplicativo já está instalado ou seu navegador não suporta esta função no momento.");
+                return;
+            }
+            acionadorInstalacaoPWA.prompt();
+            const { outcome } = await acionadorInstalacaoPWA.userChoice;
+            console.log(`💻 [PWA] Resposta do usuário para instalação: ${outcome}`);
+            if (outcome === 'accepted') {
+                acionadorInstalacaoPWA = null;
+                document.dispatchEvent(new CustomEvent('pwaInstaladoComSucesso'));
+            }
+        }
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

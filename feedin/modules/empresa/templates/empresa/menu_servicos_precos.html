@@ -1,0 +1,106 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Gestão de Serviços e Preços{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 600px;">
+
+        {# 🔙 VOLTAR AO HUB DE ATIVAÇÃO #}
+        <div class="mb-3">
+            <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Hub de Ativação">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+        </div>
+
+        {# 📊 CABEÇALHO DO MÓDULO #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle mb-4 text-center">
+            <div class="p-2 bg-danger-subtle text-danger rounded-3 d-inline-block mb-2">
+                <i class="bi bi-tags-fill fs-4 d-block"></i>
+            </div>
+            <h5 class="fw-bold text-dark m-0">Serviços e Tabela de Preços</h5>
+            <p class="text-muted small m-0 mt-1">{{ ese_empresa.nome }}</p>
+        </div>
+
+        {# 🗂️ LISTA DE AÇÕES DO MÓDULO #}
+        <div class="d-flex flex-column gap-3">
+
+            {# AÇÃO 1: CADASTRO DE SERVIÇOS OFERECIDOS (ATIVO) #}
+            <a href="{{ url_for('empresa.cadastro_servicos_listagem', empresa_id=ese_empresa.id) }}" class="card shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                            <i class="bi bi-journal-plus fs-4 d-block"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold m-0" style="font-size: 0.9rem;">1. Serviços Oferecidos</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">Indique o que sua empresa faz a partir da nossa árvore de taxonomia.</p>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-right text-danger fs-5"></i>
+                </div>
+            </a>
+
+            {# AÇÃO 2: TABELA DE PREÇOS (ATIVO) #}
+            <a href="{{ url_for('empresa.configurar_precos_listagem', empresa_id=ese_empresa.id) }}" class="card shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                            <i class="bi bi-cash-coin fs-4 d-block"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold m-0" style="font-size: 0.9rem;">2. Configurar Valores</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">Atribua preços e organize os grupos de exibição da sua tabela comercial.</p>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-right text-danger fs-5"></i>
+                </div>
+            </a>
+
+            {# AÇÃO 3: VITRINE DA TV / RECEPÇÃO (DESTRAVADO!) #}
+            <a href="{{ url_for('empresa.vitrine_tv', empresa_id=ese_empresa.id) }}" class="card shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                            <i class="bi bi-tv fs-4 d-block"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold m-0" style="font-size: 0.9rem;">3. Vitrine Digital / TV</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">Acesse a tela limpa da sua tabela comercial, ideal para transmissão em Smart TVs na recepção.</p>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-right text-danger fs-5"></i>
+                </div>
+            </a>
+
+        </div>
+
+        {# 📢 BANNER INFORMATIVO #}
+        <div class="alert alert-light border border-secondary-subtle shadow-sm rounded-4 p-3 d-flex align-items-center gap-3 mt-4 mb-0">
+            <i class="bi bi-info-circle-fill text-dark fs-4"></i>
+            <div style="line-height: 1.3;">
+                <strong class="text-dark small d-block">Como funciona este módulo?</strong>
+                <span class="text-muted" style="font-size: 0.68rem;">Selecione os seus serviços (Passo 1), atribua seus respectivos preços e agrupe-os (Passo 2) e, por fim, acesse o link do Passo 3 em qualquer tela ou Smart TV para exibir sua vitrine digital atualizada.</span>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

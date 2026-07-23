@@ -1,0 +1,76 @@
+{% extends "empresa/base_empresa.html" %}
+{% block title %}Passo 4 de 4: Homologação Comercial{% endblock %}
+
+{% block content %}
+<div class="container py-5" style="max-width: 650px; font-family: system-ui, -apple-system, sans-serif;">
+
+    <div class="mb-4">
+        <div class="d-flex justify-content-between text-muted small fw-bold mb-2 px-1">
+            <span>1. Solicitação ✓</span>
+            <span>2. Canal ✓</span>
+            <span>3. Autenticação ✓</span>
+            <span class="text-biz-primary">🟢 Passo 4: Homologação Final</span>
+        </div>
+        <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-biz-primary" role="progressbar" style="width: 100%"></div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
+        <div class="mb-4">
+            <h4 class="fw-bold text-dark mb-1">Vinculação de Titularidade</h4>
+            <p class="text-muted small">Insira as contrapartidas operacionais para gerenciar o local: <strong class="text-dark">{{ local.nome }}</strong></p>
+        </div>
+
+        <form action="{{ url_for('empresa.finalizar_claim', token=token) }}" method="POST" enctype="multipart/form-data">
+
+            <div class="mb-4">
+                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                    <i class="bi bi-file-earmark-text text-secondary me-2"></i>1. Comprovação de Vínculo
+                </h6>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-dark">Comprovante de Endereço Comercial *</label>
+                    <p class="text-muted mb-2" style="font-size: 0.75rem;">Contas de água, luz ou telefone fixo em nome da empresa ou sócio administrador (últimos 90 dias).</p>
+                    <input type="file" class="form-control rounded-3 shadow-none text-muted" name="comprovante_endereco" accept=".pdf, .jpg, .jpeg, .png" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-dark">Cartão CNPJ ou Contrato Social *</label>
+                    <p class="text-muted mb-2" style="font-size: 0.75rem;">Documento emitido pela Receita Federal para validação do quadro societário.</p>
+                    <input type="file" class="form-control rounded-3 shadow-none text-muted" name="cnpj_social" accept=".pdf, .jpg, .jpeg, .png" required>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                    <i class="bi bi-globe text-secondary me-2"></i>2. Endereço da Marca na Plataforma
+                </h6>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-dark">URL Comercial Exclusiva (Slug) *</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted small">feedin.com.br/</span>
+                        <input type="text" class="form-control rounded-end-3 border-start-0 ps-0 shadow-none" name="slug" placeholder="nome-do-seu-negocio" required style="text-transform: lowercase;">
+                    </div>
+                    <div class="form-text text-muted" style="font-size: 0.75rem;">Utilize apenas letras minúsculas e hífens. Este será o link público do seu painel.</div>
+                </div>
+            </div>
+
+            <div class="p-3 bg-light rounded-3 border border-light-subtle mb-4">
+                <div class="form-check">
+                    <input class="form-check-input border-secondary" type="checkbox" name="termo_aceito" id="termo_aceito" required>
+                    <label class="form-check-label small text-secondary fw-medium" for="termo_aceito" style="line-height: 1.4; text-align: justify;">
+                        Declaro que as informações preenchidas e os documentos anexados são legítimos, assumindo total responsabilidade civil e criminal pela veracidade desta homologação de marca perante o FeedIn.
+                    </label>
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold py-2.5 shadow-sm">
+                    Finalizar Homologação e Ativar Empresa
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

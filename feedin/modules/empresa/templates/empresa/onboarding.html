@@ -1,0 +1,417 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Onboarding{% endblock %}
+
+{% block content %}
+<style>
+    /* Áreas Clicáveis União de Mídia */
+    .zona-clicavel-midia {
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease-in-out;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+    }
+
+    /* Máscara de Hover para Interação */
+    .mascara-hover-midia {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        font-size: 0.75rem;
+        font-weight: 600;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        z-index: 3;
+    }
+    .zona-clicavel-midia:hover .mascara-hover-midia {
+        opacity: 1;
+    }
+
+    /* 🎨 Fundo Acetinado Premium para o Ecossistema Comercial de Piracicaba */
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+
+    /* Efeito de clique suave nos cards de navegação */
+    .card-navegacao-auxiliar {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card-navegacao-auxiliar:active {
+        transform: scale(0.98);
+    }
+</style>
+
+<div class="container py-3 fundo-acetinado-pwa position-relative" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif; border-radius: 24px;">
+
+{# 📱 CONTEÚDO CENTRALIZADO DA INTERFACE #}
+<div class="container py-3 fundo-acetinado-pwa position-relative" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif; border-radius: 24px;">
+
+    {# 🎯 BOTÃO VOLTAR FIXO GLOBAL (Padrão Oficial FeedIn - Contraste Escuro) #}
+    <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+       class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+       style="width: 40px; height: 40px; background-color: #212529; position: absolute; top: 24px; left: 24px; z-index: 1050;"
+       title="Voltar">
+        <i class="bi bi-arrow-left text-white fs-5"></i>
+    </a>
+
+    {# 🎯 CABEÇALHO DA TELA (Compensação ajustada para o botão de 40px) #}
+    <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-3 rounded-4 shadow-sm border" style="padding-left: 76px !important;">
+        <div class="d-flex align-items-center">
+            <div>
+                <span class="text-muted small d-block" style="font-size: 0.72rem;">Estúdio de Identidade</span>
+                <strong class="text-dark" style="font-size: 0.85rem;"><i class="bi bi-palette2 me-1"></i> Toque para mudar / Segure para excluir</strong>
+            </div>
+        </div>
+        <div class="text-end" style="line-height: 1.1;">
+            <span class="badge bg-dark text-warning fw-bold d-block" style="font-size: 0.65rem;"><i class="bi bi-shield-lock-fill me-1"></i>Pleiteante</span>
+            <small class="text-muted" style="font-size: 0.55rem;">Aguardando Homologação</small>
+        </div>
+    </div>
+
+    {# Preview do Card Principal #}
+    <div id="preview-card-principal" class="card border-0 shadow rounded-4 overflow-hidden mb-4 position-relative border transition-all" style="background-color: #ffffff;">
+
+        {# 🖼️ ÁREA CLICÁVEL DA FACHADA #}
+        <div id="wrapper-fachada-clicavel" class="zona-clicavel-midia position-relative bg-secondary d-flex align-items-center justify-content-center" style="height: 160px; background-size: cover; background-position: center; {% if ese_empresa.fachada %}background-image: url('{{ url_for('empresa.static', filename=ese_empresa.fachada) }}');{% endif %}">
+
+            <div class="mascara-hover-midia" id="mascara-fachada">
+                <i class="bi bi-camera-fill fs-4 mb-1"></i>
+                <span class="small fw-bold">Clique para Alterar Capa</span>
+                <span style="font-size: 0.6rem; opacity: 0.8;">Pressione e segure para remover</span>
+            </div>
+
+            <span id="txt-fachada-vazia" class="text-white-50 small {% if ese_empresa.fachada %}d-none{% endif %}"><i class="bi bi-camera-fill me-1"></i> Sem foto da fachada (Tom plano ativo)</span>
+
+            <span id="preview-tag-status" class="position-absolute top-0 end-0 m-3 badge text-white fw-bold text-uppercase py-2 px-3 shadow" style="font-size: 0.65rem; letter-spacing: 1px; background-color: {{ ese_empresa.cor_primaria or '#111827' }}; z-index: 4;">
+                Visualização
+            </span>
+        </div>
+
+        {# 💥 CABEÇALHO DO PWA COM BLENDING ATIVO #}
+        <div id="preview-header-fundo" class="p-4 pt-0 position-relative transition-all" style="background-color: {{ ese_empresa.cor_primaria or '#111827' }}; margin-top: -1px;">
+
+            <div class="d-flex align-items-end gap-3 position-relative" style="margin-top: -45px; z-index: 2;">
+
+                {# 🎯 ÁREA CLICÁVEL DA LOGOMARCA #}
+                <div id="wrapper-logo-clicavel" class="zona-clicavel-midia bg-transparent rounded-4 shadow border d-flex align-items-center justify-content-center overflow-hidden position-relative" style="width: 95px; height: 95px; min-width: 95px; border-width: 3px !important; border-color: #ffffff !important; background-color: rgba(255,255,255,0.15) !important; backdrop-filter: blur(5px);">
+
+                    <div class="mascara-hover-midia rounded-4 p-1">
+                        <i class="bi bi-image-fill fs-5 mb-1"></i>
+                        <span style="font-size: 0.55rem; text-align: center; line-height: 1.1;">Trocar<br><span style="opacity: 0.7;">Segure p/ excluir</span></span>
+                    </div>
+
+                    <i id="icon-logo-vazia" class="bi bi-image text-white-50 fs-2 {% if ese_empresa.logomarca %}d-none{% endif %}"></i>
+
+                    <img id="img-preview-logo"
+                         src="{% if ese_empresa.logomarca %}{{ url_for('empresa.static', filename=ese_empresa.logomarca) }}{% else %}data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'></svg>{% endif %}"
+                         alt="Sua Logo"
+                         class="w-100 h-100 object-fit-contain {% if not ese_empresa.logomarca %}d-none{% endif %}"
+                         style="background-color: transparent;">
+                </div>
+
+                <div class="mb-1" style="line-height: 1.2;">
+                    <h4 id="txt-preview-nome" class="fw-bold m-0" style="mix-blend-mode: difference; color: #ffffff;">{{ ese_empresa.nome }}</h4>
+                    <span id="preview-categoria" class="badge rounded-pill px-3 py-1 mt-2 d-inline-block small" style="mix-blend-mode: difference; color: #ffffff; border: 1px solid #ffffff; background-color: transparent;">
+                        {{ categoria_nome or 'Comércio Local' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body p-4 transition-all" id="preview-corpo-detalhes" style="background: transparent;">
+            <div class="p-3 rounded-4 border-start border-3 transition-all" id="border-preview-secundaria" style="border-left-color: {{ ese_empresa.cor_secundaria or '#6B7280' }} !important; background-color: rgba(255, 255, 255, 0.5);">
+                <small class="text-muted d-block fw-bold text-uppercase mb-1" style="font-size: 0.65rem; letter-spacing: 0.7px;">Localização do Balcão</small>
+                <div id="txt-preview-endereco" class="small text-dark" style="line-height: 1.4; font-weight: 500;">
+                    {{ local.logradouro if local else 'Endereço Comercial' }}, Nº {{ local.numero if local else 'S/N' }} — {{ local.bairro if local else '' }}<br>
+                    <span class="opacity-75">CEP: {{ local.cep if local else '' }} — {{ cidade | default('Piracicaba') }}/{{ estado | default('SP') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Card do Formulário de Identidade Visual #}
+    <div class="card border-0 shadow-sm rounded-4 bg-white mb-4">
+        <div class="card-body p-4">
+            <form id="form-onboarding" method="POST" action="{{ url_for('empresa.configurar_layout', empresa_id=ese_empresa.id) }}" enctype="multipart/form-data">
+                {% if csrf_token %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% endif %}
+
+                <input type="file" id="file-logo" name="logo" accept="image/*" class="d-none">
+                <input type="file" id="file-fachada" name="fachada" accept="image/*" class="d-none">
+
+                <input type="hidden" name="excluir_logo" id="excluir_logo" value="false">
+                <input type="hidden" name="excluir_fachada" id="excluir_fachada" value="false">
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary">Nome do Estabelecimento</label>
+                    <input type="text" id="input-nome" name="nome" class="form-control rounded-3 form-control-sm" value="{{ ese_empresa.nome }}" required>
+                </div>
+
+                <div class="mb-3 position-relative">
+                    <label class="form-label small fw-bold text-secondary">Nome da Categoria (Taxonomia)</label>
+                    <input type="text" id="input-categoria" name="categoria" class="form-control rounded-3 form-control-sm" value="{{ categoria_nome or '' }}" placeholder="Ex: Barbearia, Pizzaria, Café" autocomplete="off" required>
+
+                    <input type="hidden" name="categoria_id" id="categoria_id" value="{{ ese_empresa.categoria or '' }}">
+                    <input type="hidden" name="sugerir_nova_categoria" id="sugerir_nova_categoria" value="">
+
+                    <div id="sugestoes-taxonomia-wrapper" class="list-group shadow-lg position-absolute w-100 d-none" style="z-index: 1000; max-height: 180px; overflow-y: auto;"></div>
+                </div>
+
+                <div class="p-3 bg-light rounded-3 border mb-4">
+                    <span class="small fw-bold text-dark d-block mb-3"><i class="bi bi-paint-bucket me-1"></i> Esquema de Cores Base</span>
+                    <div class="row g-3">
+                        <div class="col-6 border-end">
+                            <label class="form-label small text-secondary fw-semibold">Cor de Fundo (Primária)</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="color" id="input-cor-primaria" name="cor_primaria" value="{{ ese_empresa.cor_primaria or '#111827' }}" class="form-control form-control-color border-0 rounded-circle" style="width: 42px; height: 42px; cursor: pointer;">
+                                <small class="text-muted" style="font-size: 0.65rem;">Fundo mestre</small>
+                            </div>
+                        </div>
+                        <div class="col-6 ps-3">
+                            <label class="form-label small text-secondary fw-semibold">Cor de Detalhe (Secundária)</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="color" id="input-cor-secundaria" name="cor_secundaria" value="{{ ese_empresa.cor_secundaria or '#6B7280' }}" class="form-control form-control-color border-0 rounded-circle" style="width: 42px; height: 42px; cursor: pointer;">
+                                <small class="text-muted" style="font-size: 0.65rem;">Bordas</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-12">
+                        <button type="submit" id="btn-confirmar-layout" class="btn btn-dark btn-sm w-100 rounded-pill py-2.5 fw-bold shadow transition-all" style="background-color: {{ ese_empresa.cor_primaria or '#111827' }}; border-color: {{ ese_empresa.cor_primaria or '#111827' }};">
+                            Confirmar Layout ✓
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# 🔒 CARD DE INSTITUCIONAL E ACESSOS (Substitui o rodapé da antiga Sidebar) #}
+    <div class="card border-0 bg-transparent text-center mb-2">
+        <div class="d-flex justify-content-center gap-3 mb-2" style="font-size: 0.75rem;">
+            <a href="#" class="text-secondary text-decoration-none"><i class="bi bi-file-earmark-text me-1"></i>Termos</a>
+            <span class="text-muted">•</span>
+            <a href="#" class="text-secondary text-decoration-none"><i class="bi bi-shield-check me-1"></i>Privacidade</a>
+            <span class="text-muted">•</span>
+            <a href="#" class="text-secondary text-decoration-none"><i class="bi bi-question-circle me-1"></i>Suporte</a>
+        </div>
+
+        <div class="d-flex flex-column gap-2 mt-2 px-3">
+            <a href="{{ url_for('empresa.logout') }}" class="btn btn-sm btn-outline-danger rounded-pill py-2 mx-auto fw-semibold d-flex align-items-center justify-content-center gap-2 w-75" style="font-size: 0.75rem;">
+                <i class="bi bi-box-arrow-right"></i>
+                Sair do Módulo Empresa
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const inputLogoReal = document.getElementById('file-logo');
+    const inputFachadaReal = document.getElementById('file-fachada');
+    const wrapperLogo = document.getElementById('wrapper-logo-clicavel');
+    const wrapperFachada = document.getElementById('wrapper-fachada-clicavel');
+
+    const TEMPO_PRESSAO = 800;
+
+    function configurarInteracaoMidia(elemento, inputReal, tipoMidia) {
+        let timerToque = null;
+        let escorregouTela = false;
+        let isLongPress = false;
+
+        elemento.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            isLongPress = false;
+            timerToque = setTimeout(() => {
+                isLongPress = true;
+                executarExclusaoMidia(tipoMidia);
+            }, TEMPO_PRESSAO);
+        });
+
+        elemento.addEventListener('mouseup', function(e) {
+            if (timerToque) clearTimeout(timerToque);
+            if (!isLongPress && e.button === 0) {
+                inputReal.click();
+            }
+        });
+
+        elemento.addEventListener('mouseleave', function() {
+            if (timerToque) clearTimeout(timerToque);
+        });
+
+        elemento.addEventListener('touchstart', function(e) {
+            escorregouTela = false;
+            isLongPress = false;
+            timerToque = setTimeout(() => {
+                isLongPress = true;
+                executarExclusaoMidia(tipoMidia);
+            }, TEMPO_PRESSAO);
+        }, { passive: true });
+
+        elemento.addEventListener('touchmove', function() {
+            escorregouTela = true;
+            if (timerToque) clearTimeout(timerToque);
+        });
+
+        elemento.addEventListener('touchend', function(e) {
+            if (timerToque) clearTimeout(timerToque);
+            if (!escorregouTela && !isLongPress) {
+                inputReal.click();
+            }
+        });
+    }
+
+    function executarExclusaoMidia(tipo) {
+        if (navigator.vibrate) navigator.vibrate(60);
+
+        if (tipo === 'logo') {
+            if (confirm("Deseja remover a Logomarca atual?")) {
+                document.getElementById('excluir_logo').value = 'true';
+                inputLogoReal.value = '';
+                document.getElementById('img-preview-logo').classList.add('d-none');
+                document.getElementById('img-preview-logo').src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'></svg>";
+                document.getElementById('icon-logo-vazia').classList.remove('d-none');
+            }
+        } else if (tipo === 'fachada') {
+            if (confirm("Deseja remover a imagem da Fachada e usar o tom plano?")) {
+                document.getElementById('excluir_fachada').value = 'true';
+                inputFachadaReal.value = '';
+                wrapperFachada.style.backgroundImage = 'none';
+                document.getElementById('txt-fachada-vazia').classList.remove('d-none');
+            }
+        }
+    }
+
+    if (wrapperLogo && inputLogoReal) configurarInteracaoMidia(wrapperLogo, inputLogoReal, 'logo');
+    if (wrapperFachada && inputFachadaReal) configurarInteracaoMidia(wrapperFachada, inputFachadaReal, 'fachada');
+
+    if(inputLogoReal) {
+        inputLogoReal.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                document.getElementById('excluir_logo').value = 'false';
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('img-preview-logo');
+                    img.src = e.target.result;
+                    img.classList.remove('d-none');
+                    document.getElementById('icon-logo-vazia').classList.add('d-none');
+                }
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+    }
+
+    if(inputFachadaReal) {
+        inputFachadaReal.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                document.getElementById('excluir_fachada').value = 'false';
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    wrapperFachada.style.backgroundImage = `url('${e.target.result}')`;
+                    document.getElementById('txt-fachada-vazia').classList.add('d-none');
+                }
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+    }
+
+    // Motor de Autocomplete da Categoria
+    const inputCategoria = document.getElementById('input-categoria');
+    const wrapperSugestoes = document.getElementById('sugestoes-taxonomia-wrapper');
+    const hiddenCategoriaId = document.getElementById('categoria_id');
+    const hiddenSugerirNova = document.getElementById('sugerir_nova_categoria');
+
+    if (inputCategoria && wrapperSugestoes) {
+        inputCategoria.addEventListener('input', function() {
+            const termo = this.value.trim();
+
+            document.getElementById('preview-categoria').innerText = termo || 'Comércio Local';
+
+            if (termo.length < 2) { wrapperSugestoes.classList.add('d-none'); return; }
+
+            fetch(`/api/buscar-interesses-onboarding?q=${encodeURIComponent(termo)}`)
+                .then(res => res.json())
+                .then(dados => {
+                    wrapperSugestoes.innerHTML = '';
+                    if (dados && dados.length > 0) {
+                        dados.forEach(item => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center border-0 py-2 border-bottom small bg-white text-dark';
+                            btn.innerHTML = `<div><i class="bi bi-tag-fill text-muted me-2"></i><strong>${item.nome}</strong></div>`;
+                            btn.onclick = () => {
+                                inputCategoria.value = item.nome;
+                                hiddenCategoriaId.value = item.id;
+                                hiddenSugerirNova.value = '';
+                                wrapperSugestoes.classList.add('d-none');
+                                document.getElementById('preview-categoria').innerText = item.nome;
+                            };
+                            wrapperSugestoes.appendChild(btn);
+                        });
+                        wrapperSugestoes.classList.remove('d-none');
+                    } else {
+                        wrapperSugestoes.innerHTML = `
+                            <button type="button" class="list-group-item list-group-item-action text-primary py-2 small bg-white" id="btn-criar-termo-custom">
+                                <i class="bi bi-plus-circle-fill me-2"></i> Sugerir nova categoria: "${termo}"
+                            </button>`;
+                        document.getElementById('btn-criar-termo-custom').onclick = () => {
+                            hiddenCategoriaId.value = '';
+                            hiddenSugerirNova.value = termo;
+                            wrapperSugestoes.classList.add('d-none');
+                        };
+                        wrapperSugestoes.classList.remove('d-none');
+                    }
+                });
+        });
+        document.addEventListener('click', (e) => { if (!inputCategoria.contains(e.target)) wrapperSugestoes.classList.add('d-none'); });
+    }
+
+    // MOTOR DE REATIVIDADE EM TEMPO REAL
+    const inputNome = document.getElementById('input-nome');
+    if (inputNome) {
+        inputNome.addEventListener('input', function() {
+            document.getElementById('txt-preview-nome').innerText = this.value || 'Nome do Estabelecimento';
+        });
+    }
+
+    const inputCorPrimaria = document.getElementById('input-cor-primaria');
+    if (inputCorPrimaria) {
+        inputCorPrimaria.addEventListener('input', function() {
+            const cor = this.value;
+            document.getElementById('preview-header-fundo').style.backgroundColor = cor;
+            document.getElementById('preview-tag-status').style.backgroundColor = cor;
+
+            const btnConfirmar = document.getElementById('btn-confirmar-layout');
+            if (btnConfirmar) {
+                btnConfirmar.style.backgroundColor = cor;
+                btnConfirmar.style.borderColor = cor;
+            }
+        });
+    }
+
+    const inputCorSecundaria = document.getElementById('input-cor-secundaria');
+    if (inputCorSecundaria) {
+        inputCorSecundaria.addEventListener('input', function() {
+            document.getElementById('border-preview-secundaria').style.setProperty('border-left-color', this.value, 'important');
+        });
+    }
+});
+</script>
+{% endblock %}
