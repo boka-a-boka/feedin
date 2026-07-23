@@ -13,8 +13,9 @@ from flask_migrate import Migrate
 from flask_wtf.csrf import CSRFProtect
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-# 1. INSTANCIAÇÃO NEUTRA DAS EXTENSÕES (Ninguém é dono de ninguém ainda)
+# 1. INSTANCIAÇÃO NEUTRA DAS EXTENSÕES
 database = SQLAlchemy()
 migrate = Migrate(render_as_batch=True)
 bcrypt = Bcrypt()
@@ -31,6 +32,10 @@ def create_app():
     """
     load_dotenv()
     app = Flask(__name__)
+
+    # --- CONFIGURAÇÃO PARA PROXY REVERSO (NGINX / VPS) ---
+    # Garante que o Flask entenda os cabeçalhos de HTTPS e Host enviados pelo Nginx
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # --- CONFIGURAÇÃO DE LOGS ---
     if not os.path.exists('logs'):
@@ -67,16 +72,21 @@ def create_app():
     app.config["PASTA_FOTOS"] = "fotos_perfil"
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-    # --- CHAVEAMENTO DE AMBIENTE: LOCALHOST vs VPS ---
-    if os.environ.get('FLASK_ENV') == 'production' or os.name != 'nt':
-        app.config['SESSION_COOKIE_DOMAIN'] = '.feedin.com.br'
-        app.config.update(SESSION_COOKIE_SECURE=True, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax')
-    else:
-        app.config['SESSION_COOKIE_DOMAIN'] = None
-        app.config.update(SESSION_COOKIE_SECURE=False, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax')
-        app.config['REMEMBER_COOKIE_SECURE'] = False
+    # --- CHAVEAMENTO DE AMBIENTE: LOCALHOST vs VPS / HOMOLOGAÇÃO ---
+    is_production = os.environ.get('FLASK_ENV') == 'production' or os.name != 'nt'
 
-    app.config['MODO_PRODUCAO'] = (os.name != 'nt')
+    # Deixamos o DOMAIN como None para aceitar dinamicamente subdomínios (ex: homolog, IP ou dominio principal)
+    app.config['SESSION_COOKIE_DOMAIN'] = None
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    # Habilita HTTPS Secure nos cookies apenas se explicitamente em produção/SSL configurado
+    # Se estiver testando homologação por HTTP, desativa temporariamente para evitar a perda do CSRF
+    usar_https = os.environ.get('USE_HTTPS', 'false').lower() == 'true'
+    app.config['SESSION_COOKIE_SECURE'] = usar_https
+    app.config['REMEMBER_COOKIE_SECURE'] = usar_https
+
+    app.config['MODO_PRODUCAO'] = is_production
     app.config['DATA_FIM_BETA'] = datetime(2026, 8, 5, tzinfo=timezone.utc)
 
     # --- CONFIGURAÇÕES DE E-MAIL ---
@@ -95,7 +105,8 @@ def create_app():
     mail.init_app(app)
 
     login_manager.init_app(app)
-    login_manager.login_view = "login"
+    # Aponta diretamente para o endpoint do blueprint de autenticação, se aplicável, ou 'login'
+    login_manager.login_view = "auth.login" if "auth_bp" in locals() else "login"
     login_manager.login_message = "Sua sessão expirou, por favor faça login novamente."
     login_manager.login_message_category = "info"
 
@@ -108,7 +119,7 @@ def create_app():
         # Carrega rotas e modelos bases do Core
         from feedin import routes, models
 
-        # 4. 🧩 REGISTRO DOS BLUEPRINTS AUTÔNOMOS (Cada um cuidando da sua vida)
+        # 4. 🧩 REGISTRO DOS BLUEPRINTS AUTÔNOMOS
         from feedin.modules.agenda import agenda_bp
         from feedin.modules.empresa import empresa_bp
         from feedin.modules.auth import auth_bp

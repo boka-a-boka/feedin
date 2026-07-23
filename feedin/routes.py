@@ -322,25 +322,32 @@ def notify(message, type):
 from flask import redirect, url_for, flash, session, make_response, current_app
 from flask_login import logout_user, login_required
 
+
 @current_app.route("/logout")
 @login_required
 def realizar_logout():
+    # 1. Pega a origem do usuário antes de mexer na sessão
     veio_do_hub = session.get('navegacao_via_hub', False)
 
-    # Desloga do Flask-Login e limpa todos os dados da memória de sessão
+    # 2. Desloga do Flask-Login
     logout_user()
-    session.clear()
 
-    # Redirecionamento condicional preservando o HUB
-    if veio_do_hub:
-        response = make_response(redirect(url_for('central_hub')))
-    else:
-        response = make_response(redirect(url_for('index')))
-
-    response.delete_cookie('session')
+    # 3. Dispara o Flash ANTES de limpar a sessão para garantir que ele seja entregue na próxima tela
     flash("Sessão encerrada com sucesso. Até logo!", "info")
-    return response
 
+    # 4. Limpa as variáveis da sessão
+    session.clear()
+    session.modified = True
+
+    # 5. Define a rota de destino
+    destino = url_for('central_hub') if veio_do_hub else url_for('index')
+    response = make_response(redirect(destino))
+
+    # 6. Força a expiração e destruição do cookie no navegador casando os parâmetros
+    domain = current_app.config.get('SESSION_COOKIE_DOMAIN')
+    response.delete_cookie('session', path='/', domain=domain)
+
+    return response
 
 @current_app.route("/login", methods=["GET", "POST"])
 def login():
