@@ -325,25 +325,22 @@ from flask_login import logout_user, login_required
 @current_app.route("/logout")
 @login_required
 def realizar_logout():
-    # 1️⃣ Preserva o rastreio da origem pelo HUB
     veio_do_hub = session.get('navegacao_via_hub', False)
 
-    # 2️⃣ Limpeza de sessão Flask-Login + Session Dict
+    # Desloga do Flask-Login e limpa todos os dados da memória de sessão
     logout_user()
     session.clear()
 
-    # 3️⃣ Decisão de redirecionamento (HUB vs Index Externa)
+    # Redirecionamento condicional preservando o HUB
     if veio_do_hub:
         response = make_response(redirect(url_for('central_hub')))
     else:
         response = make_response(redirect(url_for('index')))
 
-    # 4️⃣ Invalidação do Cookie de Sessão
-    # Mantém o descarte explícito sem travar requisições HTTP/HTTPS no ambiente local ou homologação
     response.delete_cookie('session')
-
     flash("Sessão encerrada com sucesso. Até logo!", "info")
     return response
+
 
 @current_app.route("/login", methods=["GET", "POST"])
 def login():
