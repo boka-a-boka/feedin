@@ -1,0 +1,509 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Agendar Horário{% endblock %}
+
+{% block content %}
+{% set cor_empresa = empresa.cor_primaria if (empresa.cor_primaria is defined and empresa.cor_primaria) else '#0d6efd' %}
+
+{% set raw_logo = empresa.logo_url or empresa.logomarca %}
+{% set url_logo = '' %}
+{% if raw_logo %}
+    {% if raw_logo.startswith('http') %}
+        {% set url_logo = raw_logo %}
+    {% elif 'uploads/' in raw_logo %}
+        {% set logo_clean = 'uploads/' ~ raw_logo.split('uploads/')[-1] %}
+        {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
+    {% else %}
+        {% set url_logo = url_for('empresa.static', filename=raw_logo) %}
+    {% endif %}
+{% endif %}
+
+<style>
+  body { background-color: #f4f6f9 !important; }
+  :root { --cor-empresa: {{ cor_empresa }}; }
+  .text-empresa { color: {{ cor_empresa }} !important; }
+  .bg-empresa { background-color: {{ cor_empresa }} !important; }
+  .border-empresa { border-color: var(--cor-empresa) !important; }
+
+  .card-profissional-check:checked + .label-profissional-card {
+    border-color: var(--cor-empresa) !important;
+    background-color: var(--cor-empresa) !important;
+    background-blend-mode: soft-light;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+  }
+
+  .card-profissional-check:checked + .label-profissional-card .check-icon {
+    display: inline-block !important;
+  }
+
+  .label-profissional-card {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    border: 2px solid #dee2e6;
+  }
+
+  .label-profissional-card:hover {
+    border-color: {{ cor_empresa }} !important;
+  }
+</style>
+
+<div class="container py-3 mb-5" style="max-width: 680px; font-family: system-ui, -apple-system, sans-serif;">
+
+  <!-- HEADER -->
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3 border-start border-4 border-empresa">
+    <div class="d-flex align-items-center gap-3">
+      <a href="javascript:void(0);"
+         onclick="if (document.referrer) { history.back(); } else { window.location.href = '/'; }"
+         class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center flex-shrink-0"
+         style="width: 40px; height: 40px;"
+         title="Voltar">
+        <i class="bi bi-arrow-left fs-5 text-white"></i>
+      </a>
+
+      <div class="d-flex align-items-center gap-3 p-2 rounded-3 bg-light border w-100 text-truncate">
+        {% if url_logo %}
+          <img src="{{ url_logo }}"
+               alt="Logo {{ empresa.nome }}"
+               class="rounded-3 border shadow-sm flex-shrink-0"
+               style="width: 48px; height: 48px; object-fit: cover;">
+        {% else %}
+          <div class="rounded-3 text-white fw-bold d-flex align-items-center justify-content-center shadow-sm fs-5 flex-shrink-0"
+               style="width: 48px; height: 48px; background-color: {{ cor_empresa }};">
+            {{ empresa.nome[0] | upper }}
+          </div>
+        {% endif %}
+
+        <div class="text-truncate">
+          <h6 class="fw-bold text-dark m-0 fs-6 text-truncate">{{ empresa.nome }}</h6>
+          <small class="text-muted d-block" style="font-size: 0.75rem;">
+            {% if modo_edicao %}Reagendamento de Horário{% else %}Agendamento de Horário{% endif %}
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESUMO DOS SERVIÇOS -->
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+    {% if rascunho and rascunho.itens %}
+      <div class="alert alert-primary bg-light border-primary border-opacity-25 rounded-3 p-2.5 mb-3 d-flex align-items-center gap-2 small">
+        <i class="bi bi-arrow-clockwise text-empresa fs-5 flex-shrink-0"></i>
+        <div>
+          <strong class="d-block text-dark">Rascunho restaurado com sucesso!</strong>
+          <span class="text-muted">Carregamos os <strong>{{ rascunho.itens|length }}</strong> serviço(s) selecionados anteriormente neste estabelecimento.</span>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+      <span class="fw-bold text-dark small d-flex align-items-center gap-1.5">
+        <i class="bi bi-check2-square text-empresa"></i>Serviço(s) Selecionado(s)
+      </span>
+      <span class="badge bg-light text-dark border rounded-pill small">
+        Passo 2 de 2
+      </span>
+    </div>
+
+    {% set lista_servicos = servicos_selecionados if servicos_selecionados is defined and servicos_selecionados else ([servico_selecionado] if servico_selecionado else []) %}
+
+    {% if lista_servicos %}
+      <div class="list-group list-group-flush mb-2">
+        {% for item in lista_servicos %}
+          {% set nome_srv = item.descricao_servico or (item.taxonomia.nome if item.taxonomia else (item.nome_servico or 'Serviço Agendado')) %}
+          {% set preco_srv = item.preco or item.valor or 0.0 %}
+          {% set duracao_srv = item.duracao_minutos or item.tempo_duracao %}
+
+          <div class="list-group-item px-0 py-2 border-0 d-flex justify-content-between align-items-center">
+            <div class="text-truncate me-2">
+              <strong class="d-block text-dark small text-truncate">{{ nome_srv }}</strong>
+              {% if duracao_srv %}
+                <small class="text-muted" style="font-size: 0.75rem;">
+                  <i class="bi bi-clock me-1"></i>{{ duracao_srv }} min
+                </small>
+              {% endif %}
+            </div>
+            <span class="fw-semibold text-dark small">
+              R$ {{ "%.2f"|format(preco_srv)|replace('.', ',') }}
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-1 bg-light p-2 rounded-3">
+        <div class="text-muted small">
+          <i class="bi bi-hourglass-split me-1 text-empresa"></i>Duração Total:
+          <strong>{{ duracao_total_formatada or (tempo_total ~ ' min' if tempo_total else 'A calcular') }}</strong>
+        </div>
+        <div class="fw-bold fs-5 text-empresa">
+          R$ {{ "%.2f"|format(valor_total_cobrado or valor_cobrado or (rascunho.valor_total if rascunho else 0.0))|replace('.', ',') }}
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted small m-0 text-center py-2">Nenhum serviço selecionado.</p>
+    {% endif %}
+  </div>
+
+  <!-- ATENDIMENTOS NÃO REALIZADOS -->
+  {% if atendimentos_nao_realizados %}
+    <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3 border-start border-4 border-warning">
+      <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+        <span class="fw-bold text-dark small d-flex align-items-center gap-1.5">
+          <i class="bi bi-exclamation-triangle-fill text-warning"></i> Atendimentos Não Realizados
+        </span>
+        <span class="badge bg-warning text-dark rounded-pill small">
+          {{ atendimentos_nao_realizados|length }} registro(s)
+        </span>
+      </div>
+
+      <div class="list-group list-group-flush">
+        {% for item in atendimentos_nao_realizados %}
+          <div class="list-group-item px-0 py-2 border-0 d-flex justify-content-between align-items-center">
+            <div>
+              <strong class="d-block text-dark small">
+                {{ item.servico_nome or (item.servico.descricao_servico if item.servico else 'Atendimento') }}
+              </strong>
+              <small class="text-muted" style="font-size: 0.75rem;">
+                <i class="bi bi-calendar-x me-1"></i>
+                {{ item.data_horario.strftime('%d/%m/%Y às %H:%M') if item.data_horario else (item.data_formatada or 'Data não informada') }}
+              </small>
+            </div>
+            <span class="badge bg-light text-danger border border-danger-subtle rounded-pill small">
+              {{ item.status or 'Não realizado' }}
+            </span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+<!-- FORMULÁRIO -->
+  <form method="POST" action="{{ url_for('agenda.agendar', slug_empresa=empresa.slug) }}" id="formAgendamento">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
+    {% if rascunho %}
+      <input type="hidden" name="rascunho_id" value="{{ rascunho.id }}">
+    {% endif %}
+
+    {% if modo_edicao and agendamento_original %}
+      <input type="hidden" name="agendamento_id" id="input_agendamento_id" value="{{ agendamento_original.id }}">
+      <input type="hidden" name="reagendar_id" id="input_reagendar_id" value="{{ agendamento_original.id }}">
+    {% endif %}
+
+    <input type="hidden" name="servico_ids" id="input_servico_ids" value="{{ servicos_ids_string or servico_id_selecionado or '' }}">
+    <input type="hidden" name="horario_agendamento" id="inputHorarioSelecionado" value="{{ horario_selecionado or '' }}">
+
+    <!-- PROFISSIONAL -->
+    <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+      <label class="fw-bold text-dark mb-2 small d-flex align-items-center gap-1.5">
+        <i class="bi bi-person-badge text-empresa"></i> 1. Escolha o Profissional:
+      </label>
+
+      <div class="row g-2">
+        <div class="col-6 col-sm-4">
+          <input type="radio"
+                 class="btn-check card-profissional-check"
+                 name="profissional_id"
+                 id="colab_qualquer"
+                 value=""
+                 {% if not profissional_id_selecionado %}checked{% endif %}
+                 onchange="atualizarHorariosDisponiveis()">
+          <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white" for="colab_qualquer">
+            <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center mb-1" style="width: 40px; height: 40px;">
+              <i class="bi bi-people-fill text-secondary fs-5"></i>
+            </div>
+            <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;">Qualquer um</strong>
+            <small class="text-muted" style="font-size: 0.68rem;">Sem preferência</small>
+          </label>
+        </div>
+
+{% set lista_colabs = colaboradores if colaboradores is defined and colaboradores else (profissionais if profissionais is defined else []) %}
+{% if lista_colabs %}
+  {% for colab in lista_colabs %}
+
+    {# 1. Tratamento do Nome #}
+    {% set nome_colab = colab.nome or 'Profissional' %}
+    {% set inicial_colab = nome_colab[0]|upper if nome_colab else 'P' %}
+
+    {# 2. Tratamento do Cargo (extrai a propriedade texto da Model Cargo) #}
+    {% if colab.cargo is mapping or colab.cargo.__class__.__name__ == 'Cargo' or (colab.cargo and not colab.cargo is string) %}
+      {% set cargo_nome = colab.cargo.descricao or colab.cargo.nome or colab.cargo.titulo or colab.cargo.nome_cargo or 'Especialista' %}
+    {% else %}
+      {% set cargo_nome = colab.cargo if colab.cargo else 'Especialista' %}
+    {% endif %}
+
+    {# 3. Tratamento da URL da Foto sem duplicação de caminho #}
+    {% set raw_foto = colab.url_foto_profissional or colab.foto_profissional %}
+    {% set foto_colab_final = None %}
+
+    {% if raw_foto and raw_foto|string|trim != '' and raw_foto|string|lower != 'none' %}
+      {% set str_foto = raw_foto|string %}
+      {% if str_foto.startswith('http://') or str_foto.startswith('https://') %}
+        {% set foto_colab_final = str_foto %}
+      {% else %}
+        {% set c_limpo = str_foto.replace('\\', '/').lstrip('/') %}
+        {% set c_lower = c_limpo.lower() %}
+
+        {% if 'empresas/' in c_lower %}
+          {% set idx = c_lower.find('empresas/') %}
+          {% set rel_path = 'uploads/' ~ c_limpo[idx:] %}
+          {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
+        {% elif 'uploads/' in c_lower %}
+          {% set idx = c_lower.find('uploads/') %}
+          {% set rel_path = c_limpo[idx + 8:] %}
+          {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
+        {% else %}
+          {% set foto_colab_final = url_for('empresa.static', filename='uploads/profissionais/' ~ c_limpo) %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+    <div class="col-6 col-sm-4">
+      <input type="radio"
+             class="btn-check card-profissional-check"
+             name="profissional_id"
+             id="colab_{{ colab.id }}"
+             value="{{ colab.id }}"
+             {% if profissional_id_selecionado and profissional_id_selecionado|int == colab.id|int %}checked{% endif %}
+             onchange="atualizarHorariosDisponiveis()">
+
+      <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer" for="colab_{{ colab.id }}">
+
+        {# Container do Avatar (40x40px) #}
+        <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px;">
+          {% if foto_colab_final %}
+            <img id="imgRadioColab_{{ colab.id }}"
+                 src="{{ foto_colab_final }}"
+                 alt="{{ nome_colab }}"
+                 class="rounded-circle border object-fit-cover w-100 h-100"
+                 onerror="this.style.display='none'; document.getElementById('avatarRadioLetra_{{ colab.id }}').style.display='flex';">
+          {% endif %}
+
+          <div id="avatarRadioLetra_{{ colab.id }}"
+               class="rounded-circle text-white fw-bold align-items-center justify-content-center shadow-sm w-100 h-100 border border-white"
+               style="font-size: 0.85rem; background-color: {{ empresa.cor_primaria or '#212529' }}; display: {% if foto_colab_final %}none{% else %}flex{% endif %};">
+            {{ inicial_colab }}
+          </div>
+        </div>
+
+        <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ nome_colab }}">
+          {{ nome_colab }}
+        </strong>
+        <small class="text-muted text-truncate w-100" style="font-size: 0.68rem;">
+          {{ cargo_nome }}
+        </small>
+      </label>
+    </div>
+
+  {% endfor %}
+{% endif %}
+      </div>
+    </div>
+
+    <!-- DATA -->
+    <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+      <label for="data_agendamento" class="fw-bold text-dark mb-2 small d-flex align-items-center gap-1.5">
+        <i class="bi bi-calendar-event text-empresa"></i> 2. Escolha a Data:
+      </label>
+      <input type="date"
+             id="data_agendamento"
+             name="data_agendamento"
+             value="{{ data_selecionada or data_atual }}"
+             min="{{ data_atual }}"
+             {% if data_limite_maxima %}max="{{ data_limite_maxima }}"{% endif %}
+             class="form-control rounded-3 border bg-light py-2 fw-semibold"
+             onchange="atualizarHorariosDisponiveis()"
+             required>
+    </div>
+
+    <!-- HORÁRIOS -->
+    <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-4">
+      <label class="fw-bold text-dark mb-2 small d-flex align-items-center gap-1.5">
+        <i class="bi bi-clock-history text-empresa"></i> 3. Horários Disponíveis:
+      </label>
+
+      <div id="container-slots-horario" class="d-flex flex-wrap gap-2 mt-1">
+        <div class="text-muted small py-2 w-100 text-center">
+          <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+          Consultando horários disponíveis...
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTÃO DE CONFIRMAÇÃO -->
+    <button type="submit"
+            id="btnConfirmarAgendamento"
+            class="btn text-white btn-lg rounded-pill w-100 fw-bold shadow-sm py-3"
+            style="background-color: {{ cor_empresa }}; border-color: {{ cor_empresa }};"
+            disabled>
+      <i class="bi bi-check-circle-fill me-1"></i> Confirmar Agendamento
+    </button>
+  </form>
+</div>
+
+<script>
+  const horarioPreSelecionado = "{{ horario_selecionado or '' }}";
+  const reagendarIdConst = "{{ agendamento_original.id if agendamento_original else '' }}";
+
+  function selecionarHorario(elemento, horario) {
+    document.querySelectorAll('.btn-slot-horario').forEach(btn => {
+      btn.classList.remove('btn-primary', 'text-white', 'bg-empresa');
+      if (btn.dataset.isGap === 'true') {
+        btn.classList.add('btn-outline-warning', 'text-dark');
+      } else {
+        btn.classList.add('btn-outline-primary');
+      }
+    });
+
+    elemento.classList.remove('btn-outline-primary', 'btn-outline-warning', 'text-dark');
+    elemento.classList.add('btn-primary', 'text-white');
+
+    const inputHorario = document.getElementById('inputHorarioSelecionado');
+    if (inputHorario) inputHorario.value = horario;
+
+    const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
+    if (btnConfirmar) btnConfirmar.removeAttribute('disabled');
+  }
+
+  async function atualizarHorariosDisponiveis() {
+    const empresaId = "{{ empresa.id }}";
+    const inputData = document.getElementById('data_agendamento');
+    const inputServicoIds = document.getElementById('input_servico_ids');
+
+    let servicos = inputServicoIds ? inputServicoIds.value : '';
+    servicos = servicos.replace(/[\[\]\s'"]/g, '');
+
+    const radioProfissional = document.querySelector('input[name="profissional_id"]:checked');
+    const colaboradorId = radioProfissional ? radioProfissional.value : '';
+
+    const container = document.getElementById('container-slots-horario') || document.getElementById('container_horarios_disponiveis');
+    const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
+
+    if (!container) return;
+
+    if (btnConfirmar) btnConfirmar.disabled = true;
+
+    if (!servicos || servicos.trim() === '') {
+      container.innerHTML = `
+        <div class="alert alert-info small py-2 text-center my-2 w-100" role="alert">
+          <i class="bi bi-info-circle me-1"></i> Selecione ao menos um serviço para visualizar os horários.
+        </div>`;
+      return;
+    }
+
+    if (!inputData || !inputData.value) {
+      container.innerHTML = `
+        <div class="text-muted small py-2 text-center w-100">
+          <i class="bi bi-calendar-event me-1"></i> Selecione a data para ver os horários disponíveis.
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="text-muted small py-2 w-100 text-center">
+        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+        Consultando horários disponíveis...
+      </div>`;
+
+    const queryObj = {
+      empresa_id: empresaId,
+      data: inputData.value,
+      data_agendamento: inputData.value,
+      servico_ids: servicos,
+      servico_id: servicos,
+      colaborador_id: colaboradorId,
+      profissional_id: colaboradorId
+    };
+
+    if (reagendarIdConst) {
+      queryObj.reagendar_id = reagendarIdConst;
+      queryObj.agendamento_id = reagendarIdConst;
+    }
+
+    const params = new URLSearchParams(queryObj);
+
+    try {
+      const response = await fetch(`{{ url_for('agenda.api_horarios_disponiveis') }}?${params.toString()}`);
+      if (!response.ok) throw new Error(`Status ${response.status}`);
+
+      const res = await response.json();
+      let listaHorarios = [];
+
+      if (Array.isArray(res)) {
+        listaHorarios = res;
+      } else if (res && typeof res === 'object') {
+        listaHorarios = res.horarios || res.slots || res.data || res.horarios_disponiveis || [];
+      }
+
+      container.innerHTML = '';
+
+      if (listaHorarios.length > 0) {
+        let elementoParaAutoSelecionar = null;
+
+        listaHorarios.forEach(item => {
+          const horarioStr = typeof item === 'object' ? (item.horario || item.hora || item.hora_inicio) : item;
+          const isGap = typeof item === 'object' ? !!item.is_gap : false;
+          const duracaoMin = typeof item === 'object' ? item.duracao_minutos : null;
+
+          if (!horarioStr) return;
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.isGap = isGap ? 'true' : 'false';
+          btn.className = isGap
+            ? 'btn btn-outline-warning text-dark btn-slot-horario rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1'
+            : 'btn btn-outline-primary btn-slot-horario rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1';
+
+          btn.style.fontSize = '0.85rem';
+
+          if (isGap) {
+            const infoTempo = duracaoMin ? ` (${duracaoMin}m)` : '';
+            btn.title = `Janela de encaixe de menor duração${infoTempo}`;
+            btn.innerHTML = `${horarioStr} <span class="badge bg-warning text-dark rounded-pill ms-1" style="font-size: 0.65rem;">Encaixe</span>`;
+          } else {
+            btn.textContent = horarioStr;
+          }
+
+          btn.onclick = () => selecionarHorario(btn, horarioStr);
+          container.appendChild(btn);
+
+          if (horarioPreSelecionado && horarioStr.startsWith(horarioPreSelecionado)) {
+            elementoParaAutoSelecionar = btn;
+          }
+        });
+
+        if (elementoParaAutoSelecionar) {
+          elementoParaAutoSelecionar.click();
+        }
+
+      } else {
+        container.innerHTML = `
+          <div class="text-muted small py-2 w-100 text-center">
+            <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para a data selecionada.
+          </div>`;
+      }
+    } catch (error) {
+      console.error('Erro na consulta de horários:', error);
+      container.innerHTML = `
+        <div class="text-danger small py-2 w-100 text-center">
+          <i class="bi bi-exclamation-triangle me-1"></i> Falha ao carregar horários. Tente novamente.
+        </div>`;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const inputData = document.getElementById('data_agendamento');
+
+    if (inputData) {
+      inputData.addEventListener('change', atualizarHorariosDisponiveis);
+    }
+
+    document.addEventListener('change', (event) => {
+      if (event.target && event.target.name === 'profissional_id') {
+        atualizarHorariosDisponiveis();
+      }
+    });
+
+    atualizarHorariosDisponiveis();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Central da Empresa{% endblock %}
+
+{% block content %}
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-2" style="max-width: 720px;">
+
+        {# Cabeçalho da Central #}
+        <div class="mb-4">
+            <h4 class="fw-bold text-dark m-0">Central de Controle da Empresa</h4>
+            <p class="text-muted small m-0">
+                {{ ese_empresa.nome_fantasia if ese_empresa else (processo.local.nome if processo and processo.local else 'Gestão do Estabelecimento') }}
+            </p>
+        </div>
+
+        {# 1. BANNER SE HOUVER ONBOARDING EM ANDAMENTO #}
+        {% if processo and processo.status_processo != 'concluido' %}
+        <div class="card border-0 rounded-4 shadow-sm mb-4 bg-warning-subtle overflow-hidden">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-warning text-dark fw-bold px-3 py-1 rounded-pill" style="font-size: 0.65rem;">
+                        <i class="bi bi-clock-history me-1"></i>Onboarding em Andamento
+                    </span>
+                    <small class="text-muted fw-bold" style="font-size: 0.7rem;">Status: {{ processo.status_processo }}</small>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">Conclua o Cadastro da Empresa</h5>
+                <p class="text-muted small mb-3" style="font-size: 0.8rem;">
+                    Finalize a etapa de homologação para liberar 100% dos recursos operacionais dos seus módulos ativados.
+                </p>
+                <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}" 
+                   class="btn btn-warning text-dark fw-bold px-4 py-2 rounded-3 shadow-sm d-inline-flex align-items-center gap-2">
+                    Continuar Validação <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        {# 2. CARDS DE NAVEGAÇÃO DA CENTRAL #}
+        <div class="row g-3">
+
+            {# CARD A: PAINEL OPERACIONAL DA EMPRESA #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-4 bg-white d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="p-2 bg-success-subtle text-success rounded-3 d-inline-block mb-3">
+                            <i class="bi bi-speedometer2 fs-4 d-block"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Painel Operacional</h5>
+                        <p class="text-muted small mb-3" style="font-size: 0.8rem; line-height: 1.3;">
+                            Acesse o balcão da empresa, métricas operacionais, catálogo de produtos/serviços e gestão da equipe.
+                        </p>
+                    </div>
+
+                    {% if base_empresa_pronta %}
+                        <a href="{{ url_for('empresa.painel_empresa') }}" class="btn btn-success fw-bold w-100 py-2 rounded-3">
+                            Acessar Painel <i class="bi bi-box-arrow-in-right ms-1"></i>
+                        </a>
+                    {% else %}
+                        <button class="btn btn-light text-muted fw-semibold w-100 py-2 rounded-3" disabled title="Requer onboarding concluído">
+                            <i class="bi bi-lock-fill me-1"></i> Aguardando Validação
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {# CARD B: VITRINE DE MÓDULOS (AGENDA, PRO, MÍDIA) #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-4 bg-white d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="p-2 bg-primary-subtle text-primary rounded-3 d-inline-block mb-3">
+                            <i class="bi bi-grid-plus-fill fs-4 d-block"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">Vitrine & Extensões</h5>
+                        <p class="text-muted small mb-3" style="font-size: 0.8rem; line-height: 1.3;">
+                            Ative o Módulo Agenda (inclui Licença PRO), impulsione com Mídia Contextual e adicione ferramentas.
+                        </p>
+                    </div>
+                    <a href="{{ url_for('empresa.menu_modulos_vitrine', empresa_id=empresa_id) }}" 
+                       class="btn btn-outline-primary fw-bold w-100 py-2 rounded-3">
+                        Explorar Módulos <i class="bi bi-chevron-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+
+
+        </div>
+
+    </div>
+</div>
+{% endblock %}

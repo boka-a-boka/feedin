@@ -1,0 +1,206 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Catálogo de Empresas{% endblock %}
+
+{% block content %}
+<div class="fundo-acetinado-pwa w-100 py-4" style="min-height: 100vh;">
+    <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 0. BARRA DE RETORNO (VOLTAR À DASHBOARD) #}
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <a href="{{ url_for('agenda.dashboard_cliente') }}" class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;" title="Voltar para a Dashboard">
+                <i class="bi bi-arrow-left fs-5 text-white"></i>
+            </a>
+            <span class="fw-bold text-dark small">Explorar Empresas</span>
+            <div style="width: 40px;"></div> {# Espaçador para centralizar o título #}
+        </div>
+
+        {# 1. HERO TEMÁTICO DE TOPO #}
+        <div class="card border-0 shadow-sm rounded-4 mb-3 bg-gradient-brand text-white overflow-hidden position-relative">
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-8">
+                        <span class="badge bg-white text-dark rounded-pill px-2 py-1 mb-2 fw-semibold" style="font-size: 0.68rem; opacity: 0.9;">
+                            <i class="bi bi-shop me-1"></i>Estabelecimentos
+                        </span>
+                        <h6 class="fw-bold mb-1 fs-5">Encontre seu Espaço</h6>
+                        <p class="text-white-50 mb-0" style="font-size: 0.78rem; line-height: 1.2;">
+                            Selecione uma empresa para conferir os serviços disponíveis e agendar.
+                        </p>
+                    </div>
+                    <div class="col-4 text-end">
+                        <i class="bi bi-building-check text-white-50 opacity-25" style="font-size: 3.2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# 2. BUSCA COM FILTRAGEM INSTANTÂNEA E AUTOCOMPLETE #}
+        <div class="mb-3 position-relative">
+            <div class="input-group shadow-sm rounded-4 bg-white border p-1">
+                <span class="input-group-text bg-transparent border-0 pe-1 text-muted">
+                    <i class="bi bi-search fs-5"></i>
+                </span>
+
+                <input type="text"
+                       id="campo-busca-catalogo"
+                       list="lista-sugestoes-empresas"
+                       value="{{ termo_busca if termo_busca else '' }}"
+                       class="form-control border-0 bg-transparent shadow-none"
+                       placeholder="Buscar empresa por nome ou bairro..."
+                       autocomplete="off"
+                       onkeyup="filtrarEmpresasEmTempoReal()"
+                       style="font-size: 0.9rem;">
+
+                <datalist id="lista-sugestoes-empresas">
+                    {% for emp in empresas %}
+                        <option value="{{ emp.nome }}"></option>
+                    {% endfor %}
+                </datalist>
+
+                <button id="btn-limpar-busca" type="button" onclick="limparBusca()" class="btn btn-link text-muted border-0 pe-2 align-self-center {% if not termo_busca %}d-none{% endif %}">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+        </div>
+
+        {# 3. PÍLULAS DE NAVEGAÇÃO: TODAS AS EMPRESAS + CATEGORIAS COM EMPRESAS ATIVAS #}
+        {% if categorias or empresas %}
+        <div class="d-flex gap-2 overflow-auto mb-3 pb-1 style-scrollbar-hidden" style="white-space: nowrap; -webkit-overflow-scrolling: touch;">
+            <a href="{{ url_for('agenda.catalogo_servicos') }}"
+               class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold {% if not categoria_selecionada %}btn-dark{% else %}btn-white bg-white border text-secondary{% endif %}"
+               style="font-size: 0.8rem;">
+                Todas as Empresas
+            </a>
+            {% for cat in categorias %}
+                <a href="{{ url_for('agenda.catalogo_servicos', categoria=cat.id) }}"
+                   class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold {% if categoria_selecionada == cat.id %}btn-dark{% else %}btn-white bg-white border text-secondary{% endif %}"
+                   style="font-size: 0.8rem;">
+                    {{ cat.nome }}
+                </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# 4. LISTAGEM DE EMPRESAS (CARDS INTEGRALMENTE CLICÁVEIS) #}
+        <div id="container-lista-empresas" class="d-flex flex-column gap-2.5">
+            {% if empresas %}
+                {% for emp in empresas %}
+                <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=emp.id) }}"
+                   class="card-empresa-item card border-0 bg-white rounded-4 shadow-sm p-3 text-decoration-none text-dark transition-all position-relative"
+                   data-nome="{{ emp.nome | lower }}"
+                   data-bairro="{{ emp.bairro | lower }}"
+                   data-categoria="{{ emp.categoria_nome | lower }}">
+
+                    <div class="d-flex gap-3 align-items-center">
+                        {% set url_logo = '' %}
+                        {% if emp.logomarca %}
+                            {% set logo_clean = emp.logomarca %}
+                            {% if 'uploads/' in logo_clean %}
+                                {% set logo_clean = 'uploads/' ~ logo_clean.split('uploads/')[-1] %}
+                            {% endif %}
+
+                            {% if emp.logomarca.startswith('http') %}
+                                {% set url_logo = emp.logomarca %}
+                            {% else %}
+                                {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
+                            {% endif %}
+                        {% endif %}
+
+                        {# LOGO DA EMPRESA #}
+                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width: 58px; height: 58px; background-size: cover; background-position: center; {% if url_logo %}background-image: url('{{ url_logo }}');{% endif %}">
+                            {% if not url_logo %}
+                                <i class="bi bi-building fs-3 text-secondary"></i>
+                            {% endif %}
+                        </div>
+
+                        {# DADOS DA EMPRESA #}
+                        <div class="flex-grow-1 min-w-0">
+                            <span class="badge bg-light text-dark border rounded-pill px-2 py-0.5 mb-1" style="font-size: 0.65rem;">
+                                {{ emp.categoria_nome }}
+                            </span>
+                            <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.98rem;">
+                                {{ emp.nome }}
+                            </h6>
+                            <small class="text-muted d-block text-truncate mt-0.5" style="font-size: 0.75rem;">
+                                <i class="bi bi-geo-alt me-1"></i>{{ emp.endereco }}{% if emp.bairro %} - {{ emp.bairro }}{% endif %}
+                            </small>
+                        </div>
+
+                        {# ÍCONE INDICATIVO DE AVANÇO (CHEVRON) #}
+                        <div class="text-muted opacity-50 ps-1">
+                            <i class="bi bi-chevron-right fs-5"></i>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <div class="bg-white p-5 rounded-4 shadow-sm border text-center text-muted">
+                    <i class="bi bi-building-exclamation fs-1 d-block mb-2 text-secondary"></i>
+                    <h6 class="fw-bold text-dark mb-1">Nenhuma empresa encontrada</h6>
+                    <p class="small m-0">Não há estabelecimentos cadastrados nesta categoria no momento.</p>
+                </div>
+            {% endif %}
+
+            {# Mensagem estática caso a busca em tempo real zerar os resultados #}
+            <div id="msg-sem-resultado-js" class="bg-white p-5 rounded-4 shadow-sm border text-center text-muted d-none">
+                <i class="bi bi-search fs-1 d-block mb-2 text-secondary"></i>
+                <h6 class="fw-bold text-dark mb-1">Nenhum resultado para esta busca</h6>
+                <p class="small m-0">Verifique a grafia ou tente buscar por outro nome.</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{# SCRIPT PARA FILTRAGEM INSTANTÂNEA #}
+<script>
+function filtrarEmpresasEmTempoReal() {
+    const termo = document.getElementById('campo-busca-catalogo').value.toLowerCase().strip ? document.getElementById('campo-busca-catalogo').value.toLowerCase().trim() : document.getElementById('campo-busca-catalogo').value.toLowerCase();
+    const cards = document.querySelectorAll('.card-empresa-item');
+    const btnLimpar = document.getElementById('btn-limpar-busca');
+    const msgVazia = document.getElementById('msg-sem-resultado-js');
+    let visiveis = 0;
+
+    if (termo.length > 0) {
+        btnLimpar.classList.remove('d-none');
+    } else {
+        btnLimpar.classList.add('d-none');
+    }
+
+    cards.forEach(card => {
+        const nome = card.getAttribute('data-nome');
+        const bairro = card.getAttribute('data-bairro');
+        const categoria = card.getAttribute('data-categoria');
+
+        if (nome.includes(termo) || bairro.includes(termo) || categoria.includes(termo)) {
+            card.classList.remove('d-none');
+            visiveis++;
+        } else {
+            card.classList.add('d-none');
+        }
+    });
+
+    if (visiveis === 0 && cards.length > 0) {
+        msgVazia.classList.remove('d-none');
+    } else {
+        msgVazia.classList.add('d-none');
+    }
+}
+
+function limparBusca() {
+    const input = document.getElementById('campo-busca-catalogo');
+    input.value = '';
+    filtrarEmpresasEmTempoReal();
+    input.focus();
+}
+</script>
+
+<style>
+.card-empresa-item:active {
+    transform: scale(0.98);
+    background-color: #f8f9fa !important;
+}
+</style>
+{% endblock %}

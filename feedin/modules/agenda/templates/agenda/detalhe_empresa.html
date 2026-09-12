@@ -1,156 +1,684 @@
-{% extends "base_agenda.html" %}
-
-{% block title %}{{ empresa.nome }} | FeedIn{% endblock %}
-
-<style>
-    :root {
-        --cor-marca-primaria: {{ empresa.cor_primaria or '#111827' }};
-        --cor-marca-secundaria: {{ empresa.cor_secundaria or '#6B7280' }};
-    }
-
-    .btn-marca {
-        background-color: var(--cor-marca-primaria) !important;
-        color: #ffffff !important;
-        border: none;
-    }
-    .btn-marca:hover {
-        filter: brightness(0.9);
-    }
-    .text-marca {
-        color: var(--cor-marca-primaria) !important;
-    }
-    .badge-marca {
-        background-color: var(--cor-marca-secundaria) !important;
-        color: white;
-    }
-    .border-marca-foco {
-        border-color: var(--cor-marca-primaria) !important;
-    }
-</style>
+{% extends "agenda/base_agenda.html" %}
 
 {% block content %}
-<!-- Dentro de templates/agenda/detalhe_empresa.html -->
+{# 1. DEFINIÇÃO DE CORES E VARIÁVEIS DE MARCA #}
+{% set cor_empresa = empresa.cor_primaria if (empresa.cor_primaria is defined and empresa.cor_primaria) else '#0d6efd' %}
 
-{% if is_colaborador %}
-<div class="my-3 animate__animated animate__fadeIn px-3">
-    <div class="card border-primary bg-light rounded-4 p-3 shadow-sm">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <span class="badge bg-primary text-uppercase px-2 py-1 rounded-pill fw-bold mb-1" style="font-size: 0.6rem;">
-                    Posto de Trabalho Detectado
+<style>
+  body {
+    background-color: #f4f6f9 !important;
+  }
+
+  .border-empresa {
+    border-color: {{ cor_empresa }} !important;
+  }
+
+  .bg-empresa {
+    background-color: {{ cor_empresa }} !important;
+  }
+
+  .text-empresa {
+    color: {{ cor_empresa }} !important;
+  }
+
+  /* Dynamic Cards para Serviços */
+  .card-servico {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    border: 2px solid #e9ecef;
+  }
+
+  .card-servico:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .card-servico.selected {
+    border-color: {{ cor_empresa }} !important;
+    background-color: rgba({{ cor_empresa | replace('#', '') }}, 0.03) !important;
+  }
+
+  .card-servico .badge-check {
+    display: none;
+  }
+
+  .card-servico.selected .badge-check {
+    display: inline-flex;
+  }
+
+  /* Sticky Summary Bar */
+  .resumo-carrinho-bar {
+    position: sticky;
+    top: 15px;
+    z-index: 1020;
+    backdrop-filter: blur(8px);
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+</style>
+
+<div class="container py-3 mb-5" style="max-width: 1080px; font-family: system-ui, -apple-system, sans-serif;">
+
+  {# ========================================================================= #}
+  {# 1. HEADER REESTRUTURADO: BLOCO DE IDENTIFICAÇÃO DO ESTABELECIMENTO        #}
+  {# ========================================================================= #}
+  {% set raw_logo = empresa.logo_url or empresa.logomarca or empresa.url_flyer %}
+  {% set url_logo = '' %}
+  {% if raw_logo %}
+      {% if raw_logo.startswith('http') %}
+          {% set url_logo = raw_logo %}
+      {% elif 'uploads/' in raw_logo %}
+          {% set logo_clean = 'uploads/' ~ raw_logo.split('uploads/')[-1] %}
+          {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
+      {% else %}
+          {% set url_logo = url_for('empresa.static', filename=raw_logo) %}
+      {% endif %}
+  {% endif %}
+
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-4 border-start border-4 border-empresa">
+    <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+
+      {# LADO ESQUERDO: VOLTAR + LOGO DA EMPRESA + NOME + CATEGORIA #}
+      <div class="d-flex align-items-center gap-3">
+        <a href="{{ url_for('agenda.dashboard_cliente') }}"
+           class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center flex-shrink-0"
+           style="width: 40px; height: 40px;"
+           title="Voltar para a Dashboard">
+            <i class="bi bi-arrow-left fs-5 text-white"></i>
+        </a>
+
+        <div class="d-flex align-items-center gap-3 p-2 rounded-3 bg-light border">
+            {% set raw_logo = empresa.logomarca or empresa.logo_url %}
+            {% set url_logo = media_url('empresa', raw_logo) if raw_logo else None %}
+
+            {# Container Fixo da Logo (54x54px) #}
+            <div class="position-relative flex-shrink-0" style="width: 54px; height: 54px; min-width: 54px; min-height: 54px;">
+
+                {# Logo da Empresa #}
+                <img id="imgLogoEmpresaHeader_{{ empresa.id }}"
+                     src="{{ url_logo or '' }}"
+                     alt="Logo {{ empresa.nome }}"
+                     class="rounded-3 border shadow-sm object-fit-contain w-100 h-100 p-1 {% if not url_logo %}d-none{% endif %}"
+                     style="background-color: #ffffff;"
+                     onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresaHeader_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('logoLetraEmpresaHeader_{{ empresa.id }}').classList.add('d-flex');">
+
+                {# Fallback da Inicial com Cor Personalizada da Empresa #}
+                <div id="logoLetraEmpresaHeader_{{ empresa.id }}"
+                     class="rounded-3 text-white fw-bold align-items-center justify-content-center shadow-sm fs-4 w-100 h-100 border-empresa {% if url_logo %}d-none{% else %}d-flex{% endif %}"
+                     style="background-color: {{ cor_empresa or '#212529' }};">
+                    {{ (empresa.nome or 'E')[0] | upper }}
+                </div>
+            </div>
+
+            {# Informações da Empresa #}
+            <div class="text-truncate min-w-0 flex-grow-1">
+                <h5 class="fw-bold text-dark m-0 fs-6 text-truncate">{{ empresa.nome }}</h5>
+
+                {% set nome_categoria = empresa.categoria_principal_rel.nome if empresa.categoria_principal_rel is defined and empresa.categoria_principal_rel
+                                   else (empresa.categoria_rel.nome if empresa.categoria_rel is defined and empresa.categoria_rel
+                                   else (empresa.categoria_nome if empresa.categoria_nome is defined and empresa.categoria_nome else 'Estética & Serviços')) %}
+
+                <span class="badge bg-white text-dark border rounded-pill fw-normal text-truncate d-inline-block mt-1" style="max-width: 100%;">
+                    <i class="bi bi-tag-fill me-1 text-empresa"></i>{{ nome_categoria }}
                 </span>
-                <h6 class="m-0 fw-bold text-dark">Nível de Acesso: {{ nivel_neste_local }}</h6>
             </div>
-            <a href="{{ url_for('agenda.entrar_modo_balcao', empresa_id=empresa.id) }}" class="btn btn-primary rounded-pill px-4 btn-sm fw-bold shadow-sm">
-                Abrir Balcão <i class="bi bi-box-arrow-in-right ms-1"></i>
+        </div>
+      </div>
+
+      {# LADO DIREITO: BOTÃO FAVORITAR + ÁREA PROFISSIONAL + DETALHES #}
+      <div class="d-flex align-items-center justify-content-center gap-2 flex-wrap ms-auto my-auto">
+
+        {# 1. BOTÃO DE FAVORITAR / DESFAVORITAR #}
+        <button id="btnFavoritarHeader"
+                type="button"
+                class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-sm bg-white"
+                onclick="toggleFavorito({{ empresa.id }})"
+                title="Favoritar este estabelecimento">
+          <i id="iconeFavoritoHeader" class="bi {% if eh_favorita %}bi-star-fill text-warning{% else %}bi-star text-secondary{% endif %} fs-6"></i>
+          <span id="textoFavoritoHeader" class="small fw-bold">
+            {% if eh_favorita %}Favorita{% else %}Favoritar{% endif %}
+          </span>
+        </button>
+
+        {# 2. ÁREA PROFISSIONAL / PAINEL OPERACIONAL #}
+        {% if is_colaborador %}
+            <a href="{{ url_for('agenda.dashboard_empresa', empresa_id=empresa.id) }}"
+               class="btn btn-sm btn-primary text-white rounded-pill px-3 py-2 fw-bold d-inline-flex align-items-center gap-1.5 shadow-sm">
+              <i class="bi bi-speedometer2 fs-6"></i>
+              <span>Área Profissional</span>
             </a>
-        </div>
+          {% endif %}
+
+        {# 3. BOTÃO VER DETALHES COMPLETOS #}
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#modalPerfilEmpresa">
+          <i class="bi bi-shop text-empresa"></i>
+          <span>Ver detalhes</span>
+        </button>
+
+      </div>
+
     </div>
+  </div>
+
+  {# ========================================================================= #}
+  {# 2. CONTEÚDO PRINCIPAL: CATÁLOGO DE SERVIÇOS EM GRID                       #}
+  {# ========================================================================= #}
+  <div class="row g-4">
+    <div class="col-12">
+
+      {# BARRINHA FIXA DE RESUMO DO CARRINHO #}
+      <div class="card border-0 rounded-4 shadow-sm p-3 mb-3 resumo-carrinho-bar">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div>
+            <span class="badge bg-light text-dark border fw-bold rounded-pill px-2.5 py-1 mb-1">
+              <span id="qtd-servicos-selecionados">0</span> serviço(s) selecionado(s)
+            </span>
+            <div class="d-flex align-items-center gap-3 text-dark">
+              <small class="fw-semibold"><i class="bi bi-clock me-1 text-empresa"></i><span id="tempo-total">0 min</span></small>
+              <strong class="fs-5 text-empresa"><span id="valor-total">R$ 0,00</span></strong>
+            </div>
+          </div>
+
+          <button id="btn-concluir-agendamento"
+                  class="btn text-white rounded-pill px-4 py-2 fw-bold shadow-sm d-inline-flex align-items-center gap-2"
+                  style="background-color: {{ cor_empresa }}; border-color: {{ cor_empresa }};"
+                  disabled
+                  onclick="avancarParaHorarios()">
+            <span>Concluir Agendamento</span>
+            <i class="bi bi-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      {# CARD CONTAINER DO CATÁLOGO DE SERVIÇOS #}
+      <div class="card border-0 bg-white rounded-4 shadow-sm p-4">
+
+        {# CABEÇALHO E FILTRO DE BUSCA #}
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-3 pb-2 border-bottom flex-wrap">
+          <h5 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+            <i class="bi bi-grid-3x3-gap-fill text-empresa"></i>Selecione os Serviços
+          </h5>
+          <span class="badge bg-primary-subtle text-primary fw-semibold rounded-pill px-3 py-1">
+            Passo 1 de 2
+          </span>
+        </div>
+
+        {# CAMPO DE BUSCA #}
+        <div class="position-relative mb-4">
+          <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+          <input type="text"
+                 id="input-busca-servico"
+                 class="form-control rounded-pill ps-5 py-2 border-light-subtle bg-light"
+                 placeholder="Digite para buscar um serviço pelo nome..."
+                 onkeyup="filtrarServicos()">
+        </div>
+
+        {# GRID DE SERVIÇOS #}
+        <div id="container-grid-servicos" class="row row-cols-1 row-cols-sm-2 g-3">
+          {% if servicos %}
+            {% for servico in servicos | sort(attribute='descricao_servico') %}
+              {% set nome_servico = servico.descricao_servico or (servico.servico_taxonomia.nome if servico.servico_taxonomia else 'Serviço #' ~ servico.id) %}
+              {% set preco_servico = servico.preco or servico.valor or 0.0 %}
+
+              <div class="col item-servico" data-nome="{{ nome_servico | lower }}">
+                <div class="card h-100 card-servico rounded-4 p-3 d-flex flex-column justify-content-between position-relative shadow-sm"
+                     data-id="{{ servico.id }}"
+                     data-duracao="{{ servico.tempo_duracao }}"
+                     data-preco="{{ preco_servico }}"
+                     onclick="toggleSelecaoServico(this)">
+
+                  <div>
+                    <div class="d-flex align-items-start justify-content-between gap-1 mb-2">
+                      <h6 class="fw-bold text-dark m-0 lh-sm text-break">{{ nome_servico }}</h6>
+                      <span class="badge bg-success text-white rounded-circle badge-check p-1">
+                        <i class="bi bi-check-lg"></i>
+                      </span>
+                    </div>
+
+                    <div class="text-muted small d-flex align-items-center gap-2 mb-3">
+                      <i class="bi bi-clock text-empresa"></i>
+                      <span>{{ servico.tempo_duracao }}</span>
+                    </div>
+                  </div>
+
+                  <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-auto">
+                    <div>
+                      <small class="text-muted d-block" style="font-size: 0.68rem;">Valor estimado</small>
+                      <strong class="text-dark fs-6">R$ {{ "%.2f"|format(preco_servico)|replace('.', ',') }}</strong>
+                    </div>
+
+                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 btn-adicionar fw-semibold">
+                      Escolher
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="col-12 text-center py-5 text-muted">
+              <i class="bi bi-calendar-x fs-1 d-block mb-2 text-secondary"></i>
+              <p class="m-0">Nenhum serviço disponível para agendamento nesta empresa no momento.</p>
+            </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+
 </div>
-{% endif %}
 
-<div class="container py-3" style="max-width: 540px; font-family: system-ui, -apple-system, sans-serif;">
-    
-    <a href="/negocios" class="text-decoration-none text-muted small d-inline-flex align-items-center mb-3">
-        <i class="bi bi-arrow-left me-2"></i> Voltar para a Central
-    </a>
 
-    <div class="card border-0 shadow-sm rounded-4 p-3 mb-4 bg-white">
-        <div class="d-flex align-items-center gap-3">
-            <div class="rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 75px; height: 75px; overflow: hidden; border: 3px solid var(--cor-marca-primaria); flex-shrink: 0;">
-                <img src="{{ empresa.logomarca or '/static/logos/default_empresa.png' }}" alt="Logo {{ empresa.nome }}" class="img-fluid object-fit-cover h-100 w-100">
+{# ========================================================================= #}
+{# 3. MODAL INSTITUCIONAL: PERFIL COMPLETO DO ESTABELECIMENTO                #}
+{# ========================================================================= #}
+<div class="modal fade" id="modalPerfilEmpresa" tabindex="-1" aria-labelledby="modalPerfilEmpresaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+
+      <!-- HEADER DO MODAL -->
+      <div class="modal-header border-0 text-white p-3 p-md-4" style="background-color: {{ cor_empresa or '#212529' }};">
+        <div class="d-flex align-items-center gap-3 w-100 min-w-0 me-2">
+
+          {% set raw_logo = empresa.logomarca or empresa.logo_url %}
+          {% set url_logo = media_url('empresa', raw_logo) if raw_logo else None %}
+
+          <div class="position-relative flex-shrink-0" style="width: 64px; height: 64px; min-width: 64px; min-height: 64px;">
+            <img id="imgLogoEmpresaModal_{{ empresa.id }}"
+                 src="{{ url_logo or '' }}"
+                 alt="Logo {{ empresa.nome }}"
+                 class="rounded-3 border border-2 border-white shadow-sm object-fit-contain w-100 h-100 p-1 {% if not url_logo %}d-none{% endif %}"
+                 style="background-color: #ffffff;"
+                 onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresaModal_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('logoLetraEmpresaModal_{{ empresa.id }}').classList.add('d-flex');">
+
+            <div id="logoLetraEmpresaModal_{{ empresa.id }}"
+                 class="rounded-3 bg-white fw-bold align-items-center justify-content-center shadow-sm fs-3 w-100 h-100 border border-2 border-white {% if url_logo %}d-none{% else %}d-flex{% endif %}"
+                 style="color: {{ cor_empresa or '#212529' }};">
+              {{ (empresa.nome or 'E')[0] | upper }}
             </div>
-            <div class="text-truncate">
-                <span class="badge badge-marca text-uppercase mb-1" style="font-size: 0.65rem;">{{ empresa.categoria or 'Parceiro Beta' }}</span>
-                <h4 class="fw-bold text-dark m-0 text-truncate" style="font-size: 1.3rem;">{{ empresa.nome }}</h4>
-                <small class="text-muted"><i class="bi bi-geo-alt-fill text-danger"></i> Piracicaba, SP</small>
+          </div>
+
+          <div class="min-w-0 text-truncate">
+            <div class="d-flex align-items-center gap-2 text-truncate">
+              <h4 class="modal-title fw-bold m-0 fs-5 text-truncate" id="modalPerfilEmpresaLabel">{{ empresa.nome }}</h4>
+              {% if empresa.verificado %}
+                <span class="badge bg-white text-primary fs-6 p-0 px-1 rounded-circle flex-shrink-0" title="Empresa Verificada"><i class="bi bi-patch-check-fill"></i></span>
+              {% endif %}
             </div>
+
+            {% set rating_info = empresa.get_rating_data() if empresa.get_rating_data is defined else {'media': 0, 'total': 0} %}
+            <div class="d-flex align-items-center gap-2 mt-1 small opacity-90 text-truncate">
+              <span class="text-warning fw-bold"><i class="bi bi-star-fill"></i> {{ rating_info.media }}</span>
+              <span>({{ rating_info.total }} avaliações)</span>
+              {% if empresa.data_cadastro %}
+                <span class="d-none d-sm-inline">• Desde {{ empresa.data_cadastro.strftime('%Y') }}</span>
+              {% endif %}
+            </div>
+          </div>
+
         </div>
-    </div>
+        <button type="button" class="btn-close btn-close-white flex-shrink-0" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
 
-    <ul class="nav nav-pills nav-fill bg-light p-1 rounded-pill mb-4 border" id="pills-tab" role="tablist">
-        <li class="nav-pills-item" role="presentation" style="width: 50%;">
-            <button class="nav-link active rounded-pill fw-bold py-2 small shadow-none border-0 w-100 text-dark" id="pills-servicos-tab" data-bs-toggle="pill" data-bs-target="#pills-servicos" type="button" role="tab">
-                <i class="bi bi-scissors me-2 text-marca"></i>Serviços
-            </button>
-        </li>
-        <li class="nav-pills-item" role="presentation" style="width: 50%;">
-            <button class="nav-link rounded-pill fw-bold py-2 small shadow-none border-0 w-100 text-dark" id="pills-equipe-tab" data-bs-toggle="pill" data-bs-target="#pills-equipe" type="button" role="tab">
-                <i class="bi bi-people me-2 text-marca"></i>Nossa Equipe
-            </button>
-        </li>
-    </ul>
+      <!-- CORPO DO MODAL -->
+      <div class="modal-body p-3 p-md-4 bg-light d-flex flex-column gap-3" style="font-size: 0.92rem;">
 
-    <div class="tab-content" id="pills-tabContent">
-        
-        <div class="tab-pane fade show active" id="pills-servicos" role="tabpanel">
-            <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Escolha um serviço para agendar:</h6>
-            <div class="d-flex flex-column gap-2">
-                {% for servico in servicos %}
-                <div class="card p-3 bg-white border rounded-4 shadow-sm d-flex justify-content-between align-items-center flex-row gap-2 transition-hover">
-                    <div class="text-truncate" style="line-height: 1.3;">
-                        <strong class="text-dark d-block" style="font-size: 0.95rem;">{{ servico.nome }}</strong>
-                        <span class="text-muted small d-inline-flex align-items-center gap-2" style="font-size: 0.8rem;">
-                            <i class="bi bi-clock"></i> {{ servico.duracao_minutos }} min
-                        </span>
-                        {% if servico.exibir_descricao_pwa and servico.descricao %}
-                        <p class="text-muted m-0 mt-1 text-truncate small fw-light" style="font-size: 0.75rem; white-space: normal;">
-                            {{ servico.descricao }}
-                        </p>
-                        {% endif %}
-                    </div>
-                    <div class="text-end flex-shrink-0">
-                        <span class="text-dark fw-bold d-block mb-2" style="font-size: 1rem;">R$ {{ "%.2f"|format(servico.preco)|replace('.', ',') }}</span>
-                        <button class="btn btn-sm btn-marca rounded-pill px-3 fw-bold shadow-sm" style="font-size: 0.75rem;">Reservar</button>
-                    </div>
-                </div>
-                {% else %}
-                <div class="p-4 bg-light rounded-4 text-center border border-dashed">
-                    <p class="text-muted small m-0"><i class="bi bi-folder-x me-2"></i>Nenhum serviço disponível no catálogo no momento.</p>
-                </div>
-                {% endfor %}
+        {# --- 1. ENDEREÇO, CONTATO E STATUS HOJE --- #}
+        <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
+          <div class="row g-3 align-items-center">
+            <div class="col-md-7 border-end-md">
+              <h6 class="fw-bold text-dark mb-2 d-flex align-items-center gap-1">
+                <i class="bi bi-geo-alt-fill text-danger"></i> Localização & Contato
+              </h6>
+              <p class="mb-2 text-secondary lh-sm">
+                {{ empresa.logradouro or 'Endereço não informado' }}{% if empresa.numero %}, {{ empresa.numero }}{% endif %}<br>
+                <small class="text-muted">{{ empresa.bairro or '' }} - {{ empresa.cidade or 'Piracicaba' }}/{{ empresa.estado or 'SP' }}</small>
+              </p>
+
+              <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                {% if empresa.telefone %}
+                  <span class="text-dark fw-semibold small">
+                    <i class="bi bi-telephone-fill me-1 text-secondary"></i> {{ empresa.telefone }}
+                    {% if empresa.is_whatsapp %}
+                      <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill ms-1"><i class="bi bi-whatsapp"></i> WhatsApp</span>
+                    {% endif %}
+                  </span>
+                {% endif %}
+                {% if empresa.email %}
+                  <span class="text-muted small"><i class="bi bi-envelope-fill me-1"></i> {{ empresa.email }}</span>
+                {% endif %}
+              </div>
+
+              <button class="btn btn-sm btn-outline-secondary rounded-pill disabled opacity-75 mt-1" title="Recurso de mapa em breve">
+                <i class="bi bi-map me-1"></i> Ver no mapa <span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">Em breve</span>
+              </button>
             </div>
+
+            <div class="col-md-5 d-flex flex-column justify-content-center">
+              <div class="p-3 rounded-3 bg-light border text-center">
+                <span class="text-uppercase fw-bold text-muted d-block mb-1" style="font-size: 0.7rem; letter-spacing: 0.5px;">Status Hoje</span>
+
+                <span class="badge {{ status_hoje.badge if status_hoje is defined else 'bg-secondary' }} border rounded-pill px-3 py-2 fw-bold mb-1 d-inline-flex align-items-center gap-1">
+                  <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i> {{ status_hoje.texto if status_hoje is defined else 'Indefinido' }}
+                </span>
+
+                <small class="d-block text-muted" style="font-size: 0.75rem;">{{ status_hoje.detalhe if status_hoje is defined else '' }}</small>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="tab-pane fade" id="pills-equipe" role="tabpanel">
-            <h6 class="fw-bold text-dark mb-3" style="font-size: 0.95rem;">Nossos Profissionais de Atendimento:</h6>
-            <div class="row g-2">
-                {% for prof in colaboradores %}
-                <div class="col-6">
-                    <div class="card p-3 bg-white border rounded-4 text-center h-100 shadow-sm">
-                        <div class="mx-auto mb-2 bg-light rounded-circle d-flex align-items-center justify-content-center text-secondary fw-bold shadow-inner" style="width: 55px; height: 55px; font-size: 1.2rem; border: 2px solid var(--cor-marca-primaria);">
-                            {{ prof.nome[:2]|upper }}
+        {# --- 2. SESSÃO SOBRE / HISTÓRIA --- #}
+        <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
+          <h6 class="fw-bold text-dark mb-2 border-bottom pb-2 d-flex align-items-center gap-1">
+            <i class="bi bi-info-circle-fill text-primary"></i> Sobre o Estabelecimento
+          </h6>
+          <p class="text-secondary lh-sm mb-2">
+            {{ empresa.historia or 'Estabelecimento credenciado na rede local FeedIn, focado na excelência de atendimento e preservação da memória e tradição comercial da região.' }}
+          </p>
+          {% if empresa.missao %}
+            <div class="p-2.5 rounded-3 bg-light border-start border-3 border-primary text-muted fst-italic small">
+              <strong>Missão & Valores:</strong> {{ empresa.missao }}
+            </div>
+          {% endif %}
+        </div>
+
+        {# --- 3. HORÁRIOS DE FUNCIONAMENTO --- #}
+        <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
+          <h6 class="fw-bold text-dark mb-3 border-bottom pb-2 d-flex align-items-center gap-1">
+            <i class="bi bi-clock-history text-primary"></i> Horários de Funcionamento
+          </h6>
+          <div class="row row-cols-2 row-cols-sm-4 row-cols-md-7 g-2 text-center">
+            {% set dias_semana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] %}
+            {% for i in range(7) %}
+              <div class="p-2 rounded-3 bg-light border">
+                <span class="d-block text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">{{ dias_semana[i] }}</span>
+                <span class="d-block fw-semibold text-dark mt-1" style="font-size: 0.78rem;">08:00</span>
+                <span class="d-block text-muted" style="font-size: 0.65rem;">às</span>
+                <span class="d-block fw-semibold text-dark mb-1" style="font-size: 0.78rem;">18:00</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# --- 4. CATÁLOGO DE SERVIÇOS --- #}
+        <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
+          <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
+            <h6 class="fw-bold text-dark m-0 d-flex align-items-center gap-1">
+              <i class="bi bi-journal-text text-primary"></i> Catálogo Geral de Serviços
+            </h6>
+            <small class="text-muted" style="font-size: 0.72rem;">*Valores na tela de seleção</small>
+          </div>
+
+          {% if servicos %}
+            <div class="list-group list-group-flush">
+              {% for s in servicos %}
+                {% set nome_s = s.descricao_servico or (s.servico_taxonomia.nome if s.servico_taxonomia else 'Serviço #' ~ s.id) %}
+                <div class="list-group-item px-0 py-2 d-flex align-items-center justify-content-between border-bottom-subtle">
+                  <div class="me-2 text-truncate">
+                    {% if s.grupo %}
+                      <span class="badge bg-light text-dark border me-1" style="font-size: 0.7rem;">{{ s.grupo }}</span>
+                    {% endif %}
+                    <strong class="text-dark d-inline-block" style="font-size: 0.88rem;">{{ nome_s }}</strong>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <span class="badge bg-light text-muted border font-monospace"><i class="bi bi-hourglass-split me-1"></i>{{ s.tempo_duracao }}</span>
+                    {% if s.pontos_fidelidade and (s.pontos_fidelidade | int) > 0 %}
+                      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
+                        ★ +{{ s.pontos_fidelidade | int }} pts
+                      </span>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="text-muted small m-0 py-2">Nenhum serviço catalogado no momento.</p>
+          {% endif %}
+        </div>
+
+        {# --- 5. PROFISSIONAIS & EQUIPE --- #}
+        {% if colaboradores %}
+          <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
+            <h6 class="fw-bold text-dark mb-3 border-bottom pb-2 d-flex align-items-center gap-1">
+              <i class="bi bi-people-fill text-primary"></i> Profissionais & Equipe
+            </h6>
+
+            <div class="row g-3">
+              {% for c in colaboradores %}
+                {% set nome_colab = c.nome %}
+                {% set inicial = nome_colab[0]|upper if nome_colab else 'P' %}
+                {% set nome_cargo = c.cargo_nome or 'Especialista' %}
+                {% set escala = c.escala_vigente %}
+                {% set excecoes = c.excecoes_ativas %}
+
+                <div class="col-md-6">
+                  <div class="p-3 rounded-3 bg-light border d-flex gap-3 align-items-center h-100 shadow-sm">
+                    <div class="position-relative flex-shrink-0" style="width: 52px; height: 52px;">
+                      {% if c.url_foto %}
+                        <img id="imgColab_{{ c.id }}"
+                             src="{{ c.url_foto }}"
+                             alt="Foto de {{ nome_colab }}"
+                             class="rounded-circle border shadow-sm object-fit-cover w-100 h-100"
+                             onerror="this.classList.add('d-none'); document.getElementById('avatarLetraColab_{{ c.id }}').classList.remove('d-none'); document.getElementById('avatarLetraColab_{{ c.id }}').classList.add('d-flex');">
+                      {% endif %}
+
+                      <div id="avatarLetraColab_{{ c.id }}"
+                           class="rounded-circle text-white fw-bold align-items-center justify-content-center shadow-sm w-100 h-100 border border-white {% if c.url_foto %}d-none{% else %}d-flex{% endif %}"
+                           style="font-size: 1.25rem; background-color: {{ empresa.cor_tema or empresa.cor_primaria or '#212529' }};">
+                        {{ inicial }}
+                      </div>
+                    </div>
+
+                    <div class="overflow-hidden w-100 min-w-0">
+                      <h6 class="fw-bold text-dark m-0 fs-6 text-truncate" title="{{ nome_colab }}">
+                        {{ nome_colab }}
+                      </h6>
+
+                      {% if c.username %}
+                        <small class="text-muted d-block mb-1 text-truncate" style="font-size: 0.7rem;">@{{ c.username }}</small>
+                      {% endif %}
+
+                      <span class="badge bg-primary-subtle text-primary fw-semibold mb-2 text-truncate d-inline-block" style="font-size: 0.725rem; max-width: 100%;">
+                        <i class="bi bi-briefcase me-1"></i>{{ nome_cargo }}
+                      </span>
+
+                      {% if c.data_contratacao %}
+                        <div class="text-secondary mb-1" style="font-size: 0.725rem;">
+                          <i class="bi bi-calendar-check me-1"></i>Admitido em: {{ c.data_contratacao.strftime('%d/%m/%Y') }}
                         </div>
-                        <strong class="text-dark d-block text-truncate small">{{ prof.nome }}</strong>
-                        <span class="text-muted d-block text-truncate mt-1" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;">
-                            {{ prof.cargo_especialidade or 'Especialista' }}
-                        </span>
+                      {% endif %}
+
+                      <div class="text-dark mb-1" style="font-size: 0.75rem;">
+                        <i class="bi bi-clock me-1 text-secondary"></i>
+                        {% if escala %}
+                          <strong>Expediente:</strong> {{ escala.inicio.strftime('%H:%M') }} às {{ escala.fim.strftime('%H:%M') }}
+                          {% if escala.inicio_intervalo and escala.fim_intervalo %}
+                            <span class="text-muted">({{ escala.inicio_intervalo.strftime('%H:%M') }} - {{ escala.fim_intervalo.strftime('%H:%M') }})</span>
+                          {% endif %}
+                        {% else %}
+                          <span class="text-muted">Horário indisponível</span>
+                        {% endif %}
+                      </div>
+
+                      {% if excecoes %}
+                        <div class="mt-2">
+                          {% for exc in excecoes %}
+                            <div class="badge bg-danger-subtle text-danger border border-danger-subtle fw-normal d-block text-truncate text-start p-2 mb-1" style="font-size: 0.7rem;" title="{{ exc.motivo_titulo }}">
+                              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                              <strong>{{ exc.motivo_titulo }}:</strong>
+                              {{ exc.data_inicio.strftime('%d/%m') if exc.data_inicio else '' }}
+                              {% if exc.data_fim %}até {{ exc.data_fim.strftime('%d/%m') }}{% endif %}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+
                     </div>
+                  </div>
                 </div>
-                {% else %}
-                <div class="col-12">
-                    <div class="p-4 bg-light rounded-4 text-center border border-dashed">
-                        <p class="text-muted small m-0"><i class="bi bi-person-x me-2"></i>Nenhum profissional listado para este estabelecimento.</p>
-                    </div>
-                </div>
-                {% endfor %}
+              {% endfor %}
             </div>
+          </div>
+        {% endif %}
+
+        {# --- 6. CONVITE FEEDIN / MEMÓRIA SOCIAL --- #}
+        <div class="rounded-4 p-4 text-center text-white shadow-sm" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%);">
+          <span class="badge bg-white bg-opacity-10 text-white border border-white border-opacity-25 rounded-pill text-uppercase px-3 py-1 mb-2" style="font-size: 0.68rem; letter-spacing: 1px;">
+            Memória Social & Conexões
+          </span>
+          <h5 class="fw-bold text-white mb-2">Siga a empresa na rede FeedIn</h5>
+          <p class="small text-white opacity-75 mb-3 mx-auto" style="max-width: 480px; font-size: 0.82rem;">
+            Acompanhe novidades, resgate memórias locais e faça parte do acervo histórico de Piracicaba.
+          </p>
+          <a href="#" class="btn btn-light text-dark fw-bold rounded-pill px-4 py-2 shadow-sm d-inline-flex align-items-center gap-2" style="font-size: 0.82rem;">
+            <i class="bi bi-heart-fill text-danger"></i>
+            <span>Seguir Perfil no FeedIn</span>
+          </a>
         </div>
 
-    </div>
+      </div>
 
+    </div>
+  </div>
 </div>
 
+
+{# ========================================================================= #}
+{# 4. LÓGICA JAVASCRIPT                                                       #}
+{# ========================================================================= #}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    var triggerTabList = [].slice.call(document.querySelectorAll('#pills-tab button'))
-    triggerTabList.forEach(function (triggerEl) {
-        var tabTrigger = new bootstrap.Tab(triggerEl)
-        triggerEl.addEventListener('click', function (event) {
-            event.preventDefault()
-            tabTrigger.show()
-        })
+  let servicosSelecionados = new Map();
+
+  function converterParaMinutos(duracaoStr) {
+    if (!duracaoStr) return 0;
+    duracaoStr = String(duracaoStr).trim();
+
+    if (duracaoStr.includes(':')) {
+      const partes = duracaoStr.split(':');
+      const horas = parseInt(partes[0], 10) || 0;
+      const minutos = parseInt(partes[1], 10) || 0;
+      return (horas * 60) + minutos;
+    }
+
+    const apenasNumeros = parseInt(duracaoStr.replace(/\D/g, ''), 10);
+    return isNaN(apenasNumeros) ? 0 : apenasNumeros;
+  }
+
+  function toggleSelecaoServico(cardElement) {
+    const id = cardElement.dataset.id;
+    const duracao = converterParaMinutos(cardElement.dataset.duracao);
+    const preco = parseFloat(cardElement.dataset.preco) || 0;
+    const btn = cardElement.querySelector('.btn-adicionar');
+
+    if (servicosSelecionados.has(id)) {
+      servicosSelecionados.delete(id);
+      cardElement.classList.remove('selected');
+      if (btn) {
+        btn.classList.remove('btn-primary', 'bg-empresa', 'text-white');
+        btn.classList.add('btn-outline-primary');
+        btn.textContent = 'Escolher';
+      }
+    } else {
+      servicosSelecionados.set(id, { id, duracao, preco });
+      cardElement.classList.add('selected');
+      if (btn) {
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-primary', 'text-white');
+        btn.textContent = 'Selecionado';
+      }
+    }
+
+    atualizarResumoCarrinho();
+  }
+
+  function atualizarResumoCarrinho() {
+    let qtd = servicosSelecionados.size;
+    let tempoTotalMin = 0;
+    let valorTotal = 0.0;
+
+    servicosSelecionados.forEach(item => {
+      tempoTotalMin += item.duracao;
+      valorTotal += item.preco;
+    });
+
+    document.getElementById('qtd-servicos-selecionados').textContent = qtd;
+
+    if (tempoTotalMin >= 60) {
+      const h = Math.floor(tempoTotalMin / 60);
+      const m = tempoTotalMin % 60;
+      document.getElementById('tempo-total').textContent = `${h}h ${m > 0 ? m + 'min' : ''}`;
+    } else {
+      document.getElementById('tempo-total').textContent = `${tempoTotalMin} min`;
+    }
+
+    document.getElementById('valor-total').textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+
+    const btnConcluir = document.getElementById('btn-concluir-agendamento');
+    btnConcluir.disabled = (qtd === 0);
+  }
+
+  function filtrarServicos() {
+    const termo = document.getElementById('input-busca-servico').value.toLowerCase().trim();
+    const itens = document.querySelectorAll('#container-grid-servicos .item-servico');
+
+    itens.forEach(item => {
+      const nome = item.dataset.nome;
+      item.style.display = nome.includes(termo) ? '' : 'none';
+    });
+  }
+
+  function avancarParaHorarios() {
+    if (servicosSelecionados.size === 0) return;
+
+    const ids = Array.from(servicosSelecionados.keys()).join(',');
+    const url = "{{ url_for('agenda.agendar', slug_empresa=empresa.slug) }}?servicos=" + ids;
+    window.location.href = url;
+  }
+
+function toggleFavorito(empresaId) {
+    const btn = document.getElementById('btnFavoritarHeader');
+    const icone = document.getElementById('iconeFavoritoHeader');
+    const texto = document.getElementById('textoFavoritoHeader');
+
+    // Obtém o token CSRF de uma meta tag ou input oculta se existir
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    btn.disabled = true;
+
+    fetch(`/agenda/empresa/${empresaId}/favoritar`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken  // <-- Token CSRF obrigatório para o Flask-WTF
+        }
     })
-});
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erro na requisição: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            if (data.is_favorito) {
+                icone.className = 'bi bi-star-fill text-warning fs-6';
+                texto.textContent = 'Favorita';
+            } else {
+                icone.className = 'bi bi-star text-secondary fs-6';
+                texto.textContent = 'Favoritar';
+            }
+        }
+    })
+    .catch(err => console.error('Erro ao alternar favorito:', err))
+    .finally(() => {
+        btn.disabled = false;
+    });
+}
+
 </script>
 {% endblock %}

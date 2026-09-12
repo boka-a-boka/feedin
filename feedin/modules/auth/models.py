@@ -4,13 +4,14 @@ from datetime import datetime, timezone
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, EqualTo
-
+from flask_login import UserMixin
 import uuid
 from datetime import datetime, timezone
 from feedin import database as db
+from flask import url_for
 
 
-class ModCadastroCliente(db.Model):
+class ModCadastroCliente(db.Model, UserMixin):
     """
     PERFIL DE CREDENCIAIS UNIFICADO: Tabela paralela de clientes comum a todos os módulos.
     Centraliza o e-mail, metadados de balcão e hash de senha para acesso seguro ao PWA.
@@ -48,6 +49,15 @@ class ModCadastroCliente(db.Model):
     usuario_core = db.relationship('Usuario', backref=db.backref('cadastros_modulos', lazy='dynamic'))
 
     @property
+    def is_active(self):
+        """O Flask-Login checa se a conta está ativa antes de efetivar o login."""
+        return self.status_conta == 'ativo'
+
+    def get_id(self):
+        """Retorna a chave primária UUID (String 36) para o Flask-Login."""
+        return str(self.id)  # 👈 CORRIGIDO: O id JÁ É o UUID de 36 caracteres
+
+    @property
     def cpf(self):
         """Descriptografa o CPF sob demanda utilizando o Fernet do Core."""
         from flask import current_app
@@ -64,9 +74,6 @@ class ModCadastroCliente(db.Model):
     def __repr__(self):
         return f"<ModCadastroCliente {self.nome} ({self.username_modulo})>"
 
-
-    # Dentro da classe ModCadastroCliente
-
     @property
     def nome_completo(self):
         """
@@ -79,6 +86,7 @@ class ModCadastroCliente(db.Model):
 
         # Fallback para usuários puramente de balcão/módulo
         return self.nome
+
 
 class ModFilaAtivacaoCliente(db.Model):
     """
@@ -158,11 +166,13 @@ class ModVinculoModulo(db.Model):
     modulo_slug = db.Column(db.String(50), nullable=False)
 
     # Contexto local (Vincula o usuário à barbearia, restaurante ou estabelecimento atual)
-    local_id = db.Column(db.Integer, db.ForeignKey('locais.id'),
-                         nullable=True)  # Ajuste se o nome da tabela de locais for diferente
+    local_id = db.Column(db.Integer, db.ForeignKey('locais.id'), nullable=True)
 
     # Flexibilidade: Caso o usuário queira usar um e-mail de notificação diferente para ESTE módulo
     email_customizado = db.Column(db.String(255), nullable=True)
+
+    # 📌 NOVO CAMPO: Foto de perfil específica deste vínculo/módulo
+    foto_url = db.Column(db.String(255), nullable=True)
 
     # Metadados operacionais
     criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
@@ -170,6 +180,35 @@ class ModVinculoModulo(db.Model):
 
     def __repr__(self):
         return f"<ModVinculoModulo CPF_Hash: {self.cpf_hash[:8]} -> Módulo: {self.modulo_slug}>"
+
+    @property
+    def url_foto_perfil(self):
+        """
+        Resolve a URL da foto de perfil vinculada ao módulo, respeitando
+        o retorno do processador unificado (salvar_imagem_modulo).
+        """
+        if not self.foto_url:
+            return None
+
+        # Se for link externo (S3, CDN, URL absoluta)
+        if self.foto_url.startswith(('http://', 'https://')):
+            return self.foto_url
+
+        caminho_limpo = self.foto_url.lstrip('/')
+
+        # Mapeamento do Blueprint responsável por servir o arquivo estático
+        # baseado no slug do módulo do vínculo
+        blueprint_static = f"{self.modulo_slug}.static" if self.modulo_slug else "static"
+
+        try:
+            return url_for(blueprint_static, filename=caminho_limpo)
+        except Exception:
+            # Fallback genérico para a pasta estática raiz do app
+            try:
+                return url_for("static", filename=caminho_limpo)
+            except Exception:
+                return None
+
 
 class AthAtribContexto(db.Model):
     """

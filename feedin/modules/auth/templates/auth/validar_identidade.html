@@ -22,8 +22,11 @@
         </p>
     </div>
 
+    {% set raw_next = request.args.get('next_url') or session.get('next_url', '') %}
+    {% set clean_next = raw_next.replace('/empresa/empresa/', '/empresa/') %}
+
     <div class="card shadow-sm border-0 rounded-4 w-100 mx-auto p-4" style="max-width: 500px; background-color: white;">
-        <form action="{{ url_for('auth.processar_identidade', next_url=request.args.get('next_url', '')) }}" method="POST">
+        <form action="{{ url_for('auth.processar_identidade', next_url=request.args.get('next_url')) }}" method="POST">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             {# 🔑 O SEGREDO CONTRA A SESSÃO EXPIRADA: Carrega o e-mail invisível no payload do POST #}

@@ -1,0 +1,284 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Perfil do Colaborador | {{ detalhes.nome_exibicao_pwa if detalhes else 'Colaborador' }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10 col-xl-9">
+
+            <!-- 🧭 BOTÃO VOLTAR (Utiliza 'next_page' tratado e sanitizado pela rota Python) -->
+            <div class="mb-3">
+                <a href="{{ next_page or url_for('empresa.equipe_jornadas', empresa_id=ese_empresa.id if ese_empresa else empresa.id) }}"
+                   class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white"
+                   style="width: 40px; height: 40px;"
+                   title="Voltar">
+                    <i class="bi bi-chevron-left fs-6"></i>
+                </a>
+            </div>
+
+            <!-- CARD DE CABEÇALHO / HERO DO COLABORADOR -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4 bg-white overflow-hidden">
+                <div class="card-body p-4">
+                    <div class="d-flex flex-column flex-md-row align-items-center align-items-md-start gap-4">
+
+                        <!-- 🖼️ ÁREA DE FOTO DE PERFIL RETANGULAR (PROPORÇÃO 3x4) -->
+                        <div class="position-relative flex-shrink-0" style="width: 110px; height: 147px; aspect-ratio: 3/4;">
+                            {% if foto_perfil_url %}
+                                <img src="{{ foto_perfil_url }}"
+                                     alt="Foto de {{ detalhes.nome_exibicao_pwa if detalhes else 'Colaborador' }}"
+                                     class="rounded-3 object-fit-cover shadow-sm border border-2 border-light w-100 h-100"
+                                     id="fotoPerfilImg">
+
+                                <!-- Fallback oculto por padrão (Ativado via JS caso a imagem falhe ao carregar) -->
+                                <div id="fotoPerfilPlaceholder" class="avatar-placeholder rounded-3 bg-primary bg-opacity-10 text-primary d-none d-flex align-items-center justify-content-center shadow-sm border border-2 border-light w-100 h-100 fw-bold"
+                                     style="font-size: 2.5rem;">
+                                    {% if detalhes and detalhes.nome_exibicao_pwa %}
+                                        {{ detalhes.nome_exibicao_pwa[0] | upper }}
+                                    {% else %}
+                                        <i class="bi bi-person-fill"></i>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <!-- Placeholder direto quando não há foto cadastrada -->
+                                <div class="rounded-3 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center shadow-sm border border-2 border-light w-100 h-100 fw-bold"
+                                     style="font-size: 2.5rem;">
+                                    {% if detalhes and detalhes.nome_exibicao_pwa %}
+                                        {{ detalhes.nome_exibicao_pwa[0] | upper }}
+                                    {% else %}
+                                        <i class="bi bi-person-fill"></i>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+
+                            <!-- Badge de Status do Colaborador (Canto Inferior Direito) -->
+                            <span class="position-absolute bottom-0 end-0 badge rounded-pill {% if contrato.status_profissional == 'ativo' %}bg-success{% else %}bg-secondary{% endif %} p-2 border border-2 border-white translate-middle-y me-1 mb-1"
+                                  title="Status: {{ contrato.status_profissional | capitalize }}">
+                                <span class="visually-hidden">Status: {{ contrato.status_profissional }}</span>
+                            </span>
+                        </div>
+
+                        <!-- Detalhes do Contrato e Papel -->
+                        <div class="text-center text-md-start flex-grow-1">
+                            <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-md-start gap-2 mb-1">
+                                <h3 class="fw-bold mb-0 text-dark">
+                                    {{ detalhes.nome_exibicao_pwa if (detalhes and detalhes.nome_exibicao_pwa) else (detalhes.nome_completo if detalhes else 'Colaborador #' ~ contrato.id) }}
+                                </h3>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">
+                                    {{ contrato.papel_nome | capitalize if contrato.papel_nome else 'Colaborador' }}
+                                </span>
+                            </div>
+
+                            <p class="text-muted mb-2 small">
+                                <i class="bi bi-briefcase me-1"></i> Cargo ID: <strong>{{ contrato.id_cargo }}</strong>
+                                <span class="mx-2">•</span>
+                                <i class="bi bi-building me-1"></i> {{ ese_empresa.nome if ese_empresa else 'Estabelecimento' }}
+                            </p>
+
+                            <div class="d-flex flex-wrap justify-content-center justify-content-md-start gap-3 small text-secondary">
+                                <div>
+                                    <i class="bi bi-calendar-check me-1 text-success"></i> Admissão:
+                                    <strong>{{ contrato.data_contratacao.strftime('%d/%m/%Y') if contrato.data_contratacao else '--/--/----' }}</strong>
+                                </div>
+                                <div>
+                                    <i class="bi bi-clock me-1 text-primary"></i> Expediente:
+                                    <strong>{{ contrato.hora_inicio_expediente.strftime('%H:%M') if contrato.hora_inicio_expediente else '--:--' }} às {{ contrato.hora_fim_expediente.strftime('%H:%M') if contrato.hora_fim_expediente else '--:--' }}</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            {% if detalhes %}
+            <!-- GRID DE INFORMAÇÕES PESSOAIS E OPERACIONAIS -->
+            <div class="row g-3">
+
+                <!-- 1. Dados Civis e Identificação -->
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold text-primary mb-3 d-flex align-items-center">
+                                <i class="bi bi-card-heading me-2 fs-5"></i> Dados Civis
+                            </h6>
+                            <div class="d-flex flex-column gap-2 small">
+                                <div>
+                                    <span class="text-muted d-block">Nome Completo:</span>
+                                    <strong class="text-dark">{{ detalhes.nome_completo }}</strong>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <span class="text-muted d-block">CPF:</span>
+                                        <strong>{{ detalhes.cpf if detalhes.cpf else '--' }}</strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted d-block">CNPJ:</span>
+                                        <strong>{{ detalhes.cnpj if detalhes.cnpj else '--' }}</strong>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block">Estado Civil:</span>
+                                    <strong>{{ detalhes.estado_civil if detalhes.estado_civil else 'Não informado' }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Endereço Comercial/Residencial -->
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold text-primary mb-3 d-flex align-items-center">
+                                <i class="bi bi-geo-alt me-2 fs-5"></i> Endereço Cadastrado
+                            </h6>
+                            <div class="d-flex flex-column gap-2 small">
+                                <div>
+                                    <span class="text-muted d-block">Logradouro:</span>
+                                    <strong class="text-dark">{{ detalhes.logradouro }}, {{ detalhes.numero }}</strong>
+                                    {% if detalhes.complemento %}<span class="text-muted">({{ detalhes.complemento }})</span>{% endif %}
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block">Bairro:</span>
+                                    <strong class="text-dark">{{ detalhes.bairro }}</strong>
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block">Cidade / UF:</span>
+                                    <strong class="text-dark">{{ detalhes.cidade }} - {{ detalhes.estado }}</strong>
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block">CEP:</span>
+                                    <strong>{{ detalhes.cep }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Contatos, Saúde e Emergência -->
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold text-danger mb-3 d-flex align-items-center">
+                                <i class="bi bi-telephone-plus me-2 fs-5"></i> Contatos & Saúde
+                            </h6>
+                            <div class="d-flex flex-column gap-2 small">
+                                <div>
+                                    <span class="text-muted d-block">Telefone Pessoal:</span>
+                                    <strong class="text-dark"><i class="bi bi-whatsapp text-success me-1"></i> {{ detalhes.telefone_pessoal }}</strong>
+                                </div>
+                                <hr class="my-1 text-muted opacity-25">
+                                <div>
+                                    <span class="text-muted d-block">Contato de Emergência:</span>
+                                    <strong class="text-dark">{{ detalhes.contato_emergencia_nome if detalhes.contato_emergencia_nome else 'Não cadastrado' }}</strong>
+                                    {% if detalhes.contato_emergencia_fone %}
+                                        <div class="text-muted">{{ detalhes.contato_emergencia_fone }}</div>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <span class="text-muted d-block">Tipo Sanguíneo:</span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                        {{ detalhes.tipo_sanguineo if detalhes.tipo_sanguineo else 'N/I' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Vestuário e Uniformes -->
+                <div class="col-md-6">
+                    <div class="card h-100 shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold text-warning-emphasis mb-3 d-flex align-items-center">
+                                <i class="bi bi-person-arms-up me-2 fs-5"></i> Uniformes e Medidas
+                            </h6>
+                            <div class="row text-center g-2 pt-2">
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded-3 border">
+                                        <span class="text-muted d-block small">Camiseta</span>
+                                        <strong class="fs-6 text-dark">{{ detalhes.tamanho_camiseta if detalhes.tamanho_camiseta else '--' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded-3 border">
+                                        <span class="text-muted d-block small">Calça</span>
+                                        <strong class="fs-6 text-dark">{{ detalhes.tamanho_calca if detalhes.tamanho_calca else '--' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-2 bg-light rounded-3 border">
+                                        <span class="text-muted d-block small">Calçado</span>
+                                        <strong class="fs-6 text-dark">{{ detalhes.tamanho_calcado if detalhes.tamanho_calcado else '--' }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Dados Financeiros e Repasses -->
+                <div class="col-12">
+                    <div class="card shadow-sm border-0 rounded-4">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold text-success mb-3 d-flex align-items-center">
+                                <i class="bi bi-bank me-2 fs-5"></i> Dados Bancários para Repasses / Comissões
+                            </h6>
+                            <div class="row g-3 small">
+                                <div class="col-md-3">
+                                    <span class="text-muted d-block">Banco:</span>
+                                    <strong class="text-dark">{{ detalhes.banco_nome if detalhes.banco_nome else 'Não informado' }}</strong>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="text-muted d-block">Agência:</span>
+                                    <strong class="text-dark">{{ detalhes.agencia if detalhes.agencia else '--' }}</strong>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="text-muted d-block">Conta Corrente:</span>
+                                    <strong class="text-dark">{{ detalhes.conta_corrente if detalhes.conta_corrente else '--' }}</strong>
+                                </div>
+                                <div class="col-md-3">
+                                    <span class="text-muted d-block">Chave PIX:</span>
+                                    <strong class="text-dark">{{ detalhes.chave_pix if detalhes.chave_pix else '--' }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            {% else %}
+            <!-- Estado Vazio caso ainda não tenha preenchido a Ficha Pessoal -->
+            <div class="card shadow-sm border-0 rounded-4 text-center py-5">
+                <div class="card-body">
+                    <i class="bi bi-file-earmark-person fs-1 text-muted mb-2 d-block"></i>
+                    <h5 class="text-muted">Ficha Pessoal Pendente de Preenchimento</h5>
+                    <p class="text-muted small mb-0">O colaborador aceitou o vínculo, mas ainda não completou os detalhes de autodeclaração.</p>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() if super is defined }}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Tratamento de erro ao carregar a imagem de perfil
+    const imgFoto = document.getElementById("fotoPerfilImg");
+    const placeholderFoto = document.getElementById("fotoPerfilPlaceholder");
+
+    if (imgFoto && placeholderFoto) {
+        imgFoto.addEventListener("error", function() {
+            imgFoto.classList.add("d-none");
+            placeholderFoto.classList.remove("d-none");
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -22,7 +22,7 @@ def garantir_modulos_sistema_cadastrados(database, models_dict):
             'nome': 'FeedIn Core!',
             'icone': 'bi-search-heart',
             'descricao': 'Acesso ao painel central e histórico social.',
-            'endpoint': 'dashboard',  # 🎯 Alinhado para o seu Dashboard real!
+            'endpoint': 'dashboard',  # 🎯 Alinhado para o Dashboard real
             'cor_hex': '#ffc107',
             'ativo': True
         },
@@ -40,7 +40,7 @@ def garantir_modulos_sistema_cadastrados(database, models_dict):
             'nome': 'Módulo de Agendamentos',
             'icone': 'bi-calendar-check',
             'descricao': 'Controle de horários, serviços e atendimentos vinculados.',
-            'endpoint': 'agenda.portal_entrada_agenda',  # 🎯 O portal de entrada correto!
+            'endpoint': 'agenda.dashboard_cliente',  # 🎯 Ajustado diretamente para o Dashboard principal!
             'cor_hex': '#0284C7',
             'ativo': True
         }
@@ -159,9 +159,7 @@ def executar_sincronizacao_e_ajustes():
 
     # Garante o carregamento das tabelas nativas e relacionais de todos os blueprints
     try:
-        from feedin.models import Usuario, IdentidadeCivil
-        # Ajustado para buscar de feedin.models o ModulosSistema
-        from feedin.models import ModulosSistema
+        from feedin.models import Usuario, IdentidadeCivil, ModulosSistema
         print("   🔹 [1/5] Models do Core: Carregadas com sucesso")
     except ImportError as e:
         print(f"   ❌ Erro ao carregar as models do Core: {e}")

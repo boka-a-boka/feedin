@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Comprovante de Admissão - FeedIn</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1e293b;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #0d6efd;
+            letter-spacing: -0.5px;
+        }
+        .header p {
+            margin: 3px 0 0 0;
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .doc-title {
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #0f172a;
+            text-transform: uppercase;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #0d6efd;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 5px;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        .grid-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        .grid-table td {
+            padding: 6px 0;
+            vertical-align: top;
+        }
+        .label {
+            font-weight: bold;
+            color: #475569;
+            width: 35%;
+        }
+        .value {
+            color: #0f172a;
+        }
+        .security-box {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #0d6efd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 30px;
+        }
+        .security-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #334155;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+        .security-text {
+            font-size: 11px;
+            color: #64748b;
+            line-height: 1.4;
+            margin: 0 0 10px 0;
+        }
+        .hash-code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            font-weight: bold;
+            color: #0f172a;
+            background-color: #e2e8f0;
+            padding: 4px 8px;
+            display: inline-block;
+            border-radius: 3px;
+        }
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 10px;
+            color: #94a3b8;
+            border-top: 1px solid #f1f5f9;
+            padding-top: 15px;
+        }
+        .table-schedule {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        .table-schedule th {
+            background-color: #f1f5f9;
+            color: #334155;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            text-align: center;
+        }
+        .table-schedule td {
+            padding: 7px 10px;
+            border: 1px solid #cbd5e1;
+            font-size: 12px;
+            text-align: center;
+            color: #0f172a;
+        }
+        .table-schedule tr.folga td {
+            background-color: #f8fafc;
+            color: #94a3b8;
+            font-style: italic;
+        }
+        .dia-col {
+            text-align: left !important;
+            font-weight: bold;
+            color: #334155;
+        }
+        .badge-folga {
+            color: #64748b;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Cabeçalho Institucional -->
+    <div class="header">
+        <h1>FeedIn</h1>
+        <p>Plataforma de Memória Social e Gestão Operacional</p>
+    </div>
+
+    <div class="doc-title">
+        Comprovante de Vínculo Admissional e Jornada de Trabalho
+    </div>
+
+    <!-- 1. Dados do Vínculo -->
+    <div class="section-title">1. Partes Envolvidas</div>
+    <table class="grid-table">
+        <tr>
+            <td class="label">Empresa / Estabelecimento:</td>
+            <td class="value"><strong>{{ nome_empresa }}</strong></td>
+        </tr>
+        <tr>
+            <td class="label">Colaborador:</td>
+            <td class="value"><strong>{{ nome_colaborador }}</strong></td>
+        </tr>
+        <tr>
+            <td class="label">Cargo / Função:</td>
+            <td class="value">{{ cargo_exibicao }}</td>
+        </tr>
+        <tr>
+            <td class="label">Data de Ativação do Contrato:</td>
+            <td class="value">
+                {% if contrato.data_admissao %}
+                    {{ contrato.data_admissao.strftime('%d/%m/%Y') }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <!-- 2. Jornada de Trabalho Vigente -->
+    <div class="section-title">2. Jornada de Trabalho e Grade Ativa Acordada</div>
+
+    <table class="table-schedule">
+        <thead>
+            <tr>
+                <th style="width: 25%; text-align: left;">Dia da Semana</th>
+                <th style="width: 20%;">Entrada</th>
+                <th style="width: 35%;">Intervalo</th>
+                <th style="width: 20%;">Saída</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in grade_horarios %}
+                <tr>
+                    <td class="dia-col">{{ item.dia_nome }}</td>
+                    <td>{{ item.entrada }}</td>
+                    <td>{{ item.intervalo }}</td>
+                    <td>{{ item.saida }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #64748b; padding: 15px;">
+                        Nenhuma escala ativa cadastrada para a data vigente do documento.
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- 3. Rastro Digital e Segurança -->
+    <div class="security-box">
+        <div class="security-title">🔒 Assinatura de Integridade e Rastro Digital</div>
+        <p class="security-text">
+            Este documento representa o registro eletrônico imutável dos horários e termos acordados no momento da efetivação do contrato. Qualquer alteração posterior nas matrizes horárias deste colaborador registrará um novo histórico de auditoria na plataforma FeedIn.
+        </p>
+        <div>
+            <span class="label" style="font-size: 11px;">Código Verificador:</span>
+            <span class="hash-code">{{ hash_validacao }}</span>
+        </div>
+    </div>
+
+    <!-- Rodapé -->
+    <div class="footer">
+        Documento emitido eletronicamente pela plataforma FeedIn em {{ data_emissao }} • Registro de Contrato #{{ contrato.id }}
+    </div>
+
+</body>
+</html>

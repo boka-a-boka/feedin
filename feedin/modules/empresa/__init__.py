@@ -5,8 +5,8 @@ empresa_bp = Blueprint(
     'empresa',
     __name__,
     template_folder='templates',
-    static_folder='static',
-    url_prefix='/empresa'
+    static_folder='static',            # <-- OBRIGATÓRIO
+    static_url_path='/empresa/static'  # <-- OBRIGATÓRIO para evitar conflitos de rota
 )
 
 # 🌍 MAPEAMENTO DINÂMICO DA RAIZ DO MÓDULO

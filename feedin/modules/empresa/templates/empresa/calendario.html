@@ -377,7 +377,7 @@
                                         </span>
                                     {% endif %}
 
-                                    {# Tags de Termômetro de Consumo (Coexistência) #}
+                                    {# Tags de Termômetro de Consumo #}
                                     {% if dia.numero == fluxo_financeiro.quinto_dia_util %}
                                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-normal" style="font-size: 0.62rem;">
                                             💰 5º Dia Útil
@@ -390,38 +390,38 @@
                                     {% endif %}
                                 </div>
 
-                                {# 1. Motivo/Recesso #}
+                                {# 1. Motivo/Recesso Interno #}
                                 {% if dia.motivo %}
                                     <div class="text-dark fw-semibold ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
                                         📌 <span class="text-secondary">Observação:</span> {{ dia.motivo }}
                                     </div>
                                 {% endif %}
 
-                                {# 2. Feriado #}
+                                {# 2. Feriado Oficial (Nacional, Estadual ou Municipal) - DESTACADO EM VERMELHO #}
                                 {% if tem_feriado %}
                                     {% set f = feriados_do_mes[dia.numero] %}
                                     <div class="text-danger fw-semibold ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
-                                        🎉 <span class="fw-bold">Feriado {{ f.abrangencia|capitalize }}:</span> {{ f.nome }}
+                                        🎉 <span class="fw-bold">Feriado {{ f.abrangencia|capitalize if f.abrangencia else 'Oficial' }}:</span> {{ f.nome }}
                                     </div>
                                 {% endif %}
 
-                                {# 3. Efemérides (Com suporte a múltiplas no mesmo dia) #}
+                                {# 3. Efemérides e Datas Comemorativas - ROTULADO COMO "EM DESTAQUE" E COR NEUTRA/AZUL #}
                                 {% if efemerides_do_mes and dia.numero in efemerides_do_mes %}
                                     {% set lista_efem = efemerides_do_mes[dia.numero] %}
                                     {% if lista_efem is sequence and lista_efem is not string and lista_efem is not mapping %}
                                         {% for efem in lista_efem %}
-                                            <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
-                                                🎈 <span class="fw-bold">Efeméride:</span> {{ efem.nome if efem.nome else efem }}
+                                            <div class="text-primary fw-medium ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
+                                                ✨ <span class="fw-bold">Em destaque:</span> {{ efem.nome if efem.nome else efem }}
                                             </div>
                                         {% endfor %}
                                     {% else %}
-                                        <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
-                                            🎈 <span class="fw-bold">Efeméride:</span> {{ lista_efem.nome if lista_efem.nome else lista_efem }}
+                                        <div class="text-primary fw-medium ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
+                                            ✨ <span class="fw-bold">Em destaque:</span> {{ lista_efem.nome if lista_efem.nome else lista_efem }}
                                         </div>
                                     {% endif %}
                                 {% elif dia.efemeride_nome %}
-                                    <div class="ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2; color: #fd7e14;">
-                                        🎈 <span class="fw-bold">Efeméride:</span> {{ dia.efemeride_nome }}
+                                    <div class="text-primary fw-medium ps-1 mt-1" style="font-size: 0.75rem; line-height: 1.2;">
+                                        ✨ <span class="fw-bold">Em destaque:</span> {{ dia.efemeride_nome }}
                                     </div>
                                 {% endif %}
 

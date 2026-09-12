@@ -3,8 +3,12 @@ import re
 import hashlib
 import uuid
 import enum
+from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm import validates
 from feedin import database as db
 from datetime import datetime, timezone
+from flask import url_for
+from decimal import Decimal, InvalidOperation
 
 # =====================================================================
 # 🏛️ ENTIDADES CORE E PERIFÉRICAS DO MÓDULO
@@ -28,6 +32,45 @@ Tabelas Gerenciadas:
   - EseEmpresa: Cadastro mestre de identidade jurídica, branding PWA e compliance.
 ==========================================================================================
 """
+
+class ModEmpresaModulo(db.Model):
+    __tablename__ = 'mod_empresa_modulos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False)
+
+    # Vincula ao slug mestre da tabela ModulosSistema
+    modulo_slug = db.Column(db.String(50), db.ForeignKey('modulos_sistema.slug'), nullable=False, index=True)
+
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Status de Homologação da Empresa neste Módulo especificamente
+    # 'solicitado', 'em_analise', 'homologado', 'bloqueado', 'cancelado'
+    status_homologacao = db.Column(db.String(20), default='solicitado', nullable=False)
+
+    # 🧪 MODALIDADE E DEGUSTAÇÃO
+    tipo_plano = db.Column(db.String(30), default='degustacao', nullable=False)
+
+    # Datas de Gestão do Ciclo de Vida
+    data_contratacao = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    data_vencimento = db.Column(db.DateTime, nullable=True)
+
+    # 📜 AUDITORIA E TERMOS DE ACEITE
+    termo_aceito = db.Column(db.Boolean, default=False, nullable=False)
+    data_aceite = db.Column(db.DateTime)
+    ip_aceite = db.Column(db.String(45))
+
+    # ⚙️ TRAVAS DE LIMITES DA DEGUSTAÇÃO
+    limite_profissionais = db.Column(db.Integer, default=3, nullable=True)
+    limite_clientes = db.Column(db.Integer, default=12, nullable=True)
+
+    # Relacionamento de conveniência
+    empresa = db.relationship('EseEmpresa', backref=db.backref('modulos_contratados', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('empresa_id', 'modulo_slug', name='uix_empresa_modulo'),
+    )
+
 
 class EseEmpresa(db.Model):
     """
@@ -115,25 +158,109 @@ class EseEmpresa(db.Model):
                     "Redes sociais não são aceitas como domínio de validação do negócio. Use um domínio próprio.")
         return True
 
+    def possui_recurso_pro(self):
+        """
+        Retorna True se a empresa possui direito aos recursos PRO, seja por:
+        1. Plano PRO no próprio Módulo Empresa.
+        2. Posse de módulo de extensão (ex: Agenda) que libera os recursos operacionais.
+        3. Liberação temporária durante o fluxo Provisório/Beta do Piloto.
+        """
+        # 0. REGRA DO PILOTO BETA: Se a empresa está em operação provisória/beta, libera os recursos
+        if getattr(self, 'status_homologacao', None) in ['provisorio_beta', 'pendente', 'em_analise']:
+            return True
+
+        adesoes = ModEmpresaModulo.query.filter_by(
+            empresa_id=self.id,
+            ativo=True
+        ).all()
+
+        for adesao in adesoes:
+            # 1. Checa upgrade direto no módulo base
+            if adesao.modulo_slug == 'empresa' and adesao.tipo_plano in ['pro', 'pago_pro', 'degustacao_pro']:
+                return True
+            # 2. Checa se contratou extensões que englobam o PRO
+            if adesao.modulo_slug not in ['empresa', 'core']:
+                return True
+
+        return False
+
+
+    @property
+    def url_logomarca(self):
+        """
+        Resolve a URL pública da logomarca da empresa considerando
+        se ela pertence ao static global ou ao blueprint de empresas.
+        """
+        if not self.logomarca:
+            return None
+
+        # Se for uma URL externa completa (S3, Cloudinary, etc)
+        if self.logomarca.startswith(('http://', 'https://')):
+            return self.logomarca
+
+        # Limpa barras iniciais
+        caminho_limpo = self.logomarca.lstrip('/')
+
+        # Se já tiver o prefixo de uploads
+        if caminho_limpo.startswith('static/'):
+            return f"/{caminho_limpo}"
+
+        # Caso padrão: arquivo armazenado dentro da pasta de uploads de empresas
+        # Ajuste 'empresa.static' ou 'static' conforme a estrutura de pastas do seu blueprint
+        try:
+            return url_for('empresa.static', filename=f"uploads/logos/{caminho_limpo}")
+        except Exception:
+            return url_for('static', filename=f"uploads/logos/{caminho_limpo}")
+
+    @property
+    def nome_fantasia(self):
+        """Atalho de compatibilidade para renderização e templates."""
+        return self.nome
+
+    @property
+    def razao_social(self):
+        """
+        Retorna o nome comercial do estabelecimento.
+        Se estiver instalada em um local físico com razão social cadastrada, pode priorizá-la.
+        """
+        if self.local_fisico and hasattr(self.local_fisico, 'razao_social') and self.local_fisico.razao_social:
+            return self.local_fisico.razao_social
+        return self.nome
+
 
 class UsuarioFavorito(db.Model):
-    """Registra os favoritamentos do usuário para personalizar o FeedIn Negócios."""
     __tablename__ = 'usuario_favorito'
     __table_args__ = (
-        db.UniqueConstraint('usuario_id', 'empresa_id', name='unique_usuario_empresa_fav'),
-        db.UniqueConstraint('usuario_id', 'segmento_id', name='unique_usuario_segmento_fav'),
-        {'extend_existing': True}
+        db.UniqueConstraint(
+            'usuario_id', 'empresa_id', name='unique_usuario_empresa_fav'
+        ),
+        db.UniqueConstraint(
+            'usuario_id', 'segmento_id', name='unique_usuario_segmento_fav'
+        ),
+        {'extend_existing': True},
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-    empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=True)
-    segmento_id = db.Column(db.Integer, db.ForeignKey('taxonomia.id'), nullable=True)
+    usuario_id = db.Column(
+        db.Integer, db.ForeignKey('usuario.id'), nullable=False
+    )
+    empresa_id = db.Column(
+        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=True
+    )
+    segmento_id = db.Column(
+        db.Integer, db.ForeignKey('taxonomia.id'), nullable=True
+    )
 
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    # 🎯 ADICIONAR RELACIONAMENTO ORM PARA A EMPRESA
+    empresa = db.relationship('EseEmpresa', backref='favoritado_por', lazy=True)
 
     def __repr__(self):
-        return f"<UsuarioFavorito User:{self.usuario_id} Empresa:{self.empresa_id}>"
+        return f'<UsuarioFavorito User:{self.usuario_id} Empresa:{self.empresa_id}>'
+
 
 class EseProcessoClaim(db.Model):
     __tablename__ = 'ese_processo_claim'
@@ -221,31 +348,26 @@ class ModHomologacaoEmpresa(db.Model):
 
 
 class ColaboradorContrato(db.Model):
-    """
-    O Histórico Profissional do Usuário baseado no Perfil de Módulos.
-    Vincula diretamente o colaborador (ModCadastroCliente) ao local de trabalho.
-    """
     __tablename__ = 'colaborador_contratos'
 
     id = db.Column(db.Integer, primary_key=True)
 
-    # 🎯 O ELO CORRETO: Chave estrangeira de 36 caracteres apontando para o Cadastro de Módulo
-    id_cadastro_cliente = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False)
+    # 👈 AJUSTE: Permite None enquanto o onboarding não vincula o cadastro do cliente de 36 caracteres
+    id_cadastro_cliente = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
 
-    # Referência ao Core (Mantida temporariamente ou como nullable=True para auditoria)
+    # Demais campos...
     id_usuario = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
-
-    id_local = db.Column(db.Integer, db.ForeignKey('locais.id'), nullable=False)
-    id_cargo = db.Column(db.Integer, db.ForeignKey('cargos.id'), nullable=False)
+    id_local = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False)
+    id_cargo = db.Column(db.Integer, db.ForeignKey('cargos.id'), nullable=True)
 
     papel_nome = db.Column(db.String(30), nullable=False, default='operador')
     papel_nivel = db.Column(db.Integer, nullable=False, default=500)
 
-    # Linha do Tempo Profissional
+    foto_profissional = db.Column(db.String(255), nullable=True)
+
     data_contratacao = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     data_desligamento = db.Column(db.DateTime, nullable=True)
 
-    # Configuração de Expediente Diário
     hora_inicio_expediente = db.Column(db.Time, nullable=False)
     hora_fim_expediente = db.Column(db.Time, nullable=False)
     hora_inicio_intervalo = db.Column(db.Time, nullable=True)
@@ -253,13 +375,91 @@ class ColaboradorContrato(db.Model):
 
     status_profissional = db.Column(db.String(20), default='ativo')
 
-    # 🌟 Relacionamentos atualizados para o padrão correto
-    cadastro_modulo = db.relationship('ModCadastroCliente', backref='contratos_trabalho')
-    local = db.relationship('Local', backref='equipe_colaboradores')
-    cargo = db.relationship('Cargo')
-
-    # Mantido apenas para compatibilidade legada se necessário
+    # Relacionamentos
     usuario = db.relationship('Usuario', backref='contratos_core_legados')
+    cadastro_modulo = db.relationship('ModCadastroCliente', backref='contratos_trabalho')
+    cargo = db.relationship('Cargo')
+    empresa = db.relationship('EseEmpresa', backref='contratos_colaboradores', lazy=True)
+    excecoes_jornada = db.relationship(
+        'EseExcecaoCalendario',
+        primaryjoin="and_(foreign(EseExcecaoCalendario.contrato_id) == ColaboradorContrato.id_cadastro_cliente, EseExcecaoCalendario.ativo == True)",
+        viewonly=True
+    )
+
+    # -------------------------------------------------------------------------
+    # ALIAS PARA TEMPLATES JINJA2 (SEM ALTERAR O BANCO DE DADOS)
+    # -------------------------------------------------------------------------
+    @property
+    def data_admissao(self):
+        """Redireciona 'data_admissao' para o campo 'data_contratacao' da tabela."""
+        return self.data_contratacao
+
+    @data_admissao.setter
+    def data_admissao(self, value):
+        self.data_contratacao = value
+
+    # -------------------------------------------------------------------------
+    # DEMAIS PROPERTIES
+    # -------------------------------------------------------------------------
+    @property
+    def nome(self):
+        """Retorna o nome oficial do profissional navegando pelo Cadastro de Módulo ou Usuário Core."""
+        if self.cadastro_modulo and getattr(self.cadastro_modulo, 'nome', None):
+            return self.cadastro_modulo.nome
+        if self.usuario and getattr(self.usuario, 'nome', None):
+            return self.usuario.nome
+        return "Profissional Sem Nome"
+
+    @property
+    def excecoes_ativas(self):
+        """Retorna as exceções de calendário ativas vinculadas ao id_cadastro_cliente."""
+        if not self.id_cadastro_cliente:
+            return []
+
+        return EseExcecaoCalendario.query.filter(
+            EseExcecaoCalendario.contrato_id == self.id_cadastro_cliente,
+            EseExcecaoCalendario.ativo == True
+        ).all()
+
+    @property
+    def escala_vigente(self):
+        """Resolve a escala vigente considerando prioridade."""
+        if hasattr(self, 'escalas') and self.escalas:
+            ordem = {'emergencial': 1, 'alternativo': 2, 'padrao': 3}
+            escalas_ordenadas = sorted(self.escalas, key=lambda e: ordem.get(e.tipo_escala, 99))
+            top_escala = escalas_ordenadas[0]
+            return {
+                'inicio': top_escala.inicio_expediente,
+                'fim': top_escala.fim_expediente,
+                'inicio_intervalo': top_escala.inicio_intervalo,
+                'fim_intervalo': top_escala.fim_intervalo,
+                'tipo': top_escala.tipo_escala
+            }
+
+        if self.hora_inicio_expediente and self.hora_fim_expediente:
+            return {
+                'inicio': self.hora_inicio_expediente,
+                'fim': self.hora_fim_expediente,
+                'inicio_intervalo': self.hora_inicio_intervalo,
+                'fim_intervalo': self.hora_fim_intervalo,
+                'tipo': 'contrato'
+            }
+
+    @property
+    def url_foto_profissional(self):
+        """Resolve a URL da foto do colaborador."""
+        if not self.foto_profissional:
+            return None
+
+        if self.foto_profissional.startswith(('http://', 'https://')):
+            return self.foto_profissional
+
+        caminho_limpo = self.foto_profissional.lstrip('/')
+
+        try:
+            return url_for('agenda.static', filename=f"uploads/profissionais/{caminho_limpo}")
+        except Exception:
+            return url_for('static', filename=f"uploads/profissionais/{caminho_limpo}")
 
 
 class ColaboradorDetalhesPessoais(db.Model):
@@ -273,7 +473,9 @@ class ColaboradorDetalhesPessoais(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     # Vinculado diretamente ao contrato de trabalho gerado APÓS o aceite explícito
-    contrato_id = db.Column(db.Integer, db.ForeignKey('colaborador_contratos.id'), nullable=False, unique=True)
+    # contrato_id passa a ser opcional, pois na admissão o contrato ainda não foi assinado/criado
+    contrato_id = db.Column(db.Integer, db.ForeignKey('colaborador_contratos.id'), nullable=True)
+    convite_id = db.Column(db.Integer, db.ForeignKey('ese_convite_colaborador.id'), nullable=True)
 
     # 👤 Dados Pessoais de Exibição e Civis
     nome_completo = db.Column(db.String(150), nullable=False)
@@ -405,56 +607,47 @@ class EseHorarioFuncionamento(db.Model):
 
 
 class EscalaTrabalhoColaborador(db.Model):
-    """
-    Representa a matriz volátil e o histórico de escalas de trabalho dos colaboradores.
-
-    Esta model resolve o engessamento de horários fixos, permitindo que a jornada padrão
-    estabelecida no contrato seja sobreposta de forma dinâmica por períodos específicos
-    (um dia isolado ou intervalo de datas) para tratar exceções, trocas de turno ou faltas.
-
-    Regra de Ouro do Motor de Busca (Resolução de Conflitos):
-    Ao calcular a disponibilidade ou renderizar a agenda de um colaborador para o dia X,
-    o sistema deve buscar registros ativos filtrando por `data_inicio <= X <= data_fim`.
-    Havendo concorrência de registros, aplica-se a seguinte precedência de sobreposição:
-    1. 'emergencial' (Maior prioridade: reações de última hora)
-    2. 'alternativo' (Média prioridade: planejamentos temporários/férias)
-    3. 'padrao'      (Menor prioridade: espelho da base contratual)
-
-    O primeiro registro encontrado seguindo essa ordem anula os demais para o dia calculado.
-    """
     __tablename__ = 'escala_trabalho_colaborador'
 
     id = db.Column(db.Integer, primary_key=True)
     contrato_id = db.Column(db.Integer, db.ForeignKey('colaborador_contratos.id'), nullable=False)
 
-    # 🗓️ Novo campo: Mapeamento de dia da semana (0=Segunda, 6=Domingo ou 1=Segunda, 7=Domingo)
-    # Nullable=True porque escalas 'alternativo' ou 'emergencial' usam intervalo de datas (data_inicio / data_fim)
     dia_semana = db.Column(db.Integer, nullable=True)
 
-    # Controle temporal da escala
-    data_inicio = db.Column(db.Date, nullable=False)  # Para escala padrão, pode ser a data de criação/contrato
-    data_fim = db.Column(db.Date, nullable=False)  # Para escala padrão, pode ser 2099-12-31 ou aberta
+    # Controle temporal da escala (Obrigatórios para o motor de concorrência)
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False)
 
-    # Flag de Controle
     tipo_escala = db.Column(db.String(20), default='padrao', nullable=False)
 
-    # Janela de Expediente
-    inicio_expediente = db.Column(db.Time, nullable=False)
-    fim_expediente = db.Column(db.Time, nullable=False)
+    # Janelas de Horário - TORNAR NULLABLE PARA FLEXIBILIDADE
+    inicio_expediente = db.Column(db.Time, nullable=True)  # <-- Alterado para nullable=True
+    fim_expediente = db.Column(db.Time, nullable=True)     # <-- Alterado para nullable=True
 
-    # Janela de Intervalo
     inicio_intervalo = db.Column(db.Time, nullable=True)
     fim_intervalo = db.Column(db.Time, nullable=True)
 
     ativo = db.Column(db.Boolean, default=True, nullable=False)
-    observacao = db.Column(db.Text, nullable=True)  # Livre para anotações REAIS (ex: "Troca de folga")
+    observacao = db.Column(db.Text, nullable=True)
 
-# 🕵️ Auditabilidade Leve via ModCadastroCliente (UUID)
     atualizado_por_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relacionamento opcional para facilidade de acesso no Jinja/Python (ex: escala.editor.nome_completo)
     editor = db.relationship('ModCadastroCliente', foreign_keys=[atualizado_por_id])
+
+    @validates('fim_expediente')
+    def validate_fim_expediente(self, key, fim_expediente):
+        if self.inicio_expediente and fim_expediente:
+            if self.inicio_expediente >= fim_expediente:
+                raise ValueError("O fim do expediente não pode ser menor ou igual ao início.")
+        return fim_expediente
+
+    @validates('fim_intervalo')
+    def validate_fim_intervalo(self, key, fim_intervalo):
+        if self.inicio_intervalo and fim_intervalo:
+            if self.inicio_intervalo > fim_intervalo:
+                raise ValueError("O fim do intervalo não pode ser menor que o início do intervalo.")
+        return fim_intervalo
 
 
 class CalendarioSazonalComercial(db.Model):
@@ -671,47 +864,118 @@ class EseConviteColaborador(db.Model):
         cpf_apenas_numeros = "".join(filter(str.isdigit, cpf_limpo))
         return hashlib.sha256(cpf_apenas_numeros.encode('utf-8')).hexdigest()
 
+
 class EseServicoOferecido(db.Model):
-    """
-    📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento
-    --------------------------------------------------------------------------------------
-    Mapeia os serviços que a empresa de fato oferece a partir da tabela global de Taxonomia.
-    Guarda as customizações do empreendedor como descrição própria, tempo de duração padrão
-    e a ordenação para a futura montagem da tabela de preços.
-    """
+    """📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento."""
+
     __tablename__ = 'ese_servico_oferecido'
     __table_args__ = {'extend_existing': True}
 
     id = db.Column(db.Integer, primary_key=True)
-    empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True)
-    taxonomia_id = db.Column(db.Integer, db.ForeignKey('taxonomia.id'), nullable=False)
+    empresa_id = db.Column(
+        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
+    )
+    taxonomia_id = db.Column(
+        db.Integer, db.ForeignKey('taxonomia.id'), nullable=False
+    )
 
     # Campo numérico para ordenação/agrupamento na tabela de preços futuramente
     grupo = db.Column(db.Integer, nullable=True)
 
     # Customização do serviço para o estabelecimento
     descricao_servico = db.Column(db.String(255), nullable=True)
-    tempo_duracao = db.Column(db.String(5), nullable=False, default="00:30")  # Formato "HH:mm"
+    tempo_duracao = db.Column(
+        db.String(5), nullable=False, default='00:30'
+    )  # Formato "HH:mm"
+
+    # Intervalo/Buffer para limpeza, descanso ou preparação (em minutos)
+    tempo_intervalo = db.Column(db.Integer, default=0, nullable=False)
+
+    # 🌟 CAMPO NUMÉRICO: Protegido com asdecimal=False para evitar falha no processador do SQLAlchemy
+    pontos_fidelidade = db.Column(
+        db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
+    )
 
     # Controle e Auditoria
     inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
-    data_criacao = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    data_criacao = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
-    # Relacionamento virtual para acessar propriedades da Taxonomia (como nome, categoria, etc.)
+    # Relacionamento virtual
     servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
 
+    @validates('pontos_fidelidade')
+    def validate_pontos_fidelidade(self, key, value):
+        """Sanitiza e valida a atribuição do campo pontos_fidelidade.
+
+        Garante conversão segura tratando strings com vírgula ou ponto.
+        """
+        if value is None:
+            return 1.00
+
+        if isinstance(value, str):
+            clean_val = value.replace(',', '.').strip()
+            try:
+                return float(clean_val)
+            except (ValueError, TypeError):
+                return 1.00
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 1.00
+
+    @property
+    def preco(self) -> float:
+        """Busca o preço vigente em EseServicoPreco com tratamento para dados em texto no banco."""
+        from feedin.modules.empresa.models import EseServicoPreco
+        try:
+            preco_obj = EseServicoPreco.query.filter_by(
+                empresa_id=self.empresa_id,
+                taxonomia_id=self.taxonomia_id
+            ).first()
+
+            if preco_obj and getattr(preco_obj, 'novo_valor', None) is not None:
+                val = preco_obj.novo_valor
+                if isinstance(val, str):
+                    return float(val.replace(',', '.').strip())
+                return float(val)
+        except Exception:
+            return 0.00
+
+        return 0.00
+
+    @property
+    def nome(self) -> str:
+        """Retorna a descrição customizada do serviço ou o nome da taxonomia vinculada."""
+        if self.descricao_servico:
+            return self.descricao_servico
+        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
+            return self.servico_taxonomia.nome
+        return f"Serviço #{self.id}"
+
+    @property
+    def duracao_em_minutos(self) -> int:
+        """Converte a string "HH:mm" em total de minutos (ex: '01:15' -> 75 min)."""
+        try:
+            horas, minutos = map(int, str(self.tempo_duracao).split(':'))
+            return (horas * 60) + minutos
+        except (ValueError, AttributeError):
+            return 30
+
+    @property
+    def tempo_total_bloqueio_minutos(self) -> int:
+        """Retorna o tempo TOTAL em minutos que o serviço bloqueia na agenda."""
+        return self.duracao_em_minutos + (self.tempo_intervalo or 0)
+
     def __repr__(self):
-        return f"<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Taxonomia {self.taxonomia_id}>"
+        return f'<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Pontos {self.pontos_fidelidade}>'
 
 
 class EseServicoPreco(db.Model):
-    """
-    📌 ESE_SERVICO_PRECO: Tabela de Preços Vigentes dos Serviços da Empresa
-    --------------------------------------------------------------------------------------
-    Guarda o valor atual/ativo cobrado por cada serviço oferecido pela empresa.
-    O valor é associado à Taxonomia do serviço correspondente para permitir flexibilidade
-    e inteligência nas buscas comerciais.
-    """
+    """📌 ESE_SERVICO_PRECO: Tabela de Preços Vigentes dos Serviços da Empresa."""
+
     __tablename__ = 'ese_servico_preco'
     __table_args__ = {'extend_existing': True}
 
@@ -719,34 +983,69 @@ class EseServicoPreco(db.Model):
     empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True)
     taxonomia_id = db.Column(db.Integer, db.ForeignKey('taxonomia.id'), nullable=False, index=True)
 
-    # Preço atual armazenado como numérico (Numeric/Float) para precisão decimal
-    novo_valor = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    # 🌟 APLICADO asdecimal=False: Impede erro de conversão de string no processador do SQLAlchemy
+    novo_valor = db.Column(db.Numeric(10, 2, asdecimal=False), nullable=False, default=0.00)
 
-    # Campo opcional para justificativas ou anotações internas da alteração
+    # Campo opcional para justificativas ou anotações internas
     observacao = db.Column(db.String(255), nullable=True)
 
     # Controle e Auditoria
     alterado_por_usuario_id = db.Column(db.Integer, nullable=False)
-    data_alteracao = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
-                               onupdate=lambda: datetime.now(timezone.utc))
+    data_alteracao = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
 
     grupo_id = db.Column(db.String(36), db.ForeignKey('ese_grupo_tabela.id'), nullable=True)
 
     # Relacionamentos virtuais
     servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
 
+    @validates('novo_valor')
+    def validate_novo_valor(self, key, value):
+        """Sanitiza e valida a atribuição do campo novo_valor."""
+        if value is None:
+            return 0.00
+
+        if isinstance(value, str):
+            clean_val = value.replace(',', '.').strip()
+            try:
+                return float(clean_val)
+            except (ValueError, TypeError):
+                return 0.00
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.00
+
+    @property
+    def nome(self) -> str:
+        """Retorna o nome da taxonomia vinculada ou fallback com ID."""
+        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
+            return self.servico_taxonomia.nome
+        return f"Serviço #{self.id}"
+
+    @property
+    def preco(self) -> float:
+        """Retorna o valor formatado como float com tratamento defensivo."""
+        if self.novo_valor is None:
+            return 0.00
+        try:
+            if isinstance(self.novo_valor, str):
+                return float(self.novo_valor.replace(',', '.').strip())
+            return float(self.novo_valor)
+        except (ValueError, TypeError):
+            return 0.00
+
     def __repr__(self):
         return f"<EseServicoPreco Empresa {self.empresa_id} | Taxonomia {self.taxonomia_id} | Valor {self.novo_valor}>"
 
 
 class EseServicoPrecoHistorico(db.Model):
-    """
-    📌 ESE_SERVICO_PRECO_HISTORICO: Log de Auditoria e Histórico de Preços
-    --------------------------------------------------------------------------------------
-    Guarda o rastro histórico de todas as alterações de preços efetuadas no sistema.
-    Serve para estudos de inteligência financeira, gráficos de variação de preços e auditoria
-    para saber quem, quando e por que um determinado preço foi alterado.
-    """
+    """📌 ESE_SERVICO_PRECO_HISTORICO: Log de Auditoria e Histórico de Preços."""
+
     __tablename__ = 'ese_servico_preco_historico'
     __table_args__ = {'extend_existing': True}
 
@@ -754,8 +1053,8 @@ class EseServicoPrecoHistorico(db.Model):
     empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True)
     taxonomia_id = db.Column(db.Integer, db.ForeignKey('taxonomia.id'), nullable=False, index=True)
 
-    # Valor que estava ativo antes da alteração ocorrer
-    valor_antigo = db.Column(db.Numeric(10, 2), nullable=False)
+    # 🌟 APLICADO asdecimal=False
+    valor_antigo = db.Column(db.Numeric(10, 2, asdecimal=False), nullable=False)
 
     # Observação/justificativa registrada na data daquela alteração específica
     observacao = db.Column(db.String(255), nullable=True)
@@ -768,6 +1067,24 @@ class EseServicoPrecoHistorico(db.Model):
 
     # Relacionamentos virtuais
     servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
+
+    @validates('valor_antigo')
+    def validate_valor_antigo(self, key, value):
+        """Sanitiza e valida a atribuição do campo valor_antigo."""
+        if value is None:
+            return 0.00
+
+        if isinstance(value, str):
+            clean_val = value.replace(',', '.').strip()
+            try:
+                return float(clean_val)
+            except (ValueError, TypeError):
+                return 0.00
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.00
 
     def __repr__(self):
         return f"<EseServicoPrecoHistorico Empresa {self.empresa_id} | Taxonomia {self.taxonomia_id} | Antigo {self.valor_antigo}>"
@@ -919,3 +1236,427 @@ class EseExcecaoCalendario(db.Model):
     def __repr__(self):
         alvo = f"Contrato: {self.contrato_id}" if self.contrato_id else f"Empresa: {self.empresa_id}"
         return f"<EseExcecaoCalendario {self.id} | Origem: {self.origem.value} | {alvo} | Motivo: {self.motivo_titulo}>"
+
+
+class EseNotificacaoCliente(db.Model):
+    """
+    NOTIFICAÇÕES IN-APP (PWA):
+    Armazena histórico de alertas/lembretes diretamente na conta/pwa do cliente.
+    """
+    __tablename__ = 'ese_notificacao_cliente'
+
+    id = db.Column(db.Integer, primary_key=True)
+    # FK compatível com UUID String(36) do ModCadastroCliente
+    cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False, index=True)
+    referencia_id = db.Column(db.Integer, nullable=True, index=True)  # ID do Agendamento/Pedido
+    titulo = db.Column(db.String(100), nullable=False)
+    mensagem = db.Column(db.Text, nullable=False)
+    lida = db.Column(db.Boolean, default=False, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relacionamento com o titular da conta
+    cliente = db.relationship('ModCadastroCliente', backref=db.backref('notificacoes_pwa', lazy='dynamic'))
+
+    def __repr__(self):
+        return f"<EseNotificacaoCliente ID={self.id} Cliente={self.cliente_id} Ref={self.referencia_id} Lida={self.lida}>"
+
+
+class EseLogMensagemAutomatica(db.Model):
+    """
+    REGISTRO DE IDEMPOTÊNCIA E AUDITORIA:
+    Evita disparos duplicados para o mesmo marco de tempo e canal.
+    """
+    __tablename__ = 'ese_log_mensagem_automatica'
+
+    id = db.Column(db.Integer, primary_key=True)
+    referencia_id = db.Column(db.Integer, nullable=False, index=True)  # ID do Agendamento
+    # FK compatível com UUID String(36) do ModCadastroCliente
+    cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False, index=True)
+    beneficiario_id = db.Column(db.Integer, db.ForeignKey('cliente_beneficiarios.id'), nullable=True) # Opcional: Veículo, Pet, Humano
+    marco_gatilho = db.Column(db.String(20), nullable=False)  # Ex: '48h', '24h', '3h'
+    canal_envio = db.Column(db.String(20), nullable=False)   # Ex: 'whatsapp', 'email', 'sms'
+    destinatario = db.Column(db.String(150), nullable=False) # Número de WhatsApp, E-mail ou Telefone
+    status_envio = db.Column(db.String(20), default='enviado', nullable=False) # 'processando', 'enviado', 'falha'
+    detalhes_erro = db.Column(db.Text, nullable=True)
+    data_envio = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relacionamentos auxiliares
+    cliente = db.relationship('ModCadastroCliente', backref=db.backref('logs_mensagens', lazy='dynamic'))
+    beneficiario = db.relationship('ClienteBeneficiario', backref=db.backref('logs_mensagens', lazy='dynamic'))
+
+    __table_args__ = (
+        UniqueConstraint('referencia_id', 'marco_gatilho', 'canal_envio', name='uq_agendamento_marco_canal'),
+    )
+
+    def __repr__(self):
+        return f"<EseLogMensagemAutomatica Ref={self.referencia_id} Marco={self.marco_gatilho} Canal={self.canal_envio}>"
+
+
+class ClienteBeneficiario(db.Model):
+    """Entidade genérica que representa os Beneficiários ou Personas atendidas no ecossistema.
+
+    Suporta abstração para múltiplos segmentos de negócios do sistema:
+    - Humano: Dependentes, Pacientes, Filhos, etc.
+    - Pet: Animais de estimação (Cães, Gatos, etc.).
+    - Veículo: Automóveis, Motocicletas, Máquinas (Buscados por Placa/Chassi).
+
+    Atributos:
+        id (int): Chave primária sequencial da persona.
+        cliente_id (str): UUID (CHAR 36) do cliente titular responsável cadastrado no sistema.
+        cpfhash_titular (str): Hash do CPF do titular para buscas performáticas e anonimizadas LGPD.
+        tipo_persona (str): Categoria da persona ('humano', 'pet', 'veiculo').
+        nome (str): Nome do dependente, nome do Pet, ou identificador do Veículo.
+        documento_identificador (str, optional): RG do dependente, RGA do Pet ou Placa/Chassi do Veículo.
+        genero_id (int, optional): Chave estrangeira da tabela de gêneros/sexo.
+        data_nascimento_ou_ano (date, optional): Data de nascimento para humanos/pets.
+        ano_fab_veiculo (int, optional): Ano de fabricação quando o tipo for 'veiculo'.
+        especie_marca (str, optional): Espécie para Pets (ex: Canina, Felina) ou Marca do Veículo (ex: Honda, Toyota).
+        raca_modelo (str, optional): Raça para Pets (ex: Golden Retriever) ou Modelo do Veículo (ex: Civic, Corolla).
+        ativo (bool): Indicador se o cadastro do beneficiário está ativo no sistema.
+        criado_em (datetime): Timestamp do cadastro do beneficiário.
+    """
+
+    __tablename__ = 'cliente_beneficiarios'
+
+    # --- IDENTIFICAÇÃO E VÍNCULO AO TITULAR ---
+    id = db.Column(
+        db.Integer,
+        primary_key=True,
+        comment='Chave primária autoincrementada do beneficiário'
+    )
+    cliente_id = db.Column(
+        db.String(36),
+        db.ForeignKey('mod_cadastro_cliente.id'),
+        nullable=False,
+        index=True,
+        comment='UUID (CHAR 36) do titular/responsável financeiro (mod_cadastro_cliente)'
+    )
+    cpfhash_titular = db.Column(
+        db.String(64),
+        nullable=False,
+        index=True,
+        comment='Hash SHA-256 do CPF do titular para integridade e compliance LGPD'
+    )
+
+    # --- CLASSIFICAÇÃO DA PERSONA ---
+    tipo_persona = db.Column(
+        db.String(20),
+        nullable=False,
+        default='humano',
+        comment='Tipo da persona atendida: "humano", "pet" ou "veiculo"'
+    )
+    nome = db.Column(
+        db.String(120),
+        nullable=False,
+        comment='Nome completo do dependente, apelido do Pet ou modelo simplificado do Veículo'
+    )
+    documento_identificador = db.Column(
+        db.String(50),
+        nullable=True,
+        index=True,
+        comment='Documento único: RG/CPF (Humano), RGA/Microchip (Pet), Placa/Chassi (Veículo)'
+    )
+
+    # --- ATRIBUTOS BIOLÓGICOS / ESPECÍFICOS ---
+    genero_id = db.Column(
+        db.Integer,
+        db.ForeignKey('generos.id'),
+        nullable=True,
+        comment='ID de referência da tabela de gêneros'
+    )
+    genero = db.relationship('Generos', foreign_keys=[genero_id], lazy='joined')
+
+    data_nascimento_ou_ano = db.Column(
+        db.Date,
+        nullable=True,
+        comment='Data de nascimento (aplicável para Humano e Pet)'
+    )
+    ano_fab_veiculo = db.Column(
+        db.Integer,
+        nullable=True,
+        comment='Ano de fabricação (aplicável exclusivamente quando tipo_persona="veiculo")'
+    )
+
+    especie_marca = db.Column(
+        db.String(50),
+        nullable=True,
+        comment='Espécie do Pet (Canina, Felina, etc.) ou Montadora/Marca do Veículo (Honda, Fiat, etc.)'
+    )
+    raca_modelo = db.Column(
+        db.String(50),
+        nullable=True,
+        comment='Raça do Pet (Golden, Poodle, etc.) ou Modelo do Veículo (Civic, Palio, etc.)'
+    )
+
+    # --- CONTROLE E AUDITORIA ---
+    ativo = db.Column(
+        db.Boolean,
+        default=True,
+        comment='Status do registro no sistema (True = Ativo, False = Inativo/Arquivado)'
+    )
+    criado_em = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        comment='Data e hora do cadastro (UTC)'
+    )
+
+    # Relacionamento de volta com o Titular
+    titular = db.relationship('ModCadastroCliente', backref=db.backref('beneficiarios', lazy='dynamic'))
+
+    @property
+    def idade_formatada(self) -> str:
+        """Calcula dinamicamente a representação de idade ou ano com base na persona."""
+        if self.tipo_persona == 'veiculo':
+            return f"Ano {self.ano_fab_veiculo}" if self.ano_fab_veiculo else "Ano N/I"
+
+        if self.data_nascimento_ou_ano:
+            hoje = datetime.utcnow().date()
+            anos = hoje.year - self.data_nascimento_ou_ano.year
+            if (hoje.month, hoje.day) < (self.data_nascimento_ou_ano.month, self.data_nascimento_ou_ano.day):
+                anos -= 1
+            return f"{anos} anos" if anos > 0 else "Menor de 1 ano"
+
+        return "Idade N/I"
+
+    def __repr__(self):
+        return f"<ClienteBeneficiario id={self.id} | Tipo={self.tipo_persona} | Nome={self.nome}>"
+
+
+class ClienteContato(db.Model):
+    """
+    📱 ENTIDADE: CANAIS DE COMUNICAÇÃO DO CLIENTE
+    ----------------------------------------------------------------------------------
+    Armazena os pontos de contato dinâmicos vinculados ao Titular.
+    Permite escolher por onde o cliente deseja receber avisos de agendamento/venda.
+    """
+    __tablename__ = 'cliente_contatos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False, index=True)
+
+    # Tipo de Canal: 'whatsapp', 'sms', 'email', 'telefone_fixo'
+    tipo = db.Column(db.String(20), nullable=False)
+    valor = db.Column(db.String(120), nullable=False)  # Ex: "19998765432" ou "cliente@email.com"
+    rotulo = db.Column(db.String(50), nullable=True)  # Ex: "Pessoal", "Recado", "Trabalho"
+
+    aceita_notificacao = db.Column(db.Boolean, default=True)  # Opt-in LGPD para avisos
+    is_padrao = db.Column(db.Boolean, default=False)  # Canal preferencial
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ClienteEndereco(db.Model):
+    """
+    📍 ENTIDADE: ENDEREÇOS E LOCALIZAÇÕES DO CLIENTE
+    ----------------------------------------------------------------------------------
+    Armazena endereços fixos e eventuais vinculados ao Titular.
+    Utilizado por módulos de Agendamento Leva/Traz, Entregas e Vendas.
+    """
+    __tablename__ = 'cliente_enderecos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False, index=True)
+
+    rotulo = db.Column(db.String(50),
+                       nullable=True)  # Ex: "Residência", "Trabalho", "Local de Coleta Lava-Jato"
+    logradouro = db.Column(db.String(150), nullable=False)
+    numero = db.Column(db.String(20), nullable=False)
+    complemento = db.Column(db.String(50), nullable=True)
+    bairro = db.Column(db.String(80), nullable=False)
+    cidade = db.Column(db.String(80), nullable=False)
+    uf = db.Column(db.String(2), nullable=False)
+    cep = db.Column(db.String(10), nullable=False)
+
+    # Geolocalização para logística/rotas de atendimento
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class EseNotificacao(db.Model):
+  """📌 ESE_NOTIFICACOES: Hub de Notificações e Alertas das Empresas e Módulos.
+
+  --------------------------------------------------------------------------------------
+  Centraliza os alertas gerados por todos os módulos do ecossistema
+  FeedIn.
+  Pode ser direcionada diretamente a uma Empresa (ese_empresa) para exibição
+  nas dashboards,
+  ou a uma Pessoa Física específica (mod_cadastro_cliente) — seja ela cliente,
+  colaborador,
+  gerente ou proprietário.
+  """
+
+  __tablename__ = 'ese_notificacoes'
+
+  id = db.Column(db.Integer, primary_key=True)
+
+  # --------------------------------------------------------------------------
+  # 🔗 ORIGEM DO MÓDULO (Vínculo com ModulosSistema)
+  # --------------------------------------------------------------------------
+  modulo_id = db.Column(
+      db.Integer,
+      db.ForeignKey('modulos_sistema.id'),
+      nullable=False,
+      index=True,
+  )
+  modulo_slug = db.Column(
+      db.String(30), nullable=False, index=True
+  )  # ex: 'agenda', 'delivery'
+
+  # --------------------------------------------------------------------------
+  # 🎯 DESTINATÁRIOS (Empresa / Painel x Pessoa Física / Perfil)
+  # --------------------------------------------------------------------------
+  # 1. Alerta Operacional para o Painel da Empresa (EseEmpresa)
+  empresa_id = db.Column(
+      db.Integer,
+      db.ForeignKey('ese_empresa.id'),
+      nullable=True,
+      index=True,
+  )
+
+  # 2. Notificação Pessoal para uma Pessoa Física (ModCadastroCliente - UUID 36)
+  destinatario_id = db.Column(
+      db.String(36),
+      db.ForeignKey('mod_cadastro_cliente.id'),
+      nullable=True,
+      index=True,
+  )
+
+  # --------------------------------------------------------------------------
+  # 📝 CONTEÚDO E CLASSIFICAÇÃO
+  # --------------------------------------------------------------------------
+  tipo = db.Column(
+      db.String(50), nullable=False, index=True
+  )  # ex: 'alerta_escala_vazia', 'agendamento_confirmado'
+  categoria = db.Column(
+      db.String(30), nullable=False, default='operacional'
+  )  # ex: 'operacional', 'financeiro', 'informativo'
+
+  titulo = db.Column(db.String(150), nullable=False)
+  mensagem = db.Column(db.Text, nullable=False)
+
+  # Rota interna do PWA/Painel ao clicar no card
+  url_acao = db.Column(
+      db.String(255), nullable=True
+  )  # ex: '/agenda/escalas?data=2026-08-12'
+
+  # --------------------------------------------------------------------------
+  # 📌 METADADOS E ESTADO DE LEITURA
+  # --------------------------------------------------------------------------
+  data_referencia = db.Column(
+      db.Date, nullable=True
+  )  # Data referente ao evento (ex: 2026-08-12)
+  entidade_id = db.Column(
+      db.String(50), nullable=True
+  )  # ID auxiliar se necessário (ex: servico_id)
+
+  lida = db.Column(
+      db.Boolean, default=False, nullable=False, index=True
+  )
+  lida_em = db.Column(db.DateTime, nullable=True)
+
+  created_at = db.Column(
+      db.DateTime,
+      default=lambda: datetime.now(timezone.utc),
+      nullable=False,
+      index=True,
+  )
+
+  # --------------------------------------------------------------------------
+  # 🤝 RELACIONAMENTOS OTIMIZADOS
+  # --------------------------------------------------------------------------
+  modulo = db.relationship('ModulosSistema', backref='notificacoes_ese')
+  empresa = db.relationship(
+      'EseEmpresa', backref=db.backref('notificacoes_modulo', lazy=True)
+  )
+  destinatario = db.relationship(
+      'ModCadastroCliente',
+      backref=db.backref('minhas_notificacoes_modulo', lazy=True),
+  )
+
+  def __repr__(self):
+    destino = (
+        f'Empresa:{self.empresa_id}'
+        if self.empresa_id
+        else f'Pessoa:{self.destinatario_id}'
+    )
+    return f'<EseNotificacao [{self.modulo_slug}] {self.tipo} -> {destino}>'
+
+
+# ==============================================================================
+# 1. REGRAS DE PONTUAÇÃO E FIDELIDADE (Definidas pelo Empreendedor)
+# ==============================================================================
+
+class EseRegraPontuacao(db.Model):
+  """Regras de pontuação para eventos comportamentais e situações pontuais
+
+  (ex: Check-in Pontual, Indicação, Aniversário).
+  """
+
+  __tablename__ = 'ese_regra_pontuacao'
+  __table_args__ = {'extend_existing': True}
+
+  id = db.Column(db.Integer, primary_key=True)
+  estabelecimento_id = db.Column(
+      db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False
+  )
+
+  gatilho_codigo = db.Column(
+      db.String(50), nullable=False
+  )  # Ex: 'PONTUALIDADE', 'INDICACAO'
+  nome_regra = db.Column(
+      db.String(100), nullable=False
+  )  # Ex: "Bônus de Pontualidade"
+  pontos = db.Column(db.Numeric(10, 2), default=0.50, nullable=False)
+  tolerancia_minutos = db.Column(
+      db.Integer, default=5, nullable=True
+  )  # Tolerância em min. para o gatilho
+
+  is_ativo = db.Column(db.Boolean, default=True, nullable=False)
+  data_criacao = db.Column(
+      db.DateTime, default=lambda: datetime.now(timezone.utc)
+  )
+
+
+# ==============================================================================
+# 2. EXTRATO DE PONTOS / CARTEIRA DO CLIENTE
+# ==============================================================================
+
+class ModClientePontos(db.Model):
+  """Extrato acumulado de pontos do cliente por empresa."""
+
+  __tablename__ = 'mod_cliente_pontos'
+  __table_args__ = {'extend_existing': True}
+
+  id = db.Column(db.Integer, primary_key=True)
+  estabelecimento_id = db.Column(
+      db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False
+  )
+  cliente_id = db.Column(
+      db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=False
+  )
+  agendamento_id = db.Column(
+      db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True
+  )
+
+  # Origem opcional do ponto (Serviço do catálogo OU Regra comportamental)
+  servico_oferecido_id = db.Column(
+      db.Integer, db.ForeignKey('ese_servico_oferecido.id'), nullable=True
+  )
+  regra_id = db.Column(
+      db.Integer, db.ForeignKey('ese_regra_pontuacao.id'), nullable=True
+  )
+
+  tipo_operacao = db.Column(
+      db.String(10), default='CREDITO', nullable=False
+  )  # CREDITO / DEBITO
+  pontos = db.Column(db.Numeric(10, 2), nullable=False)
+  descricao = db.Column(db.String(255), nullable=False)
+
+  data_movimentacao = db.Column(
+      db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+  )
+
+  # Relacionamentos
+  cliente = db.relationship('ModCadastroCliente', backref='extrato_pontos')
+  servico = db.relationship('EseServicoOferecido')
+  regra = db.relationship('EseRegraPontuacao')

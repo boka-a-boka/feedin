@@ -40,19 +40,32 @@
                 {# CAMPO: NOME VISUAL/PROVISÓRIO #}
                 <div class="mb-3">
                     <label for="nome_provisorio" class="form-label fw-bold text-dark small">Nome do Profissional</label>
-                    <input type="text" class="form-control rounded-3" id="nome_provisorio" name="nome_provisorio" placeholder="Ex: João Silva" required autocomplete="off">
+                    <!-- Nome do Profissional -->
+                    <input type="text"
+                           name="nome_profissional"
+                           class="form-control"
+                           placeholder="Ex: João Silva"
+                           value="{{ dados_iniciais.nome }}">
                 </div>
 
                 {# CAMPO: E-MAIL PARA DISPARO #}
                 <div class="mb-3">
                     <label for="email_destino" class="form-label fw-bold text-dark small">E-mail de Contato</label>
-                    <input type="email" class="form-control rounded-3" id="email_destino" name="email_destino" placeholder="joao.silva@email.com" required autocomplete="off">
+                    <input type="email"
+                       name="email_contato"
+                       class="form-control"
+                       placeholder="joao.silva@email.com"
+                       value="{{ dados_iniciais.email }}">
                 </div>
 
                 {# CAMPO: TELEFONE / WHATSAPP #}
                 <div class="mb-4">
                     <label for="telefone_destino" class="form-label fw-bold text-dark small">WhatsApp / Telefone</label>
-                    <input type="tel" class="form-control rounded-3" id="telefone_destino" name="telefone_destino" placeholder="(19) 99999-9999" autocomplete="off">
+                    <input type="text"
+                       name="whatsapp"
+                       class="form-control"
+                       placeholder="(19) 99999-9999"
+                       value="{{ dados_iniciais.whatsapp }}">
                 </div>
 
                 {# BOTÃO DE AÇÃO PRINCIPAL #}

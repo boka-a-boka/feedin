@@ -3,66 +3,94 @@
 {% block title %}Acesso à Plataforma | FeedIn{% endblock %}
 
 {% block content %}
-<div class="container d-flex flex-column align-items-center justify-content-center">
+<div class="container d-flex flex-column align-items-center justify-content-center py-4">
 
-    {# 🏢 LOGO / MARCA #}
+    {# 🏢 CABEÇALHO / MARCA #}
     <div class="mb-4 text-center">
-        <h2 class="fw-bold text-dark m-0">
-            {% if modulo_info %}Acesso ao {{ modulo_info.nome }}{% else %}Acesso à plataforma{% endif %}
+        <h2 class="fw-bold text-dark m-0 fs-3">
+            {% if modulo_info %}Acesso ao {{ modulo_info.nome }}{% else %}Acesso à Plataforma{% endif %}
         </h2>
-        <p class="text-muted small mt-1">Bem-vindo de volta! Insira suas credenciais.</p>
+        <p class="text-muted small mt-1 mb-0">Selecione como deseja prosseguir para acessar o sistema.</p>
     </div>
 
-    {# 💳 CARD DO FORMULÁRIO #}
-    <div class="card shadow-sm border border-2 border-gray-300 rounded-4 w-100 p-4" style="background-color: #ffffff;">
-        {# 🎯 AJUSTE 1: Passa o modulo_slug na URL do action para preservar a rota #}
-        <form method="POST" action="{{ url_for('auth.login', next_url=next_url, modulo=modulo_slug) }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {# 💳 CARD PRINCIPAL #}
+    <div class="card shadow-sm border-0 rounded-4 w-100 overflow-hidden" style="max-width: 440px; background-color: #ffffff;">
 
-            {# 🎯 AJUSTE 2: Garante a preservação do destino no request.form no submit #}
-            {% if next_url %}
-                <input type="hidden" name="next_url" value="{{ next_url }}">
-            {% endif %}
+    {# 🔘 SELETOR DE MODO (Primeiro Acesso vs Fazer Login) #}
+    {% set modulo_param = modulo_slug or (modulo_info.slug if modulo_info else None) %}
+    {% set endpoint_atual = request.endpoint %}
 
-            {# 🔑 AJUSTE 3: Preserva o módulo atual no POST da requisição #}
-            {% if modulo_slug %}
-                <input type="hidden" name="modulo_slug" value="{{ modulo_slug }}">
-            {% elif modulo_info %}
-                <input type="hidden" name="modulo_slug" value="{{ modulo_info.slug }}">
-            {% endif %}
+    <div class="p-2 bg-light border-bottom d-flex gap-1">
+        {# 1º PRIMEIRO ACESSO #}
+        <a href="{{ url_for('auth.cadastro_inicio', next_url=next_url, modulo=modulo_param) }}"
+           class="btn btn-sm w-50 rounded-3 py-2 transition-all
+                  {% if endpoint_atual == 'auth.cadastro_inicio' %}
+                      shadow-sm bg-white text-dark border fw-bold
+                  {% else %}
+                      text-secondary hover-bg-white border-0 fw-semibold
+                  {% endif %}">
+            <i class="bi bi-person-plus me-1 {% if endpoint_atual == 'auth.cadastro_inicio' %}text-primary{% endif %}"></i>
+            Primeiro Acesso
+        </a>
 
-            <div class="form-floating mb-3">
-                {{ form.email(class="form-control rounded-3", placeholder="nome@exemplo.com", style="height: 60px;") }}
-                {{ form.email.label }}
-            </div>
+        {# 2º FAZER LOGIN #}
+        <a href="{{ url_for('auth.login', next_url=next_url, modulo=modulo_param) }}"
+           class="btn btn-sm w-50 rounded-3 py-2 transition-all
+                  {% if endpoint_atual == 'auth.login' %}
+                      shadow-sm bg-white text-dark border fw-bold
+                  {% else %}
+                      text-secondary hover-bg-white border-0 fw-semibold
+                  {% endif %}">
+            <i class="bi bi-box-arrow-in-right me-1 {% if endpoint_atual == 'auth.login' %}text-primary{% endif %}"></i>
+            Fazer Login
+        </a>
+    </div>
 
-            <div class="input-group mb-4">
-                <div class="form-floating flex-grow-1">
-                    {{ form.senha(class="form-control", placeholder="Senha", style="height: 60px; border-top-left-radius: 0.5rem; border-bottom-left-radius: 0.5rem; border-top-right-radius: 0; border-bottom-right-radius: 0;", id="senha_login") }}
-                    {{ form.senha.label }}
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('auth.login', next_url=next_url, modulo=modulo_slug) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {# 🎯 PRESERVAÇÃO DE PARÂMETROS DE ROTA #}
+                {% if next_url %}
+                    <input type="hidden" name="next_url" value="{{ next_url }}">
+                {% endif %}
+
+                {% if modulo_slug %}
+                    <input type="hidden" name="modulo_slug" value="{{ modulo_slug }}">
+                {% elif modulo_info %}
+                    <input type="hidden" name="modulo_slug" value="{{ modulo_info.slug }}">
+                {% endif %}
+
+                {# ✉️ CAMPO E-MAIL #}
+                <div class="form-floating mb-3">
+                    {{ form.email(class="form-control rounded-3", placeholder="nome@exemplo.com", style="height: 58px;") }}
+                    {{ form.email.label }}
                 </div>
-                <button class="btn btn-outline-secondary" type="button" onclick="alternarVisibilidade('senha_login', 'icone_login')" style="border-top-right-radius: 0.5rem; border-bottom-right-radius: 0.5rem; border-color: #ced4da; background-color: #f8f9fa;">
-                    <svg id="icone_login" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
-                        <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
-                        <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
-                    </svg>
-                </button>
-            </div>
 
-            <div class="d-grid gap-2">
-                <button type="submit" name="botao_confirmacao" id="botao_confirmacao"
-                        class="btn btn-lg rounded-pill fw-bold py-3 fs-6 shadow-sm text-white"
-                        style="background-color: {% if modulo_info %}{{ modulo_info.cor_hex }}{% else %}#dc3545{% endif %}; border: none;">
-                    <i class="bi {% if modulo_info %}{{ modulo_info.icone }}{% else %}bi-box-arrow-in-right{% endif %} me-2"></i> Entrar no Sistema
-                </button>
-            </div>
+                {# 🔑 CAMPO SENHA COM ALTERNÂNCIA DE VISIBILIDADE #}
+                <div class="input-group mb-4">
+                    <div class="form-floating flex-grow-1">
+                        {{ form.senha(class="form-control", placeholder="Senha", style="height: 58px; border-top-left-radius: 0.5rem; border-bottom-left-radius: 0.5rem; border-top-right-radius: 0; border-bottom-right-radius: 0;", id="senha_login") }}
+                        {{ form.senha.label }}
+                    </div>
+                    <button class="btn btn-outline-secondary px-3" type="button" onclick="alternarVisibilidade('senha_login', 'icone_login')" style="border-top-right-radius: 0.5rem; border-bottom-right-radius: 0.5rem; border-color: #ced4da; background-color: #f8f9fa;">
+                        <svg id="icone_login" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-eye text-muted" viewBox="0 0 16 16">
+                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+                            <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                        </svg>
+                    </button>
+                </div>
 
-            <div class="text-center mt-4 pt-3 border-top">
-                <a href="{{ url_for('auth.cadastro_inicio', next_url=next_url, modulo=modulo_slug or (modulo_info.slug if modulo_info else None)) }}" class="text-decoration-none text-secondary small fw-semibold">
-                    Primeiro acesso? Ative sua conta aqui.
-                </a>
-            </div>
-        </form>
+                {# 🚀 BOTAO PRINCIPAL DE AÇÃO #}
+                <div class="d-grid gap-2">
+                    <button type="submit" name="botao_confirmacao" id="botao_confirmacao"
+                            class="btn btn-lg rounded-pill fw-bold py-3 fs-6 shadow-sm text-white"
+                            style="background-color: {% if modulo_info %}{{ modulo_info.cor_hex }}{% else %}#dc3545{% endif %}; border: none;">
+                        <i class="bi {% if modulo_info %}{{ modulo_info.icone }}{% else %}bi-box-arrow-in-right{% endif %} me-2"></i> Entrar no Sistema
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -75,7 +103,7 @@ function alternarVisibilidade(idInput, idIcone) {
         icone.innerHTML = `<path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/><path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829z"/><path d="M3.35 5.47q-.27.24-.518.487A13 13 0 0 0 1.172 8q.086.13.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7 7 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12z"/>`;
     } else {
         input.type = "password";
-        icone.innerHTML = `<path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>`;
+        icone.innerHTML = `<path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>`;
     }
 }
 </script>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admissão Concluída - FeedIn</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+
+    <!-- Wrapper Principal -->
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 20px 0;">
+        <tr>
+            <td align="center">
+
+                <!-- Card Container -->
+                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+
+                    <!-- Cabeçalho / Logo -->
+                    <tr>
+                        <td align="center" style="background-color: #0d6efd; padding: 25px 20px; color: #ffffff;">
+                            <h1 style="margin: 0; font-size: 26px; font-weight: bold; letter-spacing: -0.5px;">FeedIn</h1>
+                            <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9;">Plataforma de Gestão e Memória Social</p>
+                        </td>
+                    </tr>
+
+                    <!-- Corpo Principal -->
+                    <tr>
+                        <td style="padding: 30px 25px;">
+
+                            <!-- Título de Boas-Vindas -->
+                            <h2 style="margin: 0 0 15px 0; color: #1e293b; font-size: 20px; font-weight: bold;">
+                                Olá, {{ nome_colaborador }}!
+                            </h2>
+
+                            <p style="margin: 0 0 20px 0; color: #475569; font-size: 15px; line-height: 1.6;">
+                                Parabéns! Sua admissão na empresa <strong>{{ nome_empresa }}</strong> foi finalizada com sucesso na plataforma FeedIn.
+                            </p>
+
+                            <!-- Caixa de Destaque / Resumo -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border-left: 4px solid #0d6efd; border-radius: 4px; margin-bottom: 25px;">
+                                <tr>
+                                    <td style="padding: 15px;">
+                                        <p style="margin: 0 0 8px 0; font-size: 13px; color: #64748b; text-transform: uppercase; font-weight: bold;">
+                                            Resumo do Vínculo Profissional
+                                        </p>
+                                        <p style="margin: 0 0 5px 0; font-size: 14px; color: #334155;">
+                                            <strong>Empresa:</strong> {{ nome_empresa }}
+                                        </p>
+                                        <p style="margin: 0 0 5px 0; font-size: 14px; color: #334155;">
+                                            <strong>Nº do Contrato:</strong> #{{ contrato.id }}
+                                        </p>
+                                        <p style="margin: 0; font-size: 14px; color: #334155;">
+                                            <strong>Data de Admissão:</strong>
+                                            {% if contrato.data_admissao %}
+                                                {{ contrato.data_admissao.strftime('%d/%m/%Y') }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Botão de Ação CTA (Direciona para a área do colaborador no agenda_bp) -->
+                            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{ url_for('agenda.baixar_comprovante_admissao', contrato_id=contrato.id, _external=True) }}">
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 0 0 10px 0; color: #64748b; font-size: 13px; line-height: 1.5; text-align: center;">
+                                Se preferir, acesse seu painel no FeedIn a qualquer momento para acompanhar sua agenda e documentos.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    <!-- Rodapé do E-mail -->
+                    <tr>
+                        <td style="background-color: #f1f5f9; padding: 20px; text-align: center; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0 0 5px 0; font-size: 12px; color: #64748b;">
+                                Este é um e-mail automático enviado pela plataforma <strong>FeedIn</strong>.
+                            </p>
+                            <p style="margin: 0; font-size: 11px; color: #94a3b8;">
+                                &copy; {{ ano_atual or 2026 }} FeedIn. Todos os direitos reservados.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+
+            </td>
+        </tr>
+    </table>
+
+</body>
+</html>

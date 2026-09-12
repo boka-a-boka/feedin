@@ -1,0 +1,130 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}Documentação de Homologação | {{ ese_empresa.nome }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <!-- Largura confortável aproveitada de ponta a ponta -->
+        <div class="col-lg-10 col-xl-9">
+
+            <!-- Botão Voltar -->
+            <div class="mb-3">
+                <a href="{{ url_for('empresa.dashboard_empresa', empresa_id=ese_empresa.id if ese_empresa else empresa.id) }}"
+                   class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white"
+                   style="width: 40px; height: 40px;"
+                   title="Voltar ao Painel Geral">
+                    <i class="bi bi-chevron-left fs-6"></i>
+                </a>
+            </div>
+
+            <!-- Header de Contexto -->
+            <div class="mb-4">
+                <h2 class="fw-bold mb-1 fs-3">Auditoria e Validação Jurídica</h2>
+                <p class="text-muted mb-0 small">
+                    Empresa: <strong>{{ ese_empresa.nome }}</strong>
+                    {% if ese_empresa.documento_oficial %}
+                        ({{ ese_empresa.tipo_documento }}: {{ ese_empresa.documento_oficial }})
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Card Principal -->
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-body p-4 p-md-5">
+
+                    <!-- Alerta de Status -->
+                    {% if ese_empresa.status_homologacao == 'aguardando_auditoria' or ese_empresa.status_homologacao == 'em_analise' %}
+                        <div class="alert alert-info rounded-3 mb-4 d-flex align-items-center py-3 border-0 shadow-sm" role="alert">
+                            <i class="bi bi-info-circle-fill fs-4 me-3 text-info"></i>
+                            <div class="small">
+                                <strong>Documentos em Análise Interna!</strong><br>
+                                Sua documentação já foi enviada e está sob conferência da mesa de auditoria. Você pode reenviar novos arquivos se precisar corrigir algum dado.
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Formulário de Upload -->
+                    <form action="{% if processo %}{{ url_for('empresa.finalizar_claim', token=processo.token_validacao) }}{% else %}{{ url_for('empresa.enviar_documentacao', empresa_id=ese_empresa.id) }}{% endif %}"
+                          method="POST"
+                          enctype="multipart/form-data">
+
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                        <!-- Seções de Documentos -->
+                        <div class="d-flex flex-column gap-3 mb-4">
+
+                            <!-- Seção 1: Cartão CNPJ ou CPF -->
+                            <div class="p-3 rounded-3 border bg-light bg-opacity-50">
+                                <label for="cnpj_social" class="form-label fw-bold text-dark mb-1 d-block">
+                                    Cartão CNPJ ou Identificação (CPF/RG) <span class="text-danger">*</span>
+                                </label>
+                                <p class="text-muted small mb-2">
+                                    Cópia digitalizada do CNPJ ativo ou RG/CPF do responsável legal.
+                                </p>
+                                <input type="file"
+                                       name="cnpj_social"
+                                       id="cnpj_social"
+                                       class="form-control"
+                                       accept=".pdf,.jpg,.jpeg,.png"
+                                       required>
+                                <div class="form-text fs-7 mt-2">
+                                    Formatos aceitos: <strong>PDF, JPG ou PNG</strong> (Tamanho máximo: 5MB).
+                                </div>
+                            </div>
+
+                            <!-- Seção 2: Comprovante de Endereço -->
+                            <div class="p-3 rounded-3 border bg-light bg-opacity-50">
+                                <label for="comprovante_endereco" class="form-label fw-bold text-dark mb-1 d-block">
+                                    Comprovante de Endereço do Local <span class="text-danger">*</span>
+                                </label>
+                                <p class="text-muted small mb-2">
+                                    Documento comprobatório do endereço do estabelecimento comercial (água, luz, internet ou contrato).
+                                </p>
+                                <input type="file"
+                                       name="comprovante_endereco"
+                                       id="comprovante_endereco"
+                                       class="form-control"
+                                       accept=".pdf,.jpg,.jpeg,.png"
+                                       required>
+                                <div class="form-text fs-7 mt-2">
+                                    Formatos aceitos: <strong>PDF, JPG ou PNG</strong> (Tamanho máximo: 5MB).
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Termo de Aceite (Alinhado à esquerda sem paddings adicionais) -->
+                        <div class="form-check my-4 ps-4">
+                            <input class="form-check-input ms-0 me-2"
+                                   type="checkbox"
+                                   value="1"
+                                   id="termo_aceite"
+                                   name="termo_aceite"
+                                   {% if ese_empresa.termo_responsabilidade_aceito %}checked{% endif %}
+                                   required>
+                            <label class="form-check-label small text-muted" for="termo_aceite">
+                                Declaro que as informações e documentos enviados são autênticos e de minha inteira responsabilidade jurídica.
+                            </label>
+                        </div>
+
+                        <hr class="my-4 text-secondary opacity-25">
+
+                        <!-- Ações -->
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('empresa.dashboard_empresa', empresa_id=ese_empresa.id) }}" class="btn btn-outline-secondary px-4">
+                                Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary px-5 fw-semibold">
+                                Enviar
+                            </button>
+                        </div>
+
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}

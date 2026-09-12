@@ -3,7 +3,7 @@ import logging
 import re
 from datetime import timedelta, timezone, datetime
 from logging.handlers import RotatingFileHandler
-from flask import Flask
+from flask import Flask, url_for, current_app  # <-- Adicionado url_for e current_app aqui
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
@@ -34,7 +34,6 @@ def create_app():
     app = Flask(__name__)
 
     # --- CONFIGURAÇÃO PARA PROXY REVERSO (NGINX / VPS) ---
-    # Garante que o Flask entenda os cabeçalhos de HTTPS e Host enviados pelo Nginx
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # --- CONFIGURAÇÃO DE LOGS ---
@@ -75,13 +74,10 @@ def create_app():
     # --- CHAVEAMENTO DE AMBIENTE: LOCALHOST vs VPS / HOMOLOGAÇÃO ---
     is_production = os.environ.get('FLASK_ENV') == 'production' or os.name != 'nt'
 
-    # Deixamos o DOMAIN como None para aceitar dinamicamente subdomínios (ex: homolog, IP ou dominio principal)
     app.config['SESSION_COOKIE_DOMAIN'] = None
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-    # Habilita HTTPS Secure nos cookies apenas se explicitamente em produção/SSL configurado
-    # Se estiver testando homologação por HTTP, desativa temporariamente para evitar a perda do CSRF
     usar_https = os.environ.get('USE_HTTPS', 'false').lower() == 'true'
     app.config['SESSION_COOKIE_SECURE'] = usar_https
     app.config['REMEMBER_COOKIE_SECURE'] = usar_https
@@ -96,6 +92,9 @@ def create_app():
     app.config['MAIL_USERNAME'] = 'portal.indicapira@gmail.com'
     app.config['MAIL_PASSWORD'] = 'osqo ohef suzl nree'
 
+    # --- INICIALIZAÇÃO DE LISTA DE LOADERS PLUGGABLE ---
+    app.config['MODULE_USER_LOADERS'] = []
+
     # 2. ⚡ VINCULAÇÃO DAS EXTENSÕES AO APP CONSTRUÍDO
     database.init_app(app)
     migrate.init_app(app, database)
@@ -105,16 +104,37 @@ def create_app():
     mail.init_app(app)
 
     login_manager.init_app(app)
-    # Aponta diretamente para o endpoint do blueprint de autenticação, se aplicável, ou 'login'
-    login_manager.login_view = "auth.login" if "auth_bp" in locals() else "login"
+    login_manager.login_view = "auth.login"
     login_manager.login_message = "Sua sessão expirou, por favor faça login novamente."
-    login_manager.login_message_category = "info"
+    login_message_category = "info"
+
+    from feedin.modules.agenda.services.worker_lembretes import init_app as init_worker_lembretes
+    init_worker_lembretes(app)
 
     # 3. 🛰️ PROTOCOLO DE CONEXÃO DOS ACESSÓRIOS DO CORE
     with app.app_context():
         # Filtros de template customizados
         from .utils import tempo_atras_filter
         app.template_filter('tempo_atras')(tempo_atras_filter)
+
+        # --- HELPER GLOBAL JINJA2 PARA MIDIAS CROSS-MODULE ---
+        @app.template_global()
+        def media_url(modulo: str, caminho_relativo: str) -> str:
+            """
+            Resolve a URL de mídias de qualquer módulo com suporte a fallback de erros.
+            Exemplo no Jinja2: {{ media_url('empresa', empresa.logo_path) }}
+            """
+            fallback = url_for('static', filename='img/default_avatar.webp')
+            if not caminho_relativo:
+                return fallback
+            try:
+                caminho_limpo = str(caminho_relativo).replace('\\', '/')
+                return url_for(f'{modulo}.static', filename=caminho_limpo)
+            except Exception as err:
+                current_app.logger.warning(
+                    f"[MEDIA_URL] Falha ao resolver estático para módulo '{modulo}' com caminho '{caminho_relativo}': {err}"
+                )
+                return fallback
 
         # Carrega rotas e modelos bases do Core
         from feedin import routes, models
@@ -123,14 +143,42 @@ def create_app():
         from feedin.modules.agenda import agenda_bp
         from feedin.modules.empresa import empresa_bp
         from feedin.modules.auth import auth_bp
+        from feedin.utils import media_bp
 
-        app.register_blueprint(agenda_bp)
-        app.register_blueprint(empresa_bp)
-        app.register_blueprint(auth_bp)
+        # Registrar definindo o prefixo de cada URL:
+        app.register_blueprint(agenda_bp, url_prefix='/agenda')
+        app.register_blueprint(empresa_bp, url_prefix='/empresa')
+        app.register_blueprint(auth_bp, url_prefix='/auth')
+        app.register_blueprint(media_bp)
 
+    # 5. 🔐 PROVEDOR UNIFICADO DE CARREGAMENTO DE USUÁRIO (DESACOPLADO)
     @login_manager.user_loader
     def load_user(user_id):
-        from feedin.models import Usuario
-        return Usuario.query.get(int(user_id))
+        if not user_id:
+            return None
+
+        user_id_str = str(user_id).strip()
+
+        # 1. 🌐 ROTA DO CORE (ID Numérico / Inteiro)
+        # Se o ID for numérico, pertence EXCLUSIVAMENTE ao Core (Usuario)
+        if user_id_str.isdigit():
+            try:
+                from feedin.models import Usuario
+                return Usuario.query.get(int(user_id_str))
+            except Exception as e:
+                app.logger.error(f"[LOADER CORE] Erro ao carregar Usuario ({user_id_str}): {e}")
+                return None
+
+        # 2. 🧩 ROTA DOS MÓDULOS (UUID / String de 36 caracteres)
+        # Se for UUID, consulta a lista de loaders registrados pelos Módulos
+        for loader_func in app.config.get('MODULE_USER_LOADERS', []):
+            try:
+                usuario_modulo = loader_func(user_id_str)
+                if usuario_modulo:
+                    return usuario_modulo
+            except Exception as e:
+                app.logger.error(f"[LOADER MODULE] Erro ao executar loader do módulo: {e}")
+
+        return None
 
     return app

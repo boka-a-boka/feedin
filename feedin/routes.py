@@ -76,9 +76,10 @@ from feedin.modules.auth.models import VinculoUsuarioEmpresa, ModVinculoModulo
 import feedin.utils as utils
 from feedin.utils import (
     salvar_imagem, processar_mudanca_nivel, obter_signo, validar_cpf_estrutura,
-    salvar_imagem_capa, salvar_imagem_postagem, salvar_imagem_anuncio
+    salvar_imagem_modulo,
 )
 from feedin.tools.manutencao import CaixaFerramentasManutencao
+from feedin.modules.auth.models import ModCadastroCliente
 
 # =========================================================================
 # ⚙️ CONFIGURAÇÕES ESTRUTURAIS DO CONTEXTO DO CORE
@@ -126,14 +127,20 @@ def confirm_token(token, expiration=3600):
 
 @current_app.before_request
 def verificar_obrigatoriedade_cpf():
-    # Rotas que NÃO devem ser interceptadas (evita loop infinito)
-    rotas_excecao = ['static', 'logout', 'processar_identidade', 'get_perfil']
+    if current_user and current_user.is_authenticated:
+        # 1. BIFURCAÇÃO MÓDULO: Ignora a trava do Core para clientes Auth
+        if isinstance(current_user, ModCadastroCliente):
+            return
 
-    if current_user.is_authenticated:
-        # Se não aceitou LGPD ou não tem identidade vinculada
-        if not current_user.aceite_lgpd and request.endpoint not in rotas_excecao:
-            # Força o redirecionamento para o perfil, mas avisando que o modal deve abrir
-            return redirect(url_for('get_perfil', id_usuario=current_user.id, forcar_validacao=True))
+        # 2. BIFURCAÇÃO CORE: Mantém o fluxo original para usuários do Core
+        rotas_excecao = ['static', 'logout', 'processar_identidade', 'get_perfil', 'auth.logout', 'auth.login']
+
+        # Mantém a verificação defensiva de LGPD
+        has_lgpd_attr = hasattr(current_user, 'aceite_lgpd')
+
+        if has_lgpd_attr and not current_user.aceite_lgpd:
+            if request.endpoint not in rotas_excecao:
+                return redirect(url_for('get_perfil', id_usuario=current_user.id, forcar_validacao=True))
 
 
 @current_app.route('/meu-cofre')
@@ -162,6 +169,169 @@ def serve_sw():
 @current_app.route('/favicon.ico')
 def favicon():
     return current_app.send_static_file('imagens/favicon.png')
+
+
+@current_app.route('/local/<int:local_id>')
+@login_required
+def perfil_local(local_id):
+    database.session.rollback()
+
+    import random
+    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, Taxonomia, Postagem, postagem_tags, Epoca
+    from feedin.modules.empresa.models import EseProcessoClaim
+    from sqlalchemy.orm import joinedload
+
+    # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos
+    local = Local.query.get_or_404(local_id)
+
+    # Telemetria do Local
+    print(f"\n[TELEMETRIA] Carregando perfil para o Local ID recebido da rota: {local_id} (Tipo: {type(local_id)})")
+
+    print(
+        f"[TELEMETRIA] Dados do Banco -> Local.id: {local.id} | Nome: {local.nome} | id_empreendedor: {local.id_empreendedor} | status_operacional: {local.status_operacional}")
+
+    todos_claims = EseProcessoClaim.query.filter_by(local_id=local_id).all()
+    print(
+        f"[TELEMETRIA] Total de registros encontrados na tabela ese_processo_claim para este local: {len(todos_claims)}")
+
+    for c in todos_claims:
+        print(
+            f"   |- Claim ID: {c.id} | local_id no banco: {c.local_id} (Tipo: {type(c.local_id)}) | status_processo: '{c.status_processo}' | token: {c.token_validacao[:8] if c.token_validacao else 'N/A'}...")
+
+    # Executa a consulta oficial de filtragem
+    ultimo_processo = EseProcessoClaim.query.filter(
+        EseProcessoClaim.local_id == local_id,
+        EseProcessoClaim.status_processo.in_(['em_andamento', 'concluido', 'suspeito_bloqueado'])
+    ).order_by(EseProcessoClaim.id.desc()).first()
+
+    status_atual = 'livre'
+    if ultimo_processo:
+        status_atual = ultimo_processo.status_processo
+        print(f"[TELEMETRIA] Capturado processo ativo com sucesso! Status selecionado: '{status_atual}'")
+    else:
+        print(
+            "[TELEMETRIA] Nenhum processo ativo ('em_andamento', 'concluido') foi capturado no filtro oficial. Forçando status: 'livre'")
+
+    print(f"[TELEMETRIA] Injetando no Jinja2 -> status_claim='{status_atual}'\n")
+
+    # 1. GARANTIA DE VARIÁVEIS
+    tags_dos_amigos = []
+    atividades_formatadas = []
+
+    # RECUPERAÇÃO DAS ÉPOCAS
+    epocas_todas = Epoca.query.order_by(Epoca.ordem_cronologica.asc()).all()
+
+    # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO
+    vinculo_explicito = VinculoUsuarioLocal.query.filter_by(
+        usuario_id=current_user.id,
+        local_id=local_id
+    ).first()
+
+    vinculo_atividade = AtividadeLocal.query.filter_by(
+        id_criador=current_user.id,
+        id_local=local_id
+    ).first()
+
+    usuario_segue = True if (vinculo_explicito or vinculo_atividade) else False
+
+    # 3. CAPTURA DE TAGS DE AFINIDADE DO PERÍMETRO
+    try:
+        lista_ids_interesse = [amigo.id for amigo in current_user.amigos]
+        lista_ids_interesse.append(current_user.id)
+
+        tags_dos_amigos = database.session.query(Taxonomia).join(postagem_tags) \
+            .join(Postagem).filter(
+            Postagem.id_local == local_id,
+            Postagem.id_usuario.in_(lista_ids_interesse)
+        ).distinct().all()
+    except Exception as e:
+        print(f"Erro ao buscar tags: {e}")
+
+    # 4. CAPTURA E FILTRAGEM DAS POSTAGENS
+    postagens_totais_local = Postagem.query.filter(
+        Postagem.id_local == local_id,
+        Postagem.ativo == True
+    ).options(
+        joinedload(Postagem.autor),
+        joinedload(Postagem.tags_afinidade)
+    ).all()
+
+    total_posts_reais = len(postagens_totais_local)
+    posts_exibidos_contador = 0
+
+    meus_interesses_ids = []
+    if current_user.is_authenticated and hasattr(current_user.perfil, 'tags_seguidas'):
+        meus_interesses_ids = [t.id for t in current_user.perfil.tags_seguidas]
+
+    cards_de_respiro_restantes = 0
+
+    for p in postagens_totais_local:
+        e_o_autor = (current_user.is_authenticated and p.id_usuario == current_user.id)
+
+        tags_da_postagem = set(t.id for t in p.tags_afinidade)
+        tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
+
+        liberado_por_vinculo = e_o_autor or usuario_segue
+        liberado_por_tag = not tags_da_postagem or bool(tags_da_postagem & tags_usuario_segue)
+
+        if liberado_por_vinculo or liberado_por_tag:
+            posts_exibidos_contador += 1
+
+            anuncio_gerado = None
+
+            if cards_de_respiro_restantes > 0:
+                cards_de_respiro_restantes -= 1
+            else:
+                if random.random() < 0.25:
+                    # 🛡️ PROTEÇÃO CONTRA O ERRNO 22 NA PUBLICIDADE
+                    try:
+                        anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
+
+                        if isinstance(anuncio_gerado, list) and len(anuncio_gerado) > 0:
+                            anuncio_gerado = random.choice(anuncio_gerado)
+
+                        if anuncio_gerado:
+                            cards_de_respiro_restantes = 2
+                    except Exception as err_pub:
+                        print(f"⚠️ [AVISO] Falha ao capturar publicidade contextual: {err_pub}")
+                        anuncio_gerado = None
+
+            atividades_formatadas.append({
+                'id': p.id,
+                'eh_anuncio': True if anuncio_gerado else False,
+                'tipo_card': 'postagem',
+                'tipo': 'postagem',
+                'data_criacao': p.data_criacao,
+                'data_comentario': p.data_criacao,
+                'autor_objeto': p.autor,
+                'autor': p.autor,
+                'usuario': p.autor,
+                'conteudo_exibicao': p.conteudo,
+                'conteudo': p.conteudo,
+                'mensagem': p.conteudo,
+                'objeto_original': p,
+                'anuncio': anuncio_gerado,
+                'pessoas_marcadas': p.pessoas_marcadas_confirmadas,
+                'id_usuario': p.id_usuario
+            })
+
+    atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
+
+    # 5. RENDERIZAÇÃO NO TEMPLATE
+    return render_template('locais/perfil_local.html',
+                           local=local,
+                           atividades=atividades,
+                           posts_exibidos_contador=posts_exibidos_contador,
+                           total_posts_reais=total_posts_reais,
+                           total_atividades=total_posts_reais,
+                           sugestoes_nicho=tags_dos_amigos,
+                           usuario_segue=usuario_segue,
+                           context_origem='perfil_local',
+                           exibir_como_flyer=True,
+                           meus_interesses_ids=meus_interesses_ids,
+                           rating_data=local.get_rating_data(),
+                           status_claim=status_atual,
+                           epocas_todas=epocas_todas)
 
 
 @current_app.route('/alterar-senha', methods=['GET', 'POST'])
@@ -351,7 +521,14 @@ def realizar_logout():
 
 @current_app.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
+    # -------------------------------------------------------------------------
+    # 🛡️ TRAVA ANTILOOP / ISOLAMENTO CORE vs MÓDULO
+    # -------------------------------------------------------------------------
+    # Só faz auto-redirect se o usuário logado for realmente um Usuário do Core (ID numérico/int).
+    # Se for um Cliente de Módulo (UUID), ignora e mostra a tela de login do Core!
+    is_usuario_core = current_user.is_authenticated and isinstance(getattr(current_user, 'id', None), int)
+
+    if is_usuario_core:
         # Se logado e com CPF ok -> Feed. Se logado sem CPF -> Perfil (onde a modal aparecerá)
         target = 'dashboard' if current_user.aceite_lgpd else 'get_perfil'
         return redirect(url_for(target, id_usuario=current_user.id))
@@ -365,7 +542,12 @@ def login():
 
         if usuario and bcrypt.check_password_hash(usuario.senha, form_login.senha.data):
             if usuario.active:
+                # 🟢 Efetiva o login no Flask-Login (substitui a identidade na sessão)
                 login_user(usuario, remember=True)
+
+                # 🧹 Limpa resíduos de chaves de módulos passados para garantir ambiente limpo no Core
+                session.pop('cliente_modulo_id', None)
+                session.pop('modulo_slug_atual', None)
 
                 # --- AJUSTE DE CONEXÃO VIA QR CODE (INDICADOR) ---
                 id_padrinho = request.cookies.get('feedin_indicador_id')
@@ -871,6 +1053,14 @@ def formatar_postagem(texto):
 
 @current_app.route("/", methods=["GET", "POST"])
 def index():
+    # Se não estiver logado OU se for um cliente de módulo (não Usuario do Core)
+    # Identifica se é um usuário do Core (ID numérico/int)
+    is_usuario_core = current_user.is_authenticated and isinstance(getattr(current_user, 'id', None), int)
+
+    if not is_usuario_core:
+        # Se for um cliente de Módulo ou visitante, manda para o login do Core ou da Landing Page
+        return redirect(url_for('login'))
+
     # 1. LÓGICA PARA USUÁRIOS LOGADOS
     if current_user.is_authenticated:
         if current_user.nivel_acesso < 10:
@@ -1067,54 +1257,32 @@ def editar_perfil():
     return redirect(url_for('configuracoes', aba='perfil'))
 
 
-@current_app.route('/upload-foto-perfil', methods=['POST'])
+@current_app.route("/upload_foto_perfil", methods=['POST'])
 @login_required
 def upload_foto_perfil():
-    file = request.files.get('foto_perfil')
+    arquivo = request.files.get('foto_perfil')
 
-    if file:
-        nome_da_foto_para_deletar = current_user.foto_perfil
-        print(f"DEBUG: Foto que estava no banco antes: {nome_da_foto_para_deletar}")
+    if arquivo:
+        # Chamada unificada com modulo='perfil'
+        nome_processado = salvar_imagem_modulos(arquivo, current_user.id, modulo='perfil')
 
-        # Processa e salva a nova imagem no disco
-        novo_nome = salvar_imagem(file)
-
-        if novo_nome:
-            # Atualiza o campo do usuário
-            current_user.foto_perfil = novo_nome
-
-            # --- O PULO DO GATO ---
-            # Marcamos o objeto como modificado e forçamos a expiração para que o
-            # SQLAlchemy releia o banco de dados na próxima requisição sem usar cache.
-            database.session.add(current_user)
-            database.session.commit()
-            database.session.refresh(current_user)  # Força o reload imediato do objeto
-
-            print(f"DEBUG: Banco atualizado e atualizado com o novo nome: {current_user.foto_perfil}")
-            flash("Foto de perfil enviada com sucesso! Agora, complete seus dados.", "success")
-
-            # LÓGICA DE EXCLUSÃO (Preservada)
-            if nome_da_foto_para_deletar and \
-                    nome_da_foto_para_deletar != 'default.jpg' and \
-                    nome_da_foto_para_deletar != novo_nome:
-
-                pasta_fotos = os.path.join(current_app.root_path, 'static', 'fotos_perfil')
-                caminho_completo_antigo = os.path.join(pasta_fotos, nome_da_foto_para_deletar)
-
-                if os.path.exists(caminho_completo_antigo):
+        if nome_processado:
+            foto_antiga = current_user.foto_perfil
+            if foto_antiga and foto_antiga != 'default.jpg':
+                import os
+                caminho_antigo = os.path.join(current_app.root_path, 'static', 'uploads', 'perfis', foto_antiga)
+                if os.path.exists(caminho_antigo):
                     try:
-                        os.remove(caminho_completo_antigo)
-                        print(f"SUCESSO: Arquivo {nome_da_foto_para_deletar} removido.")
+                        os.remove(caminho_antigo)
                     except Exception as e:
-                        print(f"ERRO AO DELETAR: {e}")
-        else:
-            print("ERRO: A função salvar_imagem falhou ou retornou None.")
-            flash("Não foi possível processar sua imagem. Tente outro formato.", "danger")
-    else:
-        flash("Nenhum arquivo de imagem foi detectado no envio.", "warning")
+                        print(f"Aviso: Falha ao remover foto de perfil antiga: {e}")
 
-    # Força o redirecionamento explícito passando o ID para garantir consistência
-    return redirect(url_for("get_perfil", id_usuario=current_user.id))
+            current_user.foto_perfil = nome_processado
+            database.session.commit()
+
+            return jsonify({"status": "success", "url": nome_processado}), 200
+
+    return jsonify({"status": "error", "message": "Falha ao processar imagem de perfil"}), 400
 
 
 @current_app.route("/upload_capa", methods=['POST'])
@@ -1123,13 +1291,25 @@ def upload_capa():
     arquivo = request.files.get('foto_capa')
 
     if arquivo:
-        # Usamos a nova função de tratamento
-        nome_processado = salvar_imagem_capa(arquivo, current_user.id)
+        # Chamada unificada com modulo='capa'
+        nome_processado = salvar_imagem_modulos(arquivo, current_user.id, modulo='capa')
 
         if nome_processado:
-            # Se já existia uma capa antiga, você pode deletar o arquivo aqui (opcional)
+            if not current_user.perfil:
+                novo_perfil = Perfil(id_usuario=current_user.id)
+                database.session.add(novo_perfil)
+                database.session.flush()
 
-            # Atualiza o banco de dados com o novo nome (extensão .webp agora)
+            capa_antiga = current_user.perfil.url_capa
+            if capa_antiga and capa_antiga != 'default_capa.jpg':
+                import os
+                caminho_antigo = os.path.join(current_app.root_path, 'static', 'uploads', 'capas', capa_antiga)
+                if os.path.exists(caminho_antigo):
+                    try:
+                        os.remove(caminho_antigo)
+                    except Exception as e:
+                        print(f"Aviso: Falha ao deletar capa antiga: {e}")
+
             current_user.perfil.url_capa = nome_processado
             database.session.commit()
 
@@ -1462,13 +1642,6 @@ def promover_pioneiro(usuario_id):
         traceback.print_exc()
 
     return redirect(url_for('admin_sistema'))
-
-
-from itertools import groupby
-
-
-
-
 
 def apenas_pioneiros(f):
     @wraps(f)
@@ -4694,7 +4867,7 @@ def ver_perfil(usuario_id):
         else:
             tags_nao_seguidas = []
 
-        # Postagens com marcação
+         # Postagens com marcação
         if e_o_proprio or tem_conexao_confirmada:
             fotos_com_alvo = Postagem.query.join(Postagem.pessoas_marcadas) \
                 .filter(Usuario.id == usuario_id, Postagem.ativo == True) \
@@ -4841,179 +5014,7 @@ def ver_perfil(usuario_id):
                            aniversariantes_dia=aniversariantes_dia,
                            aniversariantes_semana=aniversariantes_semana)
 
-from sqlalchemy.orm import joinedload
 
-
-@current_app.route('/local/<int:local_id>')
-@login_required
-def perfil_local(local_id):
-    database.session.rollback()
-
-    import random
-    # INJETADO: Importação do modelo Epoca para alimentar a engenharia multitemporal
-    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, Taxonomia, Postagem, postagem_tags, Epoca
-    from feedin.modules.empresa.models import EseProcessoClaim
-    from sqlalchemy.orm import joinedload
-
-    # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos para evitar fadiga na VPS
-    local = Local.query.get_or_404(local_id)
-
-    # Log 1: Identifica o ID recebido pela URL da rota
-    print(f"\n🔍 [TELEMETRIA] Carregando perfil para o Local ID recebido da rota: {local_id} (Tipo: {type(local_id)})")
-
-    local = Local.query.get_or_404(local_id)
-
-    # Log 2: Verifica os dados reais que estão guardados na instância do Local
-    print(
-        f"🏢 [TELEMETRIA] Dados do Banco -> Local.id: {local.id} | Nome: {local.nome} | id_empreendedor: {local.id_empreendedor} | status_operacional: {local.status_operacional}")
-
-    # Vamos buscar TODOS os registros desse local sem filtros para ver o que tem na tabela
-    todos_claims = EseProcessoClaim.query.filter_by(local_id=local_id).all()
-    print(
-        f"📊 [TELEMETRIA] Total de registros encontrados na tabela ese_processo_claim para este local: {len(todos_claims)}")
-
-    for c in todos_claims:
-        print(
-            f"   ├─ Claim ID: {c.id} | local_id no banco: {c.local_id} (Tipo: {type(c.local_id)}) | status_processo: '{c.status_processo}' | token: {c.token_validacao[:8]}...")
-
-    # 🔍 Executa a nossa consulta oficial de filtragem
-    ultimo_processo = EseProcessoClaim.query.filter(
-        EseProcessoClaim.local_id == local_id,
-        EseProcessoClaim.status_processo.in_(['em_andamento', 'concluido', 'suspeito_bloqueado'])
-    ).order_by(EseProcessoClaim.id.desc()).first()
-
-    status_atual = 'livre'
-    if ultimo_processo:
-        status_atual = ultimo_processo.status_processo
-        print(f"🎯 [TELEMETRIA] Capturado processo ativo com sucesso! Status selecionado: '{status_atual}'")
-    else:
-        print(
-            "⚠️ [TELEMETRIA] Nenhum processo ativo ('em_andamento', 'concluido') foi capturado no filtro oficial. Forçando status: 'livre'")
-
-    print(f"🚀 [TELEMETRIA] Injetando no Jinja2 -> status_claim='{status_atual}'\n")
-
-    # 1. GARANTIA DE VARIÁVEIS
-    tags_dos_amigos = []
-    atividades_formatadas = []
-
-    # RECUPERAÇÃO DAS ÉPOCAS: Busca os períodos urbanos para montar os checkboxes do modal
-    epocas_todas = Epoca.query.order_by(Epoca.ordem_cronologica.asc()).all()
-
-    # 2. VERIFICAÇÃO DE VÍNCULO DO USUÁRIO (UNIFICADA)
-    vinculo_explicito = VinculoUsuarioLocal.query.filter_by(
-        usuario_id=current_user.id,
-        local_id=local_id
-    ).first()
-
-    # Verifica se ele já possui vínculo automático gerado por postagem de memórias
-    vinculo_atividade = AtividadeLocal.query.filter_by(
-        id_criador=current_user.id,
-        id_local=local_id
-    ).first()
-
-    # Se ele tiver qualquer um dos dois, ele já faz parte do perímetro do local!
-    usuario_segue = True if (vinculo_explicito or vinculo_atividade) else False
-
-    # 3. CAPTURA DE TAGS DE AFINIDADE DO PERÍMETRO
-    try:
-        lista_ids_interesse = [amigo.id for amigo in current_user.amigos]
-        lista_ids_interesse.append(current_user.id)
-
-        tags_dos_amigos = database.session.query(Taxonomia).join(postagem_tags) \
-            .join(Postagem).filter(
-            Postagem.id_local == local_id,
-            Postagem.id_usuario.in_(lista_ids_interesse)
-        ).distinct().all()
-    except Exception as e:
-        print(f"Erro ao buscar tags: {e}")
-
-    # 4. CAPTURA E FILTRAGEM DAS POSTAGENS REAIS com Otimização de Performance (joinedload)
-    postagens_totais_local = Postagem.query.filter(
-        Postagem.id_local == local_id,
-        Postagem.ativo == True
-    ).options(
-        joinedload(Postagem.autor),
-        joinedload(Postagem.tags_afinidade)
-    ).all()
-
-    total_posts_reais = len(postagens_totais_local)
-    posts_exibidos_contador = 0
-
-    # Captura prévia dos interesses do usuário para o Card Universal
-    meus_interesses_ids = []
-    if current_user.is_authenticated and hasattr(current_user.perfil, 'tags_seguidas'):
-        meus_interesses_ids = [t.id for t in current_user.perfil.tags_seguidas]
-
-    # Inicializa o controlador de espaçamento para as memórias do local
-    cards_de_respiro_restantes = 0
-
-    for p in postagens_totais_local:
-        e_o_autor = (current_user.is_authenticated and p.id_usuario == current_user.id)
-
-        tags_da_postagem = set(t.id for t in p.tags_afinidade)
-        tags_usuario_segue = set(t.id for t in current_user.interesses) if current_user.is_authenticated else set()
-
-        liberado_por_vinculo = e_o_autor or usuario_segue
-        liberado_por_tag = not tags_da_postagem or bool(tags_da_postagem & tags_usuario_segue)
-
-        if liberado_por_vinculo or liberado_por_tag:
-            posts_exibidos_contador += 1
-
-            # =========================================================================
-            # 🎲 CADÊNCIA EQUILIBRADA DE PUBLICIDADE CONCORRENTE (25% CHANCE + 2 RESPIROS)
-            # =========================================================================
-            anuncio_gerado = None
-
-            if cards_de_respiro_restantes > 0:
-                cards_de_respiro_restantes -= 1
-            else:
-                if random.random() < 0.25:
-                    anuncio_gerado = obter_publicidade_contextual(p, local_contexto_id=local.id)
-
-                    if isinstance(anuncio_gerado, list) and len(anuncio_gerado) > 0:
-                        anuncio_gerado = random.choice(anuncio_gerado)
-
-                    if anuncio_gerado:
-                        cards_de_respiro_restantes = 2
-            # =========================================================================
-
-            atividades_formatadas.append({
-                'id': p.id,
-                'eh_anuncio': True if anuncio_gerado else False,  # <--- A PISTA PARA O TEMPLATE
-                'tipo_card': 'postagem',
-                'tipo': 'postagem',
-                'data_criacao': p.data_criacao,
-                'data_comentario': p.data_criacao,
-                'autor_objeto': p.autor,
-                'autor': p.autor,
-                'usuario': p.autor,
-                'conteudo_exibicao': p.conteudo,
-                'conteudo': p.conteudo,
-                'mensagem': p.conteudo,
-                'objeto_original': p,
-                'anuncio': anuncio_gerado,
-                'pessoas_marcadas': p.pessoas_marcadas_confirmadas,
-                'id_usuario': p.id_usuario
-            })
-
-    # Ordenação cronológica reversa estrita das postagens
-    atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
-
-    # 5. RENDERIZAÇÃO NO TEMPLATE (Injetada a variável epocas_todas)
-    return render_template('locais/perfil_local.html',
-                           local=local,
-                           atividades=atividades,
-                           posts_exibidos_contador=posts_exibidos_contador,
-                           total_posts_reais=total_posts_reais,
-                           total_atividades=total_posts_reais,
-                           sugestoes_nicho=tags_dos_amigos,
-                           usuario_segue=usuario_segue,
-                           context_origem='perfil_local',
-                           exibir_como_flyer=True,
-                           meus_interesses_ids=meus_interesses_ids,
-                           rating_data=local.get_rating_data(),
-                           status_claim=status_atual,
-                           epocas_todas=epocas_todas) # <-- ADICIONADO AQUI!
 
 @current_app.route('/local_v2/<int:local_id>')
 @login_required
@@ -5221,8 +5222,10 @@ def processar_identidade():
 @current_app.route('/criar-postagem', methods=['POST'])
 @login_required
 def criar_postagem():
+    from zoneinfo import ZoneInfo
+    from feedin.models import Postagem, Local, AtividadeLocal, Taxonomia, MarcacaoPostagem, UsuarioLocalEpoca
+
     fuso_brasil = ZoneInfo("America/Sao_Paulo")
-    data_atual = datetime.now(fuso_brasil)
 
     # 1. Coleta Universal de Dados
     id_local = request.form.get('id_local')
@@ -5230,11 +5233,15 @@ def criar_postagem():
     tipo_postagem = request.form.get('tipo_postagem', 'comum')  # Ex: 'vinculo', 'obito', 'evento', 'nascimento'
 
     # Campos de Metadados (Memória Social)
-    epoca = request.form.get('periodo_estimado', '').strip()
+    raw_epoca = request.form.get('id_epoca') or request.form.get('periodo_estimado')
+    epoca = raw_epoca.strip() if raw_epoca else ''
     relato_extra = request.form.get('descricao', '').strip()  # O "O que mais curte"
 
     arquivo = request.files.get('imagem')
     local = Local.query.get(id_local) if id_local and id_local.isdigit() else None
+
+    # Tratamento de ID numérico para Época (se enviado ID)
+    id_epoca_num = int(epoca) if epoca and epoca.isdigit() else None
 
     # 2. Lógica de Construção de Narrativa (O "Cérebro" da Rota)
     if tipo_postagem == 'vinculo':
@@ -5259,14 +5266,18 @@ def criar_postagem():
         flash("Para este registro, uma fotografia é necessária!", "warning")
         return redirect(request.referrer)
 
-    # 4. Processamento de Imagem
+    # 4. Processamento de Imagem (Usando a nova função modular)
     nome_final = None
     if arquivo:
         try:
-            nome_final = salvar_imagem_postagem(arquivo, current_user.id)
+            # Substituição realizada: chamando salvar_imagem_modulos com o módulo 'posts'
+            nome_final = salvar_imagem_modulos(arquivo, current_user.id, modulo='posts')
+            if not nome_final:
+                flash("Formato de imagem inválido ou falha no processamento.", "danger")
+                return redirect(request.referrer)
         except Exception as e:
             print(f"Erro no processamento da imagem: {e}")
-            flash("Erro ao processar a imagem.", "danger")
+            flash("Erro técnico ao processar a imagem.", "danger")
             return redirect(request.referrer)
 
     # 5. Persistência no Banco de Dados
@@ -5275,6 +5286,7 @@ def criar_postagem():
         nova_postagem = Postagem(
             id_usuario=current_user.id,
             id_local=local.id if local else None,
+            id_epoca=id_epoca_num,
             conteudo=conteudo,
             imagem_url=nome_final,
             data_criacao=datetime.now(fuso_brasil),
@@ -5286,33 +5298,47 @@ def criar_postagem():
         database.session.flush()
 
         # =======================================================================
+        # 🧠 ENGENHARIA DO GRAFO: REGISTRO DE VÍNCULO ESPAÇO-TEMPORAL
+        # =======================================================================
+        if local and id_epoca_num:
+            vinculo_grafo = UsuarioLocalEpoca.query.filter_by(
+                id_usuario=current_user.id,
+                id_local=local.id,
+                id_epoca=id_epoca_num
+            ).first()
+
+            if not vinculo_grafo:
+                novo_no_grafo = UsuarioLocalEpoca(
+                    id_usuario=current_user.id,
+                    id_local=local.id,
+                    id_epoca=id_epoca_num
+                )
+                database.session.add(novo_no_grafo)
+                print(f"🌱 [Grafo] Novo nó registrado: Usuário {current_user.id} no Local {local.id} na Época {id_epoca_num}")
+
+        # =======================================================================
         # REGRA DE CONTORNO: VÍNCULO AUTOMÁTICO COM O LOCAL (SEGUIR)
         # =======================================================================
         if local:
-            # Verifica se o usuário já possui qualquer atividade ou segue este local
             segue_local = AtividadeLocal.query.filter_by(
                 id_criador=current_user.id,
                 id_local=local.id
             ).first()
 
-            # Se não tiver vínculo, criamos um automático como 'seguidor silencioso'
             if not segue_local:
                 vinculo_automatico = AtividadeLocal(
-                    # CORREÇÃO CIRÚRGICA: Preenche o campo obrigatório 'nome' exigido pelo banco
                     nome="Memória de Vínculo" if tipo_postagem == 'vinculo' else "Seguidor Silencioso",
-
                     id_criador=current_user.id,
                     id_local=local.id,
                     periodo_estimado=epoca if tipo_postagem == 'vinculo' else None,
                     descricao=relato_extra if tipo_postagem == 'vinculo' else "Seguiu ao publicar uma memória",
-                    data_criacao=datetime.now(timezone.utc)
+                    data_criacao=datetime.now(fuso_brasil)
                 )
                 database.session.add(vinculo_automatico)
 
-            # Se já existia, mas a postagem atual é do tipo 'vinculo', atualizamos os metadados
             elif tipo_postagem == 'vinculo':
                 segue_local.nome = "Memória de Vínculo"
-                segue_local.periodo_estimado = epoca  # <-- CORREÇÃO: Atribuição direta e limpa
+                segue_local.periodo_estimado = epoca
                 segue_local.descricao = relato_extra
 
         # =======================================================================
@@ -5323,10 +5349,8 @@ def criar_postagem():
             ids_t = [int(i) for i in tags_ids.split(',') if i.strip().isdigit()]
             tags_objetos = Taxonomia.query.filter(Taxonomia.id.in_(ids_t)).all()
 
-            # Associa as tags à postagem
             nova_postagem.tags_afinidade.extend(tags_objetos)
 
-            # Garante que as tags marcadas entrem para a lista de interesses do criador
             for tag in tags_objetos:
                 if tag not in current_user.interesses:
                     current_user.interesses.append(tag)
@@ -5337,15 +5361,12 @@ def criar_postagem():
         pessoas_ids = request.form.get('pessoas_ids', '')
         if pessoas_ids:
             ids_p = [int(i) for i in pessoas_ids.split(',') if i.strip().isdigit()]
-
-            # Mapeia os IDs dos amigos reais com conexões aceitas
             meus_amigos_ids = {amigo.id for amigo in current_user.amigos}
 
             for id_marcado in ids_p:
                 if id_marcado == current_user.id:
                     continue
 
-                # Defesa estrita: Só insere no banco se o ID estiver na lista de conexões reais
                 if id_marcado in meus_amigos_ids:
                     nova_marcacao = MarcacaoPostagem(
                         postagem_id=nova_postagem.id,
@@ -5355,13 +5376,9 @@ def criar_postagem():
                     )
                     database.session.add(nova_marcacao)
                 else:
-                    # Injeção maliciosa ou erro de ID: ignora silenciosamente para proteção de privacidade
-                    print(
-                        f"[ALERTA DE SEGURANÇA] Usuário {current_user.id} tentou marcar ID {id_marcado} sem ter amizade.")
+                    print(f"[ALERTA DE SEGURANÇA] Usuário {current_user.id} tentou marcar ID {id_marcado} sem ter amizade.")
 
-        # =======================================================================
-
-        # 4. Salva tudo definitivamente no banco
+        # Commit final da transação completa
         database.session.commit()
         flash("Memória compartilhada com sucesso!", "success")
 
@@ -5378,7 +5395,11 @@ def criar_postagem():
 @current_app.before_request
 def bloquear_usuarios_incompletos():
     if current_user and current_user.is_authenticated:
+        # 1. BIFURCAÇÃO MÓDULO: Clientes Auth seguem o fluxo sem as regras do Core
+        if isinstance(current_user, ModCadastroCliente):
+            return
 
+        # 2. BIFURCAÇÃO CORE: Mantém intacta a sua lógica e lista de rotas originais
         rotas_permitidas = [
             'get_perfil',
             'processar_identidade',
@@ -5417,10 +5438,10 @@ def editar_post(post_id):
         flash("Não é possível editar uma memória repostada.", "warning")
         return redirect(request.referrer)
 
-    # 2. Captura dos Dados do Formulário (Texto, Época e LOCAL)
+    # 2. Captura dos Dados do Formulário (Texto, Época e Local)
     novo_conteudo = request.form.get('conteudo', '').strip()
-    nova_id_epoca = request.form.get('id_epoca')
-    novo_id_local = request.form.get('id_local')
+    raw_epoca = request.form.get('id_epoca')
+    raw_local = request.form.get('id_local')
 
     if not novo_conteudo:
         flash("O conteúdo da história não pode ficar vazio.", "warning")
@@ -5431,22 +5452,28 @@ def editar_post(post_id):
         id_local_antigo = post.id_local
         id_epoca_antiga = post.id_epoca
 
-        # Atualização dos elementos básicos
+        # Atualização do conteúdo
         post.conteudo = novo_conteudo
 
+        # Tratamento seguro de casting para inteiro
+        nova_id_epoca = int(raw_epoca) if raw_epoca and raw_epoca.isdigit() else None
+        novo_id_local = int(raw_local) if raw_local and raw_local.isdigit() and raw_local != '0' else None
+
         if nova_id_epoca:
-            post.id_epoca = int(nova_id_epoca)
+            post.id_epoca = nova_id_epoca
 
         # =================================================================
-        # 🧠 ENGENHARIA DO GRAFO: REMAPEAMENTO DINÂMICO DE LOCAL
+        # 🧠 ENGENHARIA DO GRAFO: REMAPEAMENTO SE MUDAR LOCAL OU ÉPOCA
         # =================================================================
-        novo_id_local = int(novo_id_local) if (novo_id_local and novo_id_local != '0') else None
+        mudou_local = novo_id_local != id_local_antigo
+        mudou_epoca = nova_id_epoca and (nova_id_epoca != id_epoca_antiga)
 
-        if novo_id_local != id_local_antigo:
+        if mudou_local or mudou_epoca:
             post.id_local = novo_id_local
-            print(f"🔄 [Remapeamento] Post {post_id} movido do Local {id_local_antigo} para o Local {novo_id_local}")
+            print(
+                f"🔄 [Remapeamento] Post {post_id} alterado. Local: {id_local_antigo} -> {novo_id_local} | Época: {id_epoca_antiga} -> {nova_id_epoca}")
 
-            # --- LIMPEZA: O usuário tinha um vínculo com o LOCAL ANTIGO nesta ÉPOCA? ---
+            # --- LIMPEZA: O usuário tinha um vínculo com o (LOCAL ANTIGO + ÉPOCA ANTIGA)? ---
             if id_local_antigo and id_epoca_antiga:
                 restou_postagem = Postagem.query.filter_by(
                     id_usuario=current_user.id,
@@ -5463,42 +5490,37 @@ def editar_post(post_id):
                     ).first()
                     if no_antigo:
                         database.session.delete(no_antigo)
-                        print(f"🧹 [Grafo] Nó antigo desfeito: Usuário deixou de frequentar o Local {id_local_antigo} na Época {id_epoca_antiga}")
+                        print(
+                            f"🧹 [Grafo] Nó antigo desfeito: Usuário deixou de frequentar o Local {id_local_antigo} na Época {id_epoca_antiga}")
 
-            # --- INCREMENTO: Criar o novo vínculo no Grafo se o novo local exigir ---
-            if novo_id_local and post.id_epoca:
+            # --- INCREMENTO: Criar o novo vínculo no Grafo para a nova combinação ---
+            if post.id_local and post.id_epoca:
                 vinculo_existente = UsuarioLocalEpoca.query.filter_by(
                     id_usuario=current_user.id,
-                    id_local=novo_id_local,
+                    id_local=post.id_local,
                     id_epoca=post.id_epoca
                 ).first()
 
                 if not vinculo_existente:
                     novo_no = UsuarioLocalEpoca(
                         id_usuario=current_user.id,
-                        id_local=novo_id_local,
+                        id_local=post.id_local,
                         id_epoca=post.id_epoca
                     )
                     database.session.add(novo_no)
-                    print(f"🌱 [Grafo] Novo nó adicionado: Usuário agora frequenta o Local {novo_id_local} na Época {post.id_epoca}")
+                    print(
+                        f"🌱 [Grafo] Novo nó adicionado: Usuário agora frequenta o Local {post.id_local} na Época {post.id_epoca}")
 
         # =================================================================
-        # PROCESSAMENTO DE IMAGEM (Mantido)
+        # PROCESSAMENTO DE IMAGEM
         # =================================================================
+        # Na rota de criar_postagem ou editar_post:
         file = request.files.get('imagem_post')
         if file and file.filename != '':
-            novo_nome_imagem = salvar_imagem_postagem(file)
+            # Chamada unificada com modulo='posts' (ou omitindo o 3º parâmetro, pois 'posts' é o padrão)
+            novo_nome_imagem = salvar_imagem_modulos(file, current_user.id, modulo='posts')
             if novo_nome_imagem:
-                imagem_antiga = post.imagem_url
                 post.imagem_url = novo_nome_imagem
-                if imagem_antiga and imagem_antiga != 'default.jpg':
-                    import os
-                    caminho = os.path.join(current_app.root_path, 'static', 'uploads', 'posts', imagem_antiga)
-                    if os.path.exists(caminho):
-                        try:
-                            os.remove(caminho)
-                        except Exception as e_f:
-                            print(f"Erro físico: {e_f}")
 
         database.session.commit()
         flash("História e vínculos espaciais atualizados com sucesso! 🗺️🎉", "success")
@@ -5506,7 +5528,9 @@ def editar_post(post_id):
     except Exception as e:
         database.session.rollback()
         print(f"❌ ERRO CRÍTICO AO REMAPEAR POSTAGEM: {e}")
-        flash("Erro técnico ao processar a mudança de local da postagem.", "danger")
+        import traceback
+        traceback.print_exc()
+        flash("Erro técnico ao processar a alteração da postagem.", "danger")
 
     return redirect(request.referrer)
 
@@ -6662,102 +6686,71 @@ def criar_conexao(id_remetente, id_destinatario):
     return False
 
 
-@current_app.route('/hub', methods=['GET', 'POST'])
+@current_app.route('/hub', methods=['GET'])  # Ou @main_bp.route / conforme estruturado no feedin/routes.py
+@login_required
 def central_hub():
     """
-    HUB CONCENTRADOR UNIFICADO
-    Se logado: Renderiza a central de cards dark premium baseada na tabela de vínculos.
-    Se deslogado: Intercepta e renderiza a tela de login isolada e escura do HUB com CSRF.
+    🏢 CENTRAL DE MÓDULOS ECOSSISTÊMICA (HUB DINÂMICO)
+    --------------------------------------------------------------------------------------
+    Varre estritamente os vínculos do CPF logado na tabela ModVinculoModulo e
+    monta a lista de cards dinâmicos sem acoplamentos a blueprints inexistentes.
     """
-    from flask import request, render_template, redirect, url_for, session, flash
-    from flask_wtf.csrf import generate_csrf
+    from feedin.models import ModulosSistema
+    from feedin.modules.auth.models import ModVinculoModulo
 
-    # 1️⃣ CASO DE USO A: O USUÁRIO JÁ ESTÁ AUTENTICADO (Em qualquer módulo)
-    if current_user.is_authenticated:
-        usuario_logado = current_user
-        modulos_visiveis = []
+    # 1. Sinaliza o ambiente HUB na sessão para controle de retorno flutuante
+    session['navegacao_via_hub'] = True
 
-        # O elo universal imutável que o usuário autenticado possui
-        hash_para_busca = getattr(usuario_logado, 'cpf_hash', None)
+    # 2. Resgata o CPF Hash da entidade autenticada (ModCadastroCliente)
+    cliente_cpf_hash = getattr(current_user, 'cpf_hash', None)
 
-        if hash_para_busca:
-            hash_limpo = str(hash_para_busca).strip().lower()
+    if not cliente_cpf_hash:
+        flash("Não foi possível identificar seu perfil civil de acessos.", "warning")
+        return redirect(url_for('auth.login'))
 
-            # 🔍 DIAGNÓSTICOS MANTIDOS PARA SEU CONTROLE NO PYCHARM
-            vinculos_reais = database.session.query(ModVinculoModulo).filter_by(cpf_hash=hash_limpo).all()
-            print(f"\n🔍 [DIAGNÓSTICO HUB] Vínculos físicos na tabela para este hash: {[v.modulo_slug for v in vinculos_reais]}")
+    # 3. Varredura Estrita: Quais módulos este CPF possui vínculo ATIVO?
+    vinculos_ativos = ModVinculoModulo.query.filter_by(
+        cpf_hash=cliente_cpf_hash,
+        ativo=True
+    ).all()
 
-            modulos_usuario = database.session.query(ModulosSistema).join(
-                ModVinculoModulo, ModVinculoModulo.modulo_slug == ModulosSistema.slug
-            ).filter(
-                ModVinculoModulo.cpf_hash == hash_limpo,
-                ModVinculoModulo.ativo == True,
-                ModulosSistema.ativo == True
-            ).all()
+    slugs_autorizados = [v.modulo_slug for v in vinculos_ativos]
 
-            print(f"⚙️ [DIAGNÓSTICO HUB] Módulos que passaram pelo JOIN e estão ATIVOS: {[m.slug for m in modulos_usuario]}")
+    # 4. Cruzamento com o Catálogo do Sistema (ModulosSistema)
+    modulos_cards = []
+    if slugs_autorizados:
+        modulos_db = ModulosSistema.query.filter(
+            ModulosSistema.slug.in_(slugs_autorizados),
+            ModulosSistema.ativo == True
+        ).all()
 
-            for modulo in modulos_usuario:
-                try:
-                    # 🎯 CORREÇÃO CIRÚRGICA: Injeta o rastro 'origem=hub' dinamicamente em todos os links gerados
-                    url_modulo = url_for(modulo.endpoint, origem='hub')
+        cores_padrao = {
+            'agenda': '#0ea5e9',
+            'empresa': '#f59e0b',
+            'venda_convites': '#8b5cf6',
+            'cardapio_online': '#10b981'
+        }
 
-                    modulos_visiveis.append({
-                        'nome': modulo.nome,
-                        'icone': modulo.icone,
-                        'descricao': modulo.descricao,
-                        'url': url_modulo,
-                        'cor': modulo.cor_hex
-                    })
-                except BuildError:
-                    print(f"⚠️ [DIAGNÓSTICO HUB] O módulo '{modulo.slug}' ia aparecer, mas FOI PULADO porque o endpoint '{modulo.endpoint}' está errado.")
-                    continue
-
-        # Ordena alfabeticamente e entrega para o template de CARDS
-        modulos_visiveis = sorted(modulos_visiveis, key=lambda k: k['nome'])
-        return render_template('hub_concentrador.html', modulos=modulos_visiveis)
-
-    # 2️⃣ CASO DE USO B: O USUÁRIO ESTÁ DESCONECTADO (Processa o Login do HUB)
-    if request.method == 'POST':
-        email = request.form.get('email')
-        senha = request.form.get('senha')
-
-        print(f"\n📥 [RASTREIO HUB] Tentativa de login recebida. Email enviado: {email}")
-
-        # 🔑 BUSCA UNIVERSAL: Procura o usuário na tabela global pelo e-mail
-        usuario = Usuario.query.filter_by(email=email).first()
-
-        if usuario:
-            print(f"👤 [RASTREIO HUB] Usuário localizado no Banco. ID: {usuario.id}")
-
-            # 🔐 TRATATIVA BCRYPT: Validação do hash de segurança padrão do seu ecossistema
+        # 5. Montagem do payload consumido pelo Jinja
+        for mod in modulos_db:
             try:
-                # Importa o mecanismo do Flask-Bcrypt ou da biblioteca padrão do seu venv
-                try:
-                    from feedin import bcrypt
-                    senha_valida = bcrypt.check_password_hash(usuario.senha, senha)
-                except ImportError:
-                    import bcrypt
-                    senha_valida = bcrypt.check_password_hash(usuario.senha.encode('utf-8'), senha.encode('utf-8'))
+                url_destino = url_for('auth.login', modulo=mod.slug, origem='hub')
+            except Exception:
+                url_destino = f"/auth/login?modulo={mod.slug}&origem=hub"
 
-                if senha_valida:
-                    print("✅ [RASTREIO HUB] Senha validada com sucesso via Bcrypt! Efetuando login_user...")
-                    login_user(usuario)
-                    print(f"🔄 [RASTREIO HUB] Redirecionando... Autenticado? {current_user.is_authenticated}")
-                    return redirect(url_for('central_hub'))
-                else:
-                    print("❌ [RASTREIO HUB] Senha incorreta de acordo com a validação Bcrypt.")
-                    flash('Credenciais inválidas para o ecossistema FeedIn!.', 'danger')
+            modulos_cards.append({
+                'nome': mod.nome or mod.slug.capitalize(),
+                'descricao': getattr(mod, 'descricao', None) or f"Acesse o ambiente do módulo {mod.nome}.",
+                'icone': getattr(mod, 'icone', None) or 'bi-grid-fill',
+                'cor': getattr(mod, 'cor', None) or cores_padrao.get(mod.slug, '#3b82f6'),
+                'url': url_destino
+            })
 
-            except Exception as e:
-                print(f"⚠️ [RASTREIO HUB] Erro ao processar a checagem do Bcrypt: {e}")
-                flash('Erro interno ao validar credenciais.', 'danger')
-        else:
-            print("❌ [RASTREIO HUB] Usuário não encontrado no banco de dados com esse e-mail.")
-            flash('Credenciais inválidas para o ecossistema FeedIn!.', 'danger')
-
-    # Passa a chave dinâmica 'csrf_token' gerada na hora para o HTML de login se proteger
-    return render_template('login_hub.html', csrf_token=generate_csrf())
+    # 🎯 CORREÇÃO CRUCIAL: Aponta para 'central_hub.html' diretamente na pasta de templates
+    return render_template(
+        'hub_concentrador.html',
+        modulos=modulos_cards
+    )
 
 
 @current_app.context_processor

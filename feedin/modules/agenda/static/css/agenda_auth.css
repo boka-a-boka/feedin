@@ -7,12 +7,13 @@ body {
 /* Garante centralização absoluta na tela na força bruta */
 .wrapper-principal {
     display: flex !important;
-    align-items: center !important;
+    align-items: flex-start !important;
     justify-content: center !important;
     min-height: 100vh !important;
     width: 100% !important;
     padding: 40px 20px !important;
     box-sizing: border-box !important;
+    padding-top: 1.5rem;      /* Ajuste de respiro superior padronizado */
 }
 
 /* Garante que o card nunca fique esticado ou deformado */

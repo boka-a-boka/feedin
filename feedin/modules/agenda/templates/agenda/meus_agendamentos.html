@@ -1,0 +1,120 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Meus Agendamentos{% endblock %}
+
+{% block content %}
+<div class="fundo-acetinado-pwa w-100 py-4" style="min-height: 100vh;">
+    <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h5 class="fw-bold text-dark m-0">
+                <i class="bi bi-calendar-check text-primary me-2"></i>Meus Agendamentos
+            </h5>
+            <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-sm btn-primary rounded-pill fw-semibold">
+                <i class="bi bi-plus-lg me-1"></i>Novo
+            </a>
+        </div>
+
+        {# 📑 NAVEGAÇÃO POR ABAS #}
+        <ul class="nav nav-pills nav-fill bg-white p-1 rounded-4 border shadow-sm mb-3" id="tabAgendamentos" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active rounded-3 fw-semibold py-2" id="proximos-tab" data-bs-toggle="tab" data-bs-target="#proximos" type="button" role="tab" style="font-size: 0.85rem;">
+                    Próximos ({{ proximos|length }})
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link rounded-3 fw-semibold py-2 text-secondary" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico" type="button" role="tab" style="font-size: 0.85rem;">
+                    Histórico
+                </button>
+            </li>
+        </ul>
+
+        {# CONTEÚDO DAS ABAS #}
+        <div class="tab-content" id="tabAgendamentosContent">
+            
+            {# 1. ABA PRÓXIMOS AGENDAMENTOS #}
+            <div class="tab-pane fade show active" id="proximos" role="tabpanel">
+                {% if proximos %}
+                    <div class="d-flex flex-column gap-3">
+                        {% for item in proximos %}
+                        <div class="card border-0 bg-white rounded-4 shadow-sm p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill mb-1" style="font-size: 0.68rem;">
+                                        {{ item.status | upper }}
+                                    </span>
+                                    <h6 class="fw-bold text-dark m-0">{{ item.servico_id }}</h6> {# Ajustaremos o relacional da taxonomia no refator #}
+                                </div>
+                                <div class="text-end">
+                                    <span class="fw-bold text-dark fs-6 d-block">
+                                        R$ {{ "%.2f"|format(item.valor_total if item.valor_total is not none else 0.0) }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="bg-light p-2 rounded-3 mb-3 d-flex align-items-center justify-content-between" style="font-size: 0.82rem;">
+                                <div>
+                                    <i class="bi bi-calendar3 me-1 text-primary"></i>
+                                    <strong>{{ item.data_hora_inicio.strftime('%d/%m/%Y') }}</strong>
+                                </div>
+                                <div>
+                                    <i class="bi bi-clock me-1 text-primary"></i>
+                                    <strong>{{ item.data_hora_inicio.strftime('%H:%M') }}</strong>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <form method="POST" action="{{ url_for('agenda.cancelar_agendamento', agendamento_id=item.id) }}" class="w-100" onsubmit="return confirm('Tem certeza que deseja cancelar este agendamento?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill w-100 fw-semibold py-1.5" style="font-size: 0.78rem;">
+                                        <i class="bi bi-x-circle me-1"></i> Cancelar
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="bg-white p-5 rounded-4 shadow-sm text-center text-muted">
+                        <i class="bi bi-calendar-x fs-1 d-block mb-2 text-secondary"></i>
+                        <h6 class="fw-bold text-dark mb-1">Nenhum agendamento futuro</h6>
+                        <p class="small mb-3">Você não possui compromissos agendados no momento.</p>
+                        <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-sm btn-primary rounded-pill fw-semibold px-4">
+                            Agendar Agora
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+
+            {# 2. ABA HISTÓRICO DE AGENDAMENTOS #}
+            <div class="tab-pane fade" id="historico" role="tabpanel">
+                {% if historico %}
+                    <div class="d-flex flex-column gap-2">
+                        {% for item in historico %}
+                        <div class="bg-white p-3 rounded-4 shadow-sm border d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="fw-bold text-dark m-0" style="font-size: 0.88rem;">Agendamento #{{ item.id }}</h6>
+                                <span class="text-muted d-block" style="font-size: 0.78rem;">
+                                    {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') }}
+                                </span>
+                            </div>
+                            <div>
+                                <span class="badge {% if item.status == 'cancelado' %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %} rounded-pill" style="font-size: 0.7rem;">
+                                    {{ item.status }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="bg-white p-4 rounded-4 shadow-sm text-center text-muted small">
+                        Nenhum histórico de agendamentos anteriores.
+                    </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+</div>
+{% endblock %}

@@ -317,7 +317,7 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <form action="{{ url_for('empresa.registrar_intencao_claim', id_local=local.id) }}" method="POST">
+            <form id="formIniciarClaim" action="{{ url_for('empresa.registrar_intencao_claim', id_local=local.id) }}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                 <div class="modal-body p-4 bg-white">
@@ -334,9 +334,19 @@
                             <label class="form-label small fw-bold text-secondary mb-1">Nome Fantasia / Comercial *</label>
                             <input type="text" name="nome_empresa" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required value="{{ local.nome }}">
                         </div>
+
                         <div class="col-md-6">
                             <label class="form-label small fw-bold text-secondary mb-1">Documento Oficial (CPF ou CNPJ) *</label>
-                            <input type="text" name="documento_oficial" class="form-control form-control-sm rounded-3 shadow-none border-light-subtle" required placeholder="Ex: 00.000.000/0001-00">
+                            <input type="text"
+                                   name="documento_oficial"
+                                   id="documento_oficial"
+                                   class="form-control form-control-sm rounded-3 shadow-none border-light-subtle"
+                                   required
+                                   placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                                   oninput="aplicarMascaraDinamica(this)"
+                                   onblur="verificarDuplicidadeDocumento(this.value)">
+                            <!-- Feedback visual em tempo real -->
+                            <div id="feedback_doc" class="invalid-feedback small fw-semibold mt-1"></div>
                         </div>
 
                         <div class="col-md-8">
@@ -573,22 +583,20 @@
     </div>
 {% endif %}
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-# 2. O bloco de script com monitoramento em tempo real #}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const meuModal = document.getElementById('modalIniciarClaim');
     const formClaim = document.getElementById('formIniciarClaim');
+    const inputCategoria = document.getElementById('categoria_autocomplete');
+    const dataListTaxonomia = document.getElementById('datalist_taxonomia');
+    const inputCep = document.getElementById('cep');
+    let debounceTimer;
 
-// --- 🛡️ TRAVA CONTRA DUPLO POST NO SUBMIT (CORRIGIDA) ---
+    // --- 🛡️ 1. TRAVA CONTRA DUPLO POST NO SUBMIT ---
     if (formClaim) {
-        formClaim.addEventListener('submit', function(e) {
+        formClaim.addEventListener('submit', function (e) {
             const botaoSalvar = formClaim.querySelector('button[type="submit"]');
 
             if (botaoSalvar) {
-                // Joga a desabilitação para o próximo ciclo de execução (1ms)
-                // Isso garante que o formulário seja postado antes do botão congelar
                 setTimeout(() => {
                     botaoSalvar.disabled = true;
                     botaoSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Salvando dados...`;
@@ -597,88 +605,79 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // --- 🪐 GERENCIAMENTO DO MODAL (ESTEIRA ÚNICA) ---
-    if (meuModal) {
-        meuModal.addEventListener('shown.bs.modal', function () {
-            console.log('📦 Modal totalmente visível. Configurando inputs unificados...');
-
-            const inputCategoria = document.getElementById('categoria_autocomplete');
-            const dataListTaxonomia = document.getElementById('datalist_taxonomia');
-            const inputCep = document.getElementById('cep');
-            let debounceTimer;
-
-            // --- 🗂️ FLUXO DE TAXONOMIA AUTOCOMPLETE ---
-            if (inputCategoria && dataListTaxonomia) {
-                inputCategoria.removeEventListener('input', lidarComTaxonomia);
-                inputCategoria.addEventListener('input', lidarComTaxonomia);
-
-                // Evita que o 'Enter' ou clique de seleção na lista dispare nova busca
-                inputCategoria.addEventListener('change', function() {
-                    clearTimeout(debounceTimer);
-                });
+    // --- 🗂️ 2. AUTOCOMPLETE DE TAXONOMIA (INDEPENDENTE DO MODAL) ---
+    if (inputCategoria && dataListTaxonomia) {
+        inputCategoria.addEventListener('input', function (e) {
+            // Evita requisição duplicada na seleção do datalist
+            if (e.inputType === undefined || e.inputType === '') {
+                console.log('🎯 Seleção detectada via Datalist. Abortando requisição repetida.');
+                return;
             }
 
-            function lidarComTaxonomia(e) {
-                // 🎯 Se o input foi gerado por uma seleção (clique ou enter no datalist),
-                // a propriedade inputType vem vazia ou indefinida no evento nativo. Abortamos na hora.
-                if (!e.inputType && e.inputType !== "") {
-                    console.log('🎯 Seleção detectada via Datalist. Abortando requisição repetida.');
-                    return;
-                }
+            const busca = e.target.value ? e.target.value.trim() : '';
+            clearTimeout(debounceTimer);
 
-                const busca = e.target.value ? e.target.value.trim() : '';
-                clearTimeout(debounceTimer);
-
-                if (busca.length < 3) {
-                    dataListTaxonomia.innerHTML = '';
-                    return;
-                }
-
-                debounceTimer = setTimeout(() => {
-                    console.log(`📡 Buscando no banco por: "${busca}"`);
-                    const urlApi = `/empresa/api/taxonomia?q=${encodeURIComponent(busca)}&_=${new Date().getTime()}`;
-
-                    fetch(urlApi)
-                        .then(response => {
-                            if (!response.ok) throw new Error("Erro na requisição.");
-                            return response.json();
-                        })
-                        .then(data => {
-                            dataListTaxonomia.innerHTML = '';
-                            if (!data || data.length === 0) return;
-
-                            data.forEach(item => {
-                                const option = document.createElement('option');
-                                option.value = item;
-                                dataListTaxonomia.appendChild(option);
-                            });
-                        })
-                        .catch(error => console.error('❌ Erro no fetch de taxonomia:', error));
-                }, 400);
+            if (busca.length < 3) {
+                dataListTaxonomia.innerHTML = '';
+                return;
             }
 
-            // --- 📡 FLUXO DO CEP (VIACEP) ---
-            if (inputCep) {
-                inputCep.addEventListener('blur', function () {
-                    const cep = this.value.replace(/\D/g, '');
-                    if (cep.length === 8) {
-                        console.log(`📡 Buscando endereço para o CEP: ${cep}`);
-                        fetch(`https://viacep.com.br/ws/${cep}/json/`)
-                            .then(res => res.json())
-                            .then(dados => {
-                                if (!dados.erro) {
-                                    if(document.getElementById('logradouro')) document.getElementById('logradouro').value = dados.logradouro;
-                                    if(document.getElementById('bairro')) document.getElementById('bairro').value = dados.bairro;
-                                    if(document.getElementById('cidade')) document.getElementById('cidade').value = dados.localidade;
-                                    if(document.getElementById('estado')) document.getElementById('estado').value = dados.uf;
-                                    console.log('✅ Campos do endereço preenchidos via API.');
-                                } else {
-                                    console.warn('⚠️ CEP não encontrado.');
-                                }
-                            })
-                            .catch(err => console.error('❌ Erro ao buscar CEP:', err));
+            debounceTimer = setTimeout(() => {
+                console.log(`📡 Buscando no banco por: "${busca}"`);
+                const urlApi = `/empresa/api/taxonomia?q=${encodeURIComponent(busca)}&_=${new Date().getTime()}`;
+
+            // Substitua o bloco do fetch por este:
+            fetch(urlApi)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Servidor respondeu com status ${response.status}`);
                     }
-                });
+                    const contentType = response.headers.get("content-type");
+                    if (!contentType || !contentType.includes("application/json")) {
+                        throw new TypeError("A resposta do servidor não é JSON! Verifique se a rota existe ou se exige login.");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    dataListTaxonomia.innerHTML = '';
+                    if (!data || data.length === 0) return;
+
+                    data.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item;
+                        dataListTaxonomia.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('❌ Erro no fetch de taxonomia:', error));
+            }, 400);
+        });
+
+        // Previne comportamento padrão do Enter ao escolher da lista
+        inputCategoria.addEventListener('change', function () {
+            clearTimeout(debounceTimer);
+        });
+    }
+
+    // --- 📡 3. CONSULTA DE CEP (VIACEP) ---
+    if (inputCep) {
+        inputCep.addEventListener('blur', function () {
+            const cep = this.value.replace(/\D/g, '');
+            if (cep.length === 8) {
+                console.log(`📡 Buscando endereço para o CEP: ${cep}`);
+                fetch(`https://viacep.com.br/ws/${cep}/json/`)
+                    .then(res => res.json())
+                    .then(dados => {
+                        if (!dados.erro) {
+                            if (document.getElementById('logradouro')) document.getElementById('logradouro').value = dados.logradouro;
+                            if (document.getElementById('bairro')) document.getElementById('bairro').value = dados.bairro;
+                            if (document.getElementById('cidade')) document.getElementById('cidade').value = dados.localidade;
+                            if (document.getElementById('estado')) document.getElementById('estado').value = dados.uf;
+                            console.log('✅ Campos do endereço preenchidos via API.');
+                        } else {
+                            console.warn('⚠️ CEP não encontrado.');
+                        }
+                    })
+                    .catch(err => console.error('❌ Erro ao buscar CEP:', err));
             }
         });
     }

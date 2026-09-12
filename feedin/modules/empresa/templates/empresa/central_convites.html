@@ -1,0 +1,107 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Cabeçalho Institucional -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-12 col-lg-10">
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-3">
+                <div>
+                    <h3 class="fw-bold mb-1 text-dark">
+                        <i class="bi bi-card-checklist me-2 text-primary"></i>Convites de Admissão
+                    </h3>
+                    <p class="text-muted small mb-0">
+                        Solicitações de credenciamento e vínculo profissional aguardando sua confirmação.
+                    </p>
+                </div>
+                {% if convites_pendentes %}
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-2 fs-6">
+                    {{ convites_pendentes|length }} {{ 'pendência' if convites_pendentes|length == 1 else 'pendências' }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Convites Pendentes -->
+    {% if convites_pendentes %}
+        <div class="row justify-content-center g-4">
+            <div class="col-12 col-md-8 col-lg-6">
+                {% for convite in convites_pendentes %}
+                <div class="card border-0 shadow-sm rounded-3 hover-shadow transition mb-3">
+                    <div class="card-body p-4 d-flex flex-column justify-content-between">
+                        <div>
+                            <!-- Status e Data Empilhados -->
+                            <div class="d-flex flex-column align-items-start gap-1 mb-3">
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                    <i class="bi bi-clock-history me-1"></i>Aguardando Ficha
+                                </span>
+                                {% if convite.data_contratacao %}
+                                <small class="text-muted fw-medium ms-1" style="font-size: 0.8rem;" title="Data da solicitação">
+                                    <i class="bi bi-calendar3 me-1"></i>{{ convite.data_contratacao.strftime('%d/%m/%Y') }}
+                                </small>
+                                {% endif %}
+                            </div>
+
+                            <!-- Nome da Empresa / Estabelecimento -->
+                            <h5 class="fw-bold text-dark mb-2">
+                                {{ convite.empresa.nome_fantasia or convite.empresa.nome }}
+                            </h5>
+
+                            <!-- Detalhes do Solicitante -->
+                            <div class="bg-light p-2 rounded-2 mb-3 border border-light-subtle">
+                                <div class="text-secondary extra-small">NOME REGISTRADO NO CONVITE</div>
+                                <div class="fw-semibold text-dark small text-truncate">
+                                    {{ convite.nome_proposto }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ação Principal -->
+                        <div class="pt-2">
+                            <a href="{{ url_for('empresa.concluir_ficha_colaborador', token=convite.token_convite) }}"
+                               class="btn btn-primary w-100 fw-semibold d-flex align-items-center justify-content-center gap-2 py-2">
+                                <span>Preencher Ficha Cadastral</span>
+                                <i class="bi bi-arrow-right"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    <!-- Estado Vazio (Sem pendências) -->
+    {% else %}
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6">
+                <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+                    <div class="mb-3">
+                        <div class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle p-3" style="width: 70px; height: 70px;">
+                            <i class="bi bi-check-circle-fill fs-1"></i>
+                        </div>
+                    </div>
+                    <h5 class="fw-bold text-dark">Nenhum convite pendente</h5>
+                    <p class="text-muted small mb-0 mt-2">
+                        Você não possui fichas cadastrais pendentes no momento. Caso uma nova contratação seja iniciada, ela aparecerá automaticamente nesta página.
+                    </p>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .extra-small {
+        font-size: 0.7rem;
+        letter-spacing: 0.5px;
+    }
+    .hover-shadow:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important;
+    }
+    .transition {
+        transition: all 0.2s ease-in-out;
+    }
+</style>
+{% endblock %}

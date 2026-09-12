@@ -1,0 +1,237 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Ecossistema de Recursos{% endblock %}
+
+{% block content %}
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-2" style="max-width: 680px;">
+
+        {# 1. CABEÇALHO COM AVISO DE PLANO ATUAL #}
+        <div class="mb-4 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+                {# Redirecionamento dinâmico (usa ID da Empresa se existir, senão usa ID do Local) #}
+                <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}"
+                   class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white"
+                   style="width: 40px; height: 40px;">
+                    <i class="bi bi-chevron-left fs-6"></i>
+                </a>
+                <div>
+                    <h5 class="fw-bold text-dark m-0">Ecossistema FeedIn</h5>
+                    <p class="text-muted small m-0">
+                        {{ local.nome if local else (ese_empresa.nome_fantasia if ese_empresa else 'Ferramentas de gestão') }}
+                    </p>
+                </div>
+            </div>
+
+            {% if tem_acesso_pro %}
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-1.5 fw-bold" style="font-size: 0.7rem;">
+                    <i class="bi bi-star-fill text-warning me-1"></i>Perfil PRO Ativo
+                </span>
+            {% else %}
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-3 py-1.5 fw-bold" style="font-size: 0.7rem;">
+                    <i class="bi bi-shop me-1"></i>Vitrine Gratuita
+                </span>
+            {% endif %}
+        </div>
+
+        {# ========================================== #}
+        {# PILAR 1: CORE PLATFORM (PLANO BASE)        #}
+        {# ========================================== #}
+        <div class="mb-2 ms-1">
+            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">1. Perfil & Gestão Base</span>
+        </div>
+
+        <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden">
+            <div class="card-body p-4 bg-white">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="p-2 bg-warning-subtle text-warning-emphasis rounded-3">
+                        <i class="bi bi-stars fs-4 d-block"></i>
+                    </div>
+                    {% if tem_acesso_pro %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Plano Ativo</span>
+                    {% else %}
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Upgrade Recomendado</span>
+                    {% endif %}
+                </div>
+
+                <h5 class="fw-bold text-dark mb-1">Módulo Empresa PRO</h5>
+                <p class="text-muted small mb-3" style="font-size: 0.8rem; line-height: 1.3;">
+                    Autonomia operacional completa para o seu estabelecimento com métricas de engajamento, catálogo avançado de produtos/serviços e controle de equipe.
+                </p>
+
+                <div class="row g-2 mb-3 text-muted" style="font-size: 0.75rem;">
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1"></i> Tabela de Serviços & Preços</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1"></i> Gestão de Equipe & Jornadas</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1"></i> Parâmetros Operacionais Finais</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-success me-1"></i> Posição Prioritária nas Buscas</div>
+                </div>
+
+                {% if not tem_acesso_pro %}
+                    <a href="{{ url_for('empresa.ativar_modulo_empresa', empresa_id=empresa_id, modulo_slug='empresa_pro') }}"
+                       class="btn btn-warning text-dark fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-rocket-takeoff-fill"></i> Ativar Licença Empresa PRO (Teste)
+                    </a>
+                {% else %}
+                    <button class="btn btn-light text-success fw-semibold w-100 py-2 rounded-3" disabled>
+                        <i class="bi bi-check-lg me-1"></i> Recursos PRO Totalmente Liberados
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ========================================== #}
+        {# PILAR 2: MÍDIA & PUBLICIDADE CONTEXTUAL    #}
+        {# ========================================== #}
+        <div class="mb-2 ms-1">
+            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">2. Crescimento & Tráfego Qualificado</span>
+        </div>
+
+        <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden border-start border-4 border-danger">
+            <div class="card-body p-4 bg-white">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                        <i class="bi bi-bullseye fs-4 d-block"></i>
+                    </div>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Mídia Contextual</span>
+                </div>
+
+                <h5 class="fw-bold text-dark mb-1">Publicidade Contextual & Mídia Segmentada</h5>
+                <p class="text-muted small mb-3" style="font-size: 0.8rem; line-height: 1.3;">
+                    Promova suas ofertas e o seu perfil diretamente para frequentadores locais, direcionando anúncios por <strong>classes de interesse</strong>, hábitos e categorias específicas.
+                </p>
+
+                <div class="row g-2 mb-3 text-muted" style="font-size: 0.75rem;">
+                    <div class="col-6"><i class="bi bi-pin-map-fill text-danger me-1"></i> Impacto Hyper-Local</div>
+                    <div class="col-6"><i class="bi bi-people-fill text-danger me-1"></i> Segmentação por Interesses</div>
+                    <div class="col-6"><i class="bi bi-megaphone-fill text-danger me-1"></i> Banners em Feeds e Buscas</div>
+                    <div class="col-6"><i class="bi bi-graph-up-arrow text-danger me-1"></i> Mídia Kit & Métricas Reais</div>
+                </div>
+
+                <button class="btn btn-danger text-white fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-megaphone"></i> Criar Campanha de Mídia
+                </button>
+            </div>
+        </div>
+
+        {# ========================================== #}
+        {# PILAR 3: EXTENSÕES OPERACIONAIS (APPS)    #}
+        {# ========================================== #}
+        <div class="mb-2 ms-1">
+            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">3. Extensões de Negócio (Apps)</span>
+        </div>
+
+        <div class="row g-3">
+            {# APP: AGENDA & AGENDAMENTOS #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="p-2 bg-primary-subtle text-primary rounded-3">
+                                <i class="bi bi-calendar-check fs-5 d-block"></i>
+                            </div>
+                            {% if 'agenda' in slugs_contratados %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.6rem;">Contratado</span>
+                            {% else %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-bold" style="font-size: 0.6rem;">Disponível (+ Perfil PRO)</span>
+                            {% endif %}
+                        </div>
+                        <h6 class="fw-bold text-dark m-0">Agendamentos & Reservas</h6>
+                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
+                            Gestão de horários, profissionais e agendamentos diretos do cliente.
+                        </p>
+                    </div>
+
+                    {# LÓGICA DE AÇÃO DO BOTÃO DA AGENDA #}
+                    {% if 'agenda' in slugs_contratados %}
+                        {% if base_empresa_pronta %}
+                            <!-- CASO 1: Contratado E status_processo == 'concluido' -->
+                            <a href="{{ url_for('agenda.painel_agenda', empresa_id=empresa_id, origem='empresa') }}"
+                               class="btn btn-sm btn-primary fw-bold w-100 rounded-3 mt-2">
+                                <i class="bi bi-gear-fill me-1"></i> Gerenciar Agenda
+                            </a>
+                        {% else %}
+                            <!-- CASO 2: Contratado, MAS status_processo == 'em_andamento' -->
+                            <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}"
+                               class="btn btn-sm btn-warning text-dark fw-bold w-100 rounded-3 mt-2"
+                               data-bs-toggle="tooltip"
+                               title="Processo de onboarding em andamento. Conclua para liberar o painel da Agenda.">
+                                <i class="bi bi-clock-history me-1"></i> Concluir Validação do Claim
+                            </a>
+                        {% endif %}
+                    {% else %}
+                        <!-- CASO 3: Não contratado ainda -> Permite ativar para qualquer status -->
+                        <a href="{{ url_for('empresa.ativar_modulo_empresa', empresa_id=empresa_id, modulo_slug='agenda') }}"
+                           class="btn btn-sm btn-dark fw-bold w-100 rounded-3 mt-2">
+                            + Ativar Módulo (Concede Licença PRO)
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# APP: VENDAS & PEDIDOS #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
+                                <i class="bi bi-bag-check fs-5 d-block"></i>
+                            </div>
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.6rem;">Em Breve</span>
+                        </div>
+                        <h6 class="fw-bold text-dark m-0">Vendas & Pedidos Direct</h6>
+                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
+                            Catálogo interativo para recebimento direto de pedidos sem comissão.
+                        </p>
+                    </div>
+                    <button class="btn btn-sm btn-light text-muted fw-semibold w-100 rounded-3 mt-2" disabled>
+                        <i class="bi bi-bell me-1"></i> Tenho Interesse
+                    </button>
+                </div>
+            </div>
+
+            {# APP: FIDELIDADE & CASHBACK #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
+                                <i class="bi bi-gift fs-5 d-block"></i>
+                            </div>
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.6rem;">Em Breve</span>
+                        </div>
+                        <h6 class="fw-bold text-dark m-0">Fidelidade & Cupons</h6>
+                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
+                            Programas de retenção, cashback e cupons para clientes frequentes.
+                        </p>
+                    </div>
+                    <button class="btn btn-sm btn-light text-muted fw-semibold w-100 rounded-3 mt-2" disabled>
+                        <i class="bi bi-bell me-1"></i> Tenho Interesse
+                    </button>
+                </div>
+            </div>
+
+            {# APP: GESTÃO FINANCEIRA #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
+                                <i class="bi bi-bar-chart-line fs-5 d-block"></i>
+                            </div>
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.6rem;">Em Breve</span>
+                        </div>
+                        <h6 class="fw-bold text-dark m-0">Gestão Financeira & Caixa</h6>
+                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
+                            Relatórios unificados de caixa, faturamento e previsibilidade.
+                        </p>
+                    </div>
+                    <button class="btn btn-sm btn-light text-muted fw-semibold w-100 rounded-3 mt-2" disabled>
+                        <i class="bi bi-bell me-1"></i> Tenho Interesse
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

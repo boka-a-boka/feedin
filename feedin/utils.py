@@ -1,7 +1,12 @@
+import uuid
+import bcrypt
+from werkzeug.security import check_password_hash
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+import pytz
+import glob
+from datetime import datetime, timedelta, time, timezone
 from functools import wraps
 from unicodedata import normalize
 
@@ -9,8 +14,133 @@ from flask import current_app, redirect, render_template, request, session, url_
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
+from typing import Optional, Union, BinaryIO
+from werkzeug.datastructures import FileStorage
+from io import BytesIO
+
 # Imports de Modelos do Core
-from feedin.models import IdentidadeCivil, Local
+from feedin.models import IdentidadeCivil
+
+# feedin/utils.py
+
+# Configuração Única e Centralizada de Tipos de Imagem
+CONFIG_IMAGENS = {
+    # Módulo Agenda
+    'agenda_avatar': {
+        'modulo_alvo': 'agenda',
+        'subpasta': 'Avatares',
+        'tamanho': (500, 500),
+        'qualidade': 85
+    },
+    # Módulo Empresa
+    'empresa_logo': {
+        'modulo_alvo': 'empresa',
+        'subpasta': 'Uploads/empresas/{empresa_id}',
+        'tamanho': (400, 400),
+        'qualidade': 90
+    },
+    'empresa_colaborador': {
+        'modulo_alvo': 'empresa',
+        'subpasta': 'Uploads/empresas/{empresa_id}/colaboradores',
+        'tamanho': (600, 600),
+        'qualidade': 85
+    },
+    'empresa_compliance': {
+        'modulo_alvo': 'empresa',
+        'subpasta': 'Uploads/empresas/{empresa_id}/compliance',
+        'tamanho': (1200, 1200),
+        'qualidade': 85
+    },
+    'empresa_fachada': {
+            'modulo_alvo': 'empresa',
+            'subpasta': 'Uploads/empresas/{empresa_id}',
+            'tamanho': (1200, 800),
+            'qualidade': 85
+    }
+}
+
+MESES_PTBR = {
+    1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
+    5: 'Maio', 6: 'Junho', 7: 'Julho', 8: 'Agosto',
+    9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
+}
+
+
+def formatar_data_extenso(dt):
+    """
+    Recebe um objeto datetime ou date e retorna
+    o mês/ano formatado em PT-BR (ex: 'Agosto de 2026').
+    """
+    if not dt:
+        return ""
+    return f"{MESES_PTBR[dt.month]} de {dt.year}"
+
+
+def validar_unicidade_documento(doc_raw: str, id_local_atual: int = None) -> dict:
+    """
+    🔍 Função Utilitária Híbrida para validação de unicidade e integridade de CPF/CNPJ.
+    Pode ser usada tanto por APIs (retornando dict para jsonify)
+    quanto internamente em controllers do Flask.
+    """
+    # 1. Higienização estrita: extrai apenas dígitos
+    doc_limpo = "".join(char for char in doc_raw if char.isdigit()) if doc_raw else ""
+
+    # 2. Validação de tamanho estrutural (11 para CPF, 14 para CNPJ)
+    if len(doc_limpo) not in (11, 14):
+        return {
+            "valido": False,
+            "duplicado": False,
+            "tipo": None,
+            "doc_limpo": doc_limpo,
+            "mensagem": "Documento deve conter 11 dígitos (CPF) ou 14 dígitos (CNPJ)."
+        }
+
+    tipo_doc = "CPF" if len(doc_limpo) == 11 else "CNPJ"
+
+    # 3. Validação do cálculo dos Dígitos Verificadores (DV)
+    if tipo_doc == "CPF" and not validar_cpf(doc_limpo):
+        return {
+            "valido": False,
+            "duplicado": False,
+            "tipo": tipo_doc,
+            "doc_limpo": doc_limpo,
+            "mensagem": "O CPF informado é inválido. Verifique os números digitados."
+        }
+
+    if tipo_doc == "CNPJ" and not validar_cnpj(doc_limpo):
+        return {
+            "valido": False,
+            "duplicado": False,
+            "tipo": tipo_doc,
+            "doc_limpo": doc_limpo,
+            "mensagem": "O CNPJ informado é inválido. Verifique os números digitados."
+        }
+
+    # 4. Consulta de unicidade na tabela Local
+    query = Local.query.filter(Local.documento == doc_limpo)
+    if id_local_atual:
+        query = query.filter(Local.id != id_local_atual)
+
+    local_existente = query.first()
+
+    if local_existente:
+        return {
+            "valido": False,
+            "duplicado": True,
+            "tipo": tipo_doc,
+            "doc_limpo": doc_limpo,
+            "mensagem": f"Este {tipo_doc} já está vinculado ao estabelecimento '{local_existente.nome}'."
+        }
+
+    # Documento válido, consistente e totalmente disponível
+    return {
+        "valido": True,
+        "duplicado": False,
+        "tipo": tipo_doc,
+        "doc_limpo": doc_limpo,
+        "mensagem": f"{tipo_doc} válido e disponível para cadastro."
+    }
+
 
 def tempo_atras_filter(value):
     """Filtro Jinja para exibição de tempo relativo consciente de fuso horário."""
@@ -264,119 +394,440 @@ def salvar_imagem(foto):
         return None
 
 
-def salvar_imagem_postagem(foto, usuario_id):
-    """Processa fotos de postagens da linha do tempo mantendo a proporção original."""
-    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
-        return None
+# =========================================================================
+# 🔐 VALIDADOR POLIMÓRFICO DE HASH DE SENHA
+# =========================================================================
+def validar_hash_senha(objeto_usuario, senha_digitada: str) -> bool:
+    """
+    VALIDADOR UNIFICADO DE CREDENCIAIS MULTI-ALGORITMO
 
-    nome_arquivo = f"post_{usuario_id}_{int(datetime.now().timestamp())}.webp"
-    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
-    os.makedirs(pasta_destino, exist_ok=True)
+    Objetivo:
+        Verificar se a senha em texto plano informada pelo usuário corresponde
+        ao hash armazenado na entidade (Usuario ou ModCadastroCliente),
+        suportando múltiplos algoritmos de hashing (Bcrypt, Werkzeug e Fallback).
 
-    try:
-        img = Image.open(foto)
+    Parâmetros:
+        - objeto_usuario: Instância do modelo que possui o atributo de senha
+                          ('senha' ou 'senha_hash').
+        - senha_digitada (str): Senha em texto limpo fornecida no formulário.
 
-        # 1. Corrige orientação EXIF para fotos do feed não deitarem
-        img = ImageOps.exif_transpose(img)
+    Premissas e Algoritmos Suportados:
+        1. Bcrypt ($2a$, $2b$, $2y$): Valida via biblioteca `bcrypt`.
+        2. Werkzeug (pbkdf2, scrypt, argon2): Valida via `check_password_hash`.
+        3. Fallback / Plaintext: Comparação direta em ambientes legados/desenvolvimento.
 
-        # 2. Converte para RGB tratando transparências
-        if img.mode in ("RGBA", "LA", "P"):
-            fundo = Image.new('RGB', img.size, (255, 255, 255))
-            fundo.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
-            img = fundo
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
+    Retorna:
+        - bool: True se a senha for válida, False caso contrário.
+    """
+    if not objeto_usuario or not senha_digitada:
+        return False
 
-        # 3. Mantém proporção original impondo teto máximo de segurança
-        max_size = (1200, 1200)
-        img.thumbnail(max_size, Image.Resampling.LANCZOS)
+        # Extrai o hash do atributo disponível na entidade ('senha' ou 'senha_hash')
+    hash_salvo = getattr(objeto_usuario, 'senha', None) or getattr(objeto_usuario, 'senha_hash', None)
 
-        img.save(os.path.join(pasta_destino, nome_arquivo), "WEBP", quality=85)
-        return nome_arquivo
-    except Exception as e:
-        current_app.logger.error(f"Erro ao processar imagem de postagem: {str(e)}")
-        return None
-
-
-def salvar_imagem_capa(foto, usuario_id):
-    """Otimiza e redimensiona a imagem de capa do perfil para o teto de 1200px de largura."""
-    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
-        return None
-
-    nome_arquivo = f"capa_{usuario_id}_{int(datetime.now().timestamp())}.webp"
-    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'capas')
-    os.makedirs(pasta_destino, exist_ok=True)
+    if not hash_salvo:
+        return False
 
     try:
-        img = Image.open(foto)
+        # Garante que o hash_salvo seja string para análise dos prefixos
+        if isinstance(hash_salvo, bytes):
+            hash_salvo_str = hash_salvo.decode('utf-8', errors='ignore')
+        else:
+            hash_salvo_str = str(hash_salvo)
 
-        # 1. Corrige orientação EXIF
-        img = ImageOps.exif_transpose(img)
+        # 1. Caso 1: Hash no padrão Bcrypt ($2a$, $2b$, $2y$)
+        if hash_salvo_str.startswith(('$2a$', '$2b$', '$2y$')):
+            # Converte AMBOS estritamente para bytes
+            senha_bytes = senha_digitada.encode('utf-8')
+            hash_bytes = hash_salvo_str.encode('utf-8') if isinstance(hash_salvo, str) else hash_salvo
 
-        # 2. Converte para RGB tratando transparências
-        if img.mode in ("RGBA", "LA", "P"):
-            fundo = Image.new('RGB', img.size, (255, 255, 255))
-            fundo.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
-            img = fundo
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
+            return bcrypt.checkpw(senha_bytes, hash_bytes)
 
-        # 3. Configuração para Capas: Proporcional com largura alvo de 1200px
-        largura_alvo = 1200
-        proporcao = largura_alvo / float(img.size[0])
-        altura_alvo = int((float(img.size[1]) * float(proporcao)))
+        # 2. Caso 2: Hash no padrão Werkzeug (pbkdf2, scrypt, etc.)
+        if ':' in hash_salvo_str or hash_salvo_str.startswith('scrypt:'):
+            return check_password_hash(hash_salvo_str, senha_digitada)
 
-        img = img.resize((largura_alvo, altura_alvo), Image.Resampling.LANCZOS)
+        # 3. Caso 3: Comparação legada (Texto Plano)
+        return hash_salvo_str == senha_digitada
 
-        caminho_completo = os.path.join(pasta_destino, nome_arquivo)
-        img.save(caminho_completo, "WEBP", quality=80)
-        return nome_arquivo
-    except Exception as e:
-        current_app.logger.error(f"Erro ao processar imagem de capa: {str(e)}")
-        return None
+    except Exception as err:
+        if current_app:
+            # Removidos emojis para evitar UnicodeEncodeError em terminais Windows (cp1252)
+            current_app.logger.error(f"[AUTH] Falha ao verificar hash de senha: {err}")
+        return False
 
 
-def salvar_imagem_anuncio(foto, local_id):
-    """Processa e otimiza a imagem/flyer de publicidade de estabelecimentos locais."""
-    if not foto or not hasattr(foto, 'filename') or foto.filename == '':
-        return None
+# feedin/utils/alfandega.py
 
-    nome_arquivo = f"anuncio_{local_id}_{int(datetime.now().timestamp())}.webp"
-    pasta_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'anuncios')
-    os.makedirs(pasta_destino, exist_ok=True)
+def buscar_convites_pendentes_usuario(usuario):
+    """
+    Verifica se o CPF do usuário logado possui algum convite
+    de admissão pendente no banco de dados.
+    """
+    from feedin.modules.empresa.models import EseConviteColaborador
+    cpf_limpo = getattr(usuario, 'cpf', '') or ''
+    if not cpf_limpo:
+        return []
 
-    caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+    cpf_hash = EseConviteColaborador.gerar_hash_cpf(cpf_limpo)
+    return EseConviteColaborador.query.filter_by(
+        cpf_hash=cpf_hash,
+        status='pendente'
+    ).all()
 
-    try:
-        img = Image.open(foto)
 
-        # 1. Corrige orientação EXIF
-        img = ImageOps.exif_transpose(img)
+# utils.py
+# feedin/utils.py
+from feedin.models import Local
 
-        # 2. Converte para RGB tratando transparências
-        if img.mode in ("RGBA", "LA", "P"):
-            fundo = Image.new('RGB', img.size, (255, 255, 255))
-            fundo.paste(img, mask=img.split()[3] if img.mode == "RGBA" else None)
-            img = fundo
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
 
-        # 3. Redimensionamento Proporcional de Segurança
-        LIMITE_MAXIMO = 1200
-        largura, altura = img.size
+def validar_cpf(cpf: str) -> bool:
+    """
+    🧮 Valida os dígitos verificadores (DV) do CPF usando o algoritmo oficial.
+    """
+    if len(cpf) != 11 or cpf == cpf[0] * 11:
+        return False
 
-        if largura > LIMITE_MAXIMO or altura > LIMITE_MAXIMO:
-            if largura > altura:
-                nova_largura = LIMITE_MAXIMO
-                nova_altura = int((altura * LIMITE_MAXIMO) / largura)
+    # Primeiro dígito verificador
+    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+    resto = (soma * 10) % 11
+    digito_1 = resto if resto < 10 else 0
+    if int(cpf[9]) != digito_1:
+        return False
+
+    # Segundo dígito verificador
+    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+    resto = (soma * 10) % 11
+    digito_2 = resto if resto < 10 else 0
+    if int(cpf[10]) != digito_2:
+        return False
+
+    return True
+
+
+def validar_cnpj(cnpj: str) -> bool:
+    """
+    🧮 Valida os dígitos verificadores (DV) do CNPJ usando o algoritmo oficial.
+    """
+    if len(cnpj) != 14 or cnpj == cnpj[0] * 14:
+        return False
+
+    pesos_d1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    pesos_d2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+
+    # Primeiro dígito verificador
+    soma = sum(int(cnpj[i]) * pesos_d1[i] for i in range(12))
+    resto = soma % 11
+    digito_1 = 0 if resto < 2 else 11 - resto
+    if int(cnpj[12]) != digito_1:
+        return False
+
+    # Segundo dígito verificador
+    soma = sum(int(cnpj[i]) * pesos_d2[i] for i in range(13))
+    resto = soma % 11
+    digito_2 = 0 if resto < 2 else 11 - resto
+    if int(cnpj[13]) != digito_2:
+        return False
+
+    return True
+
+
+def calcular_status_funcionamento(empresa_id, agora=None):
+    """
+    Calcula o status de funcionamento em tempo real considerando a hierarquia:
+    1º EmpresaCalendarioExcecao (Prioridade Máxima)
+    2º CadastroFeriado (Feriados Oficiais com abrangencia != 'sazonal')
+    3º EseHorarioFuncionamento (Grade Comercial Semanal)
+    """
+    from feedin.modules.empresa.models import EmpresaCalendarioExcecao, CadastroFeriado, EseHorarioFuncionamento
+    if not agora:
+        tz = pytz.timezone('America/Sao_Paulo')
+        agora = datetime.now(tz)
+
+    data_hoje = agora.date()
+    hora_atual = agora.time()
+
+    # Mapeamento: Python (0=Seg ... 6=Dom) -> Banco (0=Dom, 1=Seg ... 6=Sáb)
+    dia_semana_python = agora.weekday()
+    dia_semana_banco = (dia_semana_python + 1) % 7
+
+    # -------------------------------------------------------------------------
+    # 1. CAMADA DE EXCEÇÃO (EmpresaCalendarioExcecao)
+    # -------------------------------------------------------------------------
+    excecao = EmpresaCalendarioExcecao.query.filter_by(
+        empresa_id=empresa_id,
+        data_excecao=data_hoje
+    ).first()
+
+    if excecao:
+        if not excecao.trabalha_no_dia:
+            motivo = excecao.feriado_oficial.nome if excecao.feriado_oficial else "Recesso / Fechado"
+            return {
+                'status': 'fechado',
+                'texto': f"Fechado ({motivo})",
+                'badge': 'bg-danger text-white',
+                'detalhe': 'Sem expediente hoje',
+                'pode_agendar': False
+            }
+
+        if excecao.horario_abertura_excecao and excecao.horario_fechamento_excecao:
+            abertura = excecao.horario_abertura_excecao
+            fechamento = excecao.horario_fechamento_excecao
+
+            if abertura <= hora_atual <= fechamento:
+                return {
+                    'status': 'aberto',
+                    'texto': 'Aberto (Horário Especial)',
+                    'badge': 'bg-success text-white',
+                    'detalhe': f"Fecha às {fechamento.strftime('%H:%M')}",
+                    'pode_agendar': True
+                }
+            elif hora_atual < abertura:
+                return {
+                    'status': 'fechado',
+                    'texto': 'Fechado Agora',
+                    'badge': 'bg-danger text-white',
+                    'detalhe': f"Abre hoje às {abertura.strftime('%H:%M')}",
+                    'pode_agendar': True
+                }
             else:
-                nova_altura = LIMITE_MAXIMO
-                nova_largura = int((largura * LIMITE_MAXIMO) / altura)
+                return {
+                    'status': 'fechado',
+                    'texto': 'Fechado',
+                    'badge': 'bg-secondary text-white',
+                    'detalhe': 'Expediente encerrado por hoje',
+                    'pode_agendar': True
+                }
 
-            img = img.resize((nova_largura, nova_altura), Image.Resampling.LANCZOS)
+    # -------------------------------------------------------------------------
+    # 2. CAMADA DE FERIADO CIVIL (CadastroFeriado)
+    # -------------------------------------------------------------------------
+    if not excecao:
+        feriado = CadastroFeriado.query.filter(
+            CadastroFeriado.data == data_hoje,
+            CadastroFeriado.abrangencia != 'sazonal'
+        ).first()
 
-        img.save(caminho_completo, "WEBP", quality=85)
-        return nome_arquivo
-    except Exception as e:
-        current_app.logger.error(f"Erro ao processar imagem do anúncio: {str(e)}")
+        if feriado:
+            return {
+                'status': 'fechado',
+                'texto': f"Fechado ({feriado.nome})",
+                'badge': 'bg-warning text-dark',
+                'detalhe': 'Feriado oficial - sem expediente',
+                'pode_agendar': False
+            }
+
+    # -------------------------------------------------------------------------
+    # 3. CAMADA DE GRADE SEMANAL NORMAL (EseHorarioFuncionamento)
+    # -------------------------------------------------------------------------
+    turnos = EseHorarioFuncionamento.query.filter_by(
+        empresa_id=empresa_id,
+        dia_semana=dia_semana_banco
+    ).order_by(EseHorarioFuncionamento.periodo_id).all()
+
+    if not turnos:
+        return {
+            'status': 'fechado',
+            'texto': 'Fechado Hoje',
+            'badge': 'bg-secondary text-white',
+            'detalhe': 'Não abre neste dia da semana',
+            'pode_agendar': False
+        }
+
+    for turno in turnos:
+        if turno.horario_abertura <= hora_atual <= turno.horario_fechamento:
+            return {
+                'status': 'aberto',
+                'texto': 'Aberto agora',
+                'badge': 'bg-success text-white',
+                'detalhe': f"Fecha às {turno.horario_fechamento.strftime('%H:%M')}",
+                'pode_agendar': True
+            }
+
+    if len(turnos) > 1 and turnos[0].horario_fechamento < hora_atual < turnos[1].horario_abertura:
+        return {
+            'status': 'intervalo',
+            'texto': 'Em Pausa / Almoço',
+            'badge': 'bg-warning text-dark',
+            'detalhe': f"Retorna às {turnos[1].horario_abertura.strftime('%H:%M')}",
+            'pode_agendar': True
+        }
+
+    primeiro_turno = turnos[0]
+    if hora_atual < primeiro_turno.horario_abertura:
+        detalhe_str = f"Abre hoje às {primeiro_turno.horario_abertura.strftime('%H:%M')}"
+    else:
+        detalhe_str = "Expediente encerrado por hoje"
+
+    return {
+        'status': 'fechado',
+        'texto': 'Fechado agora',
+        'badge': 'bg-danger text-white',
+        'detalhe': detalhe_str,
+        'pode_agendar': True
+    }
+
+
+def _parse_profissional_id(raw_id):
+    """Função auxiliar para tratar o parâmetro profissional_id vindo da query string."""
+    if raw_id and raw_id != 'qualquer' and str(raw_id).isdigit():
+        return int(raw_id)
+    return None
+
+
+def _converter_dia_semana_python_para_ese(dia_python):
+    """
+    Python weekday(): 0=Segunda, 1=Terça, ..., 5=Sábado, 6=Domingo
+    EseHorarioFuncionamento: 0=Domingo, 1=Segunda, ..., 6=Sábado
+    """
+    return (dia_python + 1) % 7
+
+
+def converter_duracao_para_minutos(valor_duracao) -> int:
+    """Converte valores de duração (str "HH:MM", timedelta, int ou None) para minutos inteiros."""
+    if not valor_duracao:
+        return 30
+    if isinstance(valor_duracao, timedelta):
+        return int(valor_duracao.total_seconds() // 60)
+    if isinstance(valor_duracao, int):
+        return valor_duracao
+    if isinstance(valor_duracao, str):
+        partes = valor_duracao.strip().split(':')
+        try:
+            if len(partes) >= 2:
+                return (int(partes[0]) * 60) + int(partes[1])
+            return int(partes[0])
+        except ValueError:
+            return 30
+    return 30
+
+
+def salvar_imagem_modulo(
+        arquivo: Union[FileStorage, BytesIO],
+        tipo_midia: str,
+        identificador: Union[int, str],
+        empresa_id: Optional[Union[int, str]] = None
+) -> Optional[str]:
+    """
+    Processador Unificado de Imagens Modular.
+
+    - Converte rigorosamente TODAS as imagens para .webp
+    - Respeita a estrutura isolada de pastas de cada Blueprint
+    - Retorna o caminho relativo apropriado para persistência no Banco de Dados
+    """
+    if not arquivo or not getattr(arquivo, 'filename', None):
         return None
+
+    config = CONFIG_IMAGENS.get(tipo_midia)
+    if not config:
+        current_app.logger.error(f"[UPLOAD] Tipo de mídia inválido: {tipo_midia}")
+        return None
+
+    try:
+        # 1. Normalização do Stream
+        if hasattr(arquivo, 'seek'):
+            arquivo.seek(0)
+
+        img = Image.open(arquivo)
+        img = ImageOps.exif_transpose(img)
+
+        # 2. Tratamento Inteligente de Transparência
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            # Preserva o canal Alpha para manter fundos vazados/transparentes no WebP
+            img = img.convert('RGBA')
+        elif img.mode != 'RGB':
+            # Mantém em RGB apenas imagens opacas (JPEGs, etc.) para otimizar tamanho
+            img = img.convert('RGB')
+
+        # 3. Otimização de Tamanho
+        img.thumbnail(config['tamanho'], Image.Resampling.LANCZOS)
+
+        # 4. Resolução da Pasta Física por Blueprint
+        modulo_alvo = config['modulo_alvo']
+        subpasta_template = config['subpasta']
+
+        # Formata subpasta dinamicamente se houver empresa_id
+        subpasta_relativa = subpasta_template.format(empresa_id=str(empresa_id or ''))
+
+        # Monta caminho físico do módulo correspondente
+        caminho_base_modulo = os.path.join(
+            current_app.root_path,
+            'modules',
+            modulo_alvo,
+            'static'
+        )
+
+        diretorio_destino = os.path.normpath(os.path.join(caminho_base_modulo, subpasta_relativa))
+        os.makedirs(diretorio_destino, exist_ok=True)
+
+        # 5. Nome do Arquivo WebP
+        codigo_hash = uuid.uuid4().hex[:8]
+        nome_arquivo = f"{tipo_midia}_{identificador}_{codigo_hash}.webp"
+        caminho_completo = os.path.join(diretorio_destino, nome_arquivo)
+
+        # 6. Salvar em WebP (preserva RGBA se for transparente, ou RGB se for opaco)
+        img.save(caminho_completo, 'WEBP', quality=config['qualidade'], optimize=True)
+
+        # 7. Limpeza de Versões Antigas do Mesmo Item
+        padrao_busca = os.path.join(diretorio_destino, f"{tipo_midia}_{identificador}_*.webp")
+        for arq_antigo in glob.glob(padrao_busca):
+            if os.path.abspath(arq_antigo) != os.path.abspath(caminho_completo):
+                try:
+                    os.remove(arq_antigo)
+                except OSError:
+                    pass
+
+        # Retorna o caminho relativo a partir do 'static' do módulo
+        # Exemplo: "Uploads/empresas/12/empresa_logo_12_a1b2c3d4.webp"
+        caminho_relativo_db = os.path.join(subpasta_relativa, nome_arquivo).replace('\\', '/')
+        return caminho_relativo_db
+
+    except Exception as e:
+        current_app.logger.exception(f"[ERRO UPLOAD] Falha ao salvar {tipo_midia} (ID {identificador}): {e}")
+        return None
+
+
+import os
+from flask import Blueprint, current_app, send_from_directory, abort
+
+media_bp = Blueprint('media_global', __name__)
+
+@media_bp.route('/media/<path:filename>')
+def servir_midia(filename):
+    """
+    Rota global para servir arquivos estáticos de uploads de qualquer módulo
+    (Agenda, Empresa, Core, etc.)
+    """
+    # 1. Normalização do caminho (limpa barras e retira prefixo 'uploads/' duplicado)
+    filename = filename.replace('\\', '/').lstrip('/')
+    if filename.startswith('uploads/'):
+        filename = filename[len('uploads/'):]
+
+    # 2. Caminho raiz da aplicação (pasta 'feedin')
+    base_dir = current_app.root_path
+
+    # 3. Mapeamento de todos os diretórios onde arquivos de mídia/uploads podem existir
+    pastas_busca = [
+        # Uploads do Módulo Agenda
+        os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads'),
+        # Uploads do Módulo Empresa
+        os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads'),
+        # Uploads do Módulo Core / Raiz
+        os.path.join(base_dir, 'static', 'uploads'),
+        # Fallback configurado no app.config
+        current_app.config.get('UPLOAD_FOLDER', '')
+    ]
+
+    # 4. Procura o arquivo nas pastas configuradas
+    for pasta in pastas_busca:
+        if not pasta:
+            continue
+        caminho_completo = os.path.join(pasta, filename)
+        if os.path.isfile(caminho_completo):
+            return send_from_directory(pasta, filename)
+
+    # 5. Log de diagnóstico caso não encontre
+    current_app.logger.error(
+        f"[MEDIA 404] Arquivo '{filename}' não localizado em nenhuma das pastas de upload."
+    )
+    abort(404)

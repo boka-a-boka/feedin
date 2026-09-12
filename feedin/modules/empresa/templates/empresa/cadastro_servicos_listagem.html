@@ -50,7 +50,7 @@
                     <label class="form-label small fw-semibold text-dark mb-1">Buscar ou Criar Nome do Serviço</label>
                     <div class="input-group">
                         <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                        <input type="text" id="campoBuscaTaxonomia" name="termo_servico" class="form-control border border-secondary-subtle border-start-0" placeholder="Ex: Corte feminino, Barboterapia..." autocomplete="off" required>
+                        <input type="text" id="campoBuscaTaxonomia" name="termo_servico" class="form-control border border-secondary-subtle border-start-0" placeholder="Ex: Corte Feminino, Lavagem Completa..." autocomplete="off" required>
                     </div>
                     {# container para exibir os resultados do autocomplete em tempo real #}
                     <div id="resultadosAutocomplete" class="list-group position-absolute w-100 shadow-lg d-none" style="z-index: 1050; max-height: 200px; overflow-y: auto;"></div>
@@ -62,14 +62,32 @@
                     <textarea name="descricao_servico" class="form-control border border-secondary-subtle" rows="2" placeholder="Ex: Lavagem com shampoo especial, secagem estruturada e finalização." style="font-size: 0.85rem;"></textarea>
                 </div>
 
-                {# DURAÇÃO PADRÃO #}
-                <div class="mb-3">
-                    <label class="form-label small fw-semibold text-dark mb-1">Tempo de Duração Estimado</label>
-                    <div class="input-group" style="max-width: 150px;">
-                        <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-clock"></i></span>
-                        <input type="text" name="tempo_duracao" class="form-control border border-secondary-subtle border-start-0 text-center fw-bold" placeholder="00:30" v-maska data-maska="##:##" value="00:30" required>
+                {# TEMPOS: DURAÇÃO E INTERVALO DE PREPARAÇÃO #}
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-dark mb-1">Duração Estimada</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-clock"></i></span>
+                            <input type="text" name="tempo_duracao" class="form-control border border-secondary-subtle border-start-0 text-center fw-bold" placeholder="00:30" v-maska data-maska="##:##" value="00:30" required>
+                        </div>
+                        <div class="form-text" style="font-size: 0.65rem;">Formato HH:mm</div>
                     </div>
-                    <div class="form-text" style="font-size: 0.65rem;">Formato HH:mm (Horas e minutos).</div>
+
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-dark mb-1">Intervalo / Pausa</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-pause-circle"></i></span>
+                            <select name="tempo_intervalo" class="form-select border border-secondary-subtle border-start-0 fw-semibold text-dark" style="font-size: 0.85rem;">
+                                <option value="0" selected>Sem intervalo</option>
+                                <option value="5">5 minutos</option>
+                                <option value="10">10 minutos</option>
+                                <option value="15">15 minutos</option>
+                                <option value="20">20 minutos</option>
+                                <option value="30">30 minutos</option>
+                            </select>
+                        </div>
+                        <div class="form-text" style="font-size: 0.65rem;">Tempo extra de higienização</div>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold py-2 mt-2" style="font-size: 0.85rem;">
@@ -87,24 +105,100 @@
 
             {% if servicos_cadastrados %}
                 <div class="d-flex flex-column gap-2">
-                    {% for servico in servicos_cadastrados %}
+                    {# Ordenação alfabética diretamente pelo atributo servico_taxonomia.nome #}
+                    {% for servico in servicos_cadastrados | sort(attribute='servico_taxonomia.nome', case_sensitive=False) %}
                         <div class="p-3 border border-secondary-subtle rounded-4 d-flex justify-content-between align-items-center bg-light-subtle">
                             <div class="pe-2">
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">{{ servico.servico_taxonomia.nome }}</h6>
                                 {% if servico.descricao_servico %}
                                     <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">{{ servico.descricao_servico }}</p>
                                 {% endif %}
-                                <div class="mt-1 d-flex align-items-center gap-2">
-                                    <span class="badge bg-dark-subtle text-dark-emphasis rounded-pill" style="font-size: 0.6rem;"><i class="bi bi-clock me-1"></i>{{ servico.tempo_duracao }}</span>
+                                <div class="mt-2 d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="badge bg-dark-subtle text-dark-emphasis rounded-pill" style="font-size: 0.65rem;">
+                                        <i class="bi bi-clock me-1"></i>Duração: {{ servico.tempo_duracao }}
+                                    </span>
+                                    {% if servico.tempo_intervalo and servico.tempo_intervalo | int > 0 %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill" style="font-size: 0.65rem;">
+                                            <i class="bi bi-pause-circle me-1"></i>+{{ servico.tempo_intervalo }} min intervalo
+                                        </span>
+                                    {% endif %}
                                 </div>
                             </div>
-                            <div>
+                            <div class="d-flex align-items-center gap-1">
+                                {# Botão para abrir o Modal de Edição #}
+                                <button type="button"
+                                        class="btn btn-outline-secondary btn-sm rounded-circle border-0 p-2 d-flex align-items-center justify-content-center"
+                                        style="width: 32px; height: 32px;"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#modalEditarServico{{ servico.id }}"
+                                        title="Editar serviço">
+                                    <i class="bi bi-pencil-fill"></i>
+                                </button>
+
+                                {# Form de Exclusão #}
                                 <form action="{{ url_for('empresa.excluir_servico_empresa', empresa_id=ese_empresa.id, servico_id=servico.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover este serviço oferecido?');">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-circle border-0 p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm rounded-circle border-0 p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" title="Excluir serviço">
                                         <i class="bi bi-trash3-fill"></i>
                                     </button>
                                 </form>
+                            </div>
+                        </div>
+
+                        {# MODAL DE EDIÇÃO DO SERVIÇO #}
+                        <div class="modal fade" id="modalEditarServico{{ servico.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content rounded-4 border-0 shadow">
+                                    <div class="modal-header border-bottom-0 pb-0">
+                                        <h6 class="modal-title fw-bold text-dark">
+                                            <i class="bi bi-pencil-square text-danger me-2"></i>Editar {{ servico.servico_taxonomia.nome }}
+                                        </h6>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+
+                                    <form action="{{ url_for('empresa.editar_servico_empresa', empresa_id=ese_empresa.id, servico_id=servico.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                        <div class="modal-body py-3">
+                                            {# DESCRIÇÃO #}
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-semibold text-dark mb-1">Descrição do Serviço</label>
+                                                <textarea name="descricao_servico" class="form-control border border-secondary-subtle" rows="2" style="font-size: 0.85rem;">{{ servico.descricao_servico or '' }}</textarea>
+                                            </div>
+
+                                            {# TEMPOS: DURAÇÃO E INTERVALO #}
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-semibold text-dark mb-1">Duração Estimada</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-clock"></i></span>
+                                                        <input type="text" name="tempo_duracao" class="form-control border border-secondary-subtle border-start-0 text-center fw-bold" placeholder="00:30" v-maska data-maska="##:##" value="{{ servico.tempo_duracao }}" required>
+                                                    </div>
+                                                </div>
+
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-semibold text-dark mb-1">Intervalo / Pausa</label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text bg-white border border-secondary-subtle border-end-0 text-muted"><i class="bi bi-pause-circle"></i></span>
+                                                        <select name="tempo_intervalo" class="form-select border border-secondary-subtle border-start-0 fw-semibold text-dark" style="font-size: 0.85rem;">
+                                                            <option value="0" {% if servico.tempo_intervalo | int == 0 %}selected{% endif %}>Sem intervalo</option>
+                                                            <option value="5" {% if servico.tempo_intervalo | int == 5 %}selected{% endif %}>5 minutos</option>
+                                                            <option value="10" {% if servico.tempo_intervalo | int == 10 %}selected{% endif %}>10 minutos</option>
+                                                            <option value="15" {% if servico.tempo_intervalo | int == 15 %}selected{% endif %}>15 minutos</option>
+                                                            <option value="20" {% if servico.tempo_intervalo | int == 20 %}selected{% endif %}>20 minutos</option>
+                                                            <option value="30" {% if servico.tempo_intervalo | int == 30 %}selected{% endif %}>30 minutos</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="modal-footer border-top-0 pt-0">
+                                            <button type="button" class="btn btn-light rounded-pill btn-sm text-muted" data-bs-dismiss="modal">Cancelar</button>
+                                            <button type="submit" class="btn btn-danger rounded-pill btn-sm px-3 fw-bold">Salvar Alterações</button>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     {% endfor %}
@@ -126,59 +220,76 @@ document.addEventListener("DOMContentLoaded", function() {
     const campoBusca = document.getElementById("campoBuscaTaxonomia");
     const containerResultados = document.getElementById("resultadosAutocomplete");
 
-    // Injeta a URL base gerada dinamicamente pelo Flask
     const urlBuscaBase = "{{ url_for('empresa.api_buscar_taxonomia') }}";
+
+    let timeoutId = null;
 
     campoBusca.addEventListener("input", function() {
         const query = this.value.trim();
+
+        clearTimeout(timeoutId);
+
         if (query.length < 2) {
             containerResultados.classList.add("d-none");
             containerResultados.innerHTML = "";
             return;
         }
 
-        // Faz a requisição na URL correta resolvida pela Blueprint do Flask
-        fetch(`${urlBuscaBase}?q=${encodeURIComponent(query)}&categoria=Serviço`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Erro na requisição de busca");
-                }
-                return response.json();
-            })
-            .then(data => {
-                containerResultados.innerHTML = "";
-                if (data.length > 0) {
-                    data.forEach(item => {
+        timeoutId = setTimeout(() => {
+            fetch(`${urlBuscaBase}?q=${encodeURIComponent(query)}&categoria=Serviço`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Erro na requisição da API");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    containerResultados.innerHTML = "";
+
+                    if (data && data.length > 0) {
+                        data.forEach(item => {
+                            const div = document.createElement("div");
+                            div.className = "list-group-item list-group-item-action resultado-busca-item py-2 px-3 small border-0 border-bottom bg-white";
+                            div.innerHTML = `<i class="bi bi-tag-fill text-danger me-2"></i><strong>${item.nome}</strong>`;
+
+                            div.addEventListener("mousedown", function(e) {
+                                e.preventDefault();
+                                campoBusca.value = item.nome;
+                                containerResultados.classList.add("d-none");
+                            });
+
+                            containerResultados.appendChild(div);
+                        });
+                    } else {
                         const div = document.createElement("div");
-                        div.className = "list-group-item list-group-item-action resultado-busca-item py-2 px-3 small border-0 border-bottom bg-white";
-                        div.innerHTML = `<i class="bi bi-tag-fill text-muted me-2"></i><strong>${item.nome}</strong>`;
-                        div.addEventListener("click", function() {
-                            campoBusca.value = item.nome;
+                        div.className = "list-group-item list-group-item-action resultado-busca-item py-2 px-3 small border-0 bg-white";
+                        div.innerHTML = `<i class="bi bi-plus-circle-fill text-danger me-2"></i>Criar novo termo: "<strong>${query}</strong>"`;
+
+                        div.addEventListener("mousedown", function(e) {
+                            e.preventDefault();
+                            campoBusca.value = query;
                             containerResultados.classList.add("d-none");
                         });
+
                         containerResultados.appendChild(div);
-                    });
-                } else {
-                    const div = document.createElement("div");
-                    div.className = "list-group-item text-muted py-2 px-3 small border-0 bg-white";
-                    div.innerHTML = `<i class="bi bi-plus-circle text-danger me-2"></i>Criar novo termo: "<strong>${query}</strong>"`;
-                    div.addEventListener("click", function() {
-                        campoBusca.value = query;
-                        containerResultados.classList.add("d-none");
-                    });
-                    containerResultados.appendChild(div);
-                }
-                containerResultados.classList.remove("d-none");
-            })
-            .catch(error => {
-                console.error("Erro no Autocomplete:", error);
-            });
+                    }
+                    containerResultados.classList.remove("d-none");
+                })
+                .catch(error => {
+                    console.error("Erro no Autocomplete:", error);
+                });
+        }, 200);
     });
 
-    // Fecha a lista ao clicar fora do campo de busca
     document.addEventListener("click", function(e) {
-        if (e.target !== campoBusca) {
+        if (!campoBusca.contains(e.target) && !containerResultados.contains(e.target)) {
             containerResultados.classList.add("d-none");
+        }
+    });
+
+    campoBusca.addEventListener("focus", function() {
+        if (this.value.trim().length >= 2 && containerResultados.children.length > 0) {
+            containerResultados.classList.remove("d-none");
         }
     });
 });

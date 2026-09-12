@@ -271,11 +271,20 @@ class Apelidos(database.Model):
     # Se na classe Perfil você usou backref='perfil_dono', aqui deve ser:
     id_perfil = database.Column(database.Integer, database.ForeignKey('perfil.id'), nullable=False)
 
-# Cria tabela de Gêneros
+
 class Generos(database.Model):
+    """
+    📋 TABELA DE DOMÍNIO: GÊNEROS
+    ----------------------------------------------------------------------------------
+    Tabela de referência para seleção unificada de gêneros/sexo.
+    Utilizada na qualificação de dependentes humanos e pets.
+    """
+    __tablename__ = 'generos'
     __table_args__ = {'extend_existing': True}
+
     id = database.Column(database.Integer, primary_key=True)
-    genero = database.Column(database.String(50), nullable=False)
+    genero = database.Column(database.String(50), nullable=False) # Ex: Masculino, Feminino, Fêmea, Macho, Outro, Não Informado
+
 
 # Cria tabela de Estado Civil
 class EstadoCivil(database.Model):
@@ -530,6 +539,7 @@ class Local(database.Model):
         soma = sum(a.nota for a in avaliacoes)
         media = round(soma / len(avaliacoes), 1)
         return {'media': media, 'total': len(avaliacoes)}
+
 
 class LocalMidia(database.Model):
     __tablename__ = 'local_midias'
@@ -1330,7 +1340,14 @@ class ModulosSistema(database.Model):
     cor_hex = database.Column(database.String(7), default='#111827')  # Ex: '#0284c7'
 
     ativo = database.Column(database.Boolean, default=True)  # Permite desligar um módulo globalmente se necessário
+
+    # No model ModulosSistema:
+    is_em_desenvolvimento = database.Column(database.Boolean, default=False)  # Visível apenas para Admins/Devs
+    descricao_curta = database.Column(database.String(150))  # Para o card do cardápio
+    apresentacao_html = database.Column(database.Text)  # Apresentação institucional/técnica completa (modal ou página)
+    preco_mensal = database.Column(database.Numeric(10, 2), default=0.00)  # Se houver custo de adesão
     created_at = database.Column(database.DateTime, default=lambda: datetime.now(timezone.utc))
+
 
     def __repr__(self):
         return f"<ModuloSistema {self.nome} ({self.slug})>"

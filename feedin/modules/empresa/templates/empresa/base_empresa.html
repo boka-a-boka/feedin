@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}Acesso Urbana | Módulo Empresas & Negócios{% endblock %}</title>
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
@@ -67,10 +68,10 @@
             <div class="text-center mb-4">
                 <div class="d-inline-flex p-3 bg-white text-biz-primary rounded-4 shadow-sm border mb-2">
                     {% if empresa and empresa.logomarca %}
-                        <img src="{{ url_for('empresa.static', filename=empresa.logomarca) }}"
-                             alt="Logo {{ empresa.nome }}" 
-                             class="rounded-circle"
-                             style="width: 50px; height: 50px; object-fit: cover;">
+                        <img src="{{ media_url('empresa', empresa.logomarca) }}"
+                             alt="Logo {{ empresa.nome }}"
+                             class="rounded-3"
+                             style="width: 50px; height: 50px; object-fit: contain;">
                     {% else %}
                         <i class="{{ modulos_sistema.icone if modulos_sistema else 'bi-building' }}" style="font-size: 2.5rem;"></i>
                     {% endif %}

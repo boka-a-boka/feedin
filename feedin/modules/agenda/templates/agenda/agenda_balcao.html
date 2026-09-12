@@ -1,0 +1,493 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block content %}
+{% set cor_empresa = empresa.cor_primaria if empresa.cor_primaria else '#0d6efd' %}
+
+{# 1. HEADER DINÂMICO DE ATENDIMENTO OPERACIONAL #}
+<div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+
+    {# LINHA SUPERIOR: VOLTAR + CRACHÁ DO PROFISSIONAL #}
+    <div class="d-flex align-items-center gap-2 min-w-0">
+
+        <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}"
+           class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center flex-shrink-0"
+           style="width: 40px; height: 40px;"
+           title="Voltar para a Vitrine">
+            <i class="bi bi-arrow-left fs-5 text-white"></i>
+        </a>
+
+        <div class="position-relative flex-shrink-0 ms-1" style="width: 54px; height: 70px;">
+            {% if current_user.foto_url %}
+                <img src="{{ url_for('agenda.static', filename=current_user.foto_url.replace('agenda/', '')) }}"
+                     alt="Foto de {{ current_user.nome }}"
+                     class="rounded-3 border shadow-sm w-100 h-100"
+                     style="object-fit: cover;">
+            {% else %}
+                <div class="rounded-3 text-white d-flex align-items-center justify-content-center fw-bold fs-3 border shadow-sm w-100 h-100"
+                     style="background-color: {{ cor_empresa }};">
+                    {{ (current_user.nome or 'U')[0] | upper }}
+                </div>
+            {% endif %}
+
+            <span class="position-absolute bottom-0 end-0 badge rounded-circle p-1 border border-white bg-success"
+                  title="Sessão Operacional Ativa"
+                  style="font-size: 0.48rem; transform: translate(20%, 20%);">
+                <i class="bi bi-circle-fill"></i>
+            </span>
+        </div>
+
+        <div class="text-truncate ps-1">
+            <div class="d-flex align-items-center gap-1 mb-1 flex-wrap">
+                <span class="badge rounded-pill px-2 py-0.5 text-white fw-semibold"
+                      style="font-size: 0.63rem; background-color: {{ cor_empresa }};">
+                    <i class="bi bi-person-badge me-1"></i>{{ cargo_atribuicao }}
+                </span>
+
+                {% if eh_destaque_mes %}
+                    <span class="badge bg-warning text-dark rounded-pill px-2 py-0.5 fw-bold" style="font-size: 0.60rem;">
+                        <i class="bi bi-star-fill text-dark me-1"></i>Destaque
+                    </span>
+                {% endif %}
+            </div>
+
+            <h5 class="fw-bold text-dark m-0 text-truncate" style="font-size: 1.02rem;">
+                {% set hora = agora.hour if agora else 12 %}
+                {% if hora < 12 %}Bom dia,{% elif hora < 18 %}Boa tarde,{% else %}Boa noite,{% endif %}
+                {{ (current_user.nome or 'Colaborador').split()[0] }}!
+            </h5>
+
+            <small class="text-secondary d-block mt-0.5 text-truncate" style="font-size: 0.72rem;">
+                <i class="bi bi-shop me-1"></i><strong>{{ empresa.nome }}</strong>
+            </small>
+        </div>
+    </div>
+
+    {# LINHA INFERIOR: AÇÕES HARMONIZADAS (GESTÃO ESQUERDA | AGENDAR CENTRO | NOTIFICAÇÃO DIREITA) #}
+    <div class="d-flex align-items-center justify-content-between pt-3 mt-3 border-top gap-2">
+
+        {# ESQUERDA: GESTÃO (Se não for proprietário, mantém o espaço reservado/invisível para não desalinhá-lo) #}
+        <div class="d-flex align-items-center" style="min-width: 90px;">
+            {% if eh_proprietario %}
+                <a href="#" class="btn btn-dark btn-sm rounded-pill px-3 py-1.5 shadow-sm d-inline-flex align-items-center" title="Painel Gestor" style="font-size: 0.78rem;">
+                    <i class="bi bi-gear-fill me-1.5"></i> Gestão
+                </a>
+            {% else %}
+                <div></div>
+            {% endif %}
+        </div>
+
+        {# CENTRO: BOTÃO AGENDAR (EM DESTAQUE) #}
+        <div class="d-flex justify-content-center flex-grow-1">
+            <button type="button"
+                    class="btn btn-primary btn-sm rounded-pill px-4 py-1.5 shadow-sm fw-bold d-inline-flex align-items-center"
+                    style="font-size: 0.82rem;"
+                    onclick="abrirModalNovoAgendamento()">
+                <i class="bi bi-plus-lg me-1.5 fs-6"></i> Agendar
+            </button>
+        </div>
+
+        {# DIREITA: NOTIFICAÇÕES #}
+        <div class="d-flex justify-content-end align-items-center" style="min-width: 90px;">
+            <button class="btn btn-light bg-light border-0 rounded-circle position-relative p-2"
+                    type="button"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#offcanvasNotificacoesEmpresa"
+                    aria-controls="offcanvasNotificacoesEmpresa"
+                    title="Avisos do Balcão">
+                <i class="bi bi-bell-fill text-secondary fs-5"></i>
+                {% if total_notificacoes_nao_lidas and total_notificacoes_nao_lidas > 0 %}
+                    <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                {% endif %}
+            </button>
+        </div>
+
+    </div>
+</div>
+
+{# 2. MÉTRICAS RÁPIDAS NO TOPO #}
+<div class="row g-2 mb-3" id="containerMetricasBalcao">
+    <div class="col-3">
+        <div class="card border-0 rounded-4 shadow-sm p-2 text-center bg-white">
+            <span class="text-muted fw-semibold d-block" style="font-size: 0.68rem;">Total</span>
+            <h6 class="fw-bold text-dark m-0" id="metricTotal">{{ metricas_hoje.total if metricas_hoje else 0 }}</h6>
+        </div>
+    </div>
+    <div class="col-3">
+        <div class="card border-0 rounded-4 shadow-sm p-2 text-center bg-white border-start border-3 border-warning">
+            <span class="text-muted fw-semibold d-block" style="font-size: 0.68rem;">Pendentes</span>
+            <h6 class="fw-bold text-warning m-0" id="metricPendentes">{{ metricas_hoje.pendentes if metricas_hoje else 0 }}</h6>
+        </div>
+    </div>
+    <div class="col-3">
+        <div class="card border-0 rounded-4 shadow-sm p-2 text-center bg-white border-start border-3 border-success">
+            <span class="text-muted fw-semibold d-block" style="font-size: 0.68rem;">Concluídos</span>
+            <h6 class="fw-bold text-success m-0" id="metricConcluidos">{{ metricas_hoje.concluidos if metricas_hoje else 0 }}</h6>
+        </div>
+    </div>
+    <div class="col-3">
+        <div class="card border-0 rounded-4 shadow-sm p-2 text-center bg-white border-start border-3 border-danger">
+            <span class="text-muted fw-semibold d-block" style="font-size: 0.68rem;">Cancelados</span>
+            <h6 class="fw-bold text-danger m-0" id="metricCancelados">{{ metricas_hoje.cancelados if metricas_hoje else 0 }}</h6>
+        </div>
+    </div>
+</div>
+
+{# 3. CONTROLE SUPERIOR DA AGENDA: FILTROS + CARROSSEL DE DATAS #}
+<div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom flex-wrap">
+
+        {# SELETOR DE DATA NATIVO E ACESSÍVEL (Sem truques de JS/Flatpickr) #}
+        <div class="d-flex align-items-center gap-2">
+            <label for="inputDataAtendimento" class="form-label fw-bold mb-0 text-dark small">
+                <i class="bi bi-calendar-event-fill text-primary me-1"></i> Data:
+            </label>
+            <input type="date" 
+                   id="inputDataAtendimento" 
+                   name="data_filtro" 
+                   class="form-control form-control-sm rounded-pill fw-bold border-secondary-subtle"
+                   style="font-size: 0.82rem; max-width: 150px;"
+                   value="{{ hoje.strftime('%Y-%m-%d') }}">
+        </div>
+
+        {# FILTRO DE COLABORADOR E TROCA DE VISÃO #}
+        <div class="d-flex align-items-center gap-2">
+
+            <label for="selectFiltroColaborador" class="visually-hidden">Filtrar por Colaborador</label>
+            <select id="selectFiltroColaborador"
+                    name="filtro_colaborador_id"
+                    class="form-select form-select-sm {% if not eh_proprietario %}d-none{% endif %}"
+                    style="font-size: 0.82rem; min-width: 170px;"
+                    {% if not eh_proprietario %}disabled{% endif %}>
+
+                {% if eh_proprietario %}
+                    <option value="" selected>Todos os Profissionais</option>
+                    {% if profissionais_ativos %}
+                        {% for prof in profissionais_ativos %}
+                            <option value="{{ prof.id }}">{{ prof.nome_exibicao }}</option>
+                        {% endfor %}
+                    {% endif %}
+                {% else %}
+                    <option value="{{ contrato_ativo.id if contrato_ativo else '' }}" selected>
+                        {{ current_user.nome }}
+                    </option>
+                {% endif %}
+
+            </select>
+
+            <div class="btn-group btn-group-sm" role="group" aria-label="Modo de Visão Agenda">
+                <button type="button" id="btnVisaoSemana" class="btn btn-outline-primary active rounded-start-pill px-2.5" onclick="alterarVisaoGrid('semana')" style="font-size: 0.75rem;">Dia</button>
+                <button type="button" id="btnVisaoQuinzena" class="btn btn-outline-primary px-2.5" onclick="alterarVisaoGrid('quinzena')" style="font-size: 0.75rem;">Quinzena</button>
+                <button type="button" id="btnVisaoMes" class="btn btn-outline-primary rounded-end-pill px-2.5" onclick="alterarVisaoGrid('mes')" style="font-size: 0.75rem;">Mês</button>
+            </div>
+        </div>
+
+    </div>
+
+    {# CARROSSEL HORIZONTAL DE DATAS #}
+    <div class="d-flex align-items-center gap-2 overflow-x-auto py-1 no-scrollbar" id="carrosselDatasAgenda">
+        {# Injetado limpo via JS #}
+    </div>
+</div>
+
+{# 4. CONTAINER DA MATRIZ DE AGENDAMENTOS #}
+<div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4" id="areaMatrizAgenda">
+    <div class="text-center py-5 text-muted">
+        <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+        <span style="font-size: 0.88rem;">Carregando grade de atendimento...</span>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const empresaId = {{ empresa.id }};
+    const inputDataAtendimento = document.getElementById("inputDataAtendimento");
+
+    // Endpoints reais conforme definidos no seu Blueprint /agenda
+    const ENDPOINT_GRID = "/agenda/api/agendamentos-dia";
+    const ENDPOINT_METRICAS = "/agenda/api/metricas-dia";
+
+    function formatarIsoLocalDate(dateObj) {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function criarDataLocal(isoString) {
+        if (!isoString) return new Date();
+        const partes = isoString.split('-');
+        return new Date(partes[0], partes[1] - 1, partes[2]);
+    }
+
+    const EstadoGrid = {
+        dataBaseInicial: "{{ hoje.strftime('%Y-%m-%d') }}",
+        dataInicioJanela: criarDataLocal("{{ hoje.strftime('%Y-%m-%d') }}"),
+        dataSelecionada: "{{ hoje.strftime('%Y-%m-%d') }}",
+        tipoVisao: 'semana',
+        diasPorVisao: 7
+    };
+
+    let datasComAgendamento = [];
+    let diasAtendimentoColaborador = [0, 1, 2, 3, 4, 5, 6];
+
+    // Ouvinte do input de data nativo
+    if (inputDataAtendimento) {
+        inputDataAtendimento.addEventListener("change", function(e) {
+            const dataStr = e.target.value;
+            if (dataStr) {
+                EstadoGrid.dataSelecionada = dataStr;
+                EstadoGrid.dataInicioJanela = criarDataLocal(dataStr);
+                carregarMetricasEGrid();
+            }
+        });
+    }
+
+    function gerarCarrosselDatasVisual() {
+        const container = document.getElementById('carrosselDatasAgenda');
+        if (!container) return;
+
+        container.innerHTML = '';
+        const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+        const totalDiasRender = EstadoGrid.diasPorVisao;
+
+        for (let i = 0; i < totalDiasRender; i++) {
+            const d = new Date(EstadoGrid.dataInicioJanela);
+            d.setDate(d.getDate() + i);
+
+            const isoData = formatarIsoLocalDate(d);
+            const diaSemanaIndex = d.getDay();
+
+            const isSelected = (isoData === EstadoGrid.dataSelecionada);
+            const temAgendamento = datasComAgendamento.includes(isoData);
+            const atendeNoDia = diasAtendimentoColaborador.includes(diaSemanaIndex);
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+
+            if (!atendeNoDia) {
+                btn.className = `btn btn-sm btn-light text-muted opacity-50 border-0 rounded-4 p-2 text-center flex-shrink-0`;
+                btn.disabled = true;
+                btn.style.cursor = 'not-allowed';
+            } else if (isSelected) {
+                btn.className = `btn btn-sm btn-primary shadow-sm fw-bold rounded-4 p-2 text-center flex-shrink-0`;
+            } else {
+                const pesoFonte = temAgendamento ? 'fw-bold text-dark' : 'text-secondary';
+                btn.className = `btn btn-sm btn-light ${pesoFonte} border-0 rounded-4 p-2 text-center flex-shrink-0`;
+            }
+
+            btn.style.width = '52px';
+
+            if (atendeNoDia) {
+                btn.onclick = function() {
+                    EstadoGrid.dataSelecionada = isoData;
+                    if (inputDataAtendimento) inputDataAtendimento.value = isoData;
+                    carregarMetricasEGrid();
+                };
+            }
+
+            const destaqueClass = temAgendamento ? 'fw-bold' : '';
+
+            btn.innerHTML = `
+                <small class="d-block text-uppercase ${destaqueClass}" style="font-size: 0.60rem; opacity: 0.85;">
+                    ${diasSemana[diaSemanaIndex]}
+                </small>
+                <span class="fs-6 d-block lh-1 my-0.5 ${destaqueClass}">
+                    ${d.getDate()}
+                </span>
+            `;
+
+            container.appendChild(btn);
+        }
+    }
+
+    window.alterarVisaoGrid = function(tipo) {
+        EstadoGrid.tipoVisao = tipo;
+
+        const btnSemana = document.getElementById('btnVisaoSemana');
+        const btnQuinzena = document.getElementById('btnVisaoQuinzena');
+        const btnMes = document.getElementById('btnVisaoMes');
+
+        if (btnSemana) btnSemana.classList.remove('active');
+        if (btnQuinzena) btnQuinzena.classList.remove('active');
+        if (btnMes) btnMes.classList.remove('active');
+
+        if (tipo === 'semana') {
+            if (btnSemana) btnSemana.classList.add('active');
+            EstadoGrid.diasPorVisao = 7;
+        } else if (tipo === 'quinzena') {
+            if (btnQuinzena) btnQuinzena.classList.add('active');
+            EstadoGrid.diasPorVisao = 15;
+        } else if (tipo === 'mes') {
+            if (btnMes) btnMes.classList.add('active');
+            EstadoGrid.diasPorVisao = 30;
+        }
+
+        carregarMetricasEGrid();
+    };
+
+    function carregarMetricasEGrid() {
+        const colabSelect = document.getElementById('selectFiltroColaborador');
+        let colabId = colabSelect ? colabSelect.value.toString().trim() : '';
+
+        if (!colabId || colabId === 'undefined' || colabId === 'null' || colabId === '0' || colabId.toLowerCase() === 'todos') {
+            colabId = '';
+        }
+
+        const idEmpresaValido = (typeof empresaId !== 'undefined' && empresaId) ? empresaId : (window.EMPRESA_ID || '');
+        const diaExato = EstadoGrid.dataSelecionada;
+
+        const containerGrid = document.getElementById('areaMatrizAgenda');
+        if (containerGrid) {
+            containerGrid.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                    <span style="font-size: 0.88rem;">Carregando agendamentos...</span>
+                </div>
+            `;
+        }
+
+        // 1. Busca das Métricas do Dia (Passa rigorosamente os parâmetros esperados pelo Flask)
+        const paramsMetricasObj = {
+            empresa_id: idEmpresaValido,
+            data: diaExato
+        };
+        if (colabId) paramsMetricasObj.profissional_id = colabId;
+
+        const paramsMetricas = new URLSearchParams(paramsMetricasObj);
+
+        fetch(`${ENDPOINT_METRICAS}?${paramsMetricas.toString()}`)
+            .then(res => res.ok ? res.json() : {})
+            .then(data => {
+                const metricas = data.metricas || data;
+                const elTotal = document.getElementById('metricTotal');
+                const elPend = document.getElementById('metricPendentes');
+                const elConc = document.getElementById('metricConcluidos');
+                const elCanc = document.getElementById('metricCancelados');
+
+                if (elTotal) elTotal.innerText = metricas.total || 0;
+                if (elPend) elPend.innerText = metricas.pendentes || 0;
+                if (elConc) elConc.innerText = metricas.concluidos || 0;
+                if (elCanc) elCanc.innerText = metricas.cancelados || 0;
+            })
+            .catch(err => console.error('[BALCÃO] Erro ao carregar métricas:', err));
+
+        // 2. Busca dos Agendamentos do Dia
+        const paramsDiaObj = {
+            empresa_id: idEmpresaValido,
+            data: diaExato
+        };
+        if (colabId) paramsDiaObj.profissional_id = colabId;
+
+        const paramsDia = new URLSearchParams(paramsDiaObj);
+
+        fetch(`${ENDPOINT_GRID}?${paramsDia.toString()}`)
+            .then(async res => {
+                if (!res.ok) {
+                    const txt = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${txt}`);
+                }
+                return res.json();
+            })
+            .then(agendamentosDia => {
+                // Marca o dia atual no carrossel se houver agendamentos
+                if (Array.isArray(agendamentosDia) && agendamentosDia.length > 0) {
+                    if (!datasComAgendamento.includes(diaExato)) {
+                        datasComAgendamento.push(diaExato);
+                    }
+                }
+                gerarCarrosselDatasVisual();
+                renderizarGrid(agendamentosDia);
+            })
+            .catch(err => {
+                console.error('[BALCÃO] Erro ao carregar grid:', err);
+                if (containerGrid) {
+                    containerGrid.innerHTML = `
+                        <div class="text-center py-4 text-danger">
+                            <i class="bi bi-exclamation-triangle fs-4 d-block mb-1"></i>
+                            <span style="font-size: 0.85rem;">Não foi possível carregar a agenda deste dia.</span>
+                        </div>
+                    `;
+                }
+            });
+    }
+
+    function renderizarGrid(lista) {
+        const containerGrid = document.getElementById('areaMatrizAgenda');
+        if (!containerGrid) return;
+
+        if (!lista || lista.length === 0) {
+            containerGrid.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 text-secondary opacity-50 d-block mb-2"></i>
+                    <h6 class="fw-bold mb-1 text-dark" style="font-size: 0.95rem;">Nenhum agendamento para este período</h6>
+                    <p class="small mb-0 text-secondary">A agenda está livre no intervalo selecionado.</p>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '<div class="d-flex flex-column gap-2">';
+
+        lista.forEach(item => {
+            let badgeClass = 'bg-secondary';
+            const status = (item.status || 'pendente').toLowerCase();
+
+            if (status === 'pendente' || status === 'confirmado' || status === 'soft_lock') {
+                badgeClass = 'bg-warning text-dark';
+            } else if (status === 'concluido' || status === 'concluído') {
+                badgeClass = 'bg-success';
+            } else if (status === 'cancelado') {
+                badgeClass = 'bg-danger';
+            }
+
+            let servicosTexto = 'Atendimento';
+            if (Array.isArray(item.servicos) && item.servicos.length > 0) {
+                servicosTexto = item.servicos.join(', ');
+            } else if (typeof item.servicos === 'string' && item.servicos.trim() !== '') {
+                servicosTexto = item.servicos;
+            } else if (item.servico_nome) {
+                servicosTexto = item.servico_nome;
+            }
+
+            const horaExibicao = item.horario_inicio || item.hora_inicio || item.horario || '--:--';
+            const clienteExibicao = item.cliente_nome || item.cliente || 'Cliente Balcão';
+            const profExibicao = item.profissional_nome || item.profissional || 'Equipe';
+
+            html += `
+                <div class="card border-0 bg-light rounded-3 p-2.5 shadow-sm">
+                    <div class="d-flex align-items-center justify-content-between gap-2">
+                        <div class="d-flex align-items-center gap-2.5">
+                            <span class="badge bg-dark text-white rounded-pill px-2 py-1 fw-bold" style="font-size: 0.78rem;">
+                                <i class="bi bi-clock me-1"></i>${horaExibicao}
+                            </span>
+                            <div>
+                                <h6 class="fw-bold text-dark mb-0" style="font-size: 0.88rem;">${clienteExibicao}</h6>
+                                <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                    ${servicosTexto} • ${profExibicao}
+                                </small>
+                            </div>
+                        </div>
+                        <span class="badge ${badgeClass} rounded-pill px-2.5 py-1 text-uppercase fw-semibold" style="font-size: 0.65rem;">
+                            ${status}
+                        </span>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        containerGrid.innerHTML = html;
+    }
+
+    // Event listener do seletor de colaboradores
+    const colabSelect = document.getElementById('selectFiltroColaborador');
+    if (colabSelect && colabSelect.tagName === 'SELECT') {
+        colabSelect.addEventListener('change', carregarMetricasEGrid);
+    }
+
+    // Inicialização do módulo
+    carregarMetricasEGrid();
+});
+</script>
+{% endblock %}
