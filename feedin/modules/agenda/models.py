@@ -33,6 +33,7 @@ Tabelas Gerenciadas:
 ==========================================================================================
 """
 
+from datetime import datetime, timezone
 
 class AghAgendamento(db.Model):
     __tablename__ = 'agh_agendamento'
@@ -45,7 +46,7 @@ class AghAgendamento(db.Model):
         db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
     )
 
-    # 👤 VÍNCULO COM O PROFISSIONAL
+    # 👤 VÍNCULO COM O PROFISSIONAL (Principal / Responsável)
     profissional_id = db.Column(
         db.Integer,
         db.ForeignKey('colaborador_contratos.id'),
@@ -61,11 +62,11 @@ class AghAgendamento(db.Model):
         index=True,
     )
 
-    # 🐾/👤 VÍNCULO COM O BENEFICIÁRIO/PERSONA (NOVO CAMPO)
+    # 🐾/👤 VÍNCULO COM O BENEFICIÁRIO/PERSONA
     beneficiario_id = db.Column(
         db.Integer,
         db.ForeignKey('cliente_beneficiarios.id'),
-        nullable=True,  # Deixe True caso o atendimento possa ser do próprio titular
+        nullable=True,
         index=True,
     )
 
@@ -75,13 +76,12 @@ class AghAgendamento(db.Model):
     data_hora_fim = db.Column(db.DateTime, nullable=False)
 
     # ⚙️ STATUS E ORIGEM
+    # 'soft_lock', 'pendente', 'agendado', 'confirmado', 'aguardando',
+    # 'em_atendimento', 'concluido', 'finalizado', 'cancelado',
+    # 'ausente_pendente', 'reagendamento_pendente', 'reagendado'
     status = db.Column(
         db.String(30), default='soft_lock', nullable=False, index=True
     )
-    # Status atualizados:
-    # 'soft_lock', 'pendente', 'agendado', 'confirmado', 'aguardando',
-    # 'em_atendimento', 'concluido', 'finalizado', 'cancelado',
-    # 'ausente_pendente', 'reagendamento_pendente'
 
     tipo_origem = db.Column(db.String(20), default='online')
 
@@ -95,9 +95,16 @@ class AghAgendamento(db.Model):
     limite_reagendamento = db.Column(db.DateTime, nullable=True)
     teve_impacto_comportamental = db.Column(
         db.Boolean, default=False
-    )  # Marcação permanente no perfil
+    )
 
     criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # -------------------------------------------------------------------------
+    # RASTREABILIDADE DE REAGENDAMENTOS MÚLTIPLOS (LINHA DO TEMPO)
+    # -------------------------------------------------------------------------
+    agendamento_origem_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
+    agendamento_anterior_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
+    qtd_reagendamentos = db.Column(db.Integer, default=0, nullable=False)
 
     # RELACIONAMENTOS (ORM)
     empresa = db.relationship('EseEmpresa', backref='agendamentos', lazy=True)
@@ -107,10 +114,8 @@ class AghAgendamento(db.Model):
     cliente = db.relationship(
         'ModCadastroCliente', backref='agendamentos', lazy=True
     )
-
-    # NOVO RELACIONAMENTO:
     beneficiario = db.relationship(
-    'ClienteBeneficiario', backref = 'agendamentos', lazy = True
+        'ClienteBeneficiario', backref='agendamentos', lazy=True
     )
 
     itens = db.relationship(
@@ -126,9 +131,14 @@ class AghAgendamento(db.Model):
         lazy=True,
     )
 
-    # ----------------------------------------------------------------------------------
+    # Relacionamentos para navegar na árvore de histórico de reagendamentos
+    historico_posteriores = db.relationship(
+        'AghAgendamento',
+        foreign_keys=[agendamento_origem_id],
+        backref=db.backref('agendamento_raiz', remote_side=[id])
+    )
+
     # MÉTODOS ÚTEIS
-    # ----------------------------------------------------------------------------------
     def recalcular_total(self):
         total = sum(
             item.preco_unitario for item in self.itens if item.preco_unitario
@@ -140,37 +150,14 @@ class AghAgendamento(db.Model):
     def reagendamento_valido(self):
         """Verifica se o agendamento em ausência ainda está dentro da janela limite."""
         if (
-            self.status in ['ausente_pendente', 'reagendamento_pendente']
-            and self.limite_reagendamento
+                self.status in ['ausente_pendente', 'reagendamento_pendente']
+                and self.limite_reagendamento
         ):
             return datetime.utcnow() <= self.limite_reagendamento
         return False
 
     def __repr__(self):
-        return f'<AghAgendamento #{self.id} | Empresa #{self.empresa_id} | Profissional Contrato #{self.profissional_id} | Status: {self.status}>'
-
-    # -------------------------------------------------------------------------
-    # RASTREABILIDADE DE REAGENDAMENTOS MÚLTIPLOS (LINHA DO TEMPO)
-    # -------------------------------------------------------------------------
-    # Aponta para o PRIMEIRO agendamento da história (Data de Referência Vitalícia)
-    agendamento_origem_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
-
-    # Aponta para o agendamento imediatamente anterior (passo a passo)
-    agendamento_anterior_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
-
-    # Status do Ciclo de Vida:
-    # 'confirmado', 'em_andamento', 'concluido', 'reagendado', 'cancelado', 'falta'
-    status = db.Column(db.String(30), default='confirmado', nullable=False)
-
-    # Contador para auditoria rápida
-    qtd_reagendamentos = db.Column(db.Integer, default=0, nullable=False)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # Relacionamentos para navegar na árvore de histórico
-    historico_posteriores = db.relationship('AghAgendamento',
-                                            foreign_keys=[agendamento_origem_id],
-                                            backref=db.backref('agendamento_raiz', remote_side=[id]))
+        return f'<AghAgendamento #{self.id} | Empresa #{self.empresa_id} | Profissional #{self.profissional_id} | Status: {self.status}>'
 
 
 class AghAgendamentoItem(db.Model):
@@ -184,14 +171,14 @@ class AghAgendamentoItem(db.Model):
         nullable=False,
     )
 
-    # FK apontando para a nova tabela de serviços oferecidos
+    # FK apontando para os serviços oferecidos pela empresa
     servico_id = db.Column(
         db.Integer,
         db.ForeignKey('ese_servico_oferecido.id'),
         nullable=False
     )
 
-    # 📌 CORREÇÃO AQUI: 'colaborador_contratos.id' (no plural)
+    # FK apontando para o profissional responsável por ESTE item/serviço específico
     profissional_id = db.Column(
         db.Integer,
         db.ForeignKey('colaborador_contratos.id', ondelete='SET NULL'),
@@ -202,9 +189,17 @@ class AghAgendamentoItem(db.Model):
     duracao_minutos = db.Column(db.Integer, nullable=False, default=30)
     ordem_execucao = db.Column(db.Integer, default=1)
 
-    # ----------------------------------------------------------------------------------
+    # HORÁRIOS PREVISTOS/ESPECÍFICOS DO ITEM (Janela planejada na grade)
+    data_hora_inicio = db.Column(db.DateTime, nullable=True)
+    data_hora_fim = db.Column(db.DateTime, nullable=True)
+
+    # 📌 AJUSTES PONTUAIS: EXECUÇÃO REAL E AUDITORIA DO ITEM
+    status_item = db.Column(db.String(20), nullable=False, default='pendente')  # 'pendente', 'em_andamento', 'concluido', 'cancelado'
+    data_hora_inicio_real = db.Column(db.DateTime, nullable=True)
+    data_hora_fim_real = db.Column(db.DateTime, nullable=True)
+    observacao_item = db.Column(db.String(255), nullable=True)
+
     # RELACIONAMENTOS (ORM)
-    # ----------------------------------------------------------------------------------
     servico = db.relationship(
         'EseServicoOferecido',
         backref='itens_agendados',
@@ -217,6 +212,9 @@ class AghAgendamentoItem(db.Model):
         foreign_keys=[profissional_id],
         backref=db.backref('itens_agendados', lazy='dynamic')
     )
+
+    def __repr__(self):
+        return f"<AghAgendamentoItem {self.id} | Servico={self.servico_id} | Profissional={self.profissional_id} | Status={self.status_item}>"
 
 
 class AghAgendamentoRascunho(db.Model):
@@ -241,9 +239,9 @@ class AghAgendamentoRascunho(db.Model):
     # 🔑 CONTROLE DE SESSÃO / ANÔNIMO
     session_token = db.Column(
         db.String(100), nullable=True, index=True
-    )  # Para identificar visitantes não logados
+    )
 
-    # 👤 PROFISSIONAL E HORÁRIO (Definidos apenas no Passo 2)
+    # 👤 PROFISSIONAL E HORÁRIO (Definidos no Passo 2)
     profissional_id = db.Column(
         db.Integer,
         db.ForeignKey('colaborador_contratos.id'),
@@ -253,18 +251,13 @@ class AghAgendamentoRascunho(db.Model):
     data_hora_inicio = db.Column(db.DateTime, nullable=True, index=True)
     data_hora_fim = db.Column(db.DateTime, nullable=True)
 
-    # 💰 VALOR TOTAL E DURAÇÃO
+    # 💰 VALOR TOTAL
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
 
     # ⚙️ MÁQUINA DE ESTADO DO RASCUNHO
     status = db.Column(
         db.String(30), default='servicos_selecionados', nullable=False
     )
-    # Estados possíveis:
-    # 'servicos_selecionados' -> Apenas escolheu os serviços no Passo 1
-    # 'horario_reservado'     -> Escolheu profissional e horário no Passo 2 (Soft Lock)
-    # 'convertido'           -> Já virou um AghAgendamento oficial
-    # 'expirado'             -> Tempo limite esgotado
 
     # ⏳ CONTROLE DE EXPIRAÇÃO
     expira_em = db.Column(db.DateTime, nullable=True, index=True)
@@ -288,9 +281,7 @@ class AghAgendamentoRascunho(db.Model):
         lazy='joined',
     )
 
-    # -------------------------------------------------------------------------
     # MÉTODOS ÚTEIS
-    # -------------------------------------------------------------------------
     def recalcular_total(self):
         """Soma o valor total com base nos itens atrelados."""
         total = sum(
@@ -301,17 +292,8 @@ class AghAgendamentoRascunho(db.Model):
 
     @property
     def duracao_total_minutos(self):
-        """Calcula o tempo total estimado de todos os serviços selecionados."""
-        total_min = 0
-        for item in self.itens:
-            if hasattr(item, 'servico') and item.servico:
-                dur = str(item.servico.tempo_duracao)
-                if ':' in dur:
-                    h, m = map(int, dur.split(':')[:2])
-                    total_min += h * 60 + m
-                elif dur.isdigit():
-                    total_min += int(dur)
-        return total_min
+        """Calcula o tempo total estimado somando as durações dos itens do rascunho."""
+        return sum(item.duracao_minutos or 0 for item in self.itens)
 
     @property
     def esta_expirado(self):
@@ -335,9 +317,11 @@ class AghAgendamentoRascunhoItem(db.Model):
         nullable=False,
         index=True,
     )
+
+    # 📌 CORRIGIDO: Aponta corretamente para a tabela ese_servico_oferecido
     servico_id = db.Column(
         db.Integer,
-        db.ForeignKey('agh_servico.id'),
+        db.ForeignKey('ese_servico_oferecido.id'),
         nullable=False,
         index=True,
     )
@@ -345,21 +329,16 @@ class AghAgendamentoRascunhoItem(db.Model):
     preco_unitario = db.Column(
         db.Numeric(10, 2), nullable=False, default=0.00
     )
-    duracao_minutos = db.Column(db.Integer, nullable=True)
+    duracao_minutos = db.Column(db.Integer, nullable=False, default=30)
 
     # RELACIONAMENTOS (ORM)
-    servico = db.relationship('AghServico', lazy=True)
+    servico = db.relationship('EseServicoOferecido', lazy=True)
 
     def __repr__(self):
         return f'<AghAgendamentoRascunhoItem Rascunho #{self.rascunho_id} -> Servico #{self.servico_id}>'
 
 
 class AghAvaliacaoServico(db.Model):
-    """
-    📌 AGH_AVALIACAO_SERVICO: Avaliação específica do serviço realizado
-    --------------------------------------------------------------------------------------
-    Guarda o feedback do cliente sobre o agendamento específico após a sua conclusão.
-    """
     __tablename__ = 'agh_avaliacao_servico'
     __table_args__ = {'extend_existing': True}
 
