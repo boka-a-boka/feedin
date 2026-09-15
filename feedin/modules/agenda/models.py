@@ -35,129 +35,54 @@ Tabelas Gerenciadas:
 
 from datetime import datetime, timezone
 
+# models.py
+
 class AghAgendamento(db.Model):
     __tablename__ = 'agh_agendamento'
     __table_args__ = {'extend_existing': True}
 
     id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True)
+    cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True, index=True)
+    beneficiario_id = db.Column(db.Integer, db.ForeignKey('cliente_beneficiarios.id'), nullable=True, index=True)
 
-    # 🏢 VÍNCULO DIRETO COM A EMPRESA
-    empresa_id = db.Column(
-        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
-    )
-
-    # 👤 VÍNCULO COM O PROFISSIONAL (Principal / Responsável)
+    # 👤 PROFISSIONAL PRINCIPAL / TITULAR (OPCIONAL/NULLABLE)
+    # Serve como fallback ou indicação de quem abriu/atendeu a comanda principal
     profissional_id = db.Column(
         db.Integer,
-        db.ForeignKey('colaborador_contratos.id'),
-        nullable=False,
-        index=True,
-    )
-
-    # 👥 VÍNCULO COM O CLIENTE (UUID)
-    cliente_id = db.Column(
-        db.String(36),
-        db.ForeignKey('mod_cadastro_cliente.id'),
+        db.ForeignKey('colaborador_contratos.id', ondelete='SET NULL'),
         nullable=True,
         index=True,
     )
 
-    # 🐾/👤 VÍNCULO COM O BENEFICIÁRIO/PERSONA
-    beneficiario_id = db.Column(
-        db.Integer,
-        db.ForeignKey('cliente_beneficiarios.id'),
-        nullable=True,
-        index=True,
-    )
-
-    # 💰 VALORES E HORÁRIOS
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
-    data_hora_inicio = db.Column(db.DateTime, nullable=False, index=True)
-    data_hora_fim = db.Column(db.DateTime, nullable=False)
+    data_hora_inicio = db.Column(db.DateTime, nullable=False, index=True) # Horário do 1º serviço
+    data_hora_fim = db.Column(db.DateTime, nullable=False)                # Horário final do último serviço
 
-    # ⚙️ STATUS E ORIGEM
-    # 'soft_lock', 'pendente', 'agendado', 'confirmado', 'aguardando',
-    # 'em_atendimento', 'concluido', 'finalizado', 'cancelado',
-    # 'ausente_pendente', 'reagendamento_pendente', 'reagendado'
-    status = db.Column(
-        db.String(30), default='soft_lock', nullable=False, index=True
-    )
-
+    status = db.Column(db.String(30), default='agendado', nullable=False, index=True)
     tipo_origem = db.Column(db.String(20), default='online')
-
-    # 🔒 CONTROLE DE SESSÃO / RESERVA TEMPORÁRIA
     session_token = db.Column(db.String(100), nullable=True, index=True)
     expira_em = db.Column(db.DateTime, nullable=True)
 
-    # 📅 REAGENDAMENTO, PENALIDADES E AUDITORIA
-    data_solicitacao_reagendamento = db.Column(db.DateTime, nullable=True)
-    marcado_como_ausente_em = db.Column(db.DateTime, nullable=True)
-    limite_reagendamento = db.Column(db.DateTime, nullable=True)
-    teve_impacto_comportamental = db.Column(
-        db.Boolean, default=False
-    )
-
     criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    # -------------------------------------------------------------------------
-    # RASTREABILIDADE DE REAGENDAMENTOS MÚLTIPLOS (LINHA DO TEMPO)
-    # -------------------------------------------------------------------------
-    agendamento_origem_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
-    agendamento_anterior_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
-    qtd_reagendamentos = db.Column(db.Integer, default=0, nullable=False)
 
     # RELACIONAMENTOS (ORM)
     empresa = db.relationship('EseEmpresa', backref='agendamentos', lazy=True)
-    profissional = db.relationship(
-        'ColaboradorContrato', backref='agendamentos', lazy=True
-    )
-    cliente = db.relationship(
-        'ModCadastroCliente', backref='agendamentos', lazy=True
-    )
-    beneficiario = db.relationship(
-        'ClienteBeneficiario', backref='agendamentos', lazy=True
-    )
+    cliente = db.relationship('ModCadastroCliente', backref='agendamentos', lazy=True)
+    profissional = db.relationship('ColaboradorContrato', backref='agendamentos_titular', lazy=True)
 
+    # Itens são carregados via joined para evitar N+1 queries
     itens = db.relationship(
         'AghAgendamentoItem',
         backref='agendamento_pai',
         cascade='all, delete-orphan',
         lazy='joined',
-    )
-    avaliacao = db.relationship(
-        'AghAvaliacaoServico',
-        backref='agendamento_avaliado',
-        uselist=False,
-        lazy=True,
+        order_by='AghAgendamentoItem.ordem_execucao'
     )
 
-    # Relacionamentos para navegar na árvore de histórico de reagendamentos
-    historico_posteriores = db.relationship(
-        'AghAgendamento',
-        foreign_keys=[agendamento_origem_id],
-        backref=db.backref('agendamento_raiz', remote_side=[id])
-    )
-
-    # MÉTODOS ÚTEIS
     def recalcular_total(self):
-        total = sum(
-            item.preco_unitario for item in self.itens if item.preco_unitario
-        )
-        self.valor_total = total
-        return total
-
-    @property
-    def reagendamento_valido(self):
-        """Verifica se o agendamento em ausência ainda está dentro da janela limite."""
-        if (
-                self.status in ['ausente_pendente', 'reagendamento_pendente']
-                and self.limite_reagendamento
-        ):
-            return datetime.utcnow() <= self.limite_reagendamento
-        return False
-
-    def __repr__(self):
-        return f'<AghAgendamento #{self.id} | Empresa #{self.empresa_id} | Profissional #{self.profissional_id} | Status: {self.status}>'
+        self.valor_total = sum(item.preco_unitario or 0 for item in self.itens if item.status_item != 'cancelado')
+        return self.valor_total
 
 
 class AghAgendamentoItem(db.Model):
@@ -169,52 +94,82 @@ class AghAgendamentoItem(db.Model):
         db.Integer,
         db.ForeignKey('agh_agendamento.id', ondelete='CASCADE'),
         nullable=False,
+        index=True
     )
 
-    # FK apontando para os serviços oferecidos pela empresa
     servico_id = db.Column(
         db.Integer,
         db.ForeignKey('ese_servico_oferecido.id'),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
-    # FK apontando para o profissional responsável por ESTE item/serviço específico
+    # 👤 PROFISSIONAL MANDATÓRIO DO ITEM
     profissional_id = db.Column(
         db.Integer,
-        db.ForeignKey('colaborador_contratos.id', ondelete='SET NULL'),
-        nullable=True
+        db.ForeignKey('colaborador_contratos.id', ondelete='RESTRICT'),
+        nullable=False,
+        index=True
     )
 
-    preco_unitario = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    preco_unitario = db.Column(db.Numeric(10, 2, asdecimal=False), nullable=False, default=0.00)
     duracao_minutos = db.Column(db.Integer, nullable=False, default=30)
-    ordem_execucao = db.Column(db.Integer, default=1)
+    ordem_execucao = db.Column(db.Integer, default=1, nullable=False, index=True)
 
-    # HORÁRIOS PREVISTOS/ESPECÍFICOS DO ITEM (Janela planejada na grade)
-    data_hora_inicio = db.Column(db.DateTime, nullable=True)
-    data_hora_fim = db.Column(db.DateTime, nullable=True)
+    # HORÁRIOS ESPECÍFICOS DO ITEM NA GRADE
+    data_hora_inicio = db.Column(db.DateTime, nullable=False)
+    data_hora_fim = db.Column(db.DateTime, nullable=False)
 
-    # 📌 AJUSTES PONTUAIS: EXECUÇÃO REAL E AUDITORIA DO ITEM
-    status_item = db.Column(db.String(20), nullable=False, default='pendente')  # 'pendente', 'em_andamento', 'concluido', 'cancelado'
+    # EXECUÇÃO REAL E STATUS INDIVIDUAL
+    status_item = db.Column(db.String(20), nullable=False, default='pendente')
     data_hora_inicio_real = db.Column(db.DateTime, nullable=True)
     data_hora_fim_real = db.Column(db.DateTime, nullable=True)
     observacao_item = db.Column(db.String(255), nullable=True)
 
-    # RELACIONAMENTOS (ORM)
-    servico = db.relationship(
-        'EseServicoOferecido',
-        backref='itens_agendados',
-        foreign_keys=[servico_id],
-        lazy='joined'
-    )
+    # RELACIONAMENTOS (ORM) - Removido backref para evitar conflito com AghAgendamento.itens
+    agendamento = db.relationship('AghAgendamento')
+    servico = db.relationship('EseServicoOferecido', lazy='joined')
+    profissional = db.relationship('ColaboradorContrato', lazy='joined')
 
-    profissional = db.relationship(
-        'ColaboradorContrato',
-        foreign_keys=[profissional_id],
-        backref=db.backref('itens_agendados', lazy='dynamic')
-    )
+    @property
+    def nome_servico(self) -> str:
+        if self.servico and getattr(self.servico, 'nome', None):
+            return self.servico.nome
+        return f"Serviço #{self.servico_id}"
 
-    def __repr__(self):
-        return f"<AghAgendamentoItem {self.id} | Servico={self.servico_id} | Profissional={self.profissional_id} | Status={self.status_item}>"
+    @property
+    def nome_profissional(self) -> str:
+        if not self.profissional:
+            return f"Profissional #{self.profissional_id}"
+
+        for attr in ['nome_exibicao', 'nome', 'nome_completo']:
+            val = getattr(self.profissional, attr, None)
+            if val:
+                return val
+
+        if hasattr(self.profissional, 'usuario') and self.profissional.usuario:
+            return getattr(self.profissional.usuario, 'nome', f"Profissional #{self.profissional_id}")
+
+        return f"Profissional #{self.profissional_id}"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "agendamento_id": self.agendamento_id,
+            "ordem_execucao": self.ordem_execucao,
+            "servico_id": self.servico_id,
+            "servico_nome": self.nome_servico,
+            "profissional_id": self.profissional_id,
+            "profissional_nome": self.nome_profissional,
+            "cliente_nome": self.agendamento.cliente.nome if (
+                        self.agendamento and hasattr(self.agendamento, 'cliente')) else "Cliente",
+            "preco_unitario": self.preco_unitario,
+            "duracao_minutos": self.duracao_minutos,
+            "data_hora_inicio": self.data_hora_inicio.isoformat() if self.data_hora_inicio else None,
+            "data_hora_fim": self.data_hora_fim.isoformat() if self.data_hora_fim else None,
+            "status_item": self.status_item,
+            "observacao_item": self.observacao_item
+        }
 
 
 class AghAgendamentoRascunho(db.Model):
@@ -1188,6 +1143,17 @@ class AghSolicitacaoReagendamento(db.Model):
   analisado_em = db.Column(db.DateTime, nullable=True)
 
   created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+  @property
+  def total_reagendamentos(self):
+      """
+      Retorna a contagem real de reagendamentos efetivados via tabela de solicitações.
+      """
+      return AghSolicitacaoReagendamento.query.filter_by(
+          agendamento_id=self.id,
+          status_solicitacao='aprovada'
+      ).count()
+
 
 class AghCancelamento(db.Model):
   """

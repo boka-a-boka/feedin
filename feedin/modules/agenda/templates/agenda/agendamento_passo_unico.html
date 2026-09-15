@@ -5,16 +5,18 @@
 {% block content %}
 {% set cor_empresa = empresa.cor_primaria if (empresa.cor_primaria is defined and empresa.cor_primaria) else '#0d6efd' %}
 
+{# --- RESOLVEDOR DE LOGO DA EMPRESA --- #}
 {% set raw_logo = empresa.logo_url or empresa.logomarca %}
 {% set url_logo = '' %}
 {% if raw_logo %}
-    {% if raw_logo.startswith('http') %}
-        {% set url_logo = raw_logo %}
-    {% elif 'uploads/' in raw_logo %}
-        {% set logo_clean = 'uploads/' ~ raw_logo.split('uploads/')[-1] %}
+    {% set str_logo = raw_logo|string|replace('\\', '/') %}
+    {% if str_logo.startswith('http://') or str_logo.startswith('https://') %}
+        {% set url_logo = str_logo %}
+    {% elif 'uploads/' in str_logo %}
+        {% set logo_clean = 'uploads/' ~ str_logo.split('uploads/')[-1] %}
         {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
     {% else %}
-        {% set url_logo = url_for('empresa.static', filename=raw_logo) %}
+        {% set url_logo = url_for('empresa.static', filename=str_logo.lstrip('/')) %}
     {% endif %}
 {% endif %}
 
@@ -25,15 +27,17 @@
   .bg-empresa { background-color: {{ cor_empresa }} !important; }
   .border-empresa { border-color: var(--cor-empresa) !important; }
 
+  /* Estilização Customizada dos Cards de Profissionais */
   .card-profissional-check:checked + .label-profissional-card {
     border-color: var(--cor-empresa) !important;
     background-color: var(--cor-empresa) !important;
-    background-blend-mode: soft-light;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.1) !important;
   }
 
-  .card-profissional-check:checked + .label-profissional-card .check-icon {
-    display: inline-block !important;
+  .card-profissional-check:checked + .label-profissional-card .text-dark,
+  .card-profissional-check:checked + .label-profissional-card .text-muted {
+    color: #ffffff !important;
   }
 
   .label-profissional-card {
@@ -44,6 +48,13 @@
 
   .label-profissional-card:hover {
     border-color: {{ cor_empresa }} !important;
+  }
+
+  /* Slots de Horários Baseados no Tema */
+  .btn-slot-ativo {
+    background-color: {{ cor_empresa }} !important;
+    border-color: {{ cor_empresa }} !important;
+    color: #ffffff !important;
   }
 </style>
 
@@ -69,12 +80,12 @@
         {% else %}
           <div class="rounded-3 text-white fw-bold d-flex align-items-center justify-content-center shadow-sm fs-5 flex-shrink-0"
                style="width: 48px; height: 48px; background-color: {{ cor_empresa }};">
-            {{ empresa.nome[0] | upper }}
+            {{ empresa.nome[0] | upper if empresa.nome else 'E' }}
           </div>
         {% endif %}
 
         <div class="text-truncate">
-          <h6 class="fw-bold text-dark m-0 fs-6 text-truncate">{{ empresa.nome }}</h6>
+          <h6 class="fw-bold text-dark m-0 fs-6 text-truncate">{{ empresa.nome or 'Estabelecimento' }}</h6>
           <small class="text-muted d-block" style="font-size: 0.75rem;">
             {% if modo_edicao %}Reagendamento de Horário{% else %}Agendamento de Horário{% endif %}
           </small>
@@ -110,7 +121,7 @@
       <div class="list-group list-group-flush mb-2">
         {% for item in lista_servicos %}
           {% set nome_srv = item.descricao_servico or (item.taxonomia.nome if item.taxonomia else (item.nome_servico or 'Serviço Agendado')) %}
-          {% set preco_srv = item.preco or item.valor or 0.0 %}
+          {% set preco_srv = item.preco if item.preco is defined and item.preco is not none else (item.valor if item.valor is defined and item.valor is not none else 0.0) %}
           {% set duracao_srv = item.duracao_minutos or item.tempo_duracao %}
 
           <div class="list-group-item px-0 py-2 border-0 d-flex justify-content-between align-items-center">
@@ -164,7 +175,7 @@
               </strong>
               <small class="text-muted" style="font-size: 0.75rem;">
                 <i class="bi bi-calendar-x me-1"></i>
-                {{ item.data_horario.strftime('%d/%m/%Y às %H:%M') if item.data_horario else (item.data_formatada or 'Data não informada') }}
+                {{ item.data_horario.strftime('%d/%m/%Y às %H:%M') if item.data_horario and item.data_horario.strftime else (item.data_formatada or 'Data não informada') }}
               </small>
             </div>
             <span class="badge bg-light text-danger border border-danger-subtle rounded-pill small">
@@ -176,7 +187,7 @@
     </div>
   {% endif %}
 
-<!-- FORMULÁRIO -->
+  <!-- FORMULÁRIO -->
   <form method="POST" action="{{ url_for('agenda.agendar', slug_empresa=empresa.slug) }}" id="formAgendamento">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
 
@@ -192,7 +203,7 @@
     <input type="hidden" name="servico_ids" id="input_servico_ids" value="{{ servicos_ids_string or servico_id_selecionado or '' }}">
     <input type="hidden" name="horario_agendamento" id="inputHorarioSelecionado" value="{{ horario_selecionado or '' }}">
 
-    <!-- PROFISSIONAL -->
+    <!-- SELEÇÃO DE PROFISSIONAL -->
     <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
       <label class="fw-bold text-dark mb-2 small d-flex align-items-center gap-1.5">
         <i class="bi bi-person-badge text-empresa"></i> 1. Escolha o Profissional:
@@ -216,86 +227,87 @@
           </label>
         </div>
 
-{% set lista_colabs = colaboradores if colaboradores is defined and colaboradores else (profissionais if profissionais is defined else []) %}
-{% if lista_colabs %}
-  {% for colab in lista_colabs %}
+        {% set lista_colabs = colaboradores if colaboradores is defined and colaboradores else (profissionais if profissionais is defined else []) %}
+        {% if lista_colabs %}
+          {% for colab in lista_colabs %}
+            {% set colab_id_str = colab.id|string %}
+            {% set sel_prof_str = profissional_id_selecionado|string if profissional_id_selecionado is not none else '' %}
 
-    {# 1. Tratamento do Nome #}
-    {% set nome_colab = colab.nome or 'Profissional' %}
-    {% set inicial_colab = nome_colab[0]|upper if nome_colab else 'P' %}
+            {# 1. Tratamento de Nome #}
+            {% set nome_colab = colab.nome or 'Profissional' %}
+            {% set inicial_colab = nome_colab[0]|upper if nome_colab else 'P' %}
 
-    {# 2. Tratamento do Cargo (extrai a propriedade texto da Model Cargo) #}
-    {% if colab.cargo is mapping or colab.cargo.__class__.__name__ == 'Cargo' or (colab.cargo and not colab.cargo is string) %}
-      {% set cargo_nome = colab.cargo.descricao or colab.cargo.nome or colab.cargo.titulo or colab.cargo.nome_cargo or 'Especialista' %}
-    {% else %}
-      {% set cargo_nome = colab.cargo if colab.cargo else 'Especialista' %}
-    {% endif %}
+            {# 2. Tratamento do Cargo (objeto ou string) #}
+            {% if colab.cargo is mapping or (colab.cargo and colab.cargo.__class__ is defined and colab.cargo.__class__.__name__ == 'Cargo') %}
+              {% set cargo_nome = colab.cargo.descricao or colab.cargo.nome or colab.cargo.titulo or colab.cargo.nome_cargo or 'Especialista' %}
+            {% else %}
+              {% set cargo_nome = colab.cargo if colab.cargo else 'Especialista' %}
+            {% endif %}
 
-    {# 3. Tratamento da URL da Foto sem duplicação de caminho #}
-    {% set raw_foto = colab.url_foto_profissional or colab.foto_profissional %}
-    {% set foto_colab_final = None %}
+            {# 3. Resolvedor da Foto do Colaborador (sem duplicidade de path) #}
+            {% set raw_foto = colab.url_foto_profissional or colab.foto_profissional %}
+            {% set foto_colab_final = None %}
 
-    {% if raw_foto and raw_foto|string|trim != '' and raw_foto|string|lower != 'none' %}
-      {% set str_foto = raw_foto|string %}
-      {% if str_foto.startswith('http://') or str_foto.startswith('https://') %}
-        {% set foto_colab_final = str_foto %}
-      {% else %}
-        {% set c_limpo = str_foto.replace('\\', '/').lstrip('/') %}
-        {% set c_lower = c_limpo.lower() %}
+            {% if raw_foto and raw_foto|string|trim != '' and raw_foto|string|lower != 'none' %}
+              {% set str_foto = raw_foto|string|replace('\\', '/') %}
+              {% if str_foto.startswith('http://') or str_foto.startswith('https://') %}
+                {% set foto_colab_final = str_foto %}
+              {% else %}
+                {% set c_limpo = str_foto.lstrip('/') %}
+                {% set c_lower = c_limpo.lower() %}
 
-        {% if 'empresas/' in c_lower %}
-          {% set idx = c_lower.find('empresas/') %}
-          {% set rel_path = 'uploads/' ~ c_limpo[idx:] %}
-          {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
-        {% elif 'uploads/' in c_lower %}
-          {% set idx = c_lower.find('uploads/') %}
-          {% set rel_path = c_limpo[idx + 8:] %}
-          {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
-        {% else %}
-          {% set foto_colab_final = url_for('empresa.static', filename='uploads/profissionais/' ~ c_limpo) %}
+                {% if 'empresas/' in c_lower %}
+                  {% set idx = c_lower.find('empresas/') %}
+                  {% set rel_path = 'uploads/' ~ c_limpo[idx:] %}
+                  {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
+                {% elif 'uploads/' in c_lower %}
+                  {% set idx = c_lower.find('uploads/') %}
+                  {% set rel_path = c_limpo[idx + 8:] %}
+                  {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
+                {% else %}
+                  {% set foto_colab_final = url_for('empresa.static', filename='uploads/profissionais/' ~ c_limpo) %}
+                {% endif %}
+              {% endif %}
+            {% endif %}
+
+            <div class="col-6 col-sm-4">
+              <input type="radio"
+                     class="btn-check card-profissional-check"
+                     name="profissional_id"
+                     id="colab_{{ colab_id_str }}"
+                     value="{{ colab_id_str }}"
+                     {% if sel_prof_str and sel_prof_str == colab_id_str %}checked{% endif %}
+                     onchange="atualizarHorariosDisponiveis()">
+
+              <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer" for="colab_{{ colab_id_str }}">
+
+                {# Container do Avatar (40x40px) #}
+                <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px;">
+                  {% if foto_colab_final %}
+                    <img id="imgRadioColab_{{ colab_id_str }}"
+                         src="{{ foto_colab_final }}"
+                         alt="{{ nome_colab }}"
+                         class="rounded-circle border object-fit-cover w-100 h-100"
+                         onerror="this.style.display='none'; document.getElementById('avatarRadioLetra_{{ colab_id_str }}').style.display='flex';">
+                  {% endif %}
+
+                  <div id="avatarRadioLetra_{{ colab_id_str }}"
+                       class="rounded-circle text-white fw-bold align-items-center justify-content-center shadow-sm w-100 h-100 border border-white"
+                       style="font-size: 0.85rem; background-color: {{ cor_empresa }}; display: {% if foto_colab_final %}none{% else %}flex{% endif %};">
+                    {{ inicial_colab }}
+                  </div>
+                </div>
+
+                <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ nome_colab }}">
+                  {{ nome_colab }}
+                </strong>
+                <small class="text-muted text-truncate w-100" style="font-size: 0.68rem;">
+                  {{ cargo_nome }}
+                </small>
+              </label>
+            </div>
+          {% endfor %}
         {% endif %}
-      {% endif %}
-    {% endif %}
-
-    <div class="col-6 col-sm-4">
-      <input type="radio"
-             class="btn-check card-profissional-check"
-             name="profissional_id"
-             id="colab_{{ colab.id }}"
-             value="{{ colab.id }}"
-             {% if profissional_id_selecionado and profissional_id_selecionado|int == colab.id|int %}checked{% endif %}
-             onchange="atualizarHorariosDisponiveis()">
-
-      <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer" for="colab_{{ colab.id }}">
-
-        {# Container do Avatar (40x40px) #}
-        <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px;">
-          {% if foto_colab_final %}
-            <img id="imgRadioColab_{{ colab.id }}"
-                 src="{{ foto_colab_final }}"
-                 alt="{{ nome_colab }}"
-                 class="rounded-circle border object-fit-cover w-100 h-100"
-                 onerror="this.style.display='none'; document.getElementById('avatarRadioLetra_{{ colab.id }}').style.display='flex';">
-          {% endif %}
-
-          <div id="avatarRadioLetra_{{ colab.id }}"
-               class="rounded-circle text-white fw-bold align-items-center justify-content-center shadow-sm w-100 h-100 border border-white"
-               style="font-size: 0.85rem; background-color: {{ empresa.cor_primaria or '#212529' }}; display: {% if foto_colab_final %}none{% else %}flex{% endif %};">
-            {{ inicial_colab }}
-          </div>
-        </div>
-
-        <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ nome_colab }}">
-          {{ nome_colab }}
-        </strong>
-        <small class="text-muted text-truncate w-100" style="font-size: 0.68rem;">
-          {{ cargo_nome }}
-        </small>
-      </label>
-    </div>
-
-  {% endfor %}
-{% endif %}
       </div>
     </div>
 
@@ -343,10 +355,11 @@
 <script>
   const horarioPreSelecionado = "{{ horario_selecionado or '' }}";
   const reagendarIdConst = "{{ agendamento_original.id if agendamento_original else '' }}";
+  const empresaIdConst = "{{ empresa.id }}";
 
   function selecionarHorario(elemento, horario) {
     document.querySelectorAll('.btn-slot-horario').forEach(btn => {
-      btn.classList.remove('btn-primary', 'text-white', 'bg-empresa');
+      btn.classList.remove('btn-slot-ativo', 'btn-primary', 'text-white');
       if (btn.dataset.isGap === 'true') {
         btn.classList.add('btn-outline-warning', 'text-dark');
       } else {
@@ -355,7 +368,7 @@
     });
 
     elemento.classList.remove('btn-outline-primary', 'btn-outline-warning', 'text-dark');
-    elemento.classList.add('btn-primary', 'text-white');
+    elemento.classList.add('btn-slot-ativo', 'text-white');
 
     const inputHorario = document.getElementById('inputHorarioSelecionado');
     if (inputHorario) inputHorario.value = horario;
@@ -365,7 +378,6 @@
   }
 
   async function atualizarHorariosDisponiveis() {
-    const empresaId = "{{ empresa.id }}";
     const inputData = document.getElementById('data_agendamento');
     const inputServicoIds = document.getElementById('input_servico_ids');
 
@@ -379,7 +391,6 @@
     const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
 
     if (!container) return;
-
     if (btnConfirmar) btnConfirmar.disabled = true;
 
     if (!servicos || servicos.trim() === '') {
@@ -405,7 +416,7 @@
       </div>`;
 
     const queryObj = {
-      empresa_id: empresaId,
+      empresa_id: empresaIdConst,
       data: inputData.value,
       data_agendamento: inputData.value,
       servico_ids: servicos,

@@ -2,10 +2,11 @@ import uuid
 import threading
 import smtplib
 import logging
+from zoneinfo import ZoneInfo
+from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
 from flask import current_app
 
 from feedin import database as db
@@ -14,12 +15,49 @@ from feedin.modules.agenda.models import AghNotificacao, AghAgendamento
 from feedin.modules.empresa.models import (
     ClienteBeneficiario,
     ClienteContato,
-    EseNotificacaoCliente,
-    EseLogMensagemAutomatica
+    EseLogMensagemAutomatica,
+    EseNotificacao
 )
 
 logger = logging.getLogger(__name__)
 
+# Fuso horário padrão do sistema
+TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
+
+
+# =========================================================================
+# 🛠️ HELPER INTERNO DE IDENTIDADE (COMPATIBILIDADE UUID)
+# =========================================================================
+def _resolver_usuario_uuid(cliente_id_or_obj) -> str:
+    """
+    Garante a recuperação estrita do UUID (usuario_id) do cliente.
+    Elimina o uso de IDs do tipo Integer nos registros de notificação.
+    """
+    if not cliente_id_or_obj:
+        return None
+
+    # Se já for o objeto `ModCadastroCliente`
+    if isinstance(cliente_id_or_obj, ModCadastroCliente):
+        return str(cliente_id_or_obj.usuario_id).strip() if getattr(cliente_id_or_obj, 'usuario_id', None) else None
+
+    # Se for uma string que já seja um UUID válido
+    val_str = str(cliente_id_or_obj).strip()
+    try:
+        uuid_obj = uuid.UUID(val_str)
+        return str(uuid_obj)
+    except ValueError:
+        # Se for um Integer/ID legado, consulta o banco para obter o usuario_id (UUID)
+        cliente = ModCadastroCliente.query.get(cliente_id_or_obj)
+        if cliente and getattr(cliente, 'usuario_id', None):
+            return str(cliente.usuario_id).strip()
+
+    logger.warning(f"⚠️ [IDENTIDADE] Não foi possível resolver UUID válido para a referência: {cliente_id_or_obj}")
+    return val_str
+
+
+# =========================================================================
+# 📅 1. SERVIÇO DE NOTIFICAÇÕES DO MÓDULO AGENDA (AGH)
+# =========================================================================
 class AghNotificacaoService:
 
     @staticmethod
@@ -37,15 +75,19 @@ class AghNotificacaoService:
             payload_extra: dict = None
     ) -> AghNotificacao:
         """
-        Método genérico para persistir notificações internas no banco (AGH).
+        Registra notificações internas exclusivas do Módulo de Agenda (tabela `agh_notificacoes`).
+        Garante que destinatario_id e remetente_id sejam UUIDs em formato string.
         """
         try:
+            uuid_destinatario = _resolver_usuario_uuid(destinatario_id)
+            uuid_remetente = _resolver_usuario_uuid(remetente_id) if remetente_id else None
+
             notificacao = AghNotificacao(
-                id=str(uuid.uuid4()),  # 👈 AJUSTE CRÍTICO: Garante a geração explícita do UUID CHAR(36)
+                id=str(uuid.uuid4()),
                 empresa_id=empresa_id,
-                destinatario_id=str(destinatario_id).strip() if destinatario_id else None,
+                destinatario_id=uuid_destinatario,
                 papel_destinatario=papel_destinatario,
-                remetente_id=str(remetente_id).strip() if remetente_id else None,
+                remetente_id=uuid_remetente,
                 agendamento_id=agendamento_id,
                 beneficiario_id=beneficiario_id,
                 titulo=titulo,
@@ -53,18 +95,17 @@ class AghNotificacaoService:
                 tipo_evento=tipo_evento,
                 nivel=nivel,
                 payload_extra=payload_extra or {},
-                lida=False,  # Garante valor inicial para a consulta do 'sininho'
-                criado_em=datetime.utcnow()
+                lida=False,
+                criado_em=datetime.now(TZ_BRASIL)
             )
             db.session.add(notificacao)
             db.session.commit()
             return notificacao
         except Exception as e:
             db.session.rollback()
-            print(f"[ERRO AGHNotificacaoService]: Falha ao registrar notificação - {str(e)}")
+            logger.error(f"[ERRO AghNotificacaoService]: Falha ao registrar notificação da Agenda - {str(e)}")
             return None
 
-    # 👈 ALIAS DE COMPATIBILIDADE: Redireciona chamadas .disparar() para .criar_notificacao()
     @classmethod
     def disparar(cls, *args, **kwargs):
         return cls.criar_notificacao(*args, **kwargs)
@@ -73,46 +114,45 @@ class AghNotificacaoService:
     def notificar_falta_cliente(agendamento_id: int, colaborador_usuario_id: str = None, colaborador_nome: str = None,
                                 motivo: str = "ausencia_cliente"):
         """
-        1. CRÍTICO & OBRIGATÓRIO: Atualiza o status do agendamento e grava no módulo (AghNotificacao).
-        2. OPCIONAL/FALLBACK: Caso o cliente tenha canal preferencial cadastrado, envia via WhatsApp/E-mail/SMS.
+        Processa e registra o não-comparecimento do cliente na agenda.
         """
         agendamento = AghAgendamento.query.get(agendamento_id)
         if not agendamento:
             return None
 
-        # 👈 AJUSTE 2: Atualiza o status do agendamento em caixa alta
+        agora_local = datetime.now(TZ_BRASIL)
+
         agendamento.status = 'FALTA'
         if hasattr(agendamento, 'atualizado_em'):
-            agendamento.atualizado_em = datetime.utcnow()
+            agendamento.atualizado_em = agora_local
         db.session.commit()
 
-        # Identifica beneficiário se houver (Pet, Veículo, Dependente)
+        # Identificação de Beneficiários (Pet, Veículo, Dependente)
         beneficiario_info = ""
         beneficiario_id = getattr(agendamento, 'beneficiario_id', None)
         if beneficiario_id:
             beneficiario = ClienteBeneficiario.query.get(beneficiario_id)
             if beneficiario:
-                if getattr(beneficiario, 'tipo_persona', None) == 'pet':
+                tipo_p = getattr(beneficiario, 'tipo_persona', None)
+                if tipo_p == 'pet':
                     beneficiario_info = f" (Pet: {beneficiario.nome})"
-                elif getattr(beneficiario, 'tipo_persona', None) == 'veiculo':
+                elif tipo_p == 'veiculo':
                     beneficiario_info = f" (Veículo: {beneficiario.nome})"
                 else:
                     beneficiario_info = f" ({beneficiario.nome})"
 
-        # Formatação de datas
-        data_agendamento_fmt = agendamento.data_hora_inicio.strftime("%d/%m/%Y às %H:%M") if getattr(agendamento,
-                                                                                                     'data_hora_inicio',
-                                                                                                     None) else ""
-        agora_apontamento_fmt = datetime.now().strftime("%d/%m/%Y às %H:%M")
-
+        data_agendamento_fmt = (
+            agendamento.data_hora_inicio.strftime("%d/%m/%Y às %H:%M")
+            if getattr(agendamento, 'data_hora_inicio', None) else ""
+        )
+        agora_apontamento_fmt = agora_local.strftime("%d/%m/%Y às %H:%M")
         nome_operador = colaborador_nome or "Colaborador"
 
-        # 👈 AJUSTE 3: Garante o uso do usuario_id (string/UUID) para o destinatário
-        usuario_destinatario_id = getattr(agendamento.cliente, 'usuario_id', None) or agendamento.cliente_id
+        # Resolução estrita do UUID do destinatário
+        uuid_cliente = _resolver_usuario_uuid(
+            agendamento.cliente if hasattr(agendamento, 'cliente') else agendamento.cliente_id)
 
-        # =========================================================================
-        # 📌 PASSO 1: NOTIFICAÇÃO DO MÓDULO (SEMPRE GARANTIDA)
-        # =========================================================================
+        # 1. NOTIFICAÇÃO IN-APP DA AGENDA
         mensagem_notif = (
             f"Foi registrada uma falta referente ao seu agendamento de {data_agendamento_fmt}{beneficiario_info}.\n"
             f"Apontamento realizado por: {nome_operador} em {agora_apontamento_fmt}."
@@ -120,9 +160,9 @@ class AghNotificacaoService:
 
         notificacao_interna = AghNotificacaoService.criar_notificacao(
             empresa_id=agendamento.empresa_id,
-            destinatario_id=usuario_destinatario_id,
+            destinatario_id=uuid_cliente,
             papel_destinatario='cliente',
-            remetente_id=colaborador_usuario_id or (
+            remetente_id=_resolver_usuario_uuid(colaborador_usuario_id) or (
                 str(agendamento.profissional_id) if agendamento.profissional_id else None),
             agendamento_id=agendamento.id,
             beneficiario_id=beneficiario_id,
@@ -136,22 +176,17 @@ class AghNotificacaoService:
             }
         )
 
-        # =========================================================================
-        # 📌 PASSO 2: COMUNICAÇÃO EXTERNA (WHATSAPP / EMAIL / SMS)
-        # =========================================================================
+        # 2. DISPARO EXTERNO (OPCIONAL/BACKGROUND)
         contato_preferencial = ClienteContato.query.filter_by(
             cliente_id=agendamento.cliente_id,
             aceita_notificacao=True
         ).order_by(ClienteContato.is_padrao.desc()).first()
 
         if not contato_preferencial:
-            print(
-                f"ℹ️ [AGH NOTIFICAÇÃO] Notificação interna gerada ({notificacao_interna.id if notificacao_interna else 'OK'}). "
-                f"Cliente ID '{agendamento.cliente_id}' não possui canais externos habilitados."
-            )
+            logger.info(
+                f"[AGH NOTIFICAÇÃO] Notificação in-app gerada para Cliente UUID '{uuid_cliente}'. Sem canais externos ativos.")
             return True
 
-        # Se houver canal cadastrado, dispara o canal de preferência em segundo plano
         tipo_canal = contato_preferencial.tipo.lower()
         destino = contato_preferencial.valor
         nome_cliente = agendamento.cliente.nome.split()[0] if hasattr(agendamento,
@@ -166,7 +201,6 @@ class AghNotificacaoService:
         )
 
         app_instance = current_app._get_current_object()
-
         thread = threading.Thread(
             target=AghNotificacaoService._disparar_canal_externo_bg,
             args=(app_instance, tipo_canal, destino, assunto, mensagem_txt)
@@ -178,10 +212,6 @@ class AghNotificacaoService:
 
     @staticmethod
     def _disparar_canal_externo_bg(app, tipo_canal: str, destino: str, assunto: str, mensagem: str):
-        """
-        Executado em segundo plano (Worker/Thread).
-        Acessa as configurações de SMTP/Gateways do Flask.
-        """
         with app.app_context():
             try:
                 if tipo_canal == 'email':
@@ -189,13 +219,10 @@ class AghNotificacaoService:
                 elif tipo_canal in ['whatsapp', 'sms']:
                     AghNotificacaoService._enviar_mensageria_api(app, tipo_canal, destino, mensagem)
             except Exception as e:
-                print(f"[ERRO DISPARO SEGUNDO PLANO] Falha ao enviar por {tipo_canal} para {destino}: {str(e)}")
+                logger.error(f"[ERRO DISPARO BACKGROUND AGH] Falha ao enviar por {tipo_canal} para {destino}: {str(e)}")
 
     @staticmethod
     def _enviar_email_smtp(app, email_destino: str, assunto: str, mensagem: str):
-        """
-        Envio real de E-mail via SMTP configurado no app Flask.
-        """
         smtp_server = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
         smtp_port = app.config.get('MAIL_PORT', 587)
         smtp_user = app.config.get('MAIL_USERNAME')
@@ -203,8 +230,7 @@ class AghNotificacaoService:
         sender_email = app.config.get('MAIL_DEFAULT_SENDER', smtp_user)
 
         if not smtp_user or not smtp_pass:
-            print(
-                f"⚠️ [EMAIL OMITIDO] Credenciais de e-mail (MAIL_USERNAME/MAIL_PASSWORD) não configuradas no app.config.")
+            logger.warning("⚠️ [EMAIL OMITIDO] Credenciais de SMTP não configuradas.")
             return
 
         msg = MIMEMultipart()
@@ -218,13 +244,10 @@ class AghNotificacaoService:
             server.login(smtp_user, smtp_pass)
             server.sendmail(sender_email, email_destino, msg.as_string())
 
-        print(f"📧 [E-MAIL ENVIADO] Mensagem entregue com sucesso para {email_destino}")
+        logger.info(f"📧 [E-MAIL ENVIADO] Sucesso para {email_destino}")
 
     @staticmethod
     def _enviar_mensageria_api(app, tipo: str, numero: str, mensagem: str):
-        """
-        Disparo para API de WhatsApp (Ex: Z-API / Evolution API) ou SMS (Twilio).
-        """
         api_url = app.config.get('WHATSAPP_API_URL')
         api_token = app.config.get('WHATSAPP_API_TOKEN')
 
@@ -233,59 +256,71 @@ class AghNotificacaoService:
             headers = {'Client-Token': api_token, 'Content-Type': 'application/json'}
             payload = {'phone': numero, 'message': mensagem}
             response = requests.post(api_url, json=payload, headers=headers, timeout=10)
-            print(f"📱 [{tipo.upper()} API] Resposta da integração: {response.status_code}")
+            logger.info(f"📱 [{tipo.upper()} API] Status Gateway: {response.status_code}")
         else:
-            print(f"📱 [{tipo.upper()} SIMULADO] Destino: {numero} | Conteúdo: {mensagem}")
+            logger.info(f"📱 [{tipo.upper()} SIMULADO] Destino: {numero} | Conteúdo: {mensagem}")
 
     @staticmethod
     def contar_nao_lidas(empresa_id: int, usuario_id: str, papel: str) -> int:
+        uuid_val = _resolver_usuario_uuid(usuario_id)
         return AghNotificacao.query.filter_by(
             empresa_id=empresa_id,
-            destinatario_id=str(usuario_id),
+            destinatario_id=uuid_val,
             papel_destinatario=papel,
             lida=False
         ).count()
 
 
 # =========================================================================
-# 📝 TEMPLATES DINÂMICOS DE LEMBRETES
+# 🏢 2. SERVIÇO DE NOTIFICAÇÕES DO MÓDULO EMPRESA (ESE)
 # =========================================================================
-TEMPLATES_LEMBRETE = {
-    "48h": {
-        "titulo": "📅 Faltam 2 dias para o seu agendamento!",
-        "corpo": (
-            "Olá, {nome_cliente}! Tudo bem?\n\n"
-            "Passando para lembrar do seu agendamento no FeedIn marcado para {data_hora}"
-            "{info_beneficiario}.\n\n"
-            "💡 **Precisa alterar o horário?**\n"
-            "Você pode reagendar sem custo até 24 horas antes do atendimento clicando no link: {link_reagendamento}\n\n"
-            "Tenha um excelente dia!"
-        )
-    },
-    "24h": {
-        "titulo": "⏰ Confirmado: Seu agendamento é amanhã!",
-        "corpo": (
-            "Oi, {nome_cliente}! Amanhã é o dia do seu atendimento às {apenas_hora}"
-            "{info_beneficiario}.\n\n"
-            "📌 **Aviso Importante:**\n"
-            "Para garantir a melhor experiência e organização da agenda, cancelamentos ou reagendamentos "
-            "com menos de 24h de antecedência podem estar sujeitos às regras de retenção do estabelecimento.\n\n"
-            "Confira os detalhes e a localização aqui: {link_reagendamento}"
-        )
-    },
-    "3h": {
-        "titulo": "🚗 É daqui a pouco! Estamos te esperando.",
-        "corpo": (
-            "Tudo pronto, {nome_cliente}?\n\n"
-            "Seu agendamento é hoje às {apenas_hora}{info_beneficiario}.\n\n"
-            "Contamos com a sua pontualidade! Se tiver qualquer imprevisto a caminho, acesse os detalhes e contatos de suporte pelo link: {link_reagendamento}"
-        )
-    }
-}
+class EseNotificacaoService:
 
-# -----------------------------------------------------------------------------
-# TEMPLATES GLOBAIS PADRÃO (FEEDIN)
-# -----------------------------------------------------------------------------
+    @staticmethod
+    def criar_notificacao(
+            modulo_id: int,
+            modulo_slug: str,
+            empresa_id: int,
+            destinatario_id: str,
+            tipo: str,
+            categoria: str,
+            titulo: str,
+            mensagem: str,
+            url_acao: str = None,
+            data_referencia: datetime = None
+    ) -> EseNotificacao:
+        """
+        Registra notificações institucionais/operacionais do Módulo Empresa (tabela `ese_notificacoes`).
+        """
+        try:
+            uuid_destinatario = _resolver_usuario_uuid(destinatario_id) if destinatario_id else None
+
+            notificacao = EseNotificacao(
+                modulo_id=modulo_id,
+                modulo_slug=modulo_slug,
+                empresa_id=empresa_id,
+                destinatario_id=uuid_destinatario,
+                tipo=tipo,
+                categoria=categoria,
+                titulo=titulo,
+                mensagem=mensagem,
+                url_acao=url_acao,
+                data_referencia=data_referencia or datetime.now(TZ_BRASIL).date(),
+                lida=False,
+                created_at=datetime.now(TZ_BRASIL)
+            )
+            db.session.add(notificacao)
+            db.session.commit()
+            return notificacao
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[ERRO EseNotificacaoService]: Falha ao registrar notificação da Empresa - {str(e)}")
+            return None
+
+
+# =========================================================================
+# 📝 TEMPLATES GLOBAIS DE LEMBRETES (FEEDIN)
+# =========================================================================
 TEMPLATES_LEMBRETE_PADRAO = {
     "48h": {
         "titulo": "📅 Faltam 2 dias para o seu agendamento!",
@@ -321,10 +356,6 @@ TEMPLATES_LEMBRETE_PADRAO = {
 
 
 def formatar_texto_beneficiario(beneficiario_id: int = None) -> str:
-    """
-    Formata o texto complementar caso o serviço esteja atrelado a um beneficiário
-    (Veículo/Placa, Pet ou Dependente Humano).
-    """
     if not beneficiario_id:
         return ""
 
@@ -346,13 +377,6 @@ def formatar_texto_beneficiario(beneficiario_id: int = None) -> str:
 
 
 def obter_mensagem_formatada(marco: str, dados: dict, empresa_id: int = None) -> tuple:
-    """
-    Interpolador de templates.
-    Atualmente busca do dicionário global.
-    (Futuramente buscará da tabela `EmpresaTemplateMensagem` filtrando por empresa_id).
-    """
-    # 📌 PREPARADO PARA O FUTURO: Se empresa_id tiver template customizado no DB, usará ele.
-    # Caso contrário (ou agora no MVP), usa o fallback global.
     template = TEMPLATES_LEMBRETE_PADRAO.get(marco)
 
     if not template:
@@ -372,62 +396,63 @@ def obter_mensagem_formatada(marco: str, dados: dict, empresa_id: int = None) ->
     return titulo, corpo
 
 
-def resolver_canal_preferencial(cliente_id: str) -> tuple:
+def resolver_canal_preferencial(cliente_id_or_uuid) -> tuple:
     """
-    Mapeia os canais reais da tabela `cliente_contatos`.
-    Garante compliance LGPD testando `aceita_notificacao == True`.
+    Localiza contatos elegíveis com consentimento LGPD.
+    Aaceita tanto o ID legado quanto o UUID.
+    """
+    uuid_val = _resolver_usuario_uuid(cliente_id_or_uuid)
 
-    Retorna: (tipo_canal, valor) ex: ('whatsapp', '19998765432')
-    """
-    # 1. Busca contatos ativos com opt-in LGPD
+    # Busca cliente por usuario_id (UUID)
+    cliente = ModCadastroCliente.query.filter_by(usuario_id=uuid_val).first() if uuid_val else None
+    if not cliente and str(cliente_id_or_uuid).isdigit():
+        cliente = ModCadastroCliente.query.get(int(cliente_id_or_uuid))
+
+    if not cliente:
+        return None, None
+
     contatos = ClienteContato.query.filter_by(
-        cliente_id=cliente_id,
+        cliente_id=cliente.id,
         aceita_notificacao=True
     ).all()
 
-    # 2. Fallback: Se não tiver em `cliente_contatos`, tenta ler o WhatsApp/Email direto do cadastro
     if not contatos:
-        cliente = ModCadastroCliente.query.get(cliente_id)
-        if cliente:
-            if cliente.whatsapp:
-                return 'whatsapp', cliente.whatsapp
-            elif cliente.email:
-                return 'email', cliente.email
+        if getattr(cliente, 'whatsapp', None):
+            return 'whatsapp', cliente.whatsapp
+        elif getattr(cliente, 'email', None):
+            return 'email', cliente.email
         return None, None
 
-    # 3. Dá prioridade ao marcado como `is_padrao`
-    contato_escolhido = next((c for c in contatos if c.is_padrao), None)
-
-    if not contato_escolhido:
-        contato_escolhido = contatos[0]
-
+    contato_escolhido = next((c for c in contatos if getattr(c, 'is_padrao', False)), contatos[0])
     return contato_escolhido.tipo.lower(), contato_escolhido.valor
 
 
 def disparar_mensagem_cliente(
-    agendamento_id: int,
-    cliente_id: str,
-    marco_gatilho: str,
-    dados_interpolacao: dict,
-    beneficiario_id: int = None
+        agendamento_id: int,
+        cliente_id: str,
+        marco_gatilho: str,
+        dados_interpolacao: dict,
+        empresa_id: int,
+        beneficiario_id: int = None
 ) -> bool:
     """
-    Executa o disparo híbrido e idempotente:
+    Executa o disparo idempotente de lembretes automatizados da AGENDA:
     1. Resolve canal e valida LGPD.
-    2. Bloqueia duplicidade via trava no banco (`EseLogMensagemAutomatica`).
-    3. Cria notificação PWA In-App.
-    4. Dispara API externa via Gateway.
+    2. Garante idempotência via trava em `EseLogMensagemAutomatica`.
+    3. Persiste a notificação In-App usando obrigatoriamente UUID.
+    4. Envia via Gateway.
     """
+    uuid_cliente = _resolver_usuario_uuid(cliente_id)
     canal, destinatario = resolver_canal_preferencial(cliente_id)
 
     if not canal or not destinatario:
-        logger.warning(f"[Lembretes] Cliente UUID {cliente_id} sem canal de contato com opt-in válido.")
+        logger.warning(f"[Lembretes] Cliente UUID {uuid_cliente} sem canal ativo para opt-in.")
         return False
 
-    # 1. Idempotência: Garante registro de intenção no banco
+    # 1. Trava de Idempotência
     log_envio = EseLogMensagemAutomatica(
         referencia_id=agendamento_id,
-        cliente_id=cliente_id,
+        cliente_id=uuid_cliente,
         beneficiario_id=beneficiario_id,
         marco_gatilho=marco_gatilho,
         canal_envio=canal,
@@ -440,38 +465,41 @@ def disparar_mensagem_cliente(
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        logger.info(f"[Lembretes] Lembrete '{marco_gatilho}' já enviado para Agendamento #{agendamento_id} via {canal}.")
+        logger.info(f"[Lembretes] Lembrete '{marco_gatilho}' já processado para Agendamento #{agendamento_id}.")
         return False
 
-    # 2. Interpola os dados e insere beneficiario_id no contexto
+    # 2. Formatação da mensagem
     dados_interpolacao['beneficiario_id'] = beneficiario_id
-    titulo, mensagem_corpo = obter_mensagem_formatada(marco_gatilho, dados_interpolacao)
+    titulo, mensagem_corpo = obter_mensagem_formatada(marco_gatilho, dados_interpolacao, empresa_id=empresa_id)
 
-    # 3. Cria Notificação In-App no PWA (`EseNotificacaoCliente`)
-    notificacao_pwa = EseNotificacaoCliente(
-        cliente_id=cliente_id,
-        referencia_id=agendamento_id,
+    # 3. Notificação In-App da Agenda (AGH) usando UUID
+    AghNotificacaoService.criar_notificacao(
+        empresa_id=empresa_id,
+        destinatario_id=uuid_cliente,
+        papel_destinatario='cliente',
+        agendamento_id=agendamento_id,
+        beneficiario_id=beneficiario_id,
         titulo=titulo,
-        mensagem=mensagem_corpo
+        mensagem=mensagem_corpo,
+        tipo_evento=f"lembrete_{marco_gatilho}",
+        nivel="info"
     )
-    db.session.add(notificacao_pwa)
 
-    # 4. Envio Externo
+    # 4. Gateway Externo
     sucesso_envio = _enviar_para_gateway_externo(canal, destinatario, titulo, mensagem_corpo)
 
     if sucesso_envio:
         log_envio.status_envio = 'enviado'
     else:
         log_envio.status_envio = 'falha'
-        log_envio.detalhes_erro = 'Falha no gateway externo'
+        log_envio.detalhes_erro = 'Falha de comunicação com o gateway externo'
 
     db.session.commit()
     return sucesso_envio
 
 
 def _enviar_para_gateway_externo(canal: str, destinatario: str, titulo: str, mensagem: str) -> bool:
-    """Mock para gateways (Z-API, Evolution, SendGrid, etc)."""
-    logger.info(f"[GATEWAY DISPARADO] [{canal.upper()}] Para: {destinatario} | Titulo: {titulo}")
+    logger.info(f"[GATEWAY DISPARADO] [{canal.upper()}] Para: {destinatario} | Título: {titulo}")
     return True
 
 

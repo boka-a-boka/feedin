@@ -1,77 +1,112 @@
 from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone, date, time
+from decimal import Decimal
+from sqlalchemy import func, or_, and_
+
+from feedin import database as db
+
+# Modelos do Módulo Empresa
+from feedin.modules.empresa.models import (
+    ColaboradorContrato, EseExcecaoCalendario, EseServicoOferecido,
+    EseColaboradorServicoHabilidade, EseHorarioFuncionamento,
+    EscalaTrabalhoColaborador, EseNotificacao, EseRegraPontuacao, ModClientePontos,
+)
+
+# Modelos do Módulo Agenda (Duplicidade de AghOcorrenciaCliente removida)
+from feedin.modules.agenda.models import (
+    AghAgendamento, AghConfiguracaoAgenda, AghOcorrenciaCliente,
+    AghSolicitacaoReagendamento, AghAgendamentoItem,
+)
+
+# Modelos Core
+from feedin.models import ModulosSistema
 
 # Fuso horário padrão do sistema
 TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
 
-from datetime import datetime, timedelta, timezone, date, time
-from sqlalchemy import func, or_, and_
-from decimal import Decimal
 
-from feedin import database as db
+def _encontrar_colaborador_apto(empresa_id, servico_id, inicio_slot, fim_slot, ignorar_agendamento_id=None):
+    """
+    Localiza o primeiro colaborador ativo, habilitado para o serviço e com agenda
+    livre no intervalo especificado [inicio_slot, fim_slot].
+    """
+    # 1. Busca colaboradores ativos na empresa com habilidade para este serviço
+    contratos_aptos = db.session.query(ColaboradorContrato).join(
+        EseColaboradorServicoHabilidade,
+        EseColaboradorServicoHabilidade.contrato_id == ColaboradorContrato.id
+    ).filter(
+        ColaboradorContrato.id_local == empresa_id,
+        ColaboradorContrato.status_profissional == 'ativo',
+        EseColaboradorServicoHabilidade.servico_oferecido_id == servico_id
+    ).all()
 
-from feedin.modules.empresa.models import (
-    ColaboradorContrato, EseExcecaoCalendario,  EseServicoOferecido, EseColaboradorServicoHabilidade,
-    EseHorarioFuncionamento, EscalaTrabalhoColaborador, EseNotificacao,     EseRegraPontuacao, ModClientePontos,
-)
+    if not contratos_aptos:
+        # Fallback: Se não houver amarração de habilidade explícita, avalia todos os ativos
+        contratos_aptos = ColaboradorContrato.query.filter_by(
+            id_local=empresa_id,
+            status_profissional='ativo'
+        ).all()
 
-# Modelos específicos do próprio módulo Agenda
-from feedin.modules.agenda.models import (
-    AghAgendamento, AghConfiguracaoAgenda, AghOcorrenciaCliente, AghOcorrenciaCliente, AghSolicitacaoReagendamento,
-    AghAgendamentoItem,
-)
+    for colab in contratos_aptos:
+        # 2. Verifica se o profissional já possui compromisso nesse intervalo de tempo
+        query_conflito = db.session.query(AghAgendamentoItem).join(
+            AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+        ).filter(
+            AghAgendamentoItem.profissional_id == colab.id,
+            AghAgendamento.status != 'cancelado',
+            AghAgendamentoItem.data_hora_inicio < fim_slot,
+            AghAgendamentoItem.data_hora_fim > inicio_slot
+        )
 
-# Modelos da Estrutura Base (Core)
-from feedin.models import (
-    ModulosSistema,
-)
+        if ignorar_agendamento_id:
+            query_conflito = query_conflito.filter(AghAgendamento.id != ignorar_agendamento_id)
+
+        if query_conflito.first() is None:
+            return colab.id  # Retorna o ID do primeiro colaborador disponível
+
+    return None
 
 
 def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servico_ids=None, profissional_id=None):
     """
-    Motor de Busca do FeedIn:
+    Motor de Busca do FeedIn (Otimizado - Batch Querying na Memória):
     Determina os colaboradores aptos e os slots de horários livres para agendamento.
 
     Retorna uma tupla: (lista_horarios_formatados, dict_colaboradores_por_servico)
     """
-    agora = datetime.utcnow()
+    agora_local = datetime.now(TZ_BRASIL).replace(tzinfo=None)
     dia_semana_py = data_consulta.weekday()  # 0 = Segunda, 6 = Domingo
 
     # --------------------------------------------------------------------------
     # 1. FILTRO DE ELEGIBILIDADE INICIAL
     # --------------------------------------------------------------------------
+    query_contratos = ColaboradorContrato.query.filter_by(
+        id_local=empresa_id,
+        status_profissional='ativo'
+    )
     if profissional_id:
-        contratos_base = ColaboradorContrato.query.filter_by(
-            id=profissional_id,
-            id_local=empresa_id,
-            status_profissional='ativo'
-        ).all()
-    else:
-        contratos_base = ColaboradorContrato.query.filter_by(
-            id_local=empresa_id,
-            status_profissional='ativo'
-        ).all()
+        query_contratos = query_contratos.filter_by(id=profissional_id)
 
+    contratos_base = query_contratos.all()
     if not contratos_base:
         return [], {}
 
     contratos_dict = {c.id: c for c in contratos_base}
     contratos_ids = list(contratos_dict.keys())
 
-    # Mapa para saber quais colaboradores prestam quais serviços especificamente
     # Estrutura: { servico_id: [ColaboradorContrato, ...] }
     colaboradores_por_servico = {}
 
     if servico_ids:
-        for s_id in servico_ids:
-            habilidades = EseColaboradorServicoHabilidade.query.filter(
-                EseColaboradorServicoHabilidade.contrato_id.in_(contratos_ids),
-                EseColaboradorServicoHabilidade.servico_oferecido_id == s_id
-            ).all()
+        habilidades = EseColaboradorServicoHabilidade.query.filter(
+            EseColaboradorServicoHabilidade.contrato_id.in_(contratos_ids),
+            EseColaboradorServicoHabilidade.servico_oferecido_id.in_(servico_ids)
+        ).all()
 
-            c_ids_servico = [h.contrato_id for h in habilidades]
-            colaboradores_por_servico[s_id] = [contratos_dict[cid] for cid in c_ids_servico if cid in contratos_dict]
+        for h in habilidades:
+            if h.contrato_id in contratos_dict:
+                colaboradores_por_servico.setdefault(h.servico_oferecido_id, []).append(contratos_dict[h.contrato_id])
     else:
-        # Se não informou serviços, todos os contratos ativos atendem
         for c in contratos_base:
             colaboradores_por_servico.setdefault(0, []).append(c)
 
@@ -85,12 +120,13 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
             EseServicoOferecido.empresa_id == empresa_id
         ).all()
         if servicos:
-            def _to_minutes(d):
+            def _to_minutes(s):
+                d = getattr(s, 'duracao_minutos', None) or getattr(s, 'tempo_duracao', None)
                 if isinstance(d, int): return d
                 if hasattr(d, 'hour'): return d.hour * 60 + d.minute
                 return 30
 
-            duracao_total_min = sum(_to_minutes(s.tempo_duracao) for s in servicos)
+            duracao_total_min = sum(_to_minutes(s) for s in servicos)
 
     duracao_delta = timedelta(minutes=duracao_total_min)
     passo_slot = timedelta(minutes=30)
@@ -104,7 +140,7 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
         EseExcecaoCalendario.contrato_id.is_(None),
         EseExcecaoCalendario.ativo == True,
         EseExcecaoCalendario.data_inicio <= data_consulta,
-        EseExcecaoCalendario.data_fim >= data_consulta
+        or_(EseExcecaoCalendario.data_fim >= data_consulta, EseExcecaoCalendario.data_fim.is_(None))
     ).first()
 
     if excecao_empresa:
@@ -119,14 +155,11 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
     if not janelas_empresa:
         horarios_empresa = EseHorarioFuncionamento.query.filter(
             EseHorarioFuncionamento.empresa_id == empresa_id,
-            or_(
-                EseHorarioFuncionamento.dia_semana == dia_semana_py,
-                EseHorarioFuncionamento.dia_semana == (dia_semana_py + 1)  # Tolera padrão 1..7
-            )
+            EseHorarioFuncionamento.dia_semana == dia_semana_py
         ).order_by(EseHorarioFuncionamento.horario_abertura).all()
 
         if not horarios_empresa:
-            return [], {}  # Empresa não abre neste dia
+            return [], {}
 
         for h in horarios_empresa:
             janelas_empresa.append((
@@ -135,74 +168,78 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
             ))
 
     # --------------------------------------------------------------------------
-    # 4. DISPONIBILIDADE REAL E INTERSEÇÃO DE HORÁRIOS
+    # 4. CARREGAMENTO EM LOTE (BATCH LOADING EM MEMÓRIA)
+    # --------------------------------------------------------------------------
+    inicio_dia = datetime.combine(data_consulta, time.min)
+    fim_dia = datetime.combine(data_consulta, time.max)
+
+    # A) Exceções dos Colaboradores
+    excecoes_colab = EseExcecaoCalendario.query.filter(
+        EseExcecaoCalendario.empresa_id == empresa_id,
+        EseExcecaoCalendario.contrato_id.in_(contratos_ids),
+        EseExcecaoCalendario.ativo == True,
+        EseExcecaoCalendario.data_inicio <= data_consulta,
+        or_(EseExcecaoCalendario.data_fim >= data_consulta, EseExcecaoCalendario.data_fim.is_(None))
+    ).all()
+    mapa_excecoes = {e.contrato_id: e for e in excecoes_colab}
+
+    # B) Escalas de Trabalho
+    escalas = EscalaTrabalhoColaborador.query.filter(
+        EscalaTrabalhoColaborador.contrato_id.in_(contratos_ids),
+        EscalaTrabalhoColaborador.ativo == True,
+        EscalaTrabalhoColaborador.data_inicio <= data_consulta,
+        or_(EscalaTrabalhoColaborador.data_fim >= data_consulta, EscalaTrabalhoColaborador.data_fim.is_(None)),
+        or_(EscalaTrabalhoColaborador.dia_semana == dia_semana_py, EscalaTrabalhoColaborador.dia_semana.is_(None))
+    ).all()
+
+    mapa_escalas = {}
+    ordem_prioridade = {'emergencial': 1, 'alternativo': 2, 'padrao': 3}
+    for esc in sorted(escalas, key=lambda e: ordem_prioridade.get(getattr(e, 'tipo_escala', 'padrao'), 99)):
+        if esc.contrato_id not in mapa_escalas:
+            mapa_escalas[esc.contrato_id] = esc
+
+    # C) Agendamentos / Ocupações dos Profissionais
+    itens_ocupados = db.session.query(AghAgendamentoItem).join(
+        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).filter(
+        AghAgendamentoItem.profissional_id.in_(contratos_ids),
+        AghAgendamentoItem.data_hora_inicio >= inicio_dia,
+        AghAgendamentoItem.data_hora_inicio <= fim_dia,
+        AghAgendamento.status != 'cancelado',
+        or_(
+            AghAgendamento.status != 'soft_lock',
+            and_(AghAgendamento.status == 'soft_lock', AghAgendamento.expira_em > agora_local)
+        )
+    ).all()
+
+    mapa_ocupacoes = {}
+    for item in itens_ocupados:
+        c_id = item.profissional_id
+        if c_id not in mapa_ocupacoes:
+            mapa_ocupacoes[c_id] = []
+        if item.data_hora_inicio and item.data_hora_fim:
+            mapa_ocupacoes[c_id].append((item.data_hora_inicio, item.data_hora_fim))
+
+    # --------------------------------------------------------------------------
+    # 5. DISPONIBILIDADE REAL E INTERSEÇÃO DE HORÁRIOS
     # --------------------------------------------------------------------------
     horarios_consolidados = set()
 
     for c_id in contratos_ids:
-        # A) Exceção Calendário do Colaborador
-        excecao_colab = EseExcecaoCalendario.query.filter(
-            EseExcecaoCalendario.empresa_id == empresa_id,
-            EseExcecaoCalendario.contrato_id == c_id,
-            EseExcecaoCalendario.ativo == True,
-            EseExcecaoCalendario.data_inicio <= data_consulta,
-            EseExcecaoCalendario.data_fim >= data_consulta
-        ).first()
-
+        excecao_colab = mapa_excecoes.get(c_id)
         if excecao_colab and not excecao_colab.trabalha and not excecao_colab.considera_horario:
             continue
 
-        # B) Escala de Trabalho
-        escalas_candidatas = EscalaTrabalhoColaborador.query.filter(
-            EscalaTrabalhoColaborador.contrato_id == c_id,
-            EscalaTrabalhoColaborador.ativo == True,
-            EscalaTrabalhoColaborador.data_inicio <= data_consulta,
-            EscalaTrabalhoColaborador.data_fim >= data_consulta
-        ).all()
-
-        if not escalas_candidatas:
+        escala_vigente = mapa_escalas.get(c_id)
+        if not escala_vigente:
             continue
-
-        escalas_validas = [
-            e for e in escalas_candidatas
-            if e.dia_semana is None or e.dia_semana == dia_semana_py or e.dia_semana == (dia_semana_py + 1)
-        ]
-
-        if not escalas_validas:
-            continue
-
-        ordem_prioridade = {'emergencial': 1, 'alternativo': 2, 'padrao': 3}
-        escala_vigente = sorted(
-            escalas_validas,
-            key=lambda e: ordem_prioridade.get(e.tipo_escala, 99)
-        )[0]
 
         inicio_colab = datetime.combine(data_consulta, escala_vigente.inicio_expediente)
         fim_colab = datetime.combine(data_consulta, escala_vigente.fim_expediente)
-        intervalo_inicio = datetime.combine(data_consulta,
-                                            escala_vigente.inicio_intervalo) if escala_vigente.inicio_intervalo else None
-        intervalo_fim = datetime.combine(data_consulta,
-                                         escala_vigente.fim_intervalo) if escala_vigente.fim_intervalo else None
+        intervalo_inicio = datetime.combine(data_consulta, escala_vigente.inicio_intervalo) if escala_vigente.inicio_intervalo else None
+        intervalo_fim = datetime.combine(data_consulta, escala_vigente.fim_intervalo) if escala_vigente.fim_intervalo else None
 
-        # C) Ocupações (Busca em AghAgendamentoItem para multi-profissionais)
-        inicio_dia = datetime.combine(data_consulta, datetime.min.time())
-        fim_dia = datetime.combine(data_consulta, datetime.max.time())
-
-        itens_ocupados = db.session.query(AghAgendamentoItem).join(
-            AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
-        ).filter(
-            AghAgendamentoItem.profissional_id == c_id,
-            AghAgendamentoItem.data_hora_inicio >= inicio_dia,
-            AghAgendamentoItem.data_hora_inicio <= fim_dia,
-            AghAgendamento.status != 'cancelado',
-            or_(
-                AghAgendamento.status != 'soft_lock',
-                and_(AghAgendamento.status == 'soft_lock', AghAgendamento.expira_em > agora)
-            )
-        ).all()
-
-        bloqueios = [(it.data_hora_inicio, it.data_hora_fim) for it in itens_ocupados if
-                     it.data_hora_inicio and it.data_hora_fim]
+        bloqueios = list(mapa_ocupacoes.get(c_id, []))
 
         if excecao_colab and excecao_colab.considera_horario and excecao_colab.hora_inicio_excecao:
             bloqueios.append((
@@ -210,16 +247,19 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
                 datetime.combine(data_consulta, excecao_colab.hora_fim_excecao)
             ))
 
-        # D) Geração das janelas livres
         for emp_inicio, emp_fim in janelas_empresa:
             inicio_efetivo = max(emp_inicio, inicio_colab)
             fim_efetivo = min(emp_fim, fim_colab)
 
             atual = inicio_efetivo
             while atual + duracao_delta <= fim_efetivo:
+                # Impede sugestão de horários passados no dia de hoje
+                if data_consulta == agora_local.date() and atual <= agora_local:
+                    atual += passo_slot
+                    continue
+
                 slot_inicio = atual
                 slot_fim = atual + duracao_delta
-
                 colisao = False
 
                 if intervalo_inicio and intervalo_fim:
@@ -267,7 +307,6 @@ def registrar_alerta_falta_escala(empresa_id, data_consulta, motivo="escala"):
 
     url_acao = f"/agenda/escalas?data={data_iso}"
 
-    # Trava de duplicidade para não acumular notificações não lidas no mesmo dia
     alerta_existente = EseNotificacao.query.filter_by(
         empresa_id=empresa_id,
         modulo_id=modulo_agenda.id,
@@ -281,7 +320,7 @@ def registrar_alerta_falta_escala(empresa_id, data_consulta, motivo="escala"):
             modulo_id=modulo_agenda.id,
             modulo_slug=modulo_agenda.slug,
             empresa_id=empresa_id,
-            destinatario_id=None,  # Alerta gerencial para a Dashboard da Empresa
+            destinatario_id=None,
             tipo="alerta_escala_vazia",
             categoria="operacional",
             titulo=titulo,
@@ -302,11 +341,7 @@ def processar_pontualidade_checkin(agendamento, data_hora_chegada):
     """
     Verifica se o cliente chegou no horário (ou dentro da tolerância) e credita
     os pontos correspondentes com base na regra ativa do estabelecimento.
-
-    Atenção: Se o agendamento teve reclassificação por falta ou reagendamento tardio,
-    o crédito de pontualidade é bloqueado.
     """
-    # Se sofreu reagendamento tardio ou falta prévia, nega a pontuação
     if getattr(agendamento, 'elegivel_pontualidade', True) is False:
         return False
 
@@ -319,8 +354,6 @@ def processar_pontualidade_checkin(agendamento, data_hora_chegada):
     if not regra:
         return False
 
-    # Diferença em minutos entre a chegada e a hora agendada
-    # (Valores <= 0 indicam chegada no horário ou adiantado)
     diferenca_minutos = (data_hora_chegada - agendamento.data_hora_inicio).total_seconds() / 60.0
 
     if diferenca_minutos <= regra.tolerancia_minutos:
@@ -340,8 +373,6 @@ def processar_pontualidade_checkin(agendamento, data_hora_chegada):
     return False
 
 
-TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
-
 def processar_solicitacao_reagendamento(
     agendamento_atual: AghAgendamento,
     nova_data_hora: datetime,
@@ -352,9 +383,7 @@ def processar_solicitacao_reagendamento(
     itens_servico: list = None
 ):
     """
-    Processa a solicitação de reagendamento respeitando as regras de expiração específicas:
-    - Antecedência >= 2h: Expira em 30 dias a partir da NOVA DATA.
-    - Antecedência < 2h: Expira em 7 dias a partir da DATA ORIGINAL.
+    Processa a solicitação de reagendamento respeitando as regras de expiração específicas.
     """
     config = AghConfiguracaoAgenda.query.filter_by(empresa_id=empresa.id).first()
 
@@ -365,12 +394,10 @@ def processar_solicitacao_reagendamento(
     agora_tz = datetime.now(TZ_BRASIL)
     agora_naive = agora_tz.replace(tzinfo=None)
 
-    # Trata data_hora_inicio do agendamento atual
     orig_inicio_naive = agendamento_atual.data_hora_inicio
     if orig_inicio_naive.tzinfo is not None:
         orig_inicio_naive = orig_inicio_naive.replace(tzinfo=None)
 
-    # Agendamento Raiz
     agendamento_raiz = (
         AghAgendamento.query.get(agendamento_atual.agendamento_origem_id)
         if agendamento_atual.agendamento_origem_id
@@ -378,29 +405,20 @@ def processar_solicitacao_reagendamento(
     )
     data_original_raiz = agendamento_raiz.data_hora_inicio.date()
 
-    # Cálculo do tempo restante até o agendamento original
     minutos_restantes = (orig_inicio_naive - agora_naive).total_seconds() / 60.0
 
-    # =========================================================================
-    # 📌 CÁLCULO DA DATA DE EXPIRAÇÃO CONFORME A ANTECEDÊNCIA
-    # =========================================================================
+    # Cálculo da data de expiração
     if minutos_restantes >= minutos_antecedencia_empresa:
-        # Antecedência >= 2h: 30 dias a partir da Nova Data
         data_expiracao = nova_data_hora + timedelta(days=30)
     else:
-        # Antecedência < 2h (ou pós-horário): 7 dias a partir da Data Original
         data_expiracao = agendamento_atual.data_hora_inicio + timedelta(days=prazo_limite_dias)
 
-    # --------------------------------------------------------------------------
-    # 1. FLUXO DO CLIENTE (Validações & Trava de Tolerância)
-    # --------------------------------------------------------------------------
+    # Fluxo do cliente
     if not is_colaborador:
-        # A. Validação do Limite de 30 Dias (em relação à data raiz original)
         limite_30_dias = data_original_raiz + timedelta(days=30)
         if nova_data_hora.date() > limite_30_dias:
             return False, f'A nova data não pode exceder 30 dias da data do agendamento original ({limite_30_dias.strftime("%d/%m/%Y")}).', 'prazo_excedido'
 
-        # B. Reagendamento Pós-Vencido
         if orig_inicio_naive < agora_naive:
             if not permitir_pos_horario:
                 return False, 'Esta empresa não permite reagendamentos após o horário agendado.', 'pos_horario_bloqueado'
@@ -411,7 +429,6 @@ def processar_solicitacao_reagendamento(
                 db.session.commit()
                 return False, f'O prazo limite de {prazo_limite_dias} dias para reagendar este atendimento expirou.', 'expirado'
 
-        # C. Reagendamento com pouca antecedência (< 2h) -> Gera Solicitação Pendente
         if minutos_restantes < minutos_antecedencia_empresa:
             if not justificativa:
                 return False, 'Reagendamentos com menos de 2h de antecedência exigem justificativa para análise.', 'requer_justificativa'
@@ -442,11 +459,8 @@ def processar_solicitacao_reagendamento(
             db.session.commit()
             return True, 'Sua solicitação de reagendamento foi enviada para análise da equipe.', 'pendente_aprovacao'
 
-    # --------------------------------------------------------------------------
-    # 2. EFETIVAÇÃO DO NOVO AGENDAMENTO
-    # --------------------------------------------------------------------------
+    # Efetivação do agendamento
     try:
-        # Duração total
         if itens_servico:
             duracao_minutos_total = sum(i['duracao_minutos'] for i in itens_servico)
             duracao = timedelta(minutes=duracao_minutos_total)
@@ -457,11 +471,9 @@ def processar_solicitacao_reagendamento(
                 else timedelta(minutes=30)
             )
 
-        # Marca o antigo como reagendado
         agendamento_atual.status = 'reagendado'
         agendamento_atual.data_solicitacao_reagendamento = agora_tz
 
-        # Efetiva o novo agendamento com a data_expiracao calculada
         novo_agendamento = AghAgendamento(
             empresa_id=empresa.id,
             cliente_id=agendamento_atual.cliente_id,
@@ -474,20 +486,19 @@ def processar_solicitacao_reagendamento(
             qtd_reagendamentos=(getattr(agendamento_atual, 'qtd_reagendamentos', 0) or 0) + 1,
             status='confirmado',
             tipo_origem='online',
-            expira_em=data_expiracao,  # <--- Aplica a regra calculada acima
+            expira_em=data_expiracao,
             data_solicitacao_reagendamento=agora_tz,
             criado_em=agora_tz
         )
         db.session.add(novo_agendamento)
         db.session.flush()
 
-        # Copia/Associa itens de serviço
         if itens_servico:
             for idx, item in enumerate(itens_servico, start=1):
                 db.session.add(AghAgendamentoItem(
                     agendamento_id=novo_agendamento.id,
                     servico_id=item['servico_id'],
-                    colaborador_id=item.get('colaborador_id') or novo_agendamento.profissional_id,  # 👈 Adicionado
+                    profissional_id=item.get('colaborador_id') or novo_agendamento.profissional_id,
                     preco_unitario=item['preco_unitario'],
                     duracao_minutos=item['duracao_minutos'],
                     ordem_execucao=idx
@@ -498,12 +509,12 @@ def processar_solicitacao_reagendamento(
                 db.session.add(AghAgendamentoItem(
                     agendamento_id=novo_agendamento.id,
                     servico_id=item_orig.servico_id,
+                    profissional_id=item_orig.profissional_id or novo_agendamento.profissional_id,
                     preco_unitario=item_orig.preco_unitario,
                     duracao_minutos=item_orig.duracao_minutos,
                     ordem_execucao=item_orig.ordem_execucao
                 ))
 
-        # Registra o histórico da solicitação
         solicitacao_historico = AghSolicitacaoReagendamento(
             agendamento_id=agendamento_atual.id,
             novo_agendamento_id=novo_agendamento.id,
@@ -535,9 +546,8 @@ def montar_itens_agendamento(empresa_id, servicos_objs, data_hora_inicio, profis
     horario_cursor = data_hora_inicio
 
     for idx, srv in enumerate(servicos_objs, start=1):
-        dur_min = srv.duracao_minutos if hasattr(srv, 'duracao_minutos') else 30
+        dur_min = getattr(srv, 'duracao_minutos', None) or getattr(srv, 'tempo_duracao', None) or 30
 
-        # Se um profissional específico não for exigido, obtém os aptos via serviço
         colab_id = profissional_id_preferencial
         if not colab_id:
             _, colabs_aptos = obter_colaboradores_e_horarios_disponiveis(
@@ -545,7 +555,8 @@ def montar_itens_agendamento(empresa_id, servicos_objs, data_hora_inicio, profis
                 data_consulta=data_hora_inicio.date(),
                 servico_ids=[srv.id]
             )
-            colab_id = list(colabs_aptos.keys())[0] if colabs_aptos else None
+            colabs_lista = colabs_aptos.get(srv.id, [])
+            colab_id = colabs_lista[0].id if colabs_lista else None
 
         fim_slot = horario_cursor + timedelta(minutes=dur_min)
 
@@ -559,7 +570,7 @@ def montar_itens_agendamento(empresa_id, servicos_objs, data_hora_inicio, profis
             'data_hora_fim': fim_slot
         })
 
-        horario_cursor = fim_slot  # Sequencial inicial
+        horario_cursor = fim_slot
 
     return itens
 

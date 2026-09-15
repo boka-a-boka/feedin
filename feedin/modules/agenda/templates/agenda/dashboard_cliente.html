@@ -42,24 +42,11 @@
         justify-content: center;
     }
 
-    .avatar-trigger-area {
-        width: 64px !important;
-        height: 64px !important;
-        border-radius: 50% !important;
-        overflow: hidden;
-        cursor: pointer;
-        position: relative;
-        background-color: #212529 !important; /* Cor de fundo escura garantida */
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
     .avatar-circle {
         width: 100%;
         height: 100%;
         object-fit: cover;
-        aspect-ratio: 1 / 1;          /* 👈 Força 1:1 na imagem e na div da letra */
+        aspect-ratio: 1 / 1;          /* Força 1:1 na imagem e na div da letra */
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     }
 
@@ -180,31 +167,28 @@
                     {# 1. Resolução do caminho bruto da foto de forma limpa #}
                     {% set foto_raw = None %}
                     {% if cliente and cliente.foto_url %}
-                      {% set val = cliente.foto_url | string | trim %}
-                      {% if val | lower not in ['none', 'null', ''] %}
-                        {% set foto_raw = val %}
-                      {% endif %}
+                        {% set val = cliente.foto_url | string | trim %}
+                        {% if val | lower not in ['none', 'null', ''] %}
+                            {% set foto_raw = val %}
+                        {% endif %}
                     {% endif %}
 
                     {# 2. Resolução da URL usando get_avatar_url para resolver via /media/ #}
                     {% set foto_src = None %}
                     {% if foto_raw %}
-                      {# Se já for uma URL externa completa #}
-                      {% if foto_raw.startswith('http://') or foto_raw.startswith('https://') %}
-                        {% set foto_src = foto_raw %}
-                      {# Prioridade 1: Helper global get_avatar_url #}
-                      {% elif get_avatar_url is defined %}
-                        {% set foto_src = get_avatar_url(foto_raw) %}
-                      {# Fallback seguro para montagem direta de rota /media/ #}
-                      {% else %}
-                        {% set limpo = foto_raw.replace('\\', '/').lstrip('/') %}
-                        {% for prefixo in ['agenda/static/uploads/', 'empresa/static/uploads/', 'agenda/static/', 'empresa/static/', 'static/uploads/', 'static/Uploads/', 'uploads/', 'Uploads/', 'agenda/', 'empresa/', 'static/'] %}
-                          {% if limpo.startswith(prefixo) %}
-                            {% set limpo = limpo[prefixo|length:] %}
-                          {% endif %}
-                        {% endfor %}
-                        {% set foto_src = '/media/' ~ limpo %}
-                      {% endif %}
+                        {% if foto_raw.startswith('http://') or foto_raw.startswith('https://') %}
+                            {% set foto_src = foto_raw %}
+                        {% elif get_avatar_url is defined %}
+                            {% set foto_src = get_avatar_url(foto_raw) %}
+                        {% else %}
+                            {% set limpo = foto_raw.replace('\\', '/').lstrip('/') %}
+                            {% for prefixo in ['agenda/static/uploads/', 'empresa/static/uploads/', 'agenda/static/', 'empresa/static/', 'static/uploads/', 'static/Uploads/', 'uploads/', 'Uploads/', 'agenda/', 'empresa/', 'static/'] %}
+                                {% if limpo.startswith(prefixo) %}
+                                    {% set limpo = limpo[prefixo|length:] %}
+                                {% endif %}
+                            {% endfor %}
+                            {% set foto_src = '/media/' ~ limpo %}
+                        {% endif %}
                     {% endif %}
 
                     {# --- DEPURAÇÃO NO CONSOLE DO NAVEGADOR --- #}
@@ -293,7 +277,7 @@
             </div>
         </div>
 
-        {# 📋 CONVITE / FICHA DE ADMISSÃO PENDENTE #}
+        {# 3. CONVITE / FICHA DE ADMISSÃO PENDENTE #}
         {% if ficha_pendente %}
         <div class="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -330,13 +314,13 @@
                     </div>
                 </div>
                 {% if eh_gestor %}
-                    <a href="{{ url_for('agenda.painel_gestao') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
-                        Gerenciar <i class="bi bi-arrow-right ms-1"></i>
-                    </a>
+                <a href="{{ url_for('agenda.painel_gestao') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
+                    Gerenciar <i class="bi bi-arrow-right ms-1"></i>
+                </a>
                 {% else %}
-                    <a href="{{ url_for('agenda.painel_interno_loja') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
-                        Atender <i class="bi bi-arrow-right ms-1"></i>
-                    </a>
+                <a href="{{ url_for('agenda.painel_interno_loja') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
+                    Atender <i class="bi bi-arrow-right ms-1"></i>
+                </a>
                 {% endif %}
             </div>
         </div>
@@ -370,53 +354,53 @@
             </div>
 
             {% if empresas_favoritas %}
-               <div class="row g-2">
-                    {% for empresa in empresas_favoritas %}
-                        {% set raw_logo = empresa.logomarca or empresa.logo_url %}
-                        {% set url_logo = media_url('empresa', raw_logo) if raw_logo else None %}
+            <div class="row g-2">
+                {% for empresa in empresas_favoritas %}
+                {% set raw_logo = empresa.logomarca or empresa.logo_url %}
+                {% set url_logo = media_url('empresa', raw_logo) if raw_logo and media_url is defined else None %}
 
-                        <div class="col-6 col-md-4">
-                            <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
-                                <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
-                                    <div class="d-flex align-items-center gap-2">
+                <div class="col-6 col-md-4">
+                    <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
+                        <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
+                            <div class="d-flex align-items-center gap-2">
 
-                                        {# Container Fixo da Logo (40x40px) #}
-                                        <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                                {# Container Fixo da Logo (40x40px) #}
+                                <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
 
-                                            {# Logo da Empresa #}
-                                            <img id="imgLogoEmpresa_{{ empresa.id }}"
-                                                 src="{{ url_logo or '' }}"
-                                                 class="rounded-circle border object-fit-contain w-100 h-100 p-1 {% if not url_logo %}d-none{% endif %}"
-                                                 style="background-color: #fcfbfa;"
-                                                 alt="{{ empresa.nome }}"
-                                                 onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.add('d-flex');">
+                                    {# Logo da Empresa #}
+                                    <img id="imgLogoEmpresa_{{ empresa.id }}"
+                                         src="{{ url_logo or '' }}"
+                                         class="rounded-circle border object-fit-contain w-100 h-100 p-1 {% if not url_logo %}d-none{% endif %}"
+                                         style="background-color: #fcfbfa;"
+                                         alt="{{ empresa.nome }}"
+                                         onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.add('d-flex');">
 
-                                            {# Fallback da Inicial do Nome da Empresa #}
-                                            <div id="logoLetraEmpresa_{{ empresa.id }}"
-                                                 class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100 {% if url_logo %}d-none{% else %}d-flex{% endif %}"
-                                                 style="background-color: #f6f4ee;">
-                                                {{ (empresa.nome or 'E')[0] | upper }}
-                                            </div>
-                                        </div>
-
-                                        {# Nome e Categoria #}
-                                        <div class="text-truncate min-w-0">
-                                            <span class="d-block text-dark fw-semibold small text-truncate">{{ empresa.nome }}</span>
-                                            <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
-                                                {{ empresa.categoria_rel.nome if empresa.categoria_rel else (empresa.categoria_nome or 'Estabelecimento') }}
-                                            </small>
-                                        </div>
+                                    {# Fallback da Inicial do Nome da Empresa #}
+                                    <div id="logoLetraEmpresa_{{ empresa.id }}"
+                                         class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100 {% if url_logo %}d-none{% else %}d-flex{% endif %}"
+                                         style="background-color: #f6f4ee;">
+                                        {{ (empresa.nome or 'E')[0] | upper }}
                                     </div>
                                 </div>
-                            </a>
+
+                                {# Nome e Categoria #}
+                                <div class="text-truncate min-w-0">
+                                    <span class="d-block text-dark fw-semibold small text-truncate">{{ empresa.nome }}</span>
+                                    <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
+                                        {{ empresa.categoria_rel.nome if empresa.categoria_rel else (empresa.categoria_nome or 'Estabelecimento') }}
+                                    </small>
+                                </div>
+                            </div>
                         </div>
-                    {% endfor %}
+                    </a>
                 </div>
+                {% endfor %}
+            </div>
             {% else %}
-                <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
-                    <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
-                    <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
-                </div>
+            <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
+                <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
+                <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
+            </div>
             {% endif %}
         </div>
 
@@ -437,234 +421,248 @@
 
             <div class="list-group gap-2" id="lista-notificacoes">
                 {% for notificacao in notificacoes[:2] %}
-                    {% set tipo_notif = (notificacao.tipo or notificacao.tipo_evento or 'geral') | lower %}
-                    {% set borda_cor = 'border-primary' %}
-                    {% if tipo_notif in ['empresa', 'loja'] %}
-                        {% set borda_cor = 'border-info' %}
-                    {% elif tipo_notif in ['alerta', 'urgente', 'cancelamento'] %}
-                        {% set borda_cor = 'border-danger' %}
-                    {% elif tipo_notif in ['sistema', 'convite', 'aviso'] %}
-                        {% set borda_cor = 'border-warning' %}
-                    {% endif %}
+                {% set tipo_notif = (notificacao.tipo or notificacao.tipo_evento or 'geral') | lower %}
+                {% set borda_cor = 'border-primary' %}
+                {% if tipo_notif in ['empresa', 'loja'] %}
+                    {% set borda_cor = 'border-info' %}
+                {% elif tipo_notif in ['alerta', 'urgente', 'cancelamento'] %}
+                    {% set borda_cor = 'border-danger' %}
+                {% elif tipo_notif in ['sistema', 'convite', 'aviso'] %}
+                    {% set borda_cor = 'border-warning' %}
+                {% endif %}
 
-                    <!-- ATENÇÃO PARA O ID ABAIXO -->
-                    <div id="card-notificacao-{{ notificacao.id }}"
-                         class="list-group-item rounded-4 shadow-sm border-start border-4 {{ borda_cor }} p-3 position-relative"
-                         style="transition: all 0.3s ease;">
+                <div id="card-notificacao-{{ notificacao.id }}"
+                     class="list-group-item rounded-4 shadow-sm border-start border-4 {{ borda_cor }} p-3 position-relative"
+                     style="transition: all 0.3s ease;">
 
-                        <div class="d-flex align-items-center justify-content-between mb-1">
-                            <h6 class="fw-bold text-dark mb-0 text-truncate" style="font-size: 0.88rem; max-width: 80%;">
-                                {{ notificacao.titulo or 'Nova Notificação' }}
-                            </h6>
-                            <small class="text-muted flex-shrink-0" style="font-size: 0.7rem;">
-                                {{ notificacao.criado_em.strftime('%d/%m %H:%M') if notificacao.criado_em else '' }}
-                            </small>
-                        </div>
-
-                        <p class="mb-2 text-secondary small text-break" style="font-size: 0.82rem;">
-                            {{ notificacao.mensagem or notificacao.conteudo or '' }}
-                        </p>
-
-                        <div class="d-flex justify-content-end">
-                            <button type="button"
-                                    class="btn btn-sm btn-light border rounded-pill py-1 px-3 text-muted btn-arquivar-notif"
-                                    data-notificacao-id="{{ notificacao.id }}"
-                                    style="font-size: 0.70rem;">
-                                <i class="bi bi-archive me-1"></i>Toque para arquivar
-                            </button>
-                        </div>
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <h6 class="fw-bold text-dark mb-0 text-truncate" style="font-size: 0.88rem; max-width: 80%;">
+                            {{ notificacao.titulo or 'Nova Notificação' }}
+                        </h6>
+                        <small class="text-muted flex-shrink-0" style="font-size: 0.7rem;">
+                            {{ notificacao.criado_em.strftime('%d/%m %H:%M') if notificacao.criado_em else '' }}
+                        </small>
                     </div>
+
+                    <p class="mb-2 text-secondary small text-break" style="font-size: 0.82rem;">
+                        {{ notificacao.mensagem or notificacao.conteudo or '' }}
+                    </p>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="button"
+                                class="btn btn-sm btn-light border rounded-pill py-1 px-3 text-muted btn-arquivar-notif"
+                                data-notificacao-id="{{ notificacao.id }}"
+                                style="font-size: 0.70rem;">
+                            <i class="bi bi-archive me-1"></i>Toque para arquivar
+                        </button>
+                    </div>
+                </div>
                 {% endfor %}
             </div>
         </div>
         {% endif %}
 
-        {# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
-        <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
-                <h6 class="fw-bold text-primary m-0" style="font-size: 0.85rem;">
-                    <i class="bi bi-calendar-event-fill me-1"></i> Meus Próximos Agendamentos
-                </h6>
-                {% if agendamentos %}
-                    <span class="badge bg-primary text-white rounded-pill" style="font-size: 0.7rem;">
-                        {{ agendamentos|length }}
+{# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
+<div class="mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
+        <h6 class="fw-bold text-primary m-0" style="font-size: 0.85rem;">
+            <i class="bi bi-calendar-event-fill me-1"></i> Meus Próximos Agendamentos
+        </h6>
+        {% if agendamentos %}
+        <span class="badge bg-primary text-white rounded-pill" style="font-size: 0.7rem;">
+            {{ agendamentos|length }}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if agendamentos %}
+    <div class="d-flex flex-column gap-2 pe-1" style="max-height: 420px; overflow-y: auto;">
+        {% for item in agendamentos %}
+        {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
+        {% set slug_empresa_destinataria = item.empresa.slug if item.empresa is defined and item.empresa and item.empresa.slug else 'geral' %}
+        {% set itens_lista = item.itens if (item.itens is defined and item.itens) else [] %}
+
+        {# 1. Configurações de Cancelamento #}
+        {% set config_agenda = item.empresa.configuracao_agenda if (item.empresa is defined and item.empresa and item.empresa.configuracao_agenda is defined) else None %}
+        {% set minutos_antecedencia = config_agenda.antecedencia_minima_reagendamento_min if (config_agenda and config_agenda.antecedencia_minima_reagendamento_min is not none) else 120 %}
+
+        {% if item.data_hora_inicio and agora is defined and timedelta is defined %}
+            {% set limite_cancelamento = item.data_hora_inicio - timedelta(minutes=minutos_antecedencia) %}
+            {% set permite_cancelar = (item.status in ['pendente', 'confirmado', 'aguardando']) and (agora < limite_cancelamento) %}
+        {% else %}
+            {% set permite_cancelar = False %}
+        {% endif %}
+
+        <!-- CARD DO AGENDAMENTO CONSOLIDADO -->
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item">
+
+            {# Cabeçalho do Card: Empresa e Status Generalizado #}
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
+                        {{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Agendamento') }}
+                    </h6>
+                    <span class="text-muted d-block" style="font-size: 0.72rem;">
+                        <i class="bi bi-clock me-1 text-primary"></i>
+                        {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
                     </span>
+                </div>
+
+                {% if item.status == 'aguardando' %}
+                <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                    <i class="bi bi-geo-alt-fill me-1"></i> Recepção
+                </span>
+                {% elif item.status == 'em_atendimento' %}
+                <span class="badge bg-primary text-white rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                    <i class="bi bi-scissors me-1"></i> Em Atendimento
+                </span>
+                {% elif item.status == 'confirmado' %}
+                <span class="badge bg-success-subtle text-success rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                    <i class="bi bi-check-circle-fill me-1"></i> Confirmado
+                </span>
+                {% elif item.status == 'cancelado' %}
+                <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                    <i class="bi bi-slash-circle me-1"></i> Cancelado
+                </span>
+                {% else %}
+                <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                    {{ item.status | upper }}
+                </span>
                 {% endif %}
             </div>
 
-            {% if agendamentos %}
-                <div class="d-flex flex-column gap-2 pe-1" style="max-height: 420px; overflow-y: auto;">
-                    {% for item in agendamentos %}
-                    {% set primeiro_item = item.itens[0] if item.itens else None %}
-                    {% set servico_principal = primeiro_item.servico if primeiro_item else None %}
-                    {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
-                    {% set slug_empresa_destinataria = item.empresa.slug if item.empresa is defined and item.empresa and item.empresa.slug else 'geral' %}
+            {% if esta_atrasado and item.mensagem_atraso %}
+            <div class="alert alert-warning border-0 py-2 px-3 small d-flex align-items-center my-2 rounded-3" style="font-size: 0.75rem;">
+                <i class="bi bi-exclamation-triangle-fill text-warning-emphasis me-2 fs-6"></i>
+                <span class="text-dark-emphasis">{{ item.mensagem_atraso }}</span>
+            </div>
+            {% endif %}
 
-                    {# TRATAMENTO DA FOTO E NOME DO PROFISSIONAL #}
-                    {% set prof_obj = item.profissional if item.profissional is defined and item.profissional else (item.colaborador if item.colaborador is defined and item.colaborador else None) %}
+            <hr class="my-2 text-black-50 opacity-10">
 
-                    {% set foto_prof_raw = None %}
-                    {% if prof_obj %}
-                        {% if prof_obj.foto_profissional is defined and prof_obj.foto_profissional %}
-                            {% set foto_prof_raw = prof_obj.foto_profissional %}
-                        {% elif prof_obj.foto is defined and prof_obj.foto %}
-                            {% set foto_prof_raw = prof_obj.foto %}
-                        {% elif prof_obj.foto_url is defined and prof_obj.foto_url %}
-                            {% set foto_prof_raw = prof_obj.foto_url %}
-                        {% elif prof_obj.avatar is defined and prof_obj.avatar %}
-                            {% set foto_prof_raw = prof_obj.avatar %}
-                        {% endif %}
+            {# CONSOLIDAÇÃO DOS SERVIÇOS AGRUPADOS POR COLABORADOR #}
+            {% if itens_lista|length > 0 %}
+            <div class="d-flex flex-column gap-2 my-2">
+                {% for colab_id, itens_colaborador in itens_lista | groupby('profissional_id') %}
+                {% set primeiro_sub_item = itens_colaborador[0] %}
+                {% set prof_obj = primeiro_sub_item.profissional if primeiro_sub_item.profissional else (item.profissional if item.profissional else None) %}
+
+                {# Resgate seguro da imagem / avatar do colaborador #}
+                {% set foto_prof_raw = None %}
+                {% if prof_obj %}
+                    {% if prof_obj.foto_profissional is defined and prof_obj.foto_profissional %}
+                        {% set foto_prof_raw = prof_obj.foto_profissional %}
+                    {% elif prof_obj.foto_url is defined and prof_obj.foto_url %}
+                        {% set foto_prof_raw = prof_obj.foto_url %}
+                    {% elif prof_obj.foto is defined and prof_obj.foto %}
+                        {% set foto_prof_raw = prof_obj.foto %}
+                    {% elif prof_obj.avatar is defined and prof_obj.avatar %}
+                        {% set foto_prof_raw = prof_obj.avatar %}
                     {% endif %}
+                {% endif %}
 
-                    {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else (foto_prof_raw if foto_prof_raw else None) %}
-                    {% set nome_profissional = prof_obj.nome if (prof_obj and prof_obj.nome) else (item.empresa.nome if item.empresa else 'Profissional') %}
-                    {% set especialidade_prof = prof_obj.especialidade if (prof_obj and prof_obj.especialidade is defined and prof_obj.especialidade) else 'Profissional da Empresa' %}
-                    {% set bio_prof = prof_obj.biografia if (prof_obj and prof_obj.biografia is defined and prof_obj.biografia) else 'Profissional qualificado para a realização do atendimento.' %}
+                {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else foto_prof_raw %}
+                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Especialista' %}
 
-{# 1. Tenta obter os minutos da configuração da empresa; se não existir, assume o padrão de 120 minutos (2h) #}
-{% set config_agenda = item.empresa.configuracao_agenda if (item.empresa is defined and item.empresa and item.empresa.configuracao_agenda is defined) else None %}
-{% set minutos_antecedencia = config_agenda.antecedencia_minima_reagendamento_min if (config_agenda and config_agenda.antecedencia_minima_reagendamento_min is not none) else 120 %}
-
-{# 2. Calcula a data/hora limite para o cancelamento #}
-{% if item.data_hora_inicio and agora is defined and timedelta is defined %}
-    {% set limite_cancelamento = item.data_hora_inicio - timedelta(minutes=minutos_antecedencia) %}
-    {% set permite_cancelar = (item.status in ['pendente', 'confirmado', 'aguardando']) and (agora < limite_cancelamento) %}
-{% else %}
-    {% set permite_cancelar = False %}
-{% endif %}
-
-                    <!-- CARD DO AGENDAMENTO -->
-                    <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item"
-                         style="cursor: pointer;"
-                         data-bs-toggle="modal"
-                         data-bs-target="#modalInfoAtendimento"
-                         data-prof-nome="{{ nome_profissional }}"
-                         data-prof-especialidade="{{ especialidade_prof }}"
-                         data-prof-bio="{{ bio_prof }}"
-                         data-prof-foto="{{ url_foto_prof or '' }}"
-                         data-empresa-nome="{{ item.empresa.nome if item.empresa else '' }}"
-                         data-servico-nome="{{ servico_principal.nome if servico_principal else 'Atendimento' }}"
-                         data-servico-desc="{{ servico_principal.descricao if servico_principal and servico_principal.descricao else 'Atendimento agendado conforme procedimento padrão.' }}"
-                         data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
-                         data-valor="R$ {{ '%.2f'|format(item.valor_total if item.valor_total is defined and item.valor_total is not none else (item.preco_cobrado or 0.0)) }}">
-
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="d-flex align-items-center gap-2">
-
-                                {# AVATAR DO PROFISSIONAL DO ATENDIMENTO #}
-                                <div class="position-relative flex-shrink-0" style="width: 36px; height: 36px;">
-                                    {% if url_foto_prof %}
-                                        <img id="imgProfAgendamento_{{ item.id }}"
-                                             src="{{ url_foto_prof }}"
-                                             alt="{{ nome_profissional }}"
-                                             class="rounded-circle border object-fit-cover w-100 h-100"
-                                             onerror="this.style.display='none'; document.getElementById('profLetraAgendamento_{{ item.id }}').classList.remove('d-none'); document.getElementById('profLetraAgendamento_{{ item.id }}').classList.add('d-flex');">
-                                    {% endif %}
-
-                                    <div id="profLetraAgendamento_{{ item.id }}"
-                                         class="rounded-circle bg-secondary text-white align-items-center justify-content-center fw-bold fs-6 w-100 h-100 {% if url_foto_prof %}d-none{% else %}d-flex{% endif %}">
-                                        {{ nome_profissional[0] | upper }}
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <span class="badge bg-dark text-white fw-bold mb-1" style="font-size: 0.7rem;">
-                                        {{ servico_principal.nome if servico_principal else 'Atendimento' }}
-                                    </span>
-                                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.88rem;">
-                                        {{ nome_profissional }}
-                                    </h6>
-                                </div>
-                            </div>
-
-                            {% if item.status == 'aguardando' %}
-                                <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-geo-alt-fill me-1"></i> Chegou / Na Recepção
-                                </span>
-                            {% elif item.status == 'em_atendimento' %}
-                                <span class="badge bg-primary text-white rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-scissors me-1"></i> Em Atendimento
-                                </span>
-                            {% elif item.status == 'confirmado' %}
-                                <span class="badge bg-success-subtle text-success rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-check-circle-fill me-1"></i> Confirmado
-                                </span>
-                            {% elif item.status == 'cancelado' %}
-                                <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-slash-circle me-1"></i> Cancelado
-                                </span>
-                            {% else %}
-                                <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    {{ item.status }}
-                                </span>
+                <div class="bg-light p-2 rounded-3 border-start border-3 border-primary shadow-xs">
+                    {# Linha do Colaborador (Foto + Nome) #}
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
+                        <div class="position-relative flex-shrink-0" style="width: 28px; height: 28px;">
+                            {% if url_foto_prof %}
+                            <img src="{{ url_foto_prof }}"
+                                 alt="{{ nome_prof }}"
+                                 class="rounded-circle border object-fit-cover w-100 h-100"
+                                 onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none'); this.nextElementSibling.classList.add('d-flex');">
                             {% endif %}
-                        </div>
-
-                        {% if esta_atrasado and item.mensagem_atraso %}
-                            <div class="alert alert-warning border-0 py-2 px-3 small d-flex align-items-center my-2 rounded-3" style="font-size: 0.75rem;">
-                                <i class="bi bi-exclamation-triangle-fill text-warning-emphasis me-2 fs-6"></i>
-                                <span class="text-dark-emphasis">{{ item.mensagem_atraso }}</span>
+                            <div class="rounded-circle bg-secondary text-white align-items-center justify-content-center fw-bold w-100 h-100 {% if url_foto_prof %}d-none{% else %}d-flex{% endif %}" style="font-size: 0.7rem;">
+                                {{ (nome_prof or 'E')[0] | upper }}
                             </div>
+                        </div>
+                        <span class="fw-bold text-dark" style="font-size: 0.8rem;">{{ nome_prof }}</span>
+                    </div>
+
+                    {# LISTA DOS SERVIÇOS DO COLABORADOR COM HORÁRIO E VALOR #}
+                    <div class="d-flex flex-column gap-1 ms-1">
+                        {% for srv_item in itens_colaborador %}
+                        {% set nome_servico = srv_item.servico.nome if (srv_item.servico and srv_item.servico.nome) else (srv_item.nome_servico or 'Serviço') %}
+                        {% set valor_servico = srv_item.preco_unitario if (srv_item.preco_unitario is defined and srv_item.preco_unitario is not none) else (srv_item.valor or 0.0) %}
+                        {% set hora_inicio_servico = srv_item.data_hora_inicio if srv_item.data_hora_inicio is defined and srv_item.data_hora_inicio else item.data_hora_inicio %}
+
+                        <div class="d-flex justify-content-between align-items-center small" style="font-size: 0.75rem;">
+                            <div class="text-truncate me-2" style="max-width: 60%;">
+                                <i class="bi bi-dot text-primary me-1"></i>
+                                <span class="text-secondary">{{ nome_servico }}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <span class="badge bg-light text-dark border border-secondary-subtle px-1.5 py-0.5" style="font-size: 0.68rem;">
+                                    <i class="bi bi-clock me-1 text-muted"></i>{{ hora_inicio_servico.strftime('%H:%M') if hora_inicio_servico else '--:--' }}
+                                </span>
+                                <span class="fw-semibold text-dark">
+                                    R$ {{ "%.2f"|format(valor_servico) }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Rodapé do Card: Valor Total e Ações #}
+            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                <div class="fw-bold text-dark small" style="font-size: 0.82rem;">
+                    Total: R$ {{ "%.2f"|format(item.valor_total if item.valor_total is defined and item.valor_total is not none else (item.preco_cobrado or 0.0)) }}
+                </div>
+
+                {# AÇÕES DO CARD #}
+                <div class="d-flex align-items-center gap-1">
+                    {% if item.id and item.status != 'cancelado' %}
+                        <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}"
+                           class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
+                           style="font-size: 0.73rem;"
+                           onclick="event.stopPropagation();">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
+                        </a>
+
+                        {% if permite_cancelar %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 btn-modal-cancelar"
+                                    style="font-size: 0.73rem;"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalCancelarAgendamento"
+                                    data-agendamento-id="{{ item.id }}"
+                                    onclick="event.stopPropagation();">
+                                Cancelar
+                            </button>
+                        {% else %}
+                            <span class="d-inline-block"
+                                  tabindex="0"
+                                  data-bs-toggle="tooltip"
+                                  title="O prazo limite de antecedência para cancelamento autônomo ({{ (minutos_antecedencia / 60)|round(1) }}h antes) expirou. Entre em contato com o estabelecimento."
+                                  onclick="event.stopPropagation();">
+                                <button class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1" style="font-size: 0.73rem;" disabled>
+                                    Cancelar
+                                </button>
+                            </span>
                         {% endif %}
+                    {% elif item.status == 'cancelado' %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill py-1 px-2" style="font-size: 0.68rem;">
+                            <i class="bi bi-slash-circle me-1"></i> Cancelado
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
 
-                        <hr class="my-2 text-black-50 opacity-10">
-
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div class="small text-muted" style="font-size: 0.78rem;">
-                                <i class="bi bi-calendar3 me-1 text-primary"></i>
-                                {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
-                            </div>
-                            {% set valor_exibicao = item.valor_total if item.valor_total is defined and item.valor_total is not none else item.preco_cobrado %}
-                            {% if valor_exibicao is not none %}
-                            <div class="fw-bold text-dark small" style="font-size: 0.78rem;">
-                                R$ {{ "%.2f"|format(valor_exibicao) }}
-                            </div>
-                            {% endif %}
-                        </div>
-
-{# AÇÕES DO CARD (REAGENDAR E CANCELAR) #}
-<div class="d-flex justify-content-end align-items-center gap-2 mt-2 pt-2 border-top border-light">
-    {% if item.id and item.status != 'cancelado' %}
-        <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}"
-           class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1"
-           style="font-size: 0.75rem;"
-           onclick="event.stopPropagation();">
-            <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
-        </a>
-
-        {% if permite_cancelar %}
-            <button type="button"
-                    class="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 btn-modal-cancelar"
-                    style="font-size: 0.75rem;"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalCancelarAgendamento"
-                    data-agendamento-id="{{ item.id }}"
-                    onclick="event.stopPropagation();">
-                Cancelar
-            </button>
-        {% else %}
-            <span class="d-inline-block"
-                  tabindex="0"
-                  data-bs-toggle="tooltip"
-                  title="O prazo limite de antecedência para cancelamento autônomo ({{ (minutos_antecedencia / 60)|round(1) }}h antes) expirou. Entre em contato com o estabelecimento."
-                  onclick="event.stopPropagation();">
-                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1" style="font-size: 0.75rem;" disabled>
-                    Cancelar
-                </button>
-            </span>
-        {% endif %}
-    {% elif item.status == 'cancelado' %}
-        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill py-1 px-3" style="font-size: 0.70rem;">
-            <i class="bi bi-slash-circle me-1"></i> Agendamento Cancelado
-        </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white p-3 rounded-4 shadow-sm text-center text-muted small">
+        Nenhum agendamento futuro encontrado.
+    </div>
     {% endif %}
 </div>
-
-                    </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        </div>
 
         {# 8.5. AGENDAMENTOS NÃO EXECUTADOS / PENDENTES #}
         {% if agendamentos_ausente_pendentes %}
@@ -734,7 +732,7 @@
 
                                 {% if item.id %}
                                 <div class="d-flex justify-content-end align-items-center">
-                                    <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1" style="font-size: 0.75rem;">
                                         <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
                                     </a>
                                 </div>
@@ -749,7 +747,7 @@
         {% endif %}
 
         <!-- Modal de Cancelamento -->
-        <div class="modal fade" id="modalCancelarAgendamento" tabindex="-1" aria-labelledby="modalCancelarLabel">
+        <div class="modal fade" id="modalCancelarAgendamento" tabindex="-1" aria-labelledby="modalCancelarLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content rounded-4 border-0 shadow">
                     <div class="modal-header border-0 pb-0">
@@ -796,9 +794,9 @@
 
         {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA) #}
         {% if publicidade_ativa %}
-        {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url, 'banners') if publicidade_ativa.imagem_url else None %}
+        {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url, 'banners') if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
         <div class="mb-4">
-            <div class="card border-0 rounded-0 shadow-sm overflow-hidden bg-dark text-white position-relative">
+            <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark text-white position-relative">
                 <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5"
                       style="font-size: 0.65rem; z-index: 2; border-bottom-left-radius: 4px; letter-spacing: 0.5px;">
                     PATROCINADO
@@ -869,7 +867,7 @@
                                             <small class="text-muted" style="font-size: 0.7rem;">{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') if agendamento.data_hora_inicio else '' }}</small>
                                         </div>
                                     </div>
-                                    <span class="badge bg-light text-dark border">{{ agendamento.status }}</span>
+                                    <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">{{ agendamento.status }}</span>
                                 </div>
                             {% endfor %}
                         {% else %}
@@ -882,6 +880,7 @@
 
     </div>
 </div>
+
 <!-- MODAL FLUTUANTE DE INFORMAÇÕES DO ATENDIMENTO -->
 <div class="modal fade modal-flutuante" id="modalInfoAtendimento" tabindex="-1" aria-labelledby="modalInfoAtendimentoLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
@@ -1022,10 +1021,11 @@ async function submeterFotoPerfil(input) {
             }
         });
 
-        const data = await response.json();
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
 
-        if (!response.ok || !data.sucesso) {
-            throw new Error(data.mensagem || 'Não foi possível atualizar a foto.');
+        if (!response.ok || !data || !data.sucesso) {
+            throw new Error((data && data.mensagem) || 'Não foi possível atualizar a foto.');
         }
 
         const urlFinal = data.foto_url + '?v=' + Date.now();
@@ -1053,6 +1053,14 @@ async function submeterFotoPerfil(input) {
 }
 
 /**
+ * Helper para obter o token CSRF da página
+ */
+function obterCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+           document.querySelector('input[name="csrf_token"]')?.value || '';
+}
+
+/**
  * Envio assíncrono para arquivar / marcar notificações como lidas
  */
 function enviarMarcarLida(notificacaoId = null, urlRedirecionamento = null) {
@@ -1061,7 +1069,7 @@ function enviarMarcarLida(notificacaoId = null, urlRedirecionamento = null) {
         return;
     }
 
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const csrfToken = obterCsrfToken();
     const urlEndpoint = `/agenda/notificacoes/${notificacaoId}/marcar-lida`;
 
     fetch(urlEndpoint, {
@@ -1072,18 +1080,22 @@ function enviarMarcarLida(notificacaoId = null, urlRedirecionamento = null) {
             'X-Requested-With': 'XMLHttpRequest'
         }
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Erro na requisição: ${response.status}`);
+    .then(async response => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok || (data && !data.sucesso)) {
+            throw new Error((data && data.mensagem) || `Erro HTTP: ${response.status}`);
         }
-        return response.json();
+        return data;
     })
     .then(data => {
-        if (data.sucesso) {
+        if (data && data.sucesso) {
             const cardDestaque = document.getElementById(`card-notificacao-${notificacaoId}`);
             if (cardDestaque) {
                 cardDestaque.style.opacity = '0';
                 cardDestaque.style.transform = 'translateX(20px)';
+                cardDestaque.style.transition = 'all 0.3s ease';
                 setTimeout(() => {
                     cardDestaque.remove();
                     verificarListaVazia();
@@ -1105,15 +1117,13 @@ function enviarMarcarLida(notificacaoId = null, urlRedirecionamento = null) {
             }
 
             atualizarBadgesEContadores();
-        } else {
-            console.error("Erro retornado pelo servidor:", data.mensagem);
         }
 
         if (urlRedirecionamento && urlRedirecionamento !== 'javascript:void(0);' && urlRedirecionamento !== '#') {
             window.location.href = urlRedirecionamento;
         }
     })
-    .catch(err => console.error("Erro no envio do AJAX:", err));
+    .catch(err => console.error("Erro ao atualizar notificação:", err));
 }
 
 function marcarTodasComoLidas() {
@@ -1162,15 +1172,18 @@ function sincronizarBadgesSininho() {
 }
 
 /**
- * Utilitário global para exibição de Toasts
+ * Utilitário global para exibição de Toasts com fallback
  */
 function exibirToast(titulo, mensagem, tipo = 'info') {
-    if (typeof bootstrap !== 'undefined' && document.getElementById('liveToast')) {
-        const toastEl = document.getElementById('liveToast');
+    const toastEl = document.getElementById('liveToast');
+    if (typeof bootstrap !== 'undefined' && toastEl) {
         const toastBody = toastEl.querySelector('.toast-body');
         if (toastBody) toastBody.innerText = mensagem;
 
-        const toast = new bootstrap.Toast(toastEl);
+        // Ajusta classe temática se houver no elemento do toast
+        toastEl.className = `toast align-items-center text-bg-${tipo} border-0`;
+
+        const toast = bootstrap.Toast.getOrCreateInstance(toastEl);
         toast.show();
     } else {
         alert(`${titulo}: ${mensagem}`);
@@ -1223,7 +1236,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const divFallback = document.getElementById('infoProfFallback');
             const spanInicial = document.getElementById('infoProfInicial');
 
-            if (spanInicial) spanInicial.textContent = (card.getAttribute('data-prof-nome') || 'P').charAt(0).toUpperCase();
+            if (spanInicial) {
+                spanInicial.textContent = (card.getAttribute('data-prof-nome') || 'P').charAt(0).toUpperCase();
+            }
 
             if (imgFoto && divFallback) {
                 if (profFoto && profFoto.trim() !== '') {
@@ -1239,12 +1254,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 3. MODAL CANCELAR AGENDAMENTO (Tratamento de Foco e Eventos)
+    // 3. MODAL CANCELAR AGENDAMENTO
     const modalCancelarEl = document.getElementById('modalCancelarAgendamento');
     let botaoDisparadorModal = null;
 
     if (modalCancelarEl) {
-        const bsModal = new bootstrap.Modal(modalCancelarEl);
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modalCancelarEl);
 
         // Captura o elemento que abriu o modal e popula o ID
         modalCancelarEl.addEventListener('show.bs.modal', function (event) {
@@ -1256,13 +1271,10 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Devolve o foco explicitamente para o botão de origem ao fechar o modal
+        // Devolve o foco de maneira segura ao fechar
         modalCancelarEl.addEventListener('hidden.bs.modal', function () {
-            if (document.activeElement) {
-                document.activeElement.blur();
-            }
-            if (botaoDisparadorModal) {
-                botaoDisparadorModal.focus();
+            if (botaoDisparadorModal && typeof botaoDisparadorModal.focus === 'function') {
+                setTimeout(() => botaoDisparadorModal.focus(), 50);
             }
         });
 
@@ -1270,16 +1282,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const btnConfirmar = document.getElementById('btnConfirmarCancelamento');
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', function() {
-                const agendamentoId = document.getElementById('cancelarAgendamentoId').value;
+                const agendamentoId = document.getElementById('cancelarAgendamentoId')?.value;
                 const motivoCategoria = document.getElementById('selectMotivoCategoria')?.value || '';
                 const motivoDetalhado = document.getElementById('textMotivoDetalhado')?.value || '';
 
-                if (!agendamentoId) return;
+                if (!agendamentoId) {
+                    exibirToast('Aviso', 'Identificador do agendamento ausente.', 'warning');
+                    return;
+                }
 
                 btnConfirmar.disabled = true;
-                btnConfirmar.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Processando...`;
+                btnConfirmar.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Processando...`;
 
-                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                const csrfToken = obterCsrfToken();
 
                 fetch(`/agenda/agendamento/${agendamentoId}/cancelar`, {
                     method: 'POST',
@@ -1304,10 +1319,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     return data;
                 })
                 .then(data => {
-                    if (data.sucesso) {
+                    if (data && data.sucesso) {
                         bsModal.hide();
                         exibirToast('Sucesso', 'Agendamento cancelado com sucesso.', 'success');
                         setTimeout(() => location.reload(), 800);
+                    } else {
+                        throw new Error((data && data.mensagem) || 'Não foi possível cancelar o agendamento.');
                     }
                 })
                 .catch(err => {
