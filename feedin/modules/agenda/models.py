@@ -47,7 +47,6 @@ class AghAgendamento(db.Model):
     beneficiario_id = db.Column(db.Integer, db.ForeignKey('cliente_beneficiarios.id'), nullable=True, index=True)
 
     # 👤 PROFISSIONAL PRINCIPAL / TITULAR (OPCIONAL/NULLABLE)
-    # Serve como fallback ou indicação de quem abriu/atendeu a comanda principal
     profissional_id = db.Column(
         db.Integer,
         db.ForeignKey('colaborador_contratos.id', ondelete='SET NULL'),
@@ -69,19 +68,23 @@ class AghAgendamento(db.Model):
     # RELACIONAMENTOS (ORM)
     empresa = db.relationship('EseEmpresa', backref='agendamentos', lazy=True)
     cliente = db.relationship('ModCadastroCliente', backref='agendamentos', lazy=True)
-    profissional = db.relationship('ColaboradorContrato', backref='agendamentos_titular', lazy=True)
+    profissional = db.relationship('ColaboradorContrato', foreign_keys=[profissional_id], lazy=True)
 
-    # Itens são carregados via joined para evitar N+1 queries
+    # 🎯 VINCULAÇÃO EXPLÍCITA: Elimina duplicação de relacionamentos e SAWarning
     itens = db.relationship(
         'AghAgendamentoItem',
-        backref='agendamento_pai',
+        back_populates='agendamento',
         cascade='all, delete-orphan',
         lazy='joined',
         order_by='AghAgendamentoItem.ordem_execucao'
     )
 
     def recalcular_total(self):
-        self.valor_total = sum(item.preco_unitario or 0 for item in self.itens if item.status_item != 'cancelado')
+        self.valor_total = sum(
+            item.preco_unitario or 0
+            for item in self.itens
+            if getattr(item, 'status_item', None) != 'cancelado'
+        )
         return self.valor_total
 
 
@@ -104,7 +107,7 @@ class AghAgendamentoItem(db.Model):
         index=True
     )
 
-    # 👤 PROFISSIONAL MANDATÓRIO DO ITEM
+    # 👤 PROFISSIONAL MANDATÓRIO DO ITEM (Aponta para colaborador_contratos.id)
     profissional_id = db.Column(
         db.Integer,
         db.ForeignKey('colaborador_contratos.id', ondelete='RESTRICT'),
@@ -114,7 +117,13 @@ class AghAgendamentoItem(db.Model):
 
     preco_unitario = db.Column(db.Numeric(10, 2, asdecimal=False), nullable=False, default=0.00)
     duracao_minutos = db.Column(db.Integer, nullable=False, default=30)
+
+    # 🎯 CONTROLE OPERACIONAL DE SEQUÊNCIA E SLOT DE HORÁRIO
     ordem_execucao = db.Column(db.Integer, default=1, nullable=False, index=True)
+
+    # 'sequencial' = executa após a conclusão do item anterior
+    # 'simultaneo' = executa no mesmo slot/horário do item anterior/agendamento
+    modo_execucao = db.Column(db.String(20), nullable=False, default='sequencial')
 
     # HORÁRIOS ESPECÍFICOS DO ITEM NA GRADE
     data_hora_inicio = db.Column(db.DateTime, nullable=False)
@@ -126,10 +135,22 @@ class AghAgendamentoItem(db.Model):
     data_hora_fim_real = db.Column(db.DateTime, nullable=True)
     observacao_item = db.Column(db.String(255), nullable=True)
 
-    # RELACIONAMENTOS (ORM) - Removido backref para evitar conflito com AghAgendamento.itens
-    agendamento = db.relationship('AghAgendamento')
+    # RELACIONAMENTOS (ORM) SANEADOS E UNIFICADOS
+    agendamento = db.relationship(
+        'AghAgendamento',
+        back_populates='itens',
+        foreign_keys=[agendamento_id],
+        overlaps="agendamento_pai"
+    )
     servico = db.relationship('EseServicoOferecido', lazy='joined')
-    profissional = db.relationship('ColaboradorContrato', lazy='joined')
+    profissional = db.relationship('ColaboradorContrato', foreign_keys=[profissional_id], lazy='joined')
+
+    @property
+    def agendamento_pai(self):
+        """
+        Alias de retrocompatibilidade para códigos legados que ainda leiam item.agendamento_pai.
+        """
+        return self.agendamento
 
     @property
     def nome_servico(self) -> str:
@@ -142,28 +163,44 @@ class AghAgendamentoItem(db.Model):
         if not self.profissional:
             return f"Profissional #{self.profissional_id}"
 
+        # 1. Tenta atributos diretos do contrato
         for attr in ['nome_exibicao', 'nome', 'nome_completo']:
             val = getattr(self.profissional, attr, None)
             if val:
                 return val
 
+        # 2. Tenta recuperar através da relação cadastro_modulo
+        if hasattr(self.profissional, 'cadastro_modulo') and self.profissional.cadastro_modulo:
+            nome_mod = getattr(self.profissional.cadastro_modulo, 'nome', None) or getattr(
+                self.profissional.cadastro_modulo, 'razao_social', None)
+            if nome_mod:
+                return nome_mod
+
+        # 3. Tenta recuperar através do relacionamento com o usuário base
         if hasattr(self.profissional, 'usuario') and self.profissional.usuario:
-            return getattr(self.profissional.usuario, 'nome', f"Profissional #{self.profissional_id}")
+            nome_usr = getattr(self.profissional.usuario, 'nome', None)
+            if nome_usr:
+                return nome_usr
 
         return f"Profissional #{self.profissional_id}"
 
     def to_dict(self) -> dict:
+        cliente_nome = "Cliente"
+        if self.agendamento and getattr(self.agendamento, 'cliente', None):
+            cliente_nome = getattr(self.agendamento.cliente, 'nome', None) or getattr(self.agendamento.cliente,
+                                                                                      'razao_social', None) or "Cliente"
+
         return {
             "id": self.id,
             "agendamento_id": self.agendamento_id,
             "ordem_execucao": self.ordem_execucao,
+            "modo_execucao": self.modo_execucao,
             "servico_id": self.servico_id,
             "servico_nome": self.nome_servico,
             "profissional_id": self.profissional_id,
             "profissional_nome": self.nome_profissional,
-            "cliente_nome": self.agendamento.cliente.nome if (
-                        self.agendamento and hasattr(self.agendamento, 'cliente')) else "Cliente",
-            "preco_unitario": self.preco_unitario,
+            "cliente_nome": cliente_nome,
+            "preco_unitario": float(self.preco_unitario) if self.preco_unitario is not None else 0.0,
             "duracao_minutos": self.duracao_minutos,
             "data_hora_inicio": self.data_hora_inicio.isoformat() if self.data_hora_inicio else None,
             "data_hora_fim": self.data_hora_fim.isoformat() if self.data_hora_fim else None,
@@ -294,17 +331,24 @@ class AghAgendamentoRascunhoItem(db.Model):
 
 
 class AghAvaliacaoServico(db.Model):
-    __tablename__ = 'agh_avaliacao_servico'
-    __table_args__ = {'extend_existing': True}
+  __tablename__ = 'agh_avaliacao_servico'
+  __table_args__ = {'extend_existing': True}
 
-    id = db.Column(db.Integer, primary_key=True)
-    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False)
-    nota = db.Column(db.Integer, nullable=False)
-    comentario = db.Column(db.Text, nullable=True)
-    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+  id = db.Column(db.Integer, primary_key=True)
+  agendamento_id = db.Column(
+      db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False
+  )
 
-    def __repr__(self):
-        return f"<AghAvaliacaoServico Agendamento {self.agendamento_id} - Nota {self.nota}>"
+  # 1. Adicione a ForeignKey apontando para a tabela do item de agendamento:
+  agendamento_item_id = db.Column(
+      db.Integer, db.ForeignKey('agh_agendamento_item.id'), nullable=True
+  )
+
+  nota = db.Column(db.Integer, nullable=False)
+  comentario = db.Column(db.Text, nullable=True)
+
+  # 2. Mantém o relacionamento com a ForeignKey mapeada
+  item = db.relationship('AghAgendamentoItem', backref='avaliacoes')
 
 
 class AghServico(db.Model):
@@ -1195,3 +1239,24 @@ class AghCancelamento(db.Model):
 
   def __repr__(self):
       return f"<AghCancelamento Agendamento={self.agendamento_id} Solicitante={self.solicitante_id}>"
+
+
+class AghReordenacaoSolicitada(db.Model):
+    __tablename__ = 'agh_reordenacao_solicitada'
+
+    id = db.Column(db.Integer, primary_key=True)
+    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id', ondelete='CASCADE'), nullable=False)
+    solicitante_id = db.Column(db.Integer, db.ForeignKey('colaborador_contratos.id'), nullable=False)
+
+    # Payload JSON guardando a nova proposta (ordem_execucao, modo_execucao, etc)
+    proposta_json = db.Column(db.JSON, nullable=False)
+
+    # Lista de IDs de contratos que precisam dar o 'de acordo'
+    profissionais_pendentes_ids = db.Column(db.JSON, nullable=False)
+
+    status = db.Column(db.String(20), default='pendente', nullable=False)  # pendente, aprovado, rejeitado, cancelado
+    data_criacao = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relacionamentos
+    agendamento = db.relationship('AghAgendamento')
+    solicitante = db.relationship('ColaboradorContrato')

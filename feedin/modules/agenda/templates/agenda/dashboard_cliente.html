@@ -547,38 +547,64 @@
                 {% set primeiro_sub_item = itens_colaborador[0] %}
                 {% set prof_obj = primeiro_sub_item.profissional if primeiro_sub_item.profissional else (item.profissional if item.profissional else None) %}
 
-                {# Resgate seguro da imagem / avatar do colaborador #}
+                {# RESOLUÇÃO DEFENSIVA DA FOTO (Profissional / Usuário Vinculado) #}
                 {% set foto_prof_raw = None %}
                 {% if prof_obj %}
-                    {% if prof_obj.foto_profissional is defined and prof_obj.foto_profissional %}
-                        {% set foto_prof_raw = prof_obj.foto_profissional %}
-                    {% elif prof_obj.foto_url is defined and prof_obj.foto_url %}
+                    {% if prof_obj.foto_url is defined and prof_obj.foto_url %}
                         {% set foto_prof_raw = prof_obj.foto_url %}
                     {% elif prof_obj.foto is defined and prof_obj.foto %}
                         {% set foto_prof_raw = prof_obj.foto %}
+                    {% elif prof_obj.foto_profissional is defined and prof_obj.foto_profissional %}
+                        {% set foto_prof_raw = prof_obj.foto_profissional %}
                     {% elif prof_obj.avatar is defined and prof_obj.avatar %}
                         {% set foto_prof_raw = prof_obj.avatar %}
+                    {% elif prof_obj.usuario is defined and prof_obj.usuario %}
+                        {% if prof_obj.usuario.foto_url is defined and prof_obj.usuario.foto_url %}
+                            {% set foto_prof_raw = prof_obj.usuario.foto_url %}
+                        {% elif prof_obj.usuario.foto is defined and prof_obj.usuario.foto %}
+                            {% set foto_prof_raw = prof_obj.usuario.foto %}
+                        {% endif %}
                     {% endif %}
                 {% endif %}
 
                 {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else foto_prof_raw %}
-                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Especialista' %}
+                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Profissional Integrante' %}
 
-                <div class="bg-light p-2 rounded-3 border-start border-3 border-primary shadow-xs">
-                    {# Linha do Colaborador (Foto + Nome) #}
-                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
-                        <div class="position-relative flex-shrink-0" style="width: 28px; height: 28px;">
-                            {% if url_foto_prof %}
-                            <img src="{{ url_foto_prof }}"
-                                 alt="{{ nome_prof }}"
-                                 class="rounded-circle border object-fit-cover w-100 h-100"
-                                 onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none'); this.nextElementSibling.classList.add('d-flex');">
-                            {% endif %}
-                            <div class="rounded-circle bg-secondary text-white align-items-center justify-content-center fw-bold w-100 h-100 {% if url_foto_prof %}d-none{% else %}d-flex{% endif %}" style="font-size: 0.7rem;">
-                                {{ (nome_prof or 'E')[0] | upper }}
+                <!-- Container do Colaborador com Disparo de Modal JS -->
+                <div class="bg-light p-2.5 rounded-3 border-start border-3 border-primary shadow-xs cursor-pointer hover-shadow transition mb-2"
+                     data-bs-toggle="modal"
+                     data-bs-target="#modalInfoAtendimento"
+                     data-prof-nome="{{ nome_prof }}"
+                     data-prof-especialidade="{{ prof_obj.especialidade if (prof_obj and prof_obj.especialidade) else 'Profissional Integrante' }}"
+                     data-prof-bio="{{ prof_obj.biografia or prof_obj.bio if prof_obj else 'Profissional responsável pelo seu atendimento.' }}"
+                     data-prof-foto="{{ url_foto_prof or '' }}"
+                     data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Estabelecimento') }}"
+                     data-servico-nome="{% for s in itens_colaborador %}{{ s.servico.nome if (s.servico and s.servico.nome) else (s.nome_servico or 'Serviço') }}{% if not loop.last %}, {% endif %}{% endfor %}"
+                     data-servico-desc="Atendimento presencial agrupado para a região/colaborador selecionado."
+                     data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
+                     data-valor="R$ {{ "%.2f"|format(itens_colaborador | sum(attribute='preco_unitario')) }}"
+                     style="cursor: pointer;">
+
+                    {# Linha do Colaborador (Foto + Nome + Dica Modal JS) #}
+                    <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="position-relative flex-shrink-0" style="width: 32px; height: 32px;">
+                                {% if url_foto_prof %}
+                                <img src="{{ url_foto_prof }}"
+                                     alt="{{ nome_prof }}"
+                                     class="rounded-circle border object-fit-cover w-100 h-100 d-block"
+                                     onerror="this.onerror=null; this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none'); this.nextElementSibling.classList.add('d-flex');">
+                                {% endif %}
+                                <div class="rounded-circle bg-secondary text-white align-items-center justify-content-center fw-bold w-100 h-100 {% if url_foto_prof %}d-none{% else %}d-flex{% endif %}" style="font-size: 0.75rem;">
+                                    {{ (nome_prof or 'E')[0] | upper }}
+                                </div>
+                            </div>
+                            <div>
+                                <span class="fw-bold text-dark d-block leading-tight" style="font-size: 0.82rem;">{{ nome_prof }}</span>
+                                <small class="text-primary d-block" style="font-size: 0.68rem;"><i class="bi bi-info-circle me-1"></i>Toque para ver ficha</small>
                             </div>
                         </div>
-                        <span class="fw-bold text-dark" style="font-size: 0.8rem;">{{ nome_prof }}</span>
+                        <i class="bi bi-chevron-right text-muted fs-7"></i>
                     </div>
 
                     {# LISTA DOS SERVIÇOS DO COLABORADOR COM HORÁRIO E VALOR #}
