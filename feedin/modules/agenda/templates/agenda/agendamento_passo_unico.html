@@ -204,19 +204,40 @@
     <input type="hidden" name="horario_agendamento" id="inputHorarioSelecionado" value="{{ horario_selecionado or '' }}">
 
     <!-- SELEÇÃO DE PROFISSIONAL -->
+    {% set total_servicos = lista_servicos | length if lista_servicos else 0 %}
+    {% set trava_selecao = (not permite_escolha_profissional) if permite_escolha_profissional is defined else (total_servicos > 1) %}
+
     <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
-      <label class="fw-bold text-dark mb-2 small d-flex align-items-center gap-1.5">
-        <i class="bi bi-person-badge text-empresa"></i> 1. Escolha o Profissional:
-      </label>
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <label class="fw-bold text-dark m-0 small d-flex align-items-center gap-1.5">
+          <i class="bi bi-person-badge text-empresa"></i> 1. Escolha o Profissional:
+        </label>
+        {% if trava_selecao %}
+          <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill small" style="font-size: 0.7rem;">
+            Atendimento Múltiplo
+          </span>
+        {% endif %}
+      </div>
+
+      {% if trava_selecao %}
+        <!-- Alerta quando é obrigatório dividir a equipe por especialidade -->
+        <div class="alert alert-info border-0 bg-light p-2.5 mb-2 rounded-3 small d-flex align-items-center gap-2">
+          <i class="bi bi-info-circle-fill text-primary fs-5 flex-shrink-0"></i>
+          <span class="text-secondary" style="font-size: 0.78rem;">
+            Os serviços selecionados exigem especialistas diferentes. A distribuição da equipe será feita automaticamente.
+          </span>
+        </div>
+      {% endif %}
 
       <div class="row g-2">
+        <!-- Opção: Qualquer um / Sem preferência -->
         <div class="col-6 col-sm-4">
           <input type="radio"
                  class="btn-check card-profissional-check"
                  name="profissional_id"
                  id="colab_qualquer"
                  value=""
-                 {% if not profissional_id_selecionado %}checked{% endif %}
+                 {% if not profissional_id_selecionado or trava_selecao %}checked{% endif %}
                  onchange="atualizarHorariosDisponiveis()">
           <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white" for="colab_qualquer">
             <div class="rounded-circle bg-light border d-flex align-items-center justify-content-center mb-1" style="width: 40px; height: 40px;">
@@ -233,42 +254,10 @@
             {% set colab_id_str = colab.id|string %}
             {% set sel_prof_str = profissional_id_selecionado|string if profissional_id_selecionado is not none else '' %}
 
-            {# 1. Tratamento de Nome #}
+            {# Tratamento do Colaborador #}
             {% set nome_colab = colab.nome or 'Profissional' %}
             {% set inicial_colab = nome_colab[0]|upper if nome_colab else 'P' %}
-
-            {# 2. Tratamento do Cargo (objeto ou string) #}
-            {% if colab.cargo is mapping or (colab.cargo and colab.cargo.__class__ is defined and colab.cargo.__class__.__name__ == 'Cargo') %}
-              {% set cargo_nome = colab.cargo.descricao or colab.cargo.nome or colab.cargo.titulo or colab.cargo.nome_cargo or 'Especialista' %}
-            {% else %}
-              {% set cargo_nome = colab.cargo if colab.cargo else 'Especialista' %}
-            {% endif %}
-
-            {# 3. Resolvedor da Foto do Colaborador (sem duplicidade de path) #}
-            {% set raw_foto = colab.url_foto_profissional or colab.foto_profissional %}
-            {% set foto_colab_final = None %}
-
-            {% if raw_foto and raw_foto|string|trim != '' and raw_foto|string|lower != 'none' %}
-              {% set str_foto = raw_foto|string|replace('\\', '/') %}
-              {% if str_foto.startswith('http://') or str_foto.startswith('https://') %}
-                {% set foto_colab_final = str_foto %}
-              {% else %}
-                {% set c_limpo = str_foto.lstrip('/') %}
-                {% set c_lower = c_limpo.lower() %}
-
-                {% if 'empresas/' in c_lower %}
-                  {% set idx = c_lower.find('empresas/') %}
-                  {% set rel_path = 'uploads/' ~ c_limpo[idx:] %}
-                  {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
-                {% elif 'uploads/' in c_lower %}
-                  {% set idx = c_lower.find('uploads/') %}
-                  {% set rel_path = c_limpo[idx + 8:] %}
-                  {% set foto_colab_final = url_for('empresa.static', filename=rel_path) %}
-                {% else %}
-                  {% set foto_colab_final = url_for('empresa.static', filename='uploads/profissionais/' ~ c_limpo) %}
-                {% endif %}
-              {% endif %}
-            {% endif %}
+            {% set src_foto = colab.url_foto_profissional %}
 
             <div class="col-6 col-sm-4">
               <input type="radio"
@@ -276,33 +265,38 @@
                      name="profissional_id"
                      id="colab_{{ colab_id_str }}"
                      value="{{ colab_id_str }}"
-                     {% if sel_prof_str and sel_prof_str == colab_id_str %}checked{% endif %}
+                     {% if trava_selecao %}disabled{% endif %}
+                     {% if sel_prof_str and sel_prof_str == colab_id_str and not trava_selecao %}checked{% endif %}
                      onchange="atualizarHorariosDisponiveis()">
 
-              <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer" for="colab_{{ colab_id_str }}">
+              <label class="label-profissional-card rounded-3 p-2 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer {% if trava_selecao %}opacity-50{% endif %}"
+                     for="colab_{{ colab_id_str }}"
+                     {% if trava_selecao %}title="Estes serviços exigem mais de um especialista atrelado ao atendimento."{% endif %}>
 
-                {# Container do Avatar (40x40px) #}
-                <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px;">
-                  {% if foto_colab_final %}
-                    <img id="imgRadioColab_{{ colab_id_str }}"
-                         src="{{ foto_colab_final }}"
-                         alt="{{ nome_colab }}"
+                {# Container Fixo do Avatar (40x40px) #}
+                <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                  {% if src_foto %}
+                    <img id="imgFotoColab_{{ colab_id_str }}"
+                         src="{{ src_foto }}"
                          class="rounded-circle border object-fit-cover w-100 h-100"
-                         onerror="this.style.display='none'; document.getElementById('avatarRadioLetra_{{ colab_id_str }}').style.display='flex';">
+                         alt="{{ nome_colab }}"
+                         style="display: block;"
+                         onerror="this.style.display='none'; document.getElementById('avatarLetraColab_{{ colab_id_str }}').style.display='flex';">
                   {% endif %}
 
-                  <div id="avatarRadioLetra_{{ colab_id_str }}"
+                  <div id="avatarLetraColab_{{ colab_id_str }}"
                        class="rounded-circle text-white fw-bold align-items-center justify-content-center shadow-sm w-100 h-100 border border-white"
-                       style="font-size: 0.85rem; background-color: {{ cor_empresa }}; display: {% if foto_colab_final %}none{% else %}flex{% endif %};">
+                       style="font-size: 0.85rem; background-color: {{ cor_empresa }}; display: {% if src_foto %}none{% else %}flex{% endif %};">
                     {{ inicial_colab }}
                   </div>
                 </div>
 
+                {# Nome e Cargo #}
                 <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ nome_colab }}">
                   {{ nome_colab }}
                 </strong>
                 <small class="text-muted text-truncate w-100" style="font-size: 0.68rem;">
-                  {{ cargo_nome }}
+                  {{ colab.nome_cargo_formatado }}
                 </small>
               </label>
             </div>

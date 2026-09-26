@@ -154,82 +154,47 @@
 
         {# 1. HEADER DINÂMICO DE PERFIL COM HUB DE CONFIGURAÇÕES #}
         <div class="text-center mb-3">
-
             <div class="avatar-upload-wrapper">
 
-                {# --- AVATAR DO CLIENTE COM TRATAMENTO DE ERROS E FALLBACKS --- #}
                 <div role="button"
-                     data-bs-toggle="offcanvas"
-                     data-bs-target="#offcanvasPerfilCliente"
-                     title="Abrir Central da Conta"
-                     class="avatar-trigger-area border border-2 border-white shadow-sm">
+             data-bs-toggle="offcanvas"
+             data-bs-target="#offcanvasPerfilCliente"
+             title="Abrir Central da Conta"
+             class="avatar-trigger-area border border-2 border-white shadow-sm">
 
-                    {# 1. Resolução do caminho bruto da foto de forma limpa #}
-                    {% set foto_raw = None %}
-                    {% if cliente and cliente.foto_url %}
-                        {% set val = cliente.foto_url | string | trim %}
-                        {% if val | lower not in ['none', 'null', ''] %}
-                            {% set foto_raw = val %}
-                        {% endif %}
-                    {% endif %}
+            {# Resoluçao limpa e direta consumindo a @property da Model #}
+            {% set foto_caminho = cliente.url_foto_perfil if (cliente and cliente.url_foto_perfil) else None %}
 
-                    {# 2. Resolução da URL usando get_avatar_url para resolver via /media/ #}
-                    {% set foto_src = None %}
-                    {% if foto_raw %}
-                        {% if foto_raw.startswith('http://') or foto_raw.startswith('https://') %}
-                            {% set foto_src = foto_raw %}
-                        {% elif get_avatar_url is defined %}
-                            {% set foto_src = get_avatar_url(foto_raw) %}
-                        {% else %}
-                            {% set limpo = foto_raw.replace('\\', '/').lstrip('/') %}
-                            {% for prefixo in ['agenda/static/uploads/', 'empresa/static/uploads/', 'agenda/static/', 'empresa/static/', 'static/uploads/', 'static/Uploads/', 'uploads/', 'Uploads/', 'agenda/', 'empresa/', 'static/'] %}
-                                {% if limpo.startswith(prefixo) %}
-                                    {% set limpo = limpo[prefixo|length:] %}
-                                {% endif %}
-                            {% endfor %}
-                            {% set foto_src = '/media/' ~ limpo %}
-                        {% endif %}
-                    {% endif %}
-
-                    {# --- DEPURAÇÃO NO CONSOLE DO NAVEGADOR --- #}
-                    <script>
-                        console.group('🔍 [DEBUG HTML AVATAR]');
-                        console.log('1. foto_raw (Banco/Objeto):', {{ foto_raw | tojson | safe }});
-                        console.log('2. get_avatar_url disponível?:', {{ (get_avatar_url is defined) | tojson }});
-                        console.log('3. foto_src (URL final no src):', {{ foto_src | tojson | safe }});
-                        console.groupEnd();
-                    </script>
-
-                    {# Foto de Perfil #}
-                    <img id="imgAvatarPreview"
-                         {% if foto_src %}src="{{ foto_src }}"{% endif %}
-                         alt="Foto de {{ cliente.nome if cliente and cliente.nome else 'Cliente' }}"
-                         class="avatar-circle-img {% if not foto_src %}d-none{% endif %}"
-                         onload="console.log('✅ [DEBUG HTML AVATAR] Imagem carregada com sucesso:', this.src);"
-                         onerror="console.error('❌ [DEBUG HTML AVATAR] Erro ao carregar imagem:', this.src); this.classList.add('d-none'); document.getElementById('avatarLetraPreview').classList.remove('d-none'); document.getElementById('avatarLetraPreview').classList.add('d-flex');">
-
-                    {# Tag da LETRA / INICIAL #}
-                    <div id="avatarLetraPreview"
-                         class="avatar-letra-box {% if foto_src %}d-none{% else %}d-flex{% endif %}">
-                        {{ (cliente.nome if cliente and cliente.nome else 'U')[0] | upper }}
-                    </div>
+            {% if foto_caminho %}
+                {# 1. Exibe a foto oficial tratada e resolvida pelo backend #}
+                <img id="imgAvatarPreview"
+                     src="{{ foto_caminho }}"
+                     alt="Foto de {{ cliente.nome if (cliente and cliente.nome) else 'Cliente' }}"
+                     class="avatar-circle-img">
+            {% else %}
+                {# 2. Fallback padronizado: Renderiza apenas a inicial quando foto_caminho for None #}
+                <div id="avatarLetraPreview" class="avatar-letra-box d-flex">
+                    {{ (cliente.nome if (cliente and cliente.nome) else 'U')[0] | upper }}
                 </div>
+            {% endif %}
 
-                {# Badge da Câmera #}
-                <label for="inputFotoPerfil"
-                       class="avatar-badge-camera bg-primary text-white shadow-sm cursor-pointer"
-                       title="Tirar foto ou escolher da galeria">
-                    <i class="bi bi-camera-fill" style="font-size: 0.75rem;"></i>
-                </label>
-
-            </div>
-
-            {# Form Escondido #}
-            <form id="formFotoPerfil" method="POST" action="{{ url_for('agenda.upload_foto_perfil') }}" enctype="multipart/form-data" class="d-none">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="file" id="inputFotoPerfil" name="foto" accept="image/png, image/jpeg, image/webp" onchange="submeterFotoPerfil(this)">
-            </form>
         </div>
+
+        {# Badge da Câmera #}
+        <label for="inputFotoPerfil"
+               class="avatar-badge-camera bg-primary text-white shadow-sm cursor-pointer"
+               title="Tirar foto ou escolher da galeria">
+            <i class="bi bi-camera-fill" style="font-size: 0.75rem;"></i>
+        </label>
+
+    </div>
+
+    {# Form Escondido #}
+    <form id="formFotoPerfil" method="POST" action="{{ url_for('agenda.upload_foto_perfil') }}" enctype="multipart/form-data" class="d-none">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="file" id="inputFotoPerfil" name="foto" accept="image/png, image/jpeg, image/webp" onchange="submeterFotoPerfil(this)">
+    </form>
+</div>
 
         {# 2. OFFCANVAS DA CENTRAL DA CONTA DO CLIENTE #}
         <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasPerfilCliente" aria-labelledby="offcanvasPerfilClienteLabel">
@@ -344,65 +309,69 @@
             </div>
         </div>
 
-        {# 6. ACESSO RÁPIDO (EMPRESAS FAVORITAS) #}
-        <div class="mb-4">
-            <div class="d-flex align-items-center justify-content-between mb-2 px-1">
-                <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
-                    <i class="bi bi-star-fill text-warning me-1"></i> Minhas Empresas Favoritas
-                </h6>
-                <span class="badge bg-light text-muted border rounded-pill">{{ empresas_favoritas|length if empresas_favoritas else 0 }}</span>
-            </div>
+{# 6. ACESSO RÁPIDO (EMPRESAS FAVORITAS) #}
+<div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2 px-1">
+        <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
+            <i class="bi bi-star-fill text-warning me-1"></i> Minhas Empresas Favoritas
+        </h6>
+        <span class="badge bg-light text-muted border rounded-pill">
+            {{ empresas_favoritas | length if empresas_favoritas else 0 }}
+        </span>
+    </div>
 
-            {% if empresas_favoritas %}
-            <div class="row g-2">
-                {% for empresa in empresas_favoritas %}
-                {% set raw_logo = empresa.logomarca or empresa.logo_url %}
-                {% set url_logo = media_url('empresa', raw_logo) if raw_logo and media_url is defined else None %}
+    {% if empresas_favoritas %}
+    {# Container com rolagem horizontal fluida para suportar 1 ou N empresas sem quebrar a tela #}
+    <div class="d-flex gap-2 overflow-x-auto pb-2 scrollbar-hidden" style="scroll-snap-type: x mandatory;">
+        {% for empresa in empresas_favoritas %}
+            {% set src_logo = empresa.url_logomarca %}
 
-                <div class="col-6 col-md-4">
-                    <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
-                        <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
-                            <div class="d-flex align-items-center gap-2">
+            <div class="flex-shrink-0" style="width: 220px; scroll-snap-align: start;">
+                <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
+                    <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
+                        <div class="d-flex align-items-center gap-2">
 
-                                {# Container Fixo da Logo (40x40px) #}
-                                <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
-
-                                    {# Logo da Empresa #}
+                            {# Container Fixo da Logo (40x40px) #}
+                            <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                                {% if src_logo %}
                                     <img id="imgLogoEmpresa_{{ empresa.id }}"
-                                         src="{{ url_logo or '' }}"
-                                         class="rounded-circle border object-fit-contain w-100 h-100 p-1 {% if not url_logo %}d-none{% endif %}"
-                                         style="background-color: #fcfbfa;"
+                                         src="{{ src_logo }}"
+                                         class="rounded-circle border object-fit-contain w-100 h-100 p-1"
+                                         style="background-color: #fcfbfa; display: block;"
                                          alt="{{ empresa.nome }}"
-                                         onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('logoLetraEmpresa_{{ empresa.id }}').classList.add('d-flex');">
+                                         onerror="this.style.display='none'; document.getElementById('logoLetraEmpresa_{{ empresa.id }}').style.display='flex';">
+                                {% endif %}
 
-                                    {# Fallback da Inicial do Nome da Empresa #}
-                                    <div id="logoLetraEmpresa_{{ empresa.id }}"
-                                         class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100 {% if url_logo %}d-none{% else %}d-flex{% endif %}"
-                                         style="background-color: #f6f4ee;">
-                                        {{ (empresa.nome or 'E')[0] | upper }}
-                                    </div>
-                                </div>
-
-                                {# Nome e Categoria #}
-                                <div class="text-truncate min-w-0">
-                                    <span class="d-block text-dark fw-semibold small text-truncate">{{ empresa.nome }}</span>
-                                    <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
-                                        {{ empresa.categoria_rel.nome if empresa.categoria_rel else (empresa.categoria_nome or 'Estabelecimento') }}
-                                    </small>
+                                <div id="logoLetraEmpresa_{{ empresa.id }}"
+                                     class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100"
+                                     style="background-color: #f6f4ee; display: {% if src_logo %}none{% else %}flex{% endif %};">
+                                    {{ (empresa.nome or 'E')[0] | upper }}
                                 </div>
                             </div>
+
+                            {# Nome e Categoria #}
+                            <div class="text-truncate min-w-0">
+                                <span class="d-block text-dark fw-semibold small text-truncate">
+                                    {{ empresa.nome }}
+                                </span>
+                                <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
+                                    {{ empresa.categoria_rel.nome if empresa.categoria_rel else 'Estabelecimento' }}
+                                </small>
+                            </div>
+
                         </div>
-                    </a>
-                </div>
-                {% endfor %}
+                    </div>
+                </a>
             </div>
-            {% else %}
-            <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
-                <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
-                <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
-            </div>
-            {% endif %}
-        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
+        <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
+        <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
+    </div>
+    {% endif %}
+</div>
 
         {# 7. RECADOS E NOTIFICAÇÕES EM DESTAQUE #}
         {% if notificacoes %}
@@ -547,7 +516,7 @@
                 {% set primeiro_sub_item = itens_colaborador[0] %}
                 {% set prof_obj = primeiro_sub_item.profissional if primeiro_sub_item.profissional else (item.profissional if item.profissional else None) %}
 
-                {# RESOLUÇÃO DEFENSIVA DA FOTO (Profissional / Usuário Vinculado) #}
+                {# RESOLUÇÃO DEFENSIVA DA FOTO COM HELPER #}
                 {% set foto_prof_raw = None %}
                 {% if prof_obj %}
                     {% if prof_obj.foto_url is defined and prof_obj.foto_url %}
@@ -567,7 +536,7 @@
                     {% endif %}
                 {% endif %}
 
-                {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else foto_prof_raw %}
+                {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else None %}
                 {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Profissional Integrante' %}
 
                 <!-- Container do Colaborador com Disparo de Modal JS -->
@@ -820,7 +789,7 @@
 
         {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA) #}
         {% if publicidade_ativa %}
-        {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url, 'banners') if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
+        {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url) if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
         <div class="mb-4">
             <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark text-white position-relative">
                 <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5"

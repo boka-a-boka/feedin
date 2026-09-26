@@ -2,6 +2,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone, date, time
 from decimal import Decimal
 from sqlalchemy import func, or_, and_
+from flask import current_app
 
 from feedin import database as db
 
@@ -15,7 +16,8 @@ from feedin.modules.empresa.models import (
 # Modelos do Módulo Agenda (Duplicidade de AghOcorrenciaCliente removida)
 from feedin.modules.agenda.models import (
     AghAgendamento, AghConfiguracaoAgenda, AghOcorrenciaCliente,
-    AghSolicitacaoReagendamento, AghAgendamentoItem,
+    AghSolicitacaoReagendamento, AghAgendamentoItem, AghAgendamentoEncerramento, AghHistoricoPresenca,
+    AghNotificacao,
 )
 
 # Modelos Core
@@ -575,3 +577,96 @@ def montar_itens_agendamento(empresa_id, servicos_objs, data_hora_inicio, profis
     return itens
 
 
+def registrar_falta_cliente_service(agendamento_id: int, usuario_id: int, empresa_id: int = None, motivo: str = None):
+    """
+    Regra de negócio centralizada para registro de ausência/não comparecimento (falta).
+    """
+    tz_sp = ZoneInfo('America/Sao_Paulo')
+    agora_sp = datetime.now(tz_sp)
+
+    agendamento = AghAgendamento.query.get(agendamento_id)
+    if not agendamento:
+        return False, 'Agendamento não encontrado.', 404
+
+    emp_id = empresa_id or getattr(agendamento, 'empresa_id', None)
+
+    try:
+        # 1. Atualização do status operacional do agendamento
+        agendamento.status = 'ausente_pendente'
+        agendamento.marcado_como_ausente_em = agora_sp
+        agendamento.marcado_como_ausente_por_id = usuario_id
+        agendamento.updated_at = agora_sp
+
+        # 2. Ficha de Encerramento (Auditoria)
+        encerramento = AghAgendamentoEncerramento.query.filter_by(agendamento_id=agendamento.id).first()
+        prof_id = getattr(agendamento, 'profissional_id', None) or getattr(agendamento, 'colaborador_contrato_id', None)
+
+        if not encerramento:
+            encerramento = AghAgendamentoEncerramento(
+                agendamento_id=agendamento.id,
+                empresa_id=emp_id,
+                colaborador_contrato_id=prof_id
+            )
+            db.session.add(encerramento)
+
+        encerramento.motivo_cancelamento = motivo or 'Cliente ausente / Não compareceu'
+        encerramento.cancelado_por_id = usuario_id
+        encerramento.data_cancelamento = agora_sp
+
+        # 3. Log no Histórico de Presença
+        if getattr(agendamento, 'cliente_id', None):
+            historico_kwargs = {
+                'cliente_id': agendamento.cliente_id,
+                'agendamento_id': agendamento.id,
+                'tipo_evento': 'falta_cliente',
+                'data_hora_agendada': agendamento.data_hora_inicio,
+                'data_hora_evento': agora_sp,
+                'desvio_minutos': 0,
+                'motivo': motivo or 'Cliente não compareceu ao horário agendado.'
+            }
+
+            if hasattr(AghHistoricoPresenca, 'estabelecimento_id'):
+                historico_kwargs['estabelecimento_id'] = emp_id
+            elif hasattr(AghHistoricoPresenca, 'empresa_id'):
+                historico_kwargs['empresa_id'] = emp_id
+
+            db.session.add(AghHistoricoPresenca(**historico_kwargs))
+
+            # 4. Registro de Ocorrência Comportamental para Análise de Risco
+            db.session.add(AghOcorrenciaCliente(
+                cliente_id=agendamento.cliente_id,
+                empresa_id=emp_id,
+                agendamento_id=agendamento.id,
+                tipo_ocorrencia='NO_SHOW',
+                antecedencia_minutos=0
+            ))
+
+        # 5. Notificação Informativa
+        destinatario_id = None
+        if hasattr(agendamento, 'cliente') and agendamento.cliente:
+            destinatario_id = getattr(agendamento.cliente, 'usuario_id', None) or getattr(agendamento.cliente, 'id_cadastro_cliente', None)
+        if not destinatario_id:
+            destinatario_id = getattr(agendamento, 'cliente_id', None)
+
+        if destinatario_id:
+            try:
+                data_fmt = agendamento.data_hora_inicio.strftime('%d/%m às %H:%M') if agendamento.data_hora_inicio else "horário agendado"
+                AghNotificacao.disparar(
+                    empresa_id=emp_id,
+                    destinatario_id=destinatario_id,
+                    papel_destinatario='cliente',
+                    agendamento_id=agendamento.id,
+                    titulo="Ausência Registrada",
+                    mensagem=f"O seu atendimento marcado para {data_fmt} foi assinalado como não comparecimento. Acesse a agenda caso deseje agendar um novo horário.",
+                    tipo_evento="atraso_falta_cliente",
+                    nivel="warning"
+                )
+            except Exception as err_notif:
+                current_app.logger.warning(f"[AVISO NOTIFICAÇÃO] Falha ao enviar notificação de falta: {err_notif}")
+
+        db.session.commit()
+        return True, 'Falta registrada com sucesso.', 200
+
+    except Exception as e:
+        db.session.rollback()
+        raise e

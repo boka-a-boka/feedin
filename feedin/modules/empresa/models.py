@@ -9,6 +9,7 @@ from feedin import database as db
 from datetime import datetime, timezone
 from flask import url_for
 from decimal import Decimal, InvalidOperation
+from utils import resolver_url_midia
 
 # =====================================================================
 # 🏛️ ENTIDADES CORE E PERIFÉRICAS DO MÓDULO
@@ -184,33 +185,23 @@ class EseEmpresa(db.Model):
 
         return False
 
-
     @property
     def url_logomarca(self):
-        """
-        Resolve a URL pública da logomarca da empresa considerando
-        se ela pertence ao static global ou ao blueprint de empresas.
-        """
-        if not self.logomarca:
-            return None
+        """Retorna a URL pública da logomarca tratada."""
+        return resolver_url_midia(
+            caminho_arquivo=self.logomarca,
+            modulo='empresa',
+            fallback_filename='logo-placeholder.webp'
+        )
 
-        # Se for uma URL externa completa (S3, Cloudinary, etc)
-        if self.logomarca.startswith(('http://', 'https://')):
-            return self.logomarca
-
-        # Limpa barras iniciais
-        caminho_limpo = self.logomarca.lstrip('/')
-
-        # Se já tiver o prefixo de uploads
-        if caminho_limpo.startswith('static/'):
-            return f"/{caminho_limpo}"
-
-        # Caso padrão: arquivo armazenado dentro da pasta de uploads de empresas
-        # Ajuste 'empresa.static' ou 'static' conforme a estrutura de pastas do seu blueprint
-        try:
-            return url_for('empresa.static', filename=f"uploads/logos/{caminho_limpo}")
-        except Exception:
-            return url_for('static', filename=f"uploads/logos/{caminho_limpo}")
+    @property
+    def url_fachada(self):
+        """Retorna a URL pública da foto da fachada tratada."""
+        return resolver_url_midia(
+            caminho_arquivo=self.fachada,
+            modulo='empresa',
+            fallback_filename='fachada-placeholder.webp'
+        )
 
     @property
     def nome_fantasia(self):
@@ -226,6 +217,92 @@ class EseEmpresa(db.Model):
         if self.local_fisico and hasattr(self.local_fisico, 'razao_social') and self.local_fisico.razao_social:
             return self.local_fisico.razao_social
         return self.nome
+
+
+class EseTipoExcecaoEnum(enum.Enum):
+    """
+    Enumeração para os tipos de exceção no calendário.
+    - EXCECAO: Funcionamento/trabalho em dia/horário fora do padrão (ex: plantão, feriado trabalhado).
+    - RECESSO: Ausência total ou parcial de expediente/trabalho (ex: férias, consulta médica, folga, manutenção).
+    """
+    EXCECAO = 'excecao'
+    RECESSO = 'recesso'
+
+
+class EseOrigemExcecaoEnum(enum.Enum):
+    """
+    Enumeração da origem da regra de exceção.
+    - EMPRESA: Aplica-se à empresa/unidade de atendimento.
+    - COLABORADOR: Aplica-se especificamente a um contrato de trabalho/colaborador.
+    """
+    EMPRESA = 'empresa'
+    COLABORADOR = 'colaborador'
+
+
+class EseExcecaoCalendario(db.Model):
+    """
+    ===================================================================================
+    MODEL: EseExcecaoCalendario
+    ===================================================================================
+    Descrição:
+        Armazena exceções pontuais, recessos totais ou ausências parciais por faixa
+        de horário no calendário operacional da Empresa e dos Colaboradores.
+
+    Flexibilidade de Uso:
+        1. Recesso Total: data_inicio até data_fim, trabalha=False, considera_horario=False.
+        2. Ausência Parcial: data_inicio (1 dia), considera_horario=True,
+           com hora_inicio_excecao e hora_fim_excecao definidos (ex: 14:00 às 17:00).
+        3. Expediente Especial: trabalha=True, considera_horario=False,
+           preenchendo os turnos (inicio_expediente, fim_expediente, etc).
+
+    Módulo:
+        Empresa / Escalas / Calendário (ESE)
+    ===================================================================================
+    """
+    __tablename__ = 'ese_excecao_calendario'
+
+    id = db.Column(db.String(36), primary_key=True)
+
+    # Vínculos com Entidades
+    empresa_id = db.Column(db.String(36), db.ForeignKey('ese_empresa.id'), nullable=False)
+    contrato_id = db.Column(db.String(36), db.ForeignKey('colaborador_contratos.id'), nullable=True)
+
+    # Tipificação e Origem
+    origem = db.Column(db.Enum(EseOrigemExcecaoEnum), nullable=False)
+    tipo = db.Column(db.Enum(EseTipoExcecaoEnum), nullable=False, default=EseTipoExcecaoEnum.RECESSO)
+
+    # Período de Datas
+    data_inicio = db.Column(db.Date, nullable=False)
+    data_fim = db.Column(db.Date, nullable=False)
+
+    # --- GRANULARIDADE DE HORÁRIOS ---
+    # Flag se a exceção se aplica a uma FAIXA ESPECÍFICA de horas dentro do dia
+    considera_horario = db.Column(db.Boolean, default=False, nullable=False)
+    hora_inicio_excecao = db.Column(db.Time, nullable=True)  # Ex: 14:00
+    hora_fim_excecao = db.Column(db.Time, nullable=True)  # Ex: 17:00
+
+    # Flag se há trabalho no dia/período
+    trabalha = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Horários de Expediente Especial (Usado quando trabalha = True e não é apenas bloqueio parcial)
+    inicio_expediente = db.Column(db.Time, nullable=True)
+    inicio_intervalo = db.Column(db.Time, nullable=True)
+    fim_intervalo = db.Column(db.Time, nullable=True)
+    fim_expediente = db.Column(db.Time, nullable=True)
+
+    # Contexto e Detalhamento da Ocorrência
+    motivo_titulo = db.Column(db.String(100), nullable=False)
+    justificativa = db.Column(db.Text, nullable=True)
+
+    # Controle de Auditoria e Status
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    atualizado_por_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
+
+    def __repr__(self):
+        alvo = f"Contrato: {self.contrato_id}" if self.contrato_id else f"Empresa: {self.empresa_id}"
+        return f"<EseExcecaoCalendario {self.id} | Origem: {self.origem.value} | {alvo} | Motivo: {self.motivo_titulo}>"
 
 
 class UsuarioFavorito(db.Model):
@@ -447,20 +524,31 @@ class ColaboradorContrato(db.Model):
 
     @property
     def url_foto_profissional(self):
-        """Resolve a URL da foto do colaborador."""
-        if not self.foto_profissional:
-            return None
+        """Retorna a URL pública centralizada da foto do colaborador."""
+        return resolver_url_midia(
+            caminho_arquivo=self.foto_profissional,
+            modulo='empresa',  # Pertence ao contexto do módulo empresa/agenda
+            fallback_filename='avatar-default.png'  # Ou avatar-default.webp
+        )
 
-        if self.foto_profissional.startswith(('http://', 'https://')):
-            return self.foto_profissional
-
-        caminho_limpo = self.foto_profissional.lstrip('/')
-
-        try:
-            return url_for('agenda.static', filename=f"uploads/profissionais/{caminho_limpo}")
-        except Exception:
-            return url_for('static', filename=f"uploads/profissionais/{caminho_limpo}")
-
+    # -------------------------------------------------------------------------
+    # TRATAMENTO DE CARGO
+    # -------------------------------------------------------------------------
+    @property
+    def nome_cargo_formatado(self) -> str:
+        """Retorna o nome amigável do cargo do colaborador."""
+        cargo_obj = getattr(self, 'cargo', None)
+        if cargo_obj and not isinstance(cargo_obj, str):
+            return (
+                getattr(cargo_obj, 'descricao', None) or
+                getattr(cargo_obj, 'nome', None) or
+                getattr(cargo_obj, 'titulo', None) or
+                getattr(cargo_obj, 'nome_cargo', None) or
+                'Especialista'
+            )
+        if isinstance(cargo_obj, str) and cargo_obj:
+            return cargo_obj
+        return 'Especialista'
 
 class ColaboradorDetalhesPessoais(db.Model):
     """
@@ -864,115 +952,6 @@ class EseConviteColaborador(db.Model):
         cpf_apenas_numeros = "".join(filter(str.isdigit, cpf_limpo))
         return hashlib.sha256(cpf_apenas_numeros.encode('utf-8')).hexdigest()
 
-
-class EseServicoOferecido(db.Model):
-    """📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento."""
-
-    __tablename__ = 'ese_servico_oferecido'
-    __table_args__ = {'extend_existing': True}
-
-    id = db.Column(db.Integer, primary_key=True)
-    empresa_id = db.Column(
-        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
-    )
-    taxonomia_id = db.Column(
-        db.Integer, db.ForeignKey('taxonomia.id'), nullable=False
-    )
-
-    # Campo numérico para ordenação/agrupamento na tabela de preços futuramente
-    grupo = db.Column(db.Integer, nullable=True)
-
-    # Customização do serviço para o estabelecimento
-    descricao_servico = db.Column(db.String(255), nullable=True)
-    tempo_duracao = db.Column(
-        db.String(5), nullable=False, default='00:30'
-    )  # Formato "HH:mm"
-
-    # Intervalo/Buffer para limpeza, descanso ou preparação (em minutos)
-    tempo_intervalo = db.Column(db.Integer, default=0, nullable=False)
-
-    # 🌟 CAMPO NUMÉRICO: Protegido com asdecimal=False para evitar falha no processador do SQLAlchemy
-    pontos_fidelidade = db.Column(
-        db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
-    )
-
-    # Controle e Auditoria
-    inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
-    data_criacao = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc)
-    )
-
-    # Relacionamento virtual
-    servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
-
-    @validates('pontos_fidelidade')
-    def validate_pontos_fidelidade(self, key, value):
-        """Sanitiza e valida a atribuição do campo pontos_fidelidade.
-
-        Garante conversão segura tratando strings com vírgula ou ponto.
-        """
-        if value is None:
-            return 1.00
-
-        if isinstance(value, str):
-            clean_val = value.replace(',', '.').strip()
-            try:
-                return float(clean_val)
-            except (ValueError, TypeError):
-                return 1.00
-
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return 1.00
-
-    @property
-    def preco(self) -> float:
-        """Busca o preço vigente em EseServicoPreco com tratamento para dados em texto no banco."""
-        from feedin.modules.empresa.models import EseServicoPreco
-        try:
-            preco_obj = EseServicoPreco.query.filter_by(
-                empresa_id=self.empresa_id,
-                taxonomia_id=self.taxonomia_id
-            ).first()
-
-            if preco_obj and getattr(preco_obj, 'novo_valor', None) is not None:
-                val = preco_obj.novo_valor
-                if isinstance(val, str):
-                    return float(val.replace(',', '.').strip())
-                return float(val)
-        except Exception:
-            return 0.00
-
-        return 0.00
-
-    @property
-    def nome(self) -> str:
-        """Retorna a descrição customizada do serviço ou o nome da taxonomia vinculada."""
-        if self.descricao_servico:
-            return self.descricao_servico
-        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
-            return self.servico_taxonomia.nome
-        return f"Serviço #{self.id}"
-
-    @property
-    def duracao_em_minutos(self) -> int:
-        """Converte a string "HH:mm" em total de minutos (ex: '01:15' -> 75 min)."""
-        try:
-            horas, minutos = map(int, str(self.tempo_duracao).split(':'))
-            return (horas * 60) + minutos
-        except (ValueError, AttributeError):
-            return 30
-
-    @property
-    def tempo_total_bloqueio_minutos(self) -> int:
-        """Retorna o tempo TOTAL em minutos que o serviço bloqueia na agenda."""
-        return self.duracao_em_minutos + (self.tempo_intervalo or 0)
-
-    def __repr__(self):
-        return f'<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Pontos {self.pontos_fidelidade}>'
-
-
 class EseServicoPreco(db.Model):
     """📌 ESE_SERVICO_PRECO: Tabela de Preços Vigentes dos Serviços da Empresa."""
 
@@ -1041,6 +1020,113 @@ class EseServicoPreco(db.Model):
 
     def __repr__(self):
         return f"<EseServicoPreco Empresa {self.empresa_id} | Taxonomia {self.taxonomia_id} | Valor {self.novo_valor}>"
+
+
+class EseServicoOferecido(db.Model):
+    """📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento."""
+
+    __tablename__ = 'ese_servico_oferecido'
+    __table_args__ = {'extend_existing': True}
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(
+        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
+    )
+    taxonomia_id = db.Column(
+        db.Integer, db.ForeignKey('taxonomia.id'), nullable=False
+    )
+
+    # Campo numérico para ordenação/agrupamento na tabela de preços futuramente
+    grupo = db.Column(db.Integer, nullable=True)
+
+    # Customização do serviço para o estabelecimento
+    descricao_servico = db.Column(db.String(255), nullable=True)
+    tempo_duracao = db.Column(
+        db.String(5), nullable=False, default='00:30'
+    )  # Formato "HH:mm"
+
+    # Intervalo/Buffer para limpeza, descanso ou preparação (em minutos)
+    tempo_intervalo = db.Column(db.Integer, default=0, nullable=False)
+
+    # 🌟 CAMPO NUMÉRICO: Protegido com asdecimal=False para evitar falha no processador do SQLAlchemy
+    pontos_fidelidade = db.Column(
+        db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
+    )
+
+    # Controle e Auditoria
+    inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
+    data_criacao = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relacionamento virtual
+    servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
+
+    @validates('pontos_fidelidade')
+    def validate_pontos_fidelidade(self, key, value):
+        """Sanitiza e valida a atribuição do campo pontos_fidelidade.
+
+        Garante conversão segura tratando strings com vírgula ou ponto.
+        """
+        if value is None:
+            return 1.00
+
+        if isinstance(value, str):
+            clean_val = value.replace(',', '.').strip()
+            try:
+                return float(clean_val)
+            except (ValueError, TypeError):
+                return 1.00
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 1.00
+
+    @property
+    def preco(self) -> float:
+        """Busca o preço vigente em EseServicoPreco com tratamento para dados em texto no banco."""
+        try:
+            preco_obj = EseServicoPreco.query.filter_by(
+                empresa_id=self.empresa_id,
+                taxonomia_id=self.taxonomia_id
+            ).first()
+
+            if preco_obj and getattr(preco_obj, 'novo_valor', None) is not None:
+                val = preco_obj.novo_valor
+                if isinstance(val, str):
+                    return float(val.replace(',', '.').strip())
+                return float(val)
+        except Exception:
+            return 0.00
+
+        return 0.00
+
+    @property
+    def nome(self) -> str:
+        """Retorna a descrição customizada do serviço ou o nome da taxonomia vinculada."""
+        if self.descricao_servico:
+            return self.descricao_servico
+        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
+            return self.servico_taxonomia.nome
+        return f"Serviço #{self.id}"
+
+    @property
+    def duracao_em_minutos(self) -> int:
+        """Converte a string "HH:mm" em total de minutos (ex: '01:15' -> 75 min)."""
+        try:
+            horas, minutos = map(int, str(self.tempo_duracao).split(':'))
+            return (horas * 60) + minutos
+        except (ValueError, AttributeError):
+            return 30
+
+    @property
+    def tempo_total_bloqueio_minutos(self) -> int:
+        """Retorna o tempo TOTAL em minutos que o serviço bloqueia na agenda."""
+        return self.duracao_em_minutos + (self.tempo_intervalo or 0)
+
+    def __repr__(self):
+        return f'<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Pontos {self.pontos_fidelidade}>'
 
 
 class EseServicoPrecoHistorico(db.Model):
@@ -1150,92 +1236,6 @@ class EseColaboradorServicoHabilidade(db.Model):
 
     def __repr__(self):
         return f"<EseColaboradorServicoHabilidade Contrato:{self.contrato_id} | Servico:{self.servico_oferecido_id}>"
-
-
-class EseTipoExcecaoEnum(enum.Enum):
-    """
-    Enumeração para os tipos de exceção no calendário.
-    - EXCECAO: Funcionamento/trabalho em dia/horário fora do padrão (ex: plantão, feriado trabalhado).
-    - RECESSO: Ausência total ou parcial de expediente/trabalho (ex: férias, consulta médica, folga, manutenção).
-    """
-    EXCECAO = 'excecao'
-    RECESSO = 'recesso'
-
-
-class EseOrigemExcecaoEnum(enum.Enum):
-    """
-    Enumeração da origem da regra de exceção.
-    - EMPRESA: Aplica-se à empresa/unidade de atendimento.
-    - COLABORADOR: Aplica-se especificamente a um contrato de trabalho/colaborador.
-    """
-    EMPRESA = 'empresa'
-    COLABORADOR = 'colaborador'
-
-
-class EseExcecaoCalendario(db.Model):
-    """
-    ===================================================================================
-    MODEL: EseExcecaoCalendario
-    ===================================================================================
-    Descrição:
-        Armazena exceções pontuais, recessos totais ou ausências parciais por faixa
-        de horário no calendário operacional da Empresa e dos Colaboradores.
-
-    Flexibilidade de Uso:
-        1. Recesso Total: data_inicio até data_fim, trabalha=False, considera_horario=False.
-        2. Ausência Parcial: data_inicio (1 dia), considera_horario=True,
-           com hora_inicio_excecao e hora_fim_excecao definidos (ex: 14:00 às 17:00).
-        3. Expediente Especial: trabalha=True, considera_horario=False,
-           preenchendo os turnos (inicio_expediente, fim_expediente, etc).
-
-    Módulo:
-        Empresa / Escalas / Calendário (ESE)
-    ===================================================================================
-    """
-    __tablename__ = 'ese_excecao_calendario'
-
-    id = db.Column(db.String(36), primary_key=True)
-
-    # Vínculos com Entidades
-    empresa_id = db.Column(db.String(36), db.ForeignKey('ese_empresa.id'), nullable=False)
-    contrato_id = db.Column(db.String(36), db.ForeignKey('colaborador_contratos.id'), nullable=True)
-
-    # Tipificação e Origem
-    origem = db.Column(db.Enum(EseOrigemExcecaoEnum), nullable=False)
-    tipo = db.Column(db.Enum(EseTipoExcecaoEnum), nullable=False, default=EseTipoExcecaoEnum.RECESSO)
-
-    # Período de Datas
-    data_inicio = db.Column(db.Date, nullable=False)
-    data_fim = db.Column(db.Date, nullable=False)
-
-    # --- GRANULARIDADE DE HORÁRIOS ---
-    # Flag se a exceção se aplica a uma FAIXA ESPECÍFICA de horas dentro do dia
-    considera_horario = db.Column(db.Boolean, default=False, nullable=False)
-    hora_inicio_excecao = db.Column(db.Time, nullable=True)  # Ex: 14:00
-    hora_fim_excecao = db.Column(db.Time, nullable=True)     # Ex: 17:00
-
-    # Flag se há trabalho no dia/período
-    trabalha = db.Column(db.Boolean, default=False, nullable=False)
-
-    # Horários de Expediente Especial (Usado quando trabalha = True e não é apenas bloqueio parcial)
-    inicio_expediente = db.Column(db.Time, nullable=True)
-    inicio_intervalo = db.Column(db.Time, nullable=True)
-    fim_intervalo = db.Column(db.Time, nullable=True)
-    fim_expediente = db.Column(db.Time, nullable=True)
-
-    # Contexto e Detalhamento da Ocorrência
-    motivo_titulo = db.Column(db.String(100), nullable=False)
-    justificativa = db.Column(db.Text, nullable=True)
-
-    # Controle de Auditoria e Status
-    ativo = db.Column(db.Boolean, default=True, nullable=False)
-    criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    atualizado_por_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
-
-    def __repr__(self):
-        alvo = f"Contrato: {self.contrato_id}" if self.contrato_id else f"Empresa: {self.empresa_id}"
-        return f"<EseExcecaoCalendario {self.id} | Origem: {self.origem.value} | {alvo} | Motivo: {self.motivo_titulo}>"
 
 
 class EseNotificacaoCliente(db.Model):

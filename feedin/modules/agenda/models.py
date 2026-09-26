@@ -55,12 +55,18 @@ class AghAgendamento(db.Model):
     )
 
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
-    data_hora_inicio = db.Column(db.DateTime, nullable=False, index=True) # Horário do 1º serviço
-    data_hora_fim = db.Column(db.DateTime, nullable=False)                # Horário final do último serviço
+    data_hora_inicio = db.Column(db.DateTime, nullable=False, index=True)  # Horário do 1º serviço
+    data_hora_fim = db.Column(db.DateTime, nullable=False)  # Horário final do último serviço
 
     status = db.Column(db.String(30), default='agendado', nullable=False, index=True)
     tipo_origem = db.Column(db.String(20), default='online')
     session_token = db.Column(db.String(100), nullable=True, index=True)
+    # --- FOTO OU AVATAR DO BENEFICIÁRIO (PREPARADO PARA FUTURO CADASTRO) ---
+    foto_url = db.Column(
+        db.String(255),
+        nullable=True,
+        comment='Caminho relativo da foto do dependente, Pet ou logotipo do veículo'
+    )
     expira_em = db.Column(db.DateTime, nullable=True)
 
     criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -68,9 +74,13 @@ class AghAgendamento(db.Model):
     # RELACIONAMENTOS (ORM)
     empresa = db.relationship('EseEmpresa', backref='agendamentos', lazy=True)
     cliente = db.relationship('ModCadastroCliente', backref='agendamentos', lazy=True)
+
+    # 🎯 NOVO: RELACIONAMENTO COM BENEFICIÁRIO
+    beneficiario = db.relationship('ClienteBeneficiario', foreign_keys=[beneficiario_id], lazy=True)
+
     profissional = db.relationship('ColaboradorContrato', foreign_keys=[profissional_id], lazy=True)
 
-    # 🎯 VINCULAÇÃO EXPLÍCITA: Elimina duplicação de relacionamentos e SAWarning
+    # 🎯 VINCULAÇÃO EXPLÍCITA
     itens = db.relationship(
         'AghAgendamentoItem',
         back_populates='agendamento',
@@ -86,6 +96,14 @@ class AghAgendamento(db.Model):
             if getattr(item, 'status_item', None) != 'cancelado'
         )
         return self.valor_total
+
+    @property
+    def total_reagendamentos(self):
+        """Retorna o número de vezes que este agendamento foi reagendado com sucesso."""
+        return AghSolicitacaoReagendamento.query.filter_by(
+            agendamento_id=self.id,
+            status_solicitacao='aprovada'
+        ).count()
 
 
 class AghAgendamentoItem(db.Model):
@@ -449,6 +467,26 @@ class AghHistoricoPresenca(db.Model):
   cliente = db.relationship('ModCadastroCliente', backref='historicos_presenca')
   agendamento = db.relationship('AghAgendamento', backref='historico_eventos')
 
+  # Adicione este método dentro da classe AghHistoricoPresenca
+
+  @classmethod
+  def registrar_evento(cls, empresa_id, cliente_id, agendamento_id, tipo_evento, data_agendada, desvio=0, creditos=0.0,
+                       motivo=None):
+      from datetime import datetime, timezone
+      log = cls(
+          estabelecimento_id=empresa_id,
+          cliente_id=cliente_id,
+          agendamento_id=agendamento_id,
+          tipo_evento=tipo_evento,
+          data_hora_agendada=data_agendada,
+          data_hora_evento=datetime.now(timezone.utc),
+          desvio_minutos=desvio,
+          creditos_pontualidade=creditos,
+          motivo=motivo
+      )
+      db.session.add(log)
+      return log
+
   def __repr__(self):
     return f'<AghHistoricoPresenca Cliente ID {self.cliente_id} - Evento: {self.tipo_evento} (Desvio: {self.desvio_minutos}m)>'
 
@@ -633,6 +671,9 @@ class AghConfiguracaoAgenda(db.Model):
             ' - 30.00: Cobrança de 30% como sinal de garantia da vaga.'
         ),
     )
+
+    taxa_agendamento = db.Column(db.Numeric(10, 2), default=0.00,
+                                 nullable=False)  # 🆕 Taxa fixa de segurança (monetário)
 
     tempo_expiracao_pix_minutos = db.Column(
         db.Integer,
@@ -945,6 +986,14 @@ class AghNotificacao(db.Model):
     remetente = db.relationship('Usuario', foreign_keys=[remetente_id], lazy='select')
     destinatario = db.relationship('Usuario', foreign_keys=[destinatario_id], lazy='select')
 
+    @classmethod
+    def disparar(cls, **kwargs):
+        # Lógica para criar/enviar a notificação
+        nova_notificacao = cls(**kwargs)
+        db.session.add(nova_notificacao)
+        db.session.commit()
+        return nova_notificacao
+
     def marcar_como_lida(self):
         """Atualiza a notificação como lida e preenche o timestamp de leitura."""
         if not self.lida:
@@ -958,94 +1007,101 @@ class AghNotificacao(db.Model):
         )
 
 
+from zoneinfo import ZoneInfo
+from datetime import datetime
+
+
 class AghAgendamentoEncerramento(db.Model):
     __tablename__ = 'agh_agendamento_encerramentos'
 
-    id = db.Column(db.Integer, primary_key=True)
+    __table_args__ = (
+        db.Index('idx_agendamento_item_enc', 'agendamento_id', 'agendamento_item_id'),
+    )
 
-    # Relacionamentos Principais (Foreign Keys)
-    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False, unique=True)
+    # Chave Primária própria (UUID)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    # Estruturas relacionais numéricas (Integer)
+    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False)
+    agendamento_item_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento_item.id'), nullable=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False)
-    colaborador_contrato_id = db.Column(db.Integer, db.ForeignKey('colaborador_contratos.id'), nullable=True)
 
-    # Horários Reais do Atendimento
+    # Entidades baseadas em UUID / String(36)
+    colaborador_contrato_id = db.Column(db.String(36), db.ForeignKey('colaborador_contratos.id'), nullable=True)
+    usuario_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
+
+    # Horários e Encerramento Operacional
     data_hora_inicio_real = db.Column(db.DateTime, nullable=True)
-    data_hora_fim_real = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(ZoneInfo('America/Sao_Paulo')))
-
-    # Campos de Encerramento Financeiro e Operacional
+    data_hora_fim_real = db.Column(db.DateTime, nullable=True)
+    data_hora_encerramento = db.Column(db.DateTime, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
-    valor_final_cobrado = db.Column(db.Numeric(10, 2), nullable=True)
-    forma_pagamento = db.Column(db.String(50), nullable=True)
+    nota_avaliacao_cliente = db.Column(db.SmallInteger, nullable=True)
 
-    # Campos de Auditabilidade de Cancelamento / Ausência / Falta
+    # Fechamento Financeiro / Caixa
+    valor_final_cobrado = db.Column(db.Numeric(10, 2), nullable=True)
+    valor_total = db.Column(db.Numeric(10, 2), nullable=True)
+    forma_pagamento = db.Column(db.String(50), nullable=True)
+    observacao = db.Column(db.Text, nullable=True)
+
+    # Auditabilidade e Cancelamento (UUID)
     motivo_cancelamento = db.Column(db.String(255), nullable=True)
     cancelado_por_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
     data_cancelamento = db.Column(db.DateTime, nullable=True)
 
     # Relacionamentos ORM
-    agendamento = db.relationship('AghAgendamento', backref=db.backref('encerramento', uselist=False))
+    agendamento = db.relationship('AghAgendamento', backref=db.backref('encerramentos', lazy='dynamic'))
+    agendamento_item = db.relationship('AghAgendamentoItem', backref=db.backref('encerramento', uselist=False))
     colaborador_contrato = db.relationship('ColaboradorContrato', backref='atendimentos_encerrados')
-    cancelado_por = db.relationship('ModCadastroCliente', foreign_keys=[cancelado_por_id])
 
-    def __repr__(self):
-        data_fim_str = self.data_hora_fim_real.strftime('%Y-%m-%d %H:%M') if self.data_hora_fim_real else 'N/A'
-        return f"<AghAgendamentoEncerramento AgendamentoID={self.agendamento_id} EmpresaID={self.empresa_id} FimReal={data_fim_str}>"
+    # Relacionamentos mapeados para ModCadastroCliente
+    usuario = db.relationship('ModCadastroCliente', foreign_keys=[usuario_id], backref='encerramentos_realizados')
+    cancelado_por = db.relationship('ModCadastroCliente', foreign_keys=[cancelado_por_id], backref='encerramentos_cancelados')
 
     @classmethod
-    def iniciar_atendimento_servico(cls, agendamento_id: int, empresa_id: int, colaborador_contrato_id: int):
-        """Executa a transação de início de atendimento mantendo a rastreabilidade do horário real e auditoria de pontualidade."""
+    def iniciar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int,
+                                    colaborador_contrato_id: str = None, usuario_id: str = None):
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
-        # 1. Busca e valida o agendamento
-        agendamento = AghAgendamento.query.filter_by(
-            id=agendamento_id, empresa_id=empresa_id
-        ).first()
-
+        agendamento = AghAgendamento.query.filter_by(id=agendamento_id, empresa_id=empresa_id).first()
         if not agendamento:
-            return {
-                'sucesso': False,
-                'mensagem': 'Agendamento não encontrado.',
-            }, 404
+            return {'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}, 404
 
-        # Trava de segurança contra reinício de atendimentos já iniciados/finalizados
         status_permitidos = ['agendado', 'confirmado', 'aguardando', 'soft_lock']
         if agendamento.status not in status_permitidos:
-            return {
-                'sucesso': False,
-                'mensagem': f'Não é possível iniciar um atendimento com status "{agendamento.status}".',
-            }, 400
+            return {'sucesso': False, 'mensagem': f'Não é possível iniciar com status "{agendamento.status}".'}, 400
 
         try:
-            # 2. Atualiza Status do Agendamento
             agendamento.status = 'em_atendimento'
 
-            # 3. Cria ou Atualiza o Registro de Encerramento (Início Real)
             encerramento = cls.query.filter_by(
-                agendamento_id=agendamento.id
+                agendamento_id=agendamento_id,
+                agendamento_item_id=agendamento_item_id
             ).first()
 
             if not encerramento:
                 encerramento = cls(
-                    agendamento_id=agendamento.id,
+                    agendamento_id=agendamento_id,
+                    agendamento_item_id=agendamento_item_id,
                     empresa_id=empresa_id,
                     colaborador_contrato_id=colaborador_contrato_id,
+                    usuario_id=usuario_id,
                     data_hora_inicio_real=agora_sp,
                 )
                 db.session.add(encerramento)
             else:
+                encerramento.agendamento_item_id = agendamento_item_id
                 encerramento.colaborador_contrato_id = colaborador_contrato_id
+                if usuario_id:
+                    encerramento.usuario_id = usuario_id
                 encerramento.data_hora_inicio_real = agora_sp
 
-            # 4. Cálculo do Desvio de Horário para Auditoria (Presença)
             data_agendada = agendamento.data_hora_inicio
             if data_agendada.tzinfo is None:
                 data_agendada = data_agendada.replace(tzinfo=tz_sp)
 
-            diferenca_segundos = (agora_sp - data_agendada).total_seconds()
-            desvio_minutos = int(diferenca_segundos // 60)
+            desvio_minutos = int((agora_sp - data_agendada).total_seconds() // 60)
 
-            # 5. Registro na Tabela de Histórico de Presença
             historico_presenca = AghHistoricoPresenca(
                 estabelecimento_id=empresa_id,
                 cliente_id=agendamento.cliente_id,
@@ -1058,9 +1114,7 @@ class AghAgendamentoEncerramento(db.Model):
             )
             db.session.add(historico_presenca)
 
-            # Efetiva a transação no banco
             db.session.commit()
-
             return {
                 'sucesso': True,
                 'mensagem': 'Atendimento iniciado com sucesso!',
@@ -1070,133 +1124,99 @@ class AghAgendamentoEncerramento(db.Model):
 
         except Exception as e:
             db.session.rollback()
-            return {
-                'sucesso': False,
-                'mensagem': f'Erro ao processar início do atendimento: {str(e)}',
-            }, 500
+            return {'sucesso': False, 'mensagem': f'Erro ao processar início: {str(e)}'}, 500
 
     @classmethod
-    def finalizar_atendimento_servico(cls, agendamento_id: int, empresa_id: int = None, dados_encerramento: dict = None, **kwargs):
-        """Finaliza o atendimento, grava horários reais e persiste a observação de encerramento."""
+    def encerrar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int):
+        item = AghAgendamentoItem.query.get(agendamento_item_id)
+        if not item:
+            return {'sucesso': False, 'mensagem': 'Item de agendamento não encontrado.'}, 404
+
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
-        dados = dados_encerramento or {}
 
-        # Busca observações tanto no dicionário quanto em kwargs soltos
-        obs_bruta = (
-            dados.get('observacoes') or
-            dados.get('observacao') or
-            dados.get('inputTexto') or
-            kwargs.get('observacoes') or
-            kwargs.get('observacao')
-        )
-        texto_obs = obs_bruta.strip() if isinstance(obs_bruta, str) and obs_bruta.strip() else None
+        item.status_item = 'concluido'
+        item.data_hora_fim_real = agora_sp
 
-        # 1. Busca o agendamento
-        query = AghAgendamento.query.filter_by(id=agendamento_id)
-        if empresa_id:
-            query = query.filter_by(empresa_id=empresa_id)
+        encerramento = cls.query.filter_by(
+            agendamento_id=agendamento_id,
+            agendamento_item_id=agendamento_item_id
+        ).first()
 
-        agendamento = query.first()
-        if not agendamento:
-            return {'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}, 404
+        # Busca o valor cadastrado no item (ou no serviço vinculado)
+        valor_item = float(getattr(item, 'valor', 0) or 0)
 
-        try:
-            # 2. Atualiza status do agendamento
-            agendamento.status = 'concluido'
-
-            # 3. Busca ou instancia o registro de encerramento
-            encerramento = cls.query.filter_by(agendamento_id=agendamento.id).first()
-            id_empresa_efetiva = empresa_id or agendamento.empresa_id
-
-            if not encerramento:
-                encerramento = cls(
-                    agendamento_id=agendamento.id,
-                    empresa_id=id_empresa_efetiva,
-                    colaborador_contrato_id=agendamento.colaborador_contrato_id,
-                    data_hora_inicio_real=agora_sp
-                )
-                db.session.add(encerramento)
-
-            # 4. Atribui a observação e data de encerramento
+        if encerramento:
             encerramento.data_hora_fim_real = agora_sp
-            encerramento.observacoes = texto_obs
-
-            val_final = dados.get('valor_final') or dados.get('valor_final_cobrado') or kwargs.get('valor_final')
-            if val_final is not None:
-                encerramento.valor_final_cobrado = val_final
-
-            forma_pag = dados.get('forma_pagamento') or kwargs.get('forma_pagamento')
-            if forma_pag is not None:
-                encerramento.forma_pagamento = forma_pag
-
-            # 5. Registro na Tabela de Histórico de Presença (Fim de Atendimento)
-            historico_presenca = AghHistoricoPresenca(
-                estabelecimento_id=id_empresa_efetiva,
-                cliente_id=agendamento.cliente_id,
-                agendamento_id=agendamento.id,
-                tipo_evento='fim_atendimento',
-                data_hora_agendada=agendamento.data_hora_fim,
-                data_hora_evento=agora_sp,
-                desvio_minutos=0,
-                motivo='Encerramento de atendimento registrado com sucesso',
+            if not encerramento.valor_total or encerramento.valor_total == 0:
+                encerramento.valor_total = valor_item
+                encerramento.valor_final_cobrado = valor_item
+        else:
+            # Se não existia registro de encerramento ainda, cria um já preenchendo o valor
+            encerramento = cls(
+                agendamento_id=agendamento_id,
+                agendamento_item_id=agendamento_item_id,
+                empresa_id=empresa_id,
+                colaborador_contrato_id=getattr(item, 'colaborador_contrato_id', None),
+                data_hora_inicio_real=item.data_hora_inicio_real or agora_sp,
+                data_hora_fim_real=agora_sp,
+                data_hora_encerramento=agora_sp,
+                valor_total=valor_item,
+                valor_final_cobrado=valor_item
             )
-            db.session.add(historico_presenca)
-
             db.session.add(encerramento)
-            db.session.commit()
 
-            return {
-                'sucesso': True,
-                'mensagem': 'Atendimento finalizado com sucesso!',
-                'data_hora_fim': agora_sp.strftime('%H:%M:%S')
-            }, 200
+        # Verifica itens pendentes
+        itens_pendentes_totais = AghAgendamentoItem.query.filter(
+            AghAgendamentoItem.agendamento_id == agendamento_id,
+            db.func.lower(AghAgendamentoItem.status_item) != 'concluido'
+        ).count()
 
-        except Exception as e:
-            db.session.rollback()
-            return {
-                'sucesso': False,
-                'mensagem': f'Erro ao finalizar atendimento: {str(e)}'
-            }, 500
+        agendamento_totalmente_concluido = (itens_pendentes_totais == 0)
+
+        if agendamento_totalmente_concluido:
+            agendamento = AghAgendamento.query.get(agendamento_id)
+            if agendamento:
+                agendamento.status = 'finalizado'
+
+        db.session.commit()
+
+        return {
+            'sucesso': True,
+            'mensagem': 'Serviço concluído com sucesso!',
+            'comanda_pronta': agendamento_totalmente_concluido,
+            'agendamento_id': agendamento_id
+        }, 200
 
 
 class AghSolicitacaoReagendamento(db.Model):
-  __tablename__ = 'agh_solicitacao_reagendamento'
+    __tablename__ = 'agh_solicitacao_reagendamento'
 
-  id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
+    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False)
+    novo_agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
 
-  # O agendamento QUE ESTÁ SENDO alterado
-  agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False)
+    nova_data = db.Column(db.Date, nullable=False)
+    novo_horario = db.Column(db.Time, nullable=False)
+    novo_profissional_id = db.Column(db.Integer, nullable=True)
 
-  # O NOVO agendamento gerado (preenchido quando aprovado/efetivado)
-  novo_agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
+    justificativa = db.Column(db.Text, nullable=True)
+    origem = db.Column(db.String(20), default='cliente')
+    fora_do_prazo = db.Column(db.Boolean, default=False)
+    status_solicitacao = db.Column(db.String(20), default='pendente')
 
-  nova_data = db.Column(db.Date, nullable=False)
-  novo_horario = db.Column(db.Time, nullable=False)
-  novo_profissional_id = db.Column(db.Integer, nullable=True)
+    resposta_colaborador = db.Column(db.Text, nullable=True)
+    analisado_por_id = db.Column(db.Integer, nullable=True)
+    analisado_em = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-  justificativa = db.Column(db.Text, nullable=True)
-  origem = db.Column(db.String(20), default='cliente')  # 'cliente' ou 'colaborador'
-  fora_do_prazo = db.Column(db.Boolean, default=False)
-
-  # Estados da solicitação: 'pendente', 'aprovada', 'recusada', 'cancelada'
-  status_solicitacao = db.Column(db.String(20), default='pendente')
-
-  resposta_colaborador = db.Column(db.Text, nullable=True)
-  analisado_por_id = db.Column(db.Integer, nullable=True)
-  analisado_em = db.Column(db.DateTime, nullable=True)
-
-  created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-  @property
-  def total_reagendamentos(self):
-      """
-      Retorna a contagem real de reagendamentos efetivados via tabela de solicitações.
-      """
-      return AghSolicitacaoReagendamento.query.filter_by(
-          agendamento_id=self.id,
-          status_solicitacao='aprovada'
-      ).count()
+    @property
+    def total_reagendamentos(self):
+        """Retorna quantos reagendamentos aprovados foram gerados a partir do agendamento pai desta solicitação."""
+        return AghSolicitacaoReagendamento.query.filter_by(
+            agendamento_id=self.agendamento_id,
+            status_solicitacao='aprovada'
+        ).count()
 
 
 class AghCancelamento(db.Model):

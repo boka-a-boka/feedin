@@ -3,10 +3,11 @@ import logging
 import re
 from datetime import timedelta, timezone, datetime
 from logging.handlers import RotatingFileHandler
-from flask import Flask, url_for, current_app  # <-- Adicionado url_for e current_app aqui
+from flask import Flask, url_for, current_app, send_from_directory, abort
 from flask_bcrypt import Bcrypt
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event
 from flask_bootstrap import Bootstrap5
 from flask_mail import Mail
 from flask_migrate import Migrate
@@ -117,6 +118,70 @@ def create_app():
         from .utils import tempo_atras_filter
         app.template_filter('tempo_atras')(tempo_atras_filter)
 
+        @event.listens_for(database.engine, 'connect')
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")  # Habilita gravações sem bloquear leituras
+            cursor.execute("PRAGMA busy_timeout=30000")  # Espera até 30 segundos antes de dar erro
+            cursor.execute("PRAGMA synchronous=NORMAL")  # Melhora a performance de gravação
+            cursor.close()
+
+        # --- SERVIDOR DE MÍDIAS DA APLICAÇÃO (MULTI-MÓDULO DESENVOLVIMENTO) ---
+        @app.route('/media/<path:filename>')
+        def serve_media(filename):
+            """
+            =============================================================================
+            ROTA GLOBAL DE ENTREGA DE MÍDIAS E UPLOADS (DESENVOLVIMENTO & FALLBACK)
+            =============================================================================
+            Busca iterativa do arquivo físico nos diretórios de uploads dos módulos.
+            """
+            print(f"\n--- [DEBUG MEDIA - ENTROU NA ROTA] ---")
+            print(f"Filename recebido: {filename}")
+
+            # 1. Normalização do caminho (limpa barras e prefixos redundantes)
+            filename_limpo = filename.replace('\\', '/').strip('/')
+            for prefixo in ['media/', 'uploads/']:
+                if filename_limpo.startswith(prefixo):
+                    filename_limpo = filename_limpo[len(prefixo):]
+
+            # 2. Caminho raiz do pacote 'feedin'
+            base_dir = current_app.root_path
+
+            # 3. Mapeamento dos diretórios físicos reais do projeto
+            pastas_busca = [
+                # Módulo Empresa (Logos e Colaboradores)
+                os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads'),
+                # Módulo Agenda (Avatares)
+                os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads'),
+                # Módulo Core / Raiz
+                os.path.join(base_dir, 'static', 'uploads'),
+                # Fallback configurado no app.config
+                current_app.config.get('UPLOAD_FOLDER', '')
+            ]
+
+            # 4. Verificação e entrega do arquivo físico
+            for pasta in pastas_busca:
+                if not pasta or not os.path.exists(pasta):
+                    print(f"Pasta inexistente: {pasta}")
+                    continue
+
+                caminho_completo = os.path.join(pasta, filename_limpo)
+                existe = os.path.isfile(caminho_completo)
+                print(f"Testando: {caminho_completo} -> Existe? {existe}")
+
+                if existe:
+                    subpasta = os.path.dirname(caminho_completo)
+                    nome_arquivo = os.path.basename(caminho_completo)
+                    print(f"SUCESSO! Servindo: {nome_arquivo} de {subpasta}")
+                    return send_from_directory(subpasta, nome_arquivo)
+
+            # 5. Log e encerramento em caso de arquivo inexistente no disco
+            print(f"--- [FIM DEBUG MEDIA - 404 REAL] ---\n")
+            current_app.logger.error(
+                f"[MEDIA 404] Arquivo '{filename}' não localizado em nenhuma das pastas: {pastas_busca}"
+            )
+            abort(404)
+
         # --- HELPER GLOBAL JINJA2 PARA MIDIAS CROSS-MODULE ---
         @app.template_global()
         def media_url(modulo: str, caminho_relativo: str) -> str:
@@ -149,6 +214,9 @@ def create_app():
         app.register_blueprint(agenda_bp, url_prefix='/agenda')
         app.register_blueprint(empresa_bp, url_prefix='/empresa')
         app.register_blueprint(auth_bp, url_prefix='/auth')
+
+        # 🚀 REGISTRO DO BLUEPRINT DE MÍDIA GLOBAL
+        from feedin.utils import media_bp
         app.register_blueprint(media_bp)
 
     # 5. 🔐 PROVEDOR UNIFICADO DE CARREGAMENTO DE USUÁRIO (DESACOPLADO)
@@ -160,7 +228,6 @@ def create_app():
         user_id_str = str(user_id).strip()
 
         # 1. 🌐 ROTA DO CORE (ID Numérico / Inteiro)
-        # Se o ID for numérico, pertence EXCLUSIVAMENTE ao Core (Usuario)
         if user_id_str.isdigit():
             try:
                 from feedin.models import Usuario
@@ -170,7 +237,6 @@ def create_app():
                 return None
 
         # 2. 🧩 ROTA DOS MÓDULOS (UUID / String de 36 caracteres)
-        # Se for UUID, consulta a lista de loaders registrados pelos Módulos
         for loader_func in app.config.get('MODULE_USER_LOADERS', []):
             try:
                 usuario_modulo = loader_func(user_id_str)

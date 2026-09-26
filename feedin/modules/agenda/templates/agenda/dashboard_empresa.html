@@ -1,6 +1,6 @@
 {% extends "agenda/base_agenda.html" %}
-
 {% block content %}
+
 {# TRATATIVA DE SEGURANÇA PARA A COR DA EMPRESA #}
 {% set cor_empresa = (empresa.cor_primaria if empresa and empresa.cor_primaria else '#0d6efd') %}
 
@@ -9,6 +9,14 @@
 .item-agendamento-atendimento {
     border: 2px solid #0d6efd !important;
     box-shadow: 0 0 10px rgba(13, 110, 253, 0.25) !important;
+}
+.item-agendamento {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: pan-y;
 }
 .box-horario-atendimento {
     background-color: #0d6efd !important;
@@ -49,11 +57,10 @@
   padding: 10px 12px;
   border-radius: 8px;
   background-color: #ffffff;
-  border-left: 4px solid #0056b3; /* Cor indicativa de status/ordem */
+  border-left: 4px solid #0056b3;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
 }
 
-/* Destaque máximo no topo: Profissional */
 .card-header-profissional {
   display: flex;
   justify-content: space-between;
@@ -79,7 +86,6 @@
   font-weight: 600;
 }
 
-/* Nome do Cliente */
 .card-cliente {
   font-size: 0.9rem;
   color: #555555;
@@ -89,7 +95,6 @@
   text-overflow: ellipsis;
 }
 
-/* Linha de Horário e Valor */
 .card-horario-valor {
   display: flex;
   justify-content: space-between;
@@ -108,7 +113,6 @@
   color: #28a745;
 }
 
-/* Serviço em até duas linhas com elipse */
 .card-servico-descricao {
   font-size: 0.85rem;
   color: #6c757d;
@@ -123,12 +127,38 @@
   padding-top: 4px;
 }
 
+.item-agendamento-concluido {
+    opacity: 0.65;
+    filter: grayscale(20%);
+    transition: opacity 0.2s ease, filter 0.2s ease;
+    border-left: 4px solid #198754 !important;
+}
+
+.item-agendamento-concluido:hover {
+    opacity: 0.95;
+    filter: grayscale(0%);
+}
+
+.box-horario-concluido {
+    background-color: #e9ecef !important;
+    color: #495057 !important;
+    border-color: #dee2e6 !important;
+}
+
+.rating-stars .star-btn {
+    transition: transform 0.15s ease-in-out, color 0.15s ease-in-out;
+    cursor: pointer;
+}
+.rating-stars .star-btn:hover,
+.rating-stars .star-btn.active {
+    transform: scale(1.2);
+    color: #ffc107 !important;
+}
 </style>
 
 {# HEADER COM BRANDING DA EMPRESA, LOGOTIPO E SAUDAÇÃO #}
 <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-4 position-relative" style="border-left: 6px solid {{ cor_empresa }} !important;">
 
-    {# BOTÃO DE NOTIFICAÇÕES (Fixado no Alto e à Direita do Card) #}
     <div class="position-absolute top-0 end-0 m-2 z-2">
         <button type="button"
                 class="btn btn-light rounded-circle position-relative p-2 shadow-sm d-flex align-items-center justify-content-center border"
@@ -146,8 +176,6 @@
     </div>
 
     <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap pe-4">
-
-        {# ESQUERDA: VOLTAR, LOGO DA EMPRESA E IDENTIFICAÇÃO #}
         <div class="d-flex align-items-center gap-3">
             <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}"
                class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center flex-shrink-0"
@@ -156,46 +184,29 @@
                 <i class="bi bi-arrow-left fs-5 text-white"></i>
             </a>
 
-            {# LOGOTIPO DO ESTABELECIMENTO #}
-            {% set inicial_empresa = empresa.nome[:2]|upper if empresa.nome else 'EP' %}
-            {% set cor_bg_logo = empresa.cor_primaria or empresa.cor_secundaria or cor_empresa or '#212529' %}
-            {% set raw_logo = empresa.logomarca or '' %}
-            {% set url_logo_final = None %}
+            {% set cor_bg_logo = empresa.cor_primaria or cor_empresa or '#212529' %}
+            {% set url_logo_final = empresa.url_logomarca %}
 
-            {% if raw_logo %}
-                {% if raw_logo.startswith('http') %}
-                    {% set url_logo_final = raw_logo %}
-                {% else %}
-                    {% set c_limpo = raw_logo.replace('\\', '/') %}
-                    {% if 'uploads/' in c_limpo.lower() %}
-                        {% set idx = c_limpo.lower().find('uploads/') %}
-                        {% set rel_path = c_limpo[idx + 8:] %}
-                        {% set url_logo_final = url_for('empresa.static', filename='uploads/' ~ rel_path) %}
-                    {% else %}
-                        {% set url_logo_final = url_for('empresa.static', filename=c_limpo.replace('static/', '').lstrip('/')) %}
-                    {% endif %}
-                {% endif %}
-            {% endif %}
-
-            <div class="flex-shrink-0 position-relative" style="width: 52px; height: 52px;">
+            <div class="flex-shrink-0 position-relative" style="width: 52px; height: 52px; min-width: 52px; min-height: 52px;">
                 {% if url_logo_final %}
                     <img id="imgLogoEmpresa_{{ empresa.id }}"
                          src="{{ url_logo_final }}"
                          alt="Logo de {{ empresa.nome }}"
-                         class="rounded-3 shadow-sm border object-fit-cover w-100 h-100"
-                         onerror="this.classList.add('d-none'); document.getElementById('avatarLogoLetra_{{ empresa.id }}').classList.remove('d-none'); document.getElementById('avatarLogoLetra_{{ empresa.id }}').classList.add('d-flex');">
+                         class="rounded-3 shadow-sm border object-fit-contain w-100 h-100 p-1"
+                         style="background-color: #fcfbfa; display: block;"
+                         onerror="this.style.display='none'; const el = document.getElementById('avatarLogoLetra_{{ empresa.id }}'); if(el) el.style.display='flex';">
                 {% endif %}
 
                 <div id="avatarLogoLetra_{{ empresa.id }}"
-                     class="rounded-3 shadow-sm align-items-center justify-content-center fw-bold text-white fs-4 w-100 h-100 border {% if url_logo_final %}d-none{% else %}d-flex{% endif %}"
-                     style="background-color: {{ cor_bg_logo }};">
-                    {{ inicial_empresa }}
+                     class="rounded-3 shadow-sm align-items-center justify-content-center fw-bold text-white fs-4 w-100 h-100 border"
+                     style="background-color: {{ cor_bg_logo }}; display: {% if url_logo_final %}none{% else %}flex{% endif %};">
+                    {{ (empresa.nome[:2]|upper if empresa.nome else 'EP') }}
                 </div>
             </div>
 
             <div>
                 <span class="badge rounded-pill px-2 py-0.5 text-white fw-semibold mb-1"
-                      style="font-size: 0.65rem; background-color: {{ cor_empresa }};">
+                      style="font-size: 0.65rem; background-color: {{ cor_empresa or cor_bg_logo }};">
                     <i class="bi bi-shop me-1"></i>{{ empresa.nome }}
                 </span>
                 <h4 class="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -206,8 +217,6 @@
                 </p>
             </div>
         </div>
-
-        {# DIREITA: BOTAO PAINEL DE GESTÃO #}
         {% if pode_gerenciar %}
             <div class="d-flex align-items-center gap-2 mt-2 mt-sm-0">
                 <a href="{{ url_for('agenda.dashboard_empresa', empresa_id=empresa.id) }}"
@@ -218,11 +227,10 @@
                 </a>
             </div>
         {% endif %}
-
     </div>
 </div>
 
-{# 🔔 SEÇÃO DE ALERTAS DE SOLICITAÇÃO DE REORDENAÇÃO PENDENTE (GOVERNANÇA OPERACIONAL) #}
+{# ALERTAS DE REORDENAÇÃO PENDENTE #}
 {% if pendencias_reordenacao %}
     <div class="mb-4">
         {% for pend in pendencias_reordenacao %}
@@ -261,7 +269,6 @@
         </div>
     </div>
 
-    {# CARD ATRASOS #}
     <div class="col-6 col-md-3">
         <div class="card border-0 rounded-4 shadow-sm p-3 bg-white h-100 btn-card-filtro"
              onclick="filtrarGrade('atrasos')" id="card-filtro-atrasos"
@@ -312,20 +319,23 @@
         </div>
 
         <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
-            <input type="date" id="filtro-data" class="form-control form-control-sm bg-light border-0 fw-semibold rounded-pill px-3 py-1.5"
-                   value="{{ data_filtro }}" onchange="alternarData(this)" style="max-width: 160px;">
+            <input type="date"
+                   id="filtro-data"
+                   name="data"
+                   class="form-control form-control-sm bg-light border-0 fw-semibold rounded-pill px-3 py-1.5"
+                   value="{{ data_filtro.strftime('%Y-%m-%d') if data_filtro else '' }}"
+                   onchange="alternarData(this)"
+                   style="max-width: 160px;">
 
             {% set lista_profs = profissionais if profissionais is defined else profissionais_ativos %}
             {% if current_user.is_admin or pode_gerenciar %}
-                {% set lista_profs = profissionais if profissionais is defined else profissionais_ativos %}
                 {% if lista_profs %}
                     <div class="input-group input-group-sm" style="max-width: 240px;">
                         <span class="input-group-text bg-light border-0 rounded-start-pill">
                             <i class="bi bi-person-badge"></i>
                         </span>
                         {% if pode_gerenciar %}
-                            <!-- 👑 VISÃO GESTOR/ADMINISTRADOR: Seleção completa liberada -->
-                            <select id="filtro-profissional" class="form-select border-0 shadow-sm rounded-3 fw-semibold" onchange="aplicarFiltrosGlobais()">
+                            <select id="filtro-profissional" class="form-select border-0 shadow-sm rounded-3 fw-semibold" onchange="alternarProfissionalOuData()">
                                 <option value="">Todos os Profissionais</option>
                                 {% for prof in profissionais_ativos %}
                                     {% set prof_nome = resolver_nome_profissional(prof) if resolver_nome_profissional else (prof.nome or 'Profissional') %}
@@ -335,7 +345,6 @@
                                 {% endfor %}
                             </select>
                         {% else %}
-                            <!-- 💼 VISÃO COLABORADOR OPERACIONAL: Campo travado e pré-selecionado no próprio usuário -->
                             {% set meu_prof_id = colaboradorcontrato.id if colaboradorcontrato else (prof_id_param or '') %}
                             {% set meu_nome = resolver_nome_profissional(colaboradorcontrato) if (resolver_nome_profissional and colaboradorcontrato) else 'Meu Perfil' %}
 
@@ -347,7 +356,6 @@
                                     <option value="{{ meu_prof_id }}" selected>{{ meu_nome }}</option>
                                 </select>
                             </div>
-                            <!-- Hidden input para garantir o envio no formulário ou leitura pelo script JS se necessário -->
                             <input type="hidden" name="profissional_id" value="{{ meu_prof_id }}">
                         {% endif %}
                     </div>
@@ -368,67 +376,81 @@
     <div id="conteudo-grade-atendimentos" class="position-relative min-vh-25">
         <div class="lista-agendamentos-container">
 
-            {% set lista_slots = grade_completa if grade_completa else agendamentos %}
-            {% if lista_slots %}
-                {% for slot in lista_slots %}
-                    {% set agend_id = slot.get('agendamento_id') or slot.get('id') or '' %}
-                    {% set tipo_slot = slot.get('tipo', 'ocupado') %}
-                    {% set hora_inicio_txt = slot.get('hora_inicio') or '--:--' %}
-                    {% set hora_fim_txt = slot.get('hora_fim') or '--:--' %}
-                    {% set prof_id_slot = slot.get('profissional_id', '') | string | lower | trim %}
+            {% if slots_grade %}
+                {% for slot in slots_grade %}
 
-                    {% if tipo_slot == 'ocupado' %}
-                        {% set status_slug = slot.get('status_slug') or 'agendado' %}
-                        {% set status_label = slot.get('status_label') or (status_slug | capitalize) %}
-                        {% set status_badge_class = slot.get('status_badge_class') or 'bg-secondary rounded-pill' %}
+                    {# EXTRAÇÃO DE VARIÁVEIS AUXILIARES DO SLOT #}
+                    {% set status_slug = (slot.status or 'agendado') | lower | trim %}
+                    {% set agend_id = slot.id or slot.agendamento_id %}
+                    {% set hora_inicio_txt = slot.hora_inicio or '00:00' %}
+                    {% set hora_fim_txt = slot.hora_fim or '00:00' %}
+                    {% set nome_cliente = slot.cliente_nome or 'Cliente' %}
+                    {% set cliente_id_slot = slot.cliente_id or '' %}
+                    {% set prof_id_slot = slot.profissional_id or '' %}
+                    {% set nome_prof = slot.profissional_nome or 'Profissional' %}
+                    {% set nome_servico = slot.servico_nome or 'Serviço' %}
+                    {% set valor_total_fmt = slot.valor_formatado or 'R$ 0,00' %}
+                    {% set url_foto_atendido = slot.foto_atendido %}
+                    {% set url_foto_titular = slot.foto_titular %}
+                    {% set inicial_cliente = (nome_cliente[:1] | upper) if nome_cliente else 'C' %}
+                    {% set e_atrasado = (status_slug == 'atrasado') %}
 
-                        {% set nome_cliente = slot.get('cliente_nome') or 'Cliente Avulso' %}
-                        {% set nome_servico = slot.get('servico_nome') or 'Serviço Geral' %}
-                        {% set nome_prof = slot.get('profissional_nome') or 'Profissional' %}
-                        {% set valor_total_fmt = slot.get('valor_total') or 'R$ 0,00' %}
-                        {% set e_atrasado = slot.get('esta_atrasado', False) %}
+                    {# LÓGICA DE DETECÇÃO DE PENDÊNCIAS DE ITENS DO SLOT #}
+                    {% set ns = namespace(tem_item_pendente=false, proximo_item_id='', proximo_item_nome='') %}
 
-                        {# EXTRAÇÃO DEFENSIVA E FORMATAÇÃO DA URL DA FOTO DO CLIENTE #}
-                        {% set foto_raw = slot.get('cliente_foto') or slot.get('foto_cliente') or (slot.cliente.foto_url if slot.cliente is defined and slot.cliente and slot.cliente.foto_url is defined else '') %}
+                    {% if slot.get('itens') and slot.get('itens')|length > 0 %}
+                        {% for item_p in slot.get('itens') %}
+                            {% set st_it = (item_p.get('status_item') or item_p.get('status') or 'agendado') | lower | trim %}
 
-                        {% if foto_raw %}
-                            {% if foto_raw.startswith('http://') or foto_raw.startswith('https://') or foto_raw.startswith('/') %}
-                                {% set url_foto_cliente = foto_raw %}
-                            {% else %}
-                                {% set url_foto_cliente = url_for('static', filename='uploads/perfis/' ~ foto_raw) %}
+                            {% if st_it not in ['concluido', 'concluído', 'cancelado'] and not ns.tem_item_pendente %}
+                                {% set ns.tem_item_pendente = true %}
+                                {% set ns.proximo_item_id = item_p.get('id') or item_p.get('item_id') or agend_id %}
+                                {% set ns.proximo_item_nome = (item_p.get('servico', {}).get('nome') if item_p.get('servico') else item_p.get('nome_servico')) or nome_servico %}
                             {% endif %}
-                        {% else %}
-    {% set url_foto_cliente = '' %}
-{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                            {% set ns.tem_item_pendente = true %}
+                            {% set ns.proximo_item_id = agend_id %}
+                            {% set ns.proximo_item_nome = nome_servico %}
+                        {% endif %}
+                    {% endif %}
 
-                        <!-- CARD DE ATENDIMENTO OCUPADO -->
-                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug }} {% if e_atrasado %}border-danger border-2 shadow{% endif %}"
+                    {% if slot.tipo == 'ocupado' %}
+                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug }} {% if status_slug in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento{% elif status_slug in ['concluido', 'finalizado'] %}item-agendamento-concluido{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
                              data-id="{{ agend_id }}"
                              data-tipo="ocupado"
                              data-status="{{ status_slug }}"
                              data-hora="{{ hora_inicio_txt }}"
                              data-cliente="{{ nome_cliente | e }}"
-                             data-cliente-foto="{{ url_foto_cliente or '' }}"
+                             data-cliente-id="{{ cliente_id_slot }}"
+                             data-colaborador-id="{{ prof_id_slot }}"
+                             data-cliente-foto="{{ url_foto_atendido }}"
                              data-servico="{{ nome_servico | e }}"
                              data-valor="{{ valor_total_fmt }}"
                              data-cliente-telefone="{{ slot.get('cliente_telefone', 'Contato via Plataforma') }}"
                              data-obs="{{ slot.get('observacoes', 'Sem observações adicionais.') }}"
                              data-profissional-id="{{ prof_id_slot }}"
-                             onclick="exibirDetalhesCliente(this)"
-                             ondblclick="gerenciarAcoesSlot(this)"
+                             title="Pressione e segure para ver detalhes | Duplo clique para abrir ações"
                              style="cursor: pointer; {% if e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
 
-                            <!-- CABEÇALHO DO CARD -->
                             <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
-                                <span class="badge {{ status_badge_class }} px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem; letter-spacing: 0.5px;">
-                                    <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>{{ status_label }}
-                                </span>
+                                {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                                    <span class="badge bg-primary text-white px-2.5 py-1 text-uppercase tracking-wide shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                        <span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
+                                        Em Atendimento
+                                    </span>
+                                {% else %}
+                                    <span class="badge {{ status_badge_class }} px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem; letter-spacing: 0.5px;">
+                                        <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>{{ status_label }}
+                                    </span>
+                                {% endif %}
+
                                 <div class="d-flex align-items-center gap-2">
                                     {% if slot.get('ordem_execucao') %}
                                         <small class="text-muted fw-bold" style="font-size: 0.72rem;">Etapa #{{ slot.get('ordem_execucao') }}</small>
                                     {% endif %}
 
-                                    {# BOTÃO DE SOLICITAR REORGANIZAÇÃO DE ETAPAS #}
                                     <button type="button" class="btn btn-sm btn-light border rounded-pill px-2 py-0 ms-1 text-secondary"
                                             title="Ajustar Ordem/Simultaneidade de Tarefas"
                                             onclick="event.stopPropagation(); abrirModalReorganizarComanda('{{ agend_id }}')">
@@ -437,14 +459,24 @@
                                 </div>
                             </div>
 
-                            <!-- CORPO DO CARD -->
                             <div class="d-flex align-items-start gap-3 w-100">
-                                <div class="box-horario text-center px-2.5 py-2 rounded-3 bg-light border flex-shrink-0 shadow-sm" style="min-width: 85px;">
-                                    <span class="d-block fw-bold fs-5 text-dark leading-none">{{ hora_inicio_txt }}</span>
-                                    <small class="text-muted d-block mb-1.5" style="font-size: 0.65rem;">até {{ hora_fim_txt }}</small>
-                                    <span class="badge bg-white text-dark border fw-bold w-100 py-1" style="font-size: 0.75rem;">
-                                        {{ valor_total_fmt }}
-                                    </span>
+                                <div class="box-horario text-center px-2.5 py-2 rounded-3 {% if status_slug in ['em_atendimento', 'em_andamento'] %}box-horario-atendimento{% elif status_slug in ['concluido', 'finalizado'] %}box-horario-concluido{% else %}bg-light text-dark{% endif %} border flex-shrink-0 shadow-sm" style="min-width: 85px;">
+                                    <span class="d-block fw-bold fs-5 leading-none">{{ hora_inicio_txt }}</span>
+                                    <small class="d-block mb-1.5 opacity-75" style="font-size: 0.65rem;">até {{ hora_fim_txt }}</small>
+
+                                    {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                                        <div class="rounded py-1 px-1 fw-bold w-100 shadow-sm" style="font-size: 0.75rem; background-color: rgba(255, 255, 255, 0.2); color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                            {{ valor_total_fmt }}
+                                        </div>
+                                    {% elif status_slug in ['concluido', 'finalizado'] %}
+                                        <div class="badge bg-success-subtle text-success border border-success-subtle fw-bold w-100 py-1" style="font-size: 0.75rem;">
+                                            {{ valor_total_fmt }}
+                                        </div>
+                                    {% else %}
+                                        <div class="badge bg-white text-dark border fw-bold w-100 py-1" style="font-size: 0.75rem;">
+                                            {{ valor_total_fmt }}
+                                        </div>
+                                    {% endif %}
                                 </div>
 
                                 <div class="flex-grow-1 overflow-hidden">
@@ -453,45 +485,180 @@
                                             <i class="bi bi-person-badge-fill text-primary me-1.5"></i>{{ nome_prof }}
                                         </h5>
                                     </div>
-                                    <div class="text-secondary fw-semibold mb-2 text-truncate" style="font-size: 0.88rem;">
-                                        <i class="bi bi-person-fill text-muted me-1"></i>Cliente: <span class="text-dark">{{ nome_cliente }}</span>
-                                    </div>
-                                    <div class="p-2 rounded-3 bg-light-subtle border text-dark" style="font-size: 0.82rem;">
-                                        <div class="d-flex align-items-start gap-1.5">
-                                            <i class="bi bi-scissors text-secondary me-1 flex-shrink-0 mt-0.5"></i>
-                                            <span class="fw-medium text-break" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25;">
-                                                {{ nome_servico }}
-                                            </span>
+
+                                    <div class="d-flex align-items-center gap-2 my-1">
+                                        <div class="position-relative flex-shrink-0" style="width: 38px; height: 38px;">
+                                            {% if slot.get('tem_beneficiario') %}
+                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 border-primary d-flex align-items-center justify-content-center text-primary shadow-sm"
+                                                     title="Beneficiário: {{ slot.get('nome_beneficiario') }}">
+                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
+                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ slot.get('nome_beneficiario') }}" onerror="this.style.display='none';">
+                                                    {% else %}
+                                                        {% set tp = slot.get('tipo_persona', 'humano') %}
+                                                        {% if tp == 'pet' %}
+                                                            <i class="bi bi-paw-fill fs-5"></i>
+                                                        {% elif tp == 'veiculo' %}
+                                                            <i class="bi bi-car-front-fill fs-5"></i>
+                                                        {% else %}
+                                                            <i class="bi bi-person-fill fs-5"></i>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                </div>
+
+                                                <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden"
+                                                     style="width: 16px; height: 16px;" title="Responsável: {{ slot.get('cliente_nome') }}">
+                                                    {% if url_foto_titular and url_foto_titular != 'None' %}
+                                                        <img src="{{ url_foto_titular }}" class="w-100 h-100 object-fit-cover" onerror="this.style.display='none';">
+                                                    {% else %}
+                                                        <span class="text-white fw-bold d-flex align-items-center justify-content-center h-100" style="font-size: 0.5rem;">
+                                                            {{ inicial_cliente }}
+                                                        </span>
+                                                    {% endif %}
+                                                </div>
+                                            {% else %}
+                                                <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
+                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
+                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+                                                        <span class="fw-bold text-primary fs-6 d-none">{{ inicial_cliente }}</span>
+                                                    {% else %}
+                                                        <span class="fw-bold text-primary fs-6">
+                                                            {{ inicial_cliente }}
+                                                        </span>
+                                                    {% endif %}
+                                                </div>
+                                            {% endif %}
                                         </div>
+
+                                        <div class="text-secondary fw-semibold text-truncate lh-sm" style="font-size: 0.85rem;">
+                                            {% if slot.get('tem_beneficiario') %}
+                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                    {{ slot.get('nome_beneficiario') }}
+                                                </div>
+                                                <div class="text-muted text-truncate" style="font-size: 0.75rem;">
+                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span>
+                                                </div>
+                                            {% else %}
+                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                    {{ nome_cliente }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    {# LISTA DE ITENS DO AGENDAMENTO #}
+                                    <div class="mt-2 pt-2 border-top">
+                                        {% if slot.get('itens') %}
+                                            {% for item in slot.get('itens') %}
+                                                {% set st_item = item.status_item or item.status or 'agendado' %}
+                                                {% set item_nome_txt = item.servico.nome if item.servico else (item.nome_servico or 'Serviço') %}
+                                                <div class="card mb-2 border-start border-4
+                                                     {% if st_item == 'concluido' %}border-success bg-light
+                                                     {% elif st_item in ['em_andamento', 'em_atendimento'] %}border-warning bg-warning-subtle
+                                                     {% else %}border-primary{% endif %}">
+
+                                                    <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <strong class="d-block small">{{ item_nome_txt }}</strong>
+                                                            <span class="badge {% if st_item == 'concluido' %}bg-success{% else %}bg-secondary{% endif %}">
+                                                                {{ st_item | replace('_', ' ') | title }}
+                                                            </span>
+                                                        </div>
+
+                                                        <div>
+                                                            {% if status_slug not in ['concluido', 'finalizado'] %}
+                                                                {% if st_item != 'concluido' %}
+                                                                    <button type="button" class="btn btn-sm btn-outline-success"
+                                                                            data-agendamento-id="{{ agend_id }}"
+                                                                            data-item-id="{{ item.id }}"
+                                                                            onclick="aoClicarEncerrarTarefa(event, this)">
+                                                                        <i class="bi bi-check-lg"></i> Concluir
+                                                                    </button>
+                                                                {% else %}
+                                                                    <button type="button" class="btn btn-sm btn-link text-muted p-0" title="Reabrir item"
+                                                                            onclick="event.stopPropagation(); reabrirItemServico('{{ agend_id }}', '{{ item.id }}')">
+                                                                        <i class="bi bi-arrow-counterclockwise"></i> Reabrir
+                                                                    </button>
+                                                                {% endif %}
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        {% else %}
+                                            <div class="p-2 rounded-3 bg-light-subtle border text-dark mt-1" style="font-size: 0.82rem;">
+                                                <div class="d-flex align-items-start gap-1.5">
+                                                    <i class="bi bi-scissors text-secondary me-1 flex-shrink-0 mt-0.5"></i>
+                                                    <span class="fw-medium text-break" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25;">
+                                                        {{ nome_servico }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- PAINEL DE AÇÕES DO CARD (EXPANDIDO VIA DUPLO CLIQUE) -->
-                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top d-flex align-items-center justify-content-end gap-2 flex-wrap">
+                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ENCERRAR TAREFA PENDENTE OU NOTA DE CONCLUÍDO #}
+                            {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <small class="text-primary fw-bold">
+                                        <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
+                                    </small>
+
+                                    {% if ns.tem_item_pendente and ns.proximo_item_id %}
+                                        <button type="button"
+                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ ns.proximo_item_id }}', '{{ empresa.id }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Concluir Tarefa
+                                        </button>
+                                    {% else %}
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
+                                            <i class="bi bi-receipt me-1"></i> Exibir Comanda / Caixa
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+
+                            {# PAINEL DE AÇÕES REVELADO POR DUPLO CLIQUE #}
+                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
                                 {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold btn-finalizar"
-                                            onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}')">
-                                        <i class="bi bi-check2-circle me-1"></i>Finalizar Atendimento
-                                    </button>
-                                {% elif status_slug not in ['concluido', 'finalizado', 'cancelado'] %}
-                                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold btn-iniciar"
-                                            onclick="event.stopPropagation(); acaoIniciarAtendimento('{{ agend_id }}')">
-                                        <i class="bi bi-play-fill me-1"></i>Iniciar Atendimento
+                                    {% if ns.tem_item_pendente %}
+                                        <button type="button"
+                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ ns.proximo_item_id }}', '{{ empresa.id }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Concluir Tarefa
+                                        </button>
+                                    {% endif %}
+
+                                    {% if not ns.tem_item_pendente %}
+                                        <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
+                                            <i class="bi bi-receipt me-1"></i>Fechar Comanda / Caixa
+                                        </button>
+                                    {% endif %}
+
+                                {% elif status_slug not in ['concluido', 'finalizado', 'cancelado', 'falta'] %}
+                                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                            onclick="event.stopPropagation(); acaoIniciarAtendimento('{{ slot.id or slot.agendamento_id }}', '{{ empresa.id }}')">
+                                        <i class="bi bi-play-circle me-1"></i>Iniciar Atendimento
                                     </button>
                                     <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 py-1 fw-semibold btn-marcar-falta"
-                                            onclick="event.stopPropagation(); confirmarAusenciaPeloModal('{{ agend_id }}')">
+                                            onclick="event.stopPropagation(); abrirModalAtrasoPresenca('{{ agend_id }}', '{{ nome_cliente | e }}')">
                                         <i class="bi bi-person-x me-1"></i>Marcar Falta
                                     </button>
                                 {% endif %}
-                                <button type="button" class="btn btn-sm btn-light rounded-circle p-1 ms-1" title="Fechar"
+
+                                <button type="button" class="btn btn-sm btn-light border rounded-circle p-1 ms-1" title="Fechar Painel"
                                         onclick="event.stopPropagation(); fecharPainelAcoes(this)">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
                             </div>
                         </div>
+
                     {% else %}
-                        <!-- CARD DE HORÁRIO LIVRE -->
+                        {# CARD DE SLOT LIVRE #}
                         <div class="p-3 mb-2 rounded-4 border border-dashed bg-light d-flex align-items-center justify-content-between item-agendamento slot-livre user-select-none"
                              data-tipo="livre"
                              data-hora="{{ hora_inicio_txt }}"
@@ -508,6 +675,7 @@
                             </button>
                         </div>
                     {% endif %}
+
                 {% endfor %}
             {% else %}
                 <div class="text-center py-5 border rounded-4 bg-light" id="msg-sem-agendamentos">
@@ -524,7 +692,76 @@
     </div>
 </div>
 
-{# MODAL DE REORGANIZAÇÃO SEGURO DA COMANDA / SEQUÊNCIA DE SERVIÇOS #}
+{# MODAL DE DETALHES DO CLIENTE #}
+<div class="modal fade" id="modalDetalhesClienteEmpresa" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header border-bottom pb-3">
+                <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                    <i class="bi bi-person-lines-fill text-primary"></i>Detalhes do Agendamento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-3">
+                <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
+                    <div style="width: 50px; height: 50px; min-width: 50px; min-height: 50px;" class="position-relative flex-shrink-0">
+                        <img id="modalClienteEmpresaFoto"
+                             src=""
+                             alt="Foto do Cliente"
+                             class="rounded-circle object-fit-cover w-100 h-100 border shadow-sm"
+                             style="display: none;"
+                             onerror="this.style.display='none'; const el = document.getElementById('modalClienteEmpresaInicial'); if(el) el.style.display='flex';">
+
+                        <div id="modalClienteEmpresaInicial"
+                             class="rounded-circle bg-primary text-white align-items-center justify-content-center fw-bold fs-4 w-100 h-100 border shadow-sm"
+                             style="display: flex;">
+                            C
+                        </div>
+                    </div>
+
+                    <div>
+                        <h5 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Cliente</h5>
+                        <small class="text-muted" id="modalClienteEmpresaTelefone"><i class="bi bi-whatsapp text-success me-1"></i>--</small>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block">Horário</small>
+                            <span class="fw-bold text-dark" id="modalClienteEmpresaHora">--:--</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block">Valor Total</small>
+                            <span class="fw-bold text-success" id="modalClienteEmpresaValor">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="fw-semibold text-muted small d-block mb-1">Serviço Solicitado</label>
+                    <div class="p-2 bg-light rounded-3 border text-dark fw-medium" id="modalClienteEmpresaServico">
+                        --
+                    </div>
+                </div>
+
+                <div>
+                    <label class="fw-semibold text-muted small d-block mb-1">Observações</label>
+                    <div class="p-2 bg-light rounded-3 border text-secondary small" id="modalClienteEmpresaObs">
+                        Nenhuma observação.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top pt-2">
+                <button type="button" class="btn btn-secondary rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# MODAL DE REORGANIZAÇÃO DE COMANDA #}
 <div class="modal fade" id="modalReorganizarComanda" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 rounded-4 shadow">
@@ -539,9 +776,7 @@
                 <p class="text-muted small mb-3">
                     Ajuste a ordem de atendimento ou marque a opção <strong>"Simultâneo"</strong> caso dois ou mais colaboradores executem os serviços no mesmo horário.
                 </p>
-
                 <ul class="list-group list-group-flush rounded-3 border" id="listaItensReordenacao">
-                    <!-- Itens inseridos via JavaScript dinamicamente -->
                 </ul>
 
                 <div class="alert alert-info border-0 rounded-3 mt-3 mb-0 small d-flex align-items-center gap-2">
@@ -574,10 +809,14 @@
             </div>
             <div class="modal-body py-3">
                 <p class="mb-1 text-muted">O atendimento de <strong id="nome-cliente-atraso" class="text-dark"></strong> está em atraso.</p>
+                <div class="mb-3">
+                    <label for="motivoAusenciaInput" class="form-label small fw-semibold text-muted">Motivo do Registro (Caso Ausente)</label>
+                    <input type="text" class="form-control rounded-3" id="motivoAusenciaInput" placeholder="Ex: Cliente não compareceu no horário">
+                </div>
                 <p class="fw-bold fs-6 text-dark mb-0">O cliente está presente no estabelecimento?</p>
             </div>
             <div class="modal-footer border-0 pt-0 flex-nowrap">
-                <button type="button" class="btn btn-outline-danger w-50 rounded-pill fw-semibold" id="btnClienteAusente" onclick="processarAusenciaModal()">
+                <button type="button" class="btn btn-outline-danger w-50 rounded-pill fw-semibold" id="btnClienteAusente" onclick="confirmarAusenciaPeloModal()">
                     <i class="bi bi-x-circle me-1"></i>Não (Ausente)
                 </button>
                 <button type="button" class="btn btn-success w-50 rounded-pill fw-semibold" id="btnClientePresente" data-bs-dismiss="modal">
@@ -588,206 +827,571 @@
     </div>
 </div>
 
-{# MODAL DE FINALIZAÇÃO DE ATENDIMENTO COM DETALHAMENTO FINANCEIRO #}
+<!-- MODAL PARA FINALIZAR ITEM DE SERVIÇO -->
+<div class="modal fade" id="modalFinalizarItem" tabindex="-1" aria-labelledby="modalFinalizarItemLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 rounded-4 shadow">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold" id="modalFinalizarItemLabel">
+          <i class="bi bi-check2-square me-2"></i>Concluir Serviço / Tarefa
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <form id="formFinalizarItem" onsubmit="event.preventDefault(); confirmarEGravarEncerramentoItem();">
+        <div class="modal-body">
+          <input type="hidden" id="modal_agendamento_id" name="agendamento_id" value="">
+          <input type="hidden" id="modal_item_id" name="item_id" value="">
+
+          <div class="alert alert-light border mb-3">
+            <strong id="modal_servico_nome" class="d-block text-primary fs-6">Nome do Serviço</strong>
+            <small class="text-muted" id="modal_cliente_nome">Cliente: ---</small>
+          </div>
+
+          <!-- Horários Automatizados e Somente Leitura -->
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label for="hora_inicio_real" class="form-label small fw-bold">Início Real</label>
+              <div class="input-group">
+                <span class="input-group-text bg-light"><i class="bi bi-play-circle"></i></span>
+                <input type="time" class="form-control bg-light" id="hora_inicio_real" name="hora_inicio_real" readonly tabindex="-1">
+              </div>
+            </div>
+            <div class="col-6">
+              <label for="hora_fim_real" class="form-label small fw-bold">Fim Real</label>
+              <div class="input-group">
+                <span class="input-group-text bg-light"><i class="bi bi-stop-circle"></i></span>
+                <input type="time" class="form-control bg-light" id="hora_fim_real" name="hora_fim_real" readonly tabindex="-1">
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="modal_item_observacao" class="form-label small fw-bold">Observações / Anotações do Atendimento</label>
+            <textarea class="form-control" id="modal_item_observacao" name="observacoes_tecnicas" rows="2" placeholder="Ex: Produto X utilizado, observações do cliente..."></textarea>
+          </div>
+
+          <div id="bloco_avaliacao_cliente" class="border-top pt-3 mt-3">
+            <label class="form-label small fw-bold text-dark">
+              <i class="bi bi-star me-1 text-warning"></i>Avaliação do Cliente
+            </label>
+            <div class="row align-items-center g-2">
+              <div class="col-5">
+                <select class="form-select" id="modal_item_avaliacao" name="nota_avaliacao_cliente">
+                  <option value="5" selected>⭐⭐⭐⭐⭐ (5)</option>
+                  <option value="4">⭐⭐⭐⭐ (4)</option>
+                  <option value="3">⭐⭐⭐ (3)</option>
+                  <option value="2">⭐⭐ (2)</option>
+                  <option value="1">⭐ (1)</option>
+                </select>
+              </div>
+              <div class="col-7">
+                <input type="text" class="form-control" id="comentario_avaliacao_cliente" name="comentario_avaliacao_cliente" placeholder="Comentário (opcional)">
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold">
+            <i class="bi bi-check-lg me-1"></i>Confirmar Conclusão
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# MODAL DE FECHAMENTO FINANCEIRO DE COMANDA #}
 <div class="modal fade" id="modalFinalizarAtendimento" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 shadow">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-bold text-dark">
-                    <i class="bi bi-check2-circle text-primary me-2"></i>Finalizar Atendimento
+                    <i class="bi bi-receipt text-primary me-2"></i>Fechamento de Comanda / Caixa
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-3">
                 <input type="hidden" id="modal-finalizar-agendamento-id">
 
-                <div class="mb-3">
-                    <label for="modal-finalizar-observacao" class="form-label fw-semibold text-dark small">
-                        Observações do Atendimento / Encerramento
-                    </label>
-                    <textarea class="form-control rounded-3" id="modal-finalizar-observacao" rows="3"
-                              placeholder="Digite aqui observações relevantes sobre o atendimento..."></textarea>
-                </div>
-
-                <div class="row g-2">
-                    <div class="col-6">
-                        <label for="modal-finalizar-valor" class="form-label fw-semibold text-dark small">Valor Cobrado (R$)</label>
-                        <input type="number" step="0.01" class="form-control rounded-3" id="modal-finalizar-valor" placeholder="0.00">
+                <div class="alert alert-light border rounded-3 mb-3 p-3 small">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Status dos Serviços:</span>
+                        <span class="badge bg-success-subtle text-success fw-bold">Todos Concluídos</span>
                     </div>
-                    <div class="col-6">
-                        <label for="modal-finalizar-forma-pagamento" class="form-label fw-semibold text-dark small">Forma de Pagamento</label>
-                        <select class="form-select rounded-3" id="modal-finalizar-forma-pagamento">
-                            <option value="">Selecione...</option>
-                            <option value="pix">PIX</option>
-                            <option value="dinheiro">Dinheiro</option>
-                            <option value="cartao_credito">Cartão de Crédito</option>
-                            <option value="cartao_debito">Cartão de Débito</option>
-                        </select>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Total Previsto dos Itens:</span>
+                        <strong id="modal-resumo-valor-previsto">R$ 0,00</strong>
                     </div>
-                </div>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success rounded-pill px-4 fw-semibold" onclick="confirmarEGravarEncerramento()">
-                    <i class="bi bi-check-lg me-1"></i>Concluir Atendimento
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{# MODAL DE CONFIRMAÇÃO DE AÇÕES GENÉRICO E DINÂMICO #}
-<div class="modal fade" id="modalConfirmacaoAcao" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold text-dark" id="modalAcaoTitulo">
-                    <i class="bi bi-question-circle text-primary me-2" id="modalAcaoIcone"></i>
-                    <span id="modalAcaoTituloTexto">Confirmar Ação</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body py-3">
-                <p class="text-muted small mb-3" id="modalAcaoMensagem">
-                    Tem certeza de que deseja prosseguir com esta ação?
-                </p>
-
-                <input type="hidden" id="modalAcaoEndpoint" value="">
-                <input type="hidden" id="modalAcaoElementoId" value="">
-
-                <div class="mb-3 d-none" id="modalAcaoContainerInput">
-                    <label for="modalAcaoInputTexto" class="form-label fw-semibold text-dark small" id="modalAcaoLabelInput">
-                        Observação / Motivo
-                    </label>
-                    <textarea class="form-control rounded-3" id="modalAcaoInputTexto" rows="3" placeholder=""></textarea>
-                </div>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold" id="modalAcaoBtnConfirmar">
-                    <i class="bi bi-check-lg me-1"></i><span id="modalAcaoBtnTexto">Confirmar</span>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{# DRAWER DE NOTIFICAÇÕES DA EMPRESA #}
-<div class="offcanvas offcanvas-end border-0 shadow" tabindex="-1" id="offcanvasNotificacoesEmpresa" aria-labelledby="offcanvasNotificacoesLabel">
-    <div class="offcanvas-header border-bottom">
-        <h5 class="offcanvas-title fw-bold text-dark" id="offcanvasNotificacoesLabel">
-            <i class="bi bi-bell text-primary me-2"></i>Notificações da Operação
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-    <div class="offcanvas-body p-0">
-        <div id="lista-notificacoes-container" class="list-group list-group-flush">
-            {% if notificacoes and notificacoes|length > 0 %}
-                {% for notif in notificacoes %}
-                    <div class="list-group-item p-3 border-bottom item-notificacao-empresa" id="notif-item-{{ notif.id }}">
-                        <div class="d-flex align-items-start justify-content-between gap-2">
-                            <div>
-                                <h6 class="fw-bold text-dark mb-1" style="font-size: 0.88rem;">{{ notif.titulo }}</h6>
-                                <p class="text-muted small mb-1">{{ notif.mensagem }}</p>
-                                <small class="text-secondary opacity-75 d-block" style="font-size: 0.7rem;">{{ notif.criado_em.strftime('%d/%m/%Y %H:%M') if notif.criado_em else '' }}</small>
-                            </div>
-                        </div>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="text-center py-5 text-muted">
-                    <i class="bi bi-bell-slash fs-2 d-block mb-2"></i>
-                    <small>Nenhuma notificação encontrada.</small>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- MODAL FICHA DE ATENDIMENTO DO CLIENTE -->
-<div class="modal fade" id="modalDetalhesClienteEmpresa" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 shadow">
-            <div class="modal-header bg-dark text-white border-0 py-3">
-                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2">
-                    <i class="bi bi-person-vcard text-primary"></i>Ficha de Atendimento do Cliente
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
-                    <!-- CONTAINER DA FOTO / INICIAL DO CLIENTE -->
-                    <div class="position-relative flex-shrink-0" style="width: 56px; height: 56px;">
-                        <img id="modalClienteEmpresaFoto"
-                             src=""
-                             alt="Foto do Cliente"
-                             class="rounded-circle border object-fit-cover w-100 h-100 d-none"
-                             onerror="this.onerror=null; this.classList.add('d-none'); document.getElementById('modalClienteEmpresaInicial').classList.remove('d-none'); document.getElementById('modalClienteEmpresaInicial').classList.add('d-flex');">
-
-                        <div class="rounded-circle bg-primary text-white align-items-center justify-content-center fw-bold fs-3 shadow-sm w-100 h-100 d-flex"
-                             id="modalClienteEmpresaInicial">
-                            C
-                        </div>
-                    </div>
-
-                    <div>
-                        <h5 class="fw-bold text-dark mb-0" id="modalClienteEmpresaNome">---</h5>
-                        <small class="text-muted d-block" id="modalClienteEmpresaTelefone">
-                            <i class="bi bi-whatsapp text-success me-1"></i>---
-                        </small>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="fw-bold text-dark small d-block mb-1"><i class="bi bi-scissors text-primary me-1"></i>Serviço Solicitado:</label>
-                    <div class="p-2.5 bg-light rounded-3 border text-secondary small" id="modalClienteEmpresaServico">---</div>
                 </div>
 
                 <div class="row g-2 mb-3">
                     <div class="col-6">
-                        <label class="fw-bold text-dark small d-block mb-1"><i class="bi bi-clock me-1 text-primary"></i>Horário:</label>
-                        <div class="p-2 bg-light rounded-3 border text-dark fw-bold small text-center" id="modalClienteEmpresaHora">---</div>
+                        <label for="modal-finalizar-valor" class="form-label fw-semibold text-dark small">Valor Final Cobrado (R$)</label>
+                        <input type="text" class="form-control rounded-3 fw-bold text-success fs-5" id="modal-finalizar-valor" placeholder="0,00">
                     </div>
                     <div class="col-6">
-                        <label class="fw-bold text-dark small d-block mb-1"><i class="bi bi-cash-stack me-1 text-success"></i>Valor Estimado:</label>
-                        <div class="p-2 bg-light rounded-3 border text-success fw-bold small text-center" id="modalClienteEmpresaValor">---</div>
+                        <label for="modal-finalizar-forma-pagamento" class="form-label fw-semibold text-dark small">Forma de Pagamento</label>
+                        <select class="form-select rounded-3" id="modal-finalizar-forma-pagamento">
+                            <option value="PIX" selected>PIX</option>
+                            <option value="Cartão de Crédito">Cartão de Crédito</option>
+                            <option value="Cartão de Débito">Cartão de Débito</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Outro">Outro</option>
+                        </select>
                     </div>
                 </div>
 
-                <div>
-                    <label class="fw-bold text-dark small d-block mb-1"><i class="bi bi-chat-left-text me-1 text-warning"></i>Observações do Cliente:</label>
-                    <div class="p-2.5 bg-light rounded-3 border text-muted small" id="modalClienteEmpresaObs">Nenhuma observação registrada.</div>
+                <div class="mb-3">
+                    <label for="modal-finalizar-observacao" class="form-label fw-semibold text-dark small">
+                        Observações Financeiras / Caixa (Opcional)
+                    </label>
+                    <textarea class="form-control rounded-3" id="modal-finalizar-observacao" rows="2"
+                              placeholder="Descontos aplicados, acréscimos ou detalhes do acerto..."></textarea>
                 </div>
             </div>
-            <div class="modal-footer bg-light border-0 py-2">
-                <button type="button" class="btn btn-sm btn-dark rounded-pill px-4" data-bs-dismiss="modal">Fechar</button>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Manter Aberto</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold" onclick="confirmarEGravarEncerramento()">
+                    <i class="bi bi-wallet2 me-1"></i>Liquidar Comanda
+                </button>
             </div>
         </div>
     </div>
 </div>
 
-{# JAVASCRIPT CORRIGIDO E INTEGRADO #}
-
 <script>
-let agendamentoSelecionadoId = null;
+// =========================================================================
+// 1. UTILITÁRIOS E ESTADO GLOBAL
+// =========================================================================
 let filtroStatusAtual = 'todos';
 
-window.acaoIniciarAtendimento = acaoIniciarAtendimento;
-window.acaoFinalizarAtendimento = acaoFinalizarAtendimento;
-window.confirmarEGravarEncerramento = confirmarEGravarEncerramento;
-window.fecharPainelAcoes = fecharPainelAcoes;
-window.confirmarAusenciaPeloModal = confirmarAusenciaPeloModal;
-window.processarAusenciaModal = processarAusenciaModal;
-window.gerenciarAcoesSlot = gerenciarAcoesSlot;
-window.filtrarGrade = filtrarGrade;
-window.aplicarFiltrosGlobais = aplicarFiltrosGlobais;
-window.exibirDetalhesCliente = exibirDetalhesCliente;
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+        || document.querySelector('input[name="csrf_token"]')?.value
+        || '';
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    aplicarFiltrosGlobais();
-});
+// =========================================================================
+// 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
+// =========================================================================
 
-function aplicarFiltrosGlobais() {
+window.abrirModalFinalizarItem = function(agendamentoId, itemId, nomeServico, nomeCliente) {
+    const inputAgendamento = document.getElementById('modal_agendamento_id');
+    const inputItem = document.getElementById('modal_item_id');
+    const spanServico = document.getElementById('modal_servico_nome');
+    const spanCliente = document.getElementById('modal_cliente_nome');
+
+    if (inputAgendamento) inputAgendamento.value = agendamentoId || '';
+    if (inputItem) inputItem.value = itemId || '';
+    if (spanServico) spanServico.textContent = nomeServico || 'Serviço';
+    if (spanCliente) spanCliente.textContent = nomeCliente ? `Cliente: ${nomeCliente}` : 'Cliente: ---';
+
+    const modalEl = document.getElementById('modalFinalizarItem');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
+
+window.abrirModalEncerramento = function(element) {
+    if (!element) return;
+
+    const btn = element.closest('button') || element;
+    const agendamentoId = btn.dataset.agendamentoId || btn.dataset.itemId || btn.getAttribute('data-agendamento-id');
+    const empresaId = btn.dataset.empresaId || btn.getAttribute('data-empresa-id') || '';
+
+    if (!agendamentoId) {
+        alert("Parâmetros agendamento-id ou item-id ausentes no botão.");
+        return;
+    }
+
+    const inputAgendamento = document.getElementById('encerrar_agendamento_id');
+    if (inputAgendamento) {
+        inputAgendamento.value = agendamentoId;
+    }
+
+    const formEncerrar = document.getElementById('form-encerrar-atendimento');
+    if (formEncerrar && empresaId) {
+        formEncerrar.action = `/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/encerrar`;
+    }
+
+    const modalEl = document.getElementById('modalEncerrarAtendimento');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
+
+window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
+    if (!valorTotal) {
+        const cardEl = document.querySelector(`.item-agendamento[data-id="${agendamentoId}"]`);
+        valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0,00';
+    }
+    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+};
+
+window.prepararEAbrirModalCaixa = function(agendamentoId, cardEl) {
+    const valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0.00';
+    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+};
+
+window.aoClicarEncerrarTarefa = function(event, elemento) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const btn = elemento ? (elemento.closest('button') || elemento) : null;
+    if (!btn) return;
+
+    const agendamentoId = btn.dataset.agendamentoId || btn.getAttribute('data-agendamento-id');
+    const itemId = btn.dataset.itemId || btn.getAttribute('data-item-id');
+
+    if (!agendamentoId || !itemId) {
+        alert("Parâmetros agendamento-id ou item-id ausentes no botão.");
+        return;
+    }
+
+    fetch("{{ url_for('agenda.encerrar_clique') }}", {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            agendamento_id: agendamentoId,
+            item_id: itemId
+        })
+    })
+    .then(async response => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok) {
+            throw new Error(data?.mensagem || `Erro no servidor (${response.status})`);
+        }
+        return data;
+    })
+    .then(data => {
+        if (!data || !data.sucesso) {
+            alert(data?.mensagem || "Erro ao iniciar encerramento do serviço.");
+            return;
+        }
+        window.popularModalFinalizar(data);
+    })
+    .catch(error => {
+        console.error("[CLIENTE] Erro no encerramento:", error);
+        alert(`Falha ao processar requisição: ${error.message}`);
+    });
+};
+
+window.popularModalFinalizar = function(dados) {
+    if (!dados) return;
+
+    const elAgendamento = document.getElementById('modal_agendamento_id');
+    const elItem = document.getElementById('modal_item_id');
+    const elServico = document.getElementById('modal_servico_nome');
+    const elCliente = document.getElementById('modal_cliente_nome');
+
+    if (elAgendamento) elAgendamento.value = dados.agendamento_id || '';
+    if (elItem) elItem.value = dados.item_id || '';
+    if (elServico) elServico.textContent = dados.servico_nome || 'Serviço';
+    if (elCliente) elCliente.textContent = 'Cliente: ' + (dados.cliente_nome || '---');
+
+    const elInicio = document.getElementById('hora_inicio_real');
+    const elFim = document.getElementById('hora_fim_real');
+
+    if (elInicio && dados.hora_inicio_real) {
+        elInicio.value = String(dados.hora_inicio_real).substring(0, 5);
+    }
+    if (elFim && dados.hora_fim_real) {
+        elFim.value = String(dados.hora_fim_real).substring(0, 5);
+    }
+
+    if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+    }
+
+    const modalElement = document.getElementById('modalFinalizarItem');
+    if (modalElement && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+    }
+};
+
+window.confirmarEGravarEncerramentoItem = function() {
+    const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
+    const itemId = document.getElementById('modal_item_id')?.value;
+    const observacao = document.getElementById('modal_item_observacao')?.value || '';
+    const avaliacao = document.getElementById('modal_item_avaliacao')?.value || null;
+
+    if (!agendamentoId || !itemId) {
+        alert("IDs inválidos para conclusão do item.");
+        return;
+    }
+
+    const payload = {
+        agendamento_id: agendamentoId,
+        item_id: itemId,
+        observacao: observacao,
+        avaliacao: avaliacao
+    };
+
+    fetch('/agenda/api/agendamento/concluir-item', {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.sucesso) {
+            alert(data.mensagem || 'Erro ao concluir item.');
+            return;
+        }
+
+        const modalElement = document.getElementById('modalFinalizarItem');
+        if (modalElement && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getInstance(modalElement)?.hide();
+        }
+
+        if (data.comanda_pronta) {
+            window.acaoFinalizarAtendimento(data.agendamento_id, data.valor_total);
+        } else {
+            window.location.reload();
+        }
+    })
+    .catch(err => {
+        console.error("Erro ao gravar encerramento do item:", err);
+        alert("Falha ao salvar as informações do serviço.");
+    });
+};
+
+window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00') {
+    const inputId = document.getElementById('modal-finalizar-agendamento-id');
+    const inputValor = document.getElementById('modal-finalizar-valor');
+    const elResumo = document.getElementById('modal-resumo-valor-previsto');
+
+    if (inputId) inputId.value = agendamentoId;
+
+    let valorNum = 0.0;
+
+    if (typeof valorSugerido === 'number') {
+        valorNum = valorSugerido;
+    } else if (valorSugerido) {
+        let strLimpa = String(valorSugerido)
+            .replace("R$", "")
+            .replace(/\s/g, "")
+            .trim();
+
+        if (strLimpa.includes(',')) {
+            strLimpa = strLimpa.replace(/\./g, "").replace(",", ".");
+        }
+
+        valorNum = parseFloat(strLimpa);
+    }
+
+    if (isNaN(valorNum)) valorNum = 0.0;
+
+    const valorFormatado = valorNum.toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    if (inputValor) inputValor.value = valorFormatado;
+    if (elResumo) elResumo.innerText = `R$ ${valorFormatado}`;
+
+    const modalCaixaEl = document.getElementById('modalFinalizarAtendimento');
+    if (modalCaixaEl && typeof bootstrap !== 'undefined') {
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+        bootstrap.Modal.getOrCreateInstance(modalCaixaEl).show();
+    }
+};
+
+window.confirmarEGravarEncerramento = function() {
+    const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
+    const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
+    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value;
+    const observacao = document.getElementById('modal-finalizar-observacao')?.value;
+
+    if (!agendamentoId) {
+        alert("ID do agendamento não informado.");
+        return;
+    }
+
+    let valorTratado = valorInput.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+    let valorFinal = parseFloat(valorTratado);
+    if (isNaN(valorFinal)) valorFinal = 0.0;
+
+    const payload = {
+        agendamento_id: agendamentoId,
+        valor_total: valorFinal,
+        valor_final_cobrado: valorFinal,
+        forma_pagamento: formaPagamento,
+        observacao: observacao
+    };
+
+    fetch('/agenda/api/agendamento/concluir-processo', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso || data.success) {
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
+            window.location.reload();
+        } else {
+            alert(data.mensagem || data.message || 'Erro ao liquidar comanda.');
+        }
+    })
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        alert('Falha ao processar liquidação.');
+    });
+};
+
+window.reabrirItemServico = function(agendamentoId, itemId) {
+    if (!confirm("Deseja reabrir este serviço para alteração?")) return;
+
+    const empresaId = "{{ empresa.id if empresa is defined and empresa else '' }}";
+    fetch(`/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/itens/${itemId}/reabrir`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) location.reload();
+        else alert(data.mensagem || 'Erro ao reabrir item.');
+    })
+    .catch(err => console.error('Erro na reabertura do item:', err));
+};
+
+window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
+    if (!agendamentoId || !empresaId) {
+        alert("Erro de parâmetros: ID do agendamento ou da empresa ausentes.");
+        return;
+    }
+
+    const idLimpo = String(agendamentoId).split('_')[0];
+
+    fetch(`/agenda/empresa/${empresaId}/agendamentos/${idLimpo}/iniciar`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(async response => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok) {
+            throw new Error(data?.mensagem || `Erro no servidor (${response.status})`);
+        }
+        return data;
+    })
+    .then(data => {
+        if (data && (data.sucesso || data.success)) {
+            window.location.reload();
+        } else {
+            alert(data?.mensagem || 'Não foi possível iniciar o atendimento.');
+        }
+    })
+    .catch(err => {
+        console.error('Erro ao iniciar atendimento:', err);
+        alert(`Erro ao iniciar atendimento: ${err.message}`);
+    });
+};
+
+window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
+    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
+        alert("Erro no frontend: O ID do item ou do agendamento não foi encontrado no card.");
+        return;
+    }
+
+    // URL fixa direta sem depender de url_for do Flask
+    fetch("/agenda/api/agendamento/concluir-processo", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            agendamento_id: agendamentoId,
+            item_id: itemId
+        })
+    })
+    .then(async response => {
+        if (!response.ok) {
+            throw new Error(`Erro na requisição (Status: ${response.status})`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.status === 'sucesso' || data.success || data.sucesso) {
+            location.reload();
+        } else {
+            alert(data.message || data.mensagem || 'Erro ao concluir tarefa.');
+        }
+    })
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        alert('Ocorreu um erro ao processar a solicitação.');
+    });
+};
+
+window.gerenciarAcoesSlot = function(elemento) {
+    document.querySelectorAll('.painel-acoes-slot').forEach(p => p.classList.add('d-none'));
+    const painelAtual = elemento.querySelector('.painel-acoes-slot');
+    if (painelAtual) {
+        painelAtual.classList.remove('d-none');
+    }
+};
+
+window.fecharPainelAcoes = function(btn) {
+    if (!btn) return;
+    const painel = btn.closest('.painel-acoes-slot');
+    if (painel) painel.classList.add('d-none');
+};
+
+window.alternarData = function(element) {
+    const dataSelecionada = element.value;
+    if (!dataSelecionada) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('data', dataSelecionada);
+    window.location.search = urlParams.toString();
+};
+
+window.alternarProfissionalOuData = function() {
+    const dataSelecionada = document.getElementById('filtro-data')?.value;
+    const profId = document.getElementById('filtro-profissional')?.value;
+
+    const urlParams = new URLSearchParams(window.location.search);
+
+    if (dataSelecionada) urlParams.set('data', dataSelecionada);
+    if (profId) urlParams.set('profissional_id', profId);
+    else urlParams.delete('profissional_id');
+
+    window.location.search = urlParams.toString();
+};
+
+window.aplicarFiltrosGlobais = function() {
     const selectProf = document.getElementById('filtro-profissional');
     const chkGradeAberta = document.getElementById('chkExibirGradeAberta');
 
@@ -826,6 +1430,11 @@ function aplicarFiltrosGlobais() {
         }
     });
 
+    const msgSemAgendamentos = document.getElementById('msg-sem-agendamentos');
+    if (msgSemAgendamentos && itensVisiveisCount > 0) {
+        msgSemAgendamentos.classList.add('d-none');
+    }
+
     const msgFiltroVazio = document.getElementById('msg-filtro-vazio');
     if (msgFiltroVazio) {
         if (itensVisiveisCount === 0 && todosItens.length > 0) {
@@ -834,224 +1443,77 @@ function aplicarFiltrosGlobais() {
             msgFiltroVazio.classList.add('d-none');
         }
     }
-}
+};
 
-function acaoFinalizarAtendimento(agendamentoId) {
-    document.getElementById('modal-finalizar-agendamento-id').value = agendamentoId;
-    const modalEl = document.getElementById('modalFinalizarAtendimento');
+window.filtrarGrade = function(status) {
+    filtroStatusAtual = status;
+    document.querySelectorAll('.btn-card-filtro').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.opacity = '0.7';
+    });
+    const cardAtivo = document.getElementById(`card-filtro-${status}`);
+    if (cardAtivo) {
+        cardAtivo.classList.add('active');
+        cardAtivo.style.opacity = '1';
+    }
+    window.aplicarFiltrosGlobais();
+};
+
+window.abrirModalReorganizarComanda = function(agendamentoId) {
+    const modalEl = document.getElementById('modalReorganizarComanda');
     if (modalEl) {
-        const modal = new bootstrap.Modal(modalEl);
-        modal.show();
-    }
-}
-
-function confirmarEGravarEncerramento() {
-    const agendamentoId = document.getElementById('modal-finalizar-agendamento-id').value;
-    const observacao = document.getElementById('modal-finalizar-observacao').value;
-    const valor = document.getElementById('modal-finalizar-valor').value;
-    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento').value;
-
-    fetch(`/api/agendamentos/${agendamentoId}/finalizar`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: JSON.stringify({ observacao, valor, forma_pagamento: formaPagamento })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso) {
-            location.reload();
-        } else {
-            alert(data.mensagem || "Erro ao encerrar atendimento.");
+        if (agendamentoId) {
+            const inputId = document.getElementById('reord-agendamento-id');
+            if (inputId) inputId.value = agendamentoId;
         }
-    })
-    .catch(err => console.error("Erro ao encerrar atendimento:", err));
-}
-
-function gerenciarAcoesSlot(elemento) {
-    const todosPaineis = document.querySelectorAll('.painel-acoes-slot');
-    todosPaineis.forEach(p => p.classList.add('d-none'));
-
-    const painelAtual = elemento.querySelector('.painel-acoes-slot');
-    if (painelAtual) {
-        painelAtual.classList.remove('d-none');
+        if (typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
     }
-}
+};
 
-function fecharPainelAcoes(btn) {
-    const painel = btn.closest('.painel-acoes-slot');
-    if (painel) painel.classList.add('d-none');
-}
+window.abrirModalAtrasoPresenca = function(agendamentoId, nomeCliente) {
+    const inputId = document.getElementById('modal-atraso-agendamento-id');
+    const elNome = document.getElementById('nome-cliente-atraso');
+    if (inputId) inputId.value = agendamentoId;
+    if (elNome) elNome.textContent = nomeCliente || 'Cliente';
 
-// A. DUPLO CLIQUE NO CARD -> Modal com Perfil do Colaborador/Serviço
-$(document).on('dblclick', '.card-agendamento', function() {
-    const colaboradorId = $(this).data('colaborador-id');
-    const itemId = $(this).data('item-id');
+    const modalEl = document.getElementById('modalConfirmarPresenca');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
 
-    if (!colaboradorId) return;
+// =========================================================================
+// 3. INICIALIZAÇÃO E EVENTOS DOM
+// =========================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    window.aplicarFiltrosGlobais();
 
-    $.get(`/colaborador/${colaboradorId}/perfil_modal?item_id=${itemId || ''}`, function(res) {
-        if (res.sucesso) {
-            $('#modalColaboradorNome').text(res.nome);
-            $('#modalColaboradorDesde').text(res.nao_empresa_desde);
-            $('#modalColaboradorMediaGeral').text(res.media_geral + ' ★');
-            $('#modalColaboradorAtendimentos').text(res.total_atendimentos);
+    const cards = document.querySelectorAll('.item-agendamento');
+    cards.forEach(card => {
+        card.addEventListener('contextmenu', e => e.preventDefault());
+        card.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.gerenciarAcoesSlot(this);
+        });
+    });
 
-            if (res.media_servico_especifico) {
-                $('#modalServicoMediaContainer').show();
-                $('#modalServicoMedia').text(res.media_servico_especifico + ' ★');
-            } else {
-                $('#modalServicoMediaContainer').hide();
-            }
-
-            $('#modalPerfilColaborador').modal('show');
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.item-agendamento')) {
+            document.querySelectorAll('.painel-acoes-slot').forEach(p => p.classList.add('d-none'));
         }
     });
-});
 
-// B. CLIQUE LONGO / MANTER PRESSIONADO -> Prontuário do Cliente
-let timerPressao = null;
-
-$(document).on('mousedown touchstart', '.card-agendamento', function(e) {
-    const clienteId = $(this).data('cliente-id');
-    if (!clienteId) return;
-
-    timerPressao = setTimeout(function() {
-        $.get(`/cliente/${clienteId}/prontuario_modal`, function(res) {
-            if (res.sucesso) {
-                $('#modalClienteNome').text(res.nome_cliente);
-                $('#modalClienteConcluidos').text(res.total_concluidos);
-                $('#modalClienteCancelamentos').text(res.total_cancelamentos);
-
-                let htmlLogs = '';
-                if (res.historico_observacoes.length > 0) {
-                    res.historico_observacoes.forEach(log => {
-                        htmlLogs += `<li class="list-group-item small">
-                            <strong>${log.data}:</strong> ${log.observacao}
-                        </li>`;
-                    });
-                } else {
-                    htmlLogs = '<li class="list-group-item text-muted small">Sem observações anteriores.</li>';
-                }
-
-                $('#modalClienteLogs').html(htmlLogs);
-                $('#modalProntuarioCliente').modal('show');
+    const modais = document.querySelectorAll('.modal');
+    modais.forEach(modalEl => {
+        modalEl.addEventListener('hide.bs.modal', () => {
+            if (document.activeElement && modalEl.contains(document.activeElement)) {
+                document.activeElement.blur();
             }
         });
-    }, 600);
-});
-
-$(document).on('mouseup mouseleave touchend', '.card-agendamento', function() {
-    clearTimeout(timerPressao);
-});
-
-// 1. Função para iniciar atendimento no card
-function acaoIniciarAtendimento(agendamentoId) {
-    if (!agendamentoId) return;
-    $.post(`/agenda/agendamento/${agendamentoId}/iniciar`, function(res) {
-        if (res.sucesso) {
-            if (typeof toastr !== 'undefined') toastr.success(res.mensagem);
-            location.reload();
-        } else {
-            alert(res.mensagem || 'Erro ao iniciar atendimento.');
-        }
     });
-}
-
-// 2. Função para o modal de reorganizar/remanjar comanda
-function abrirModalReorganizarComanda(agendamentoId) {
-    if ($('#modalReorganizarComanda').length > 0) {
-        if (agendamentoId) {
-            $('#modalReorganizarComanda').data('agendamento-id', agendamentoId);
-        }
-        $('#modalReorganizarComanda').modal('show');
-    } else {
-        console.warn('Modal de reorganizar comanda não encontrado no DOM.');
-    }
-}
-
-// 3. Função para confirmar ausência/no-show do cliente via modal
-function confirmarAusenciaPeloModal(agendamentoId) {
-    if (!agendamentoId) {
-        agendamentoId = $('#modalConfirmarAusencia').data('agendamento-id');
-    }
-
-    if (!agendamentoId) return;
-
-    $.ajax({
-        url: `/agenda/agendamento/${agendamentoId}/ausencia`,
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({
-            motivo: $('#motivoAusenciaInput').val() || 'Cliente não compareceu (no-show)'
-        }),
-        success: function(res) {
-            if (res.sucesso) {
-                if (typeof toastr !== 'undefined') toastr.info('Ausência registrada.');
-                $('#modalConfirmarAusencia').modal('hide');
-                location.reload();
-            } else {
-                alert(res.mensagem || 'Erro ao registrar ausência.');
-            }
-        },
-        error: function(err) {
-            alert('Erro ao processar requisição de ausência.');
-        }
-    });
-}
-
-// Alias para evitar ReferenceError caso seja chamado via inline HTML
-function processarAusenciaModal(agendamentoId) {
-    confirmarAusenciaPeloModal(agendamentoId);
-}
-
-// 4. Dispara o modal com a ficha do cliente ao clicar no card da empresa
-function exibirDetalhesCliente(cardElement) {
-    if (document.activeElement) {
-        document.activeElement.blur();
-    }
-
-    const nome = cardElement.getAttribute('data-cliente') || 'Cliente Avulso';
-    const telefone = cardElement.getAttribute('data-cliente-telefone') || 'Não informado';
-    const servico = cardElement.getAttribute('data-servico') || 'Serviço Geral';
-    const hora = cardElement.getAttribute('data-hora') || '--:--';
-    const valor = cardElement.getAttribute('data-valor') || 'R$ 0,00';
-    const obs = cardElement.getAttribute('data-obs') || 'Nenhuma observação informada.';
-    const foto = cardElement.getAttribute('data-cliente-foto') || '';
-
-    document.getElementById('modalClienteEmpresaNome').textContent = nome;
-    document.getElementById('modalClienteEmpresaInicial').textContent = nome.charAt(0).toUpperCase();
-    document.getElementById('modalClienteEmpresaTelefone').innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${telefone}`;
-    document.getElementById('modalClienteEmpresaServico').textContent = servico;
-    document.getElementById('modalClienteEmpresaHora').textContent = hora;
-    document.getElementById('modalClienteEmpresaValor').textContent = valor;
-    document.getElementById('modalClienteEmpresaObs').textContent = obs;
-
-    // Tratamento de foto / inicial
-    const imgEl = document.getElementById('modalClienteEmpresaFoto');
-    const inicialEl = document.getElementById('modalClienteEmpresaInicial');
-
-    if (imgEl && inicialEl) {
-        if (foto && foto.trim() !== '') {
-            imgEl.src = foto;
-            imgEl.classList.remove('d-none');
-            inicialEl.classList.add('d-none');
-            inicialEl.classList.remove('d-flex');
-        } else {
-            imgEl.src = '';
-            imgEl.classList.add('d-none');
-            inicialEl.classList.remove('d-none');
-            inicialEl.classList.add('d-flex');
-        }
-    }
-
-    const modalEl = document.getElementById('modalDetalhesClienteEmpresa');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modalInstance.show();
-    }
-}
+});
 </script>
 {% endblock %}

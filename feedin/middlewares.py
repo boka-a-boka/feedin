@@ -13,7 +13,7 @@ def resolver_contexto_usuario(usuario, kwargs):
     """
     Resolve o nível de acesso efetivo do usuário considerando:
     - Se é SuperAdmin/Admin do sistema (Nível 999/900)
-    - Se é Proprietário/Colaborador no contrato da empresa (Nível do contrato)
+    - Se é Proprietário/Colaborador no contrato da empresa (Nível do contrato via `papel_nivel`)
     - Se é Cliente comum (Nível 10)
 
     Retorna: (nivel_efetivo: int, papel_nome: str, permissoes_lista: list)
@@ -37,7 +37,8 @@ def resolver_contexto_usuario(usuario, kwargs):
         ).first()
 
         if contrato:
-            nivel = getattr(contrato, 'nivel_acesso', 100)
+            # Lendo a coluna real do banco de dados (papel_nivel)
+            nivel = getattr(contrato, 'papel_nivel', 500)
             papel = getattr(contrato, 'papel_nome', 'Colaborador')
             return nivel, papel, []
 
@@ -59,19 +60,29 @@ def _responder_negativa_acesso(mensagem, url_redirecionamento=None, status_code=
     if is_ajax:
         return jsonify({
             'sucesso': False,
+            'mensagem': mensagem,
             'erro': mensagem,
             'status': status_code
         }), status_code
 
     flash(mensagem, 'danger')
 
-    if not url_redirecionamento:
-        try:
-            url_redirecionamento = url_for('dashboard.index')
-        except Exception:
-            url_redirecionamento = '/'
+    # Resolve o destino com fallbacks seguros para evitar erros de BuildError no url_for
+    dest_url = None
+    if url_redirecionamento:
+        dest_url = url_redirecionamento
+    else:
+        for ep in ['dashboard', 'agenda.home_negocios']:
+            try:
+                dest_url = url_for(ep)
+                break
+            except Exception:
+                continue
 
-    return redirect(url_redirecionamento)
+    if not dest_url:
+        dest_url = '/'
+
+    return redirect(dest_url)
 
 
 # -------------------------------------------------------------------------
@@ -87,7 +98,13 @@ def requer_nivel(min_nivel=10):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
-                return _responder_negativa_acesso("Autenticação necessária.", url_for('auth.login'), 401)
+                # Tenta redirecionar para auth.login se for navegação comum
+                login_url = None
+                try:
+                    login_url = url_for('auth.login')
+                except Exception:
+                    login_url = '/'
+                return _responder_negativa_acesso("Autenticação necessária.", login_url, 401)
 
             nivel_efetivo, papel, _ = resolver_contexto_usuario(current_user, kwargs)
 
@@ -96,9 +113,16 @@ def requer_nivel(min_nivel=10):
             g.user_papel = papel
 
             if nivel_efetivo < min_nivel and not getattr(current_user, 'is_admin', False):
+                # Resolve a rota de fallback com tratamento seguro
+                dash_url = None
+                try:
+                    dash_url = url_for('dashboard')
+                except Exception:
+                    dash_url = None
+
                 return _responder_negativa_acesso(
                     f"Nível de acesso insuficiente para esta operação ({nivel_efetivo} < {min_nivel}).",
-                    url_for('dashboard.index'),
+                    dash_url,
                     403
                 )
 
@@ -126,7 +150,12 @@ def requer_acesso_modulo(modulo_slug):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
-                return _responder_negativa_acesso("Autenticação necessária.", url_for('auth.login'), 401)
+                login_url = None
+                try:
+                    login_url = url_for('auth.login')
+                except Exception:
+                    login_url = '/'
+                return _responder_negativa_acesso("Autenticação necessária.", login_url, 401)
 
             # Administrador do sistema tem passe livre
             if getattr(current_user, 'is_admin', False):
@@ -143,9 +172,15 @@ def requer_acesso_modulo(modulo_slug):
                 ).first()
 
                 if not modulo_ativo:
+                    dash_url = None
+                    try:
+                        dash_url = url_for('dashboard')
+                    except Exception:
+                        dash_url = None
+
                     return _responder_negativa_acesso(
                         f"A empresa não possui o módulo '{modulo_slug}' ativo.",
-                        url_for('dashboard.index'),
+                        dash_url,
                         403
                     )
 

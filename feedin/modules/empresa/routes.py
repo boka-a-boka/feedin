@@ -246,6 +246,7 @@ def processar_claim_digital():
     """
     from feedin.modules.empresa.models import EseProcessoClaim
     from feedin.models import Local
+    from feedin.modules.agenda.models import AghConfiguracaoAgenda  # 👈 Importação da Configuração
 
     tipo_negocio = request.form.get('tipo_negocio')
     nome_fantasia = request.form.get('nome')
@@ -270,29 +271,23 @@ def processar_claim_digital():
     # =====================================================================
     # 🔍 1. INVESTIGAÇÃO ANTECIPADA DA ESTEIRA (AÇÃO CORRETORA DE CONSISTÊNCIA)
     # =====================================================================
-    # Captura o fato gerador do claim antes de permitir qualquer escrita
     processo_ativo = EseProcessoClaim.query.filter(
         (EseProcessoClaim.local_id == local_id) |
         (EseProcessoClaim.documento_declarado == documento)
     ).filter(EseProcessoClaim.status_processo == 'em_andamento').order_by(EseProcessoClaim.id.desc()).first()
 
-    # 🚨 TESTE DE LEGITIMIDADE EXPULSIVO:
-    # Se o processo não existir OU o cara que está tentando submeter (current_user.id)
-    # não for EXATAMENTE o mesmo que solicitou o claim (usuario_solicitante_id), é PORTA NA CARA.
-    # 🔍 1. Resolução Resiliente do ID Core a partir da Sessão/Usuário Logado
+    # Resolução Resiliente do ID Core
     user_core_id = getattr(current_user, 'usuario_id', None)
 
-    # Se current_user for do Core (Integer)
     if not user_core_id and isinstance(current_user.id, int):
         user_core_id = current_user.id
 
-    # Se current_user for do Módulo (ModCadastroCliente - UUID String)
     if isinstance(current_user.id, str):
         cliente = ModCadastroCliente.query.get(current_user.id)
         if cliente:
             user_core_id = cliente.usuario_id
 
-    # 🚨 TESTE DE LEGITIMIDADE EXPULSIVO (Usando o ID Core resolvido)
+    # 🚨 TESTE DE LEGITIMIDADE EXPULSIVO
     if not processo_ativo or processo_ativo.usuario_solicitante_id != user_core_id:
         print(
             f"🚨 [ALERTA DE INVASÃO/DISCREPÂNCIA] Claim do Usuário: {processo_ativo.usuario_solicitante_id if processo_ativo else 'N/A'} vs Usuário Resolvido: {user_core_id}")
@@ -340,25 +335,25 @@ def processar_claim_digital():
         # 🔑 2. INJEÇÃO DE DADOS HOMOGÊNEOS (AMARRADO AO ID DO PROCESSO)
         # =====================================================================
         nova_empresa = EseEmpresa(
-            proprietario_id=id_proprietario_efetivo,  # 🔥 CORREÇÃO: ID homogêneo garantido
+            proprietario_id=id_proprietario_efetivo,
             local_id=local_id,
             nome=nome_fantasia,
             categoria=categoria,
             documento_oficial=documento,
             tipo_documento='CNPJ' if len(documento) == 14 else 'CPF',
             dominio_web=dominio,
-            status_homologacao='aguardando_dados',  # 🔥 Pés no chão: Inicia sempre aguardando layout/docs no hub
+            status_homologacao='aguardando_dados',
             termo_responsabilidade_aceito=True,
             data_aceite_termo=datetime.now(timezone.utc),
             ip_aceite_termo=request.remote_addr
         )
 
         db.session.add(nova_empresa)
-        db.session.flush()  # Sincroniza em memória para capturar nova_empresa.id
+        db.session.flush()  # 🔥 Gera o nova_empresa.id necessário para FKs
 
-        # Vínculo de Posse Master herda o mesmo ID homogêneo
+        # Vínculo de Posse Master
         novo_vinculo = VinculoUsuarioEmpresa(
-            usuario_id=id_proprietario_efetivo,  # 🔥 CORREÇÃO: Mesma amarração
+            usuario_id=id_proprietario_efetivo,
             empresa_id=nova_empresa.id,
             papel_nome='empreendedor',
             papel_nivel=999,
@@ -367,12 +362,28 @@ def processar_claim_digital():
         db.session.add(novo_vinculo)
 
         # =====================================================================
+        # ⚙️ 2.1 INITIALIZATION SEED: CONFIGURAÇÃO DE AGENDA PADRÃO (BOOTSTRAP)
+        # =====================================================================
+        # Garante que NENHUMA empresa homologada fique sem a linha de regras no banco
+        config_padrao_agenda = AghConfiguracaoAgenda(
+            empresa_id=nova_empresa.id,
+            antecedencia_minima_reagendamento_min=120,   # 120 minutos (2h)
+            prazo_limite_reagendamento_dias=30,         # 30 dias
+            permitir_reagendamento_pos_horario=True,     # Permite pós-horário com anuência
+            exigir_pagamento_antecipado=False,           # Sem pagamento antecipado obrigatório
+            percentual_sinal_pagamento=0.00,             # 0%
+            taxa_agendamento=0.00,                      # R$ 0,00 (Taxa fixa de segurança)
+            fidelidade_ativa=False,                     # Fidelidade desativada por padrão
+            tolerancia_atraso_minutos=10                 # 10 minutos de tolerância
+        )
+        db.session.add(config_padrao_agenda)
+
+        # =====================================================================
         # 🛰️ MÓDULO ADERENTE (EX: AGENDA)
         # =====================================================================
         modulo_atual = session.get('modulo_slug_atual')
 
         if modulo_atual:
-
             identidade = IdentidadeCivil.query.filter_by(usuario_id=id_proprietario_efetivo).first()
             cpf_hash_dono = identidade.cpf_hash if identidade else None
 
@@ -387,12 +398,11 @@ def processar_claim_digital():
                         cpf_hash=cpf_hash_dono,
                         modulo_slug=modulo_atual,
                         local_id=local_id or nova_empresa.id,
-                        email_customizado=current_user.email,  # Mantém o email da sessão logada
+                        email_customizado=current_user.email,
                         ativo=True
                     )
                     db.session.add(novo_vinculo_modulo)
 
-            # Seta as permissões na sessão ativa para o ambiente virar "Balcão"
             session['modo_visao'] = 'balcao'
             session['nivel_acesso_atual'] = 999
             session['empresa_id_atual'] = nova_empresa.id
@@ -418,7 +428,7 @@ def processar_claim_digital():
                     db.session.add(local_core)
 
         db.session.commit()
-        print("✅ [BANCO] Consistência aplicada e gravada com sucesso em disco.")
+        print(f"✅ [BANCO] Empresa ID {nova_empresa.id} e AghConfiguracaoAgenda gravadas com sucesso.")
         flash(f"Empresa '{nome_fantasia}' cadastrada com sucesso!", "success")
 
         if modulo_atual == 'agenda':

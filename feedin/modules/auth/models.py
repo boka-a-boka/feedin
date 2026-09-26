@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from feedin import database as db
 from flask import url_for
+from feedin.utils import resolver_url_midia
 
 
 class ModCadastroCliente(db.Model, UserMixin):
@@ -178,36 +179,35 @@ class ModVinculoModulo(db.Model):
     criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     ativo = db.Column(db.Boolean, default=True)
 
+    @classmethod
+    def obter_vinculo_cliente(cls, modulo_slug: str, cpf_hash: str, email: str):
+        """
+        Busca o vínculo ativo do cliente exigindo obrigatoriamente a combinação
+        exata dos 3 parâmetros (Módulo E CPF Hash E E-mail).
+        """
+        # Se qualquer um dos parâmetros obrigatórios for ausente, interrompe a busca
+        if not modulo_slug or not cpf_hash or not email:
+            return None
+
+        # Filtro E (AND) estrito para os 3 critérios
+        return cls.query.filter(
+            cls.modulo_slug == modulo_slug,
+            cls.cpf_hash == cpf_hash,
+            cls.email_customizado == email
+        ).first()
+
+    @property
+    def url_foto_perfil(self) -> str:
+        """Resolve a URL pública da foto deste vínculo de módulo."""
+        return resolver_url_midia(
+            caminho_arquivo=self.foto_url,
+            modulo=self.modulo_slug or 'core',
+            fallback_filename=None
+        )
+
     def __repr__(self):
         return f"<ModVinculoModulo CPF_Hash: {self.cpf_hash[:8]} -> Módulo: {self.modulo_slug}>"
 
-    @property
-    def url_foto_perfil(self):
-        """
-        Resolve a URL da foto de perfil vinculada ao módulo, respeitando
-        o retorno do processador unificado (salvar_imagem_modulo).
-        """
-        if not self.foto_url:
-            return None
-
-        # Se for link externo (S3, CDN, URL absoluta)
-        if self.foto_url.startswith(('http://', 'https://')):
-            return self.foto_url
-
-        caminho_limpo = self.foto_url.lstrip('/')
-
-        # Mapeamento do Blueprint responsável por servir o arquivo estático
-        # baseado no slug do módulo do vínculo
-        blueprint_static = f"{self.modulo_slug}.static" if self.modulo_slug else "static"
-
-        try:
-            return url_for(blueprint_static, filename=caminho_limpo)
-        except Exception:
-            # Fallback genérico para a pasta estática raiz do app
-            try:
-                return url_for("static", filename=caminho_limpo)
-            except Exception:
-                return None
 
 
 class AthAtribContexto(db.Model):

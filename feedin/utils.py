@@ -787,47 +787,51 @@ def salvar_imagem_modulo(
         return None
 
 
+from flask import Blueprint, current_app, send_from_directory, url_for
 import os
-from flask import Blueprint, current_app, send_from_directory, abort
 
+# 1. Instancia o Blueprint
 media_bp = Blueprint('media_global', __name__)
 
-@media_bp.route('/media/<path:filename>')
-def servir_midia(filename):
+
+# 2. Define a rota de entrega de arquivos dos módulos
+@media_bp.route('/media/<modulo>/<path:filename>')
+def servir_midia_modulo(modulo, filename):
     """
-    Rota global para servir arquivos estáticos de uploads de qualquer módulo
-    (Agenda, Empresa, Core, etc.)
+    Entrega imagens salvas pela salvar_imagem_modulo()
+    buscando na pasta 'static' do módulo correspondente.
     """
-    # 1. Normalização do caminho (limpa barras e retira prefixo 'uploads/' duplicado)
-    filename = filename.replace('\\', '/').lstrip('/')
-    if filename.startswith('uploads/'):
-        filename = filename[len('uploads/'):]
+    pasta_modulo = os.path.join(current_app.root_path, 'modules', modulo, 'static')
+    caminho_arquivo = os.path.join(pasta_modulo, filename)
 
-    # 2. Caminho raiz da aplicação (pasta 'feedin')
-    base_dir = current_app.root_path
+    # Se o arquivo não existir fisicamente, evita erro 500 e entrega o avatar padrão
+    if not os.path.exists(caminho_arquivo):
+        return send_from_directory(
+            os.path.join(current_app.root_path, 'static', 'img'),
+            'avatar-default.png'
+        )
 
-    # 3. Mapeamento de todos os diretórios onde arquivos de mídia/uploads podem existir
-    pastas_busca = [
-        # Uploads do Módulo Agenda
-        os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads'),
-        # Uploads do Módulo Empresa
-        os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads'),
-        # Uploads do Módulo Core / Raiz
-        os.path.join(base_dir, 'static', 'uploads'),
-        # Fallback configurado no app.config
-        current_app.config.get('UPLOAD_FOLDER', '')
-    ]
+    return send_from_directory(pasta_modulo, filename)
 
-    # 4. Procura o arquivo nas pastas configuradas
-    for pasta in pastas_busca:
-        if not pasta:
-            continue
-        caminho_completo = os.path.join(pasta, filename)
-        if os.path.isfile(caminho_completo):
-            return send_from_directory(pasta, filename)
 
-    # 5. Log de diagnóstico caso não encontre
-    current_app.logger.error(
-        f"[MEDIA 404] Arquivo '{filename}' não localizado em nenhuma das pastas de upload."
-    )
-    abort(404)
+from flask import url_for
+
+def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str = None) -> str:
+    """
+    Padroniza a resolução de URLs de mídia para o formato WebP e rotas centralizadas (/media/).
+    """
+    if not caminho_arquivo:
+        if fallback_filename:
+            return url_for('static', filename=f'img/{fallback_filename}')
+        return None
+
+    # Se já for link externo completo (S3, CDN, URL absoluta)
+    if caminho_arquivo.startswith(('http://', 'https://')):
+        return caminho_arquivo
+
+    caminho_limpo = caminho_arquivo.lstrip('/')
+
+    try:
+        return url_for('media_global.servir_midia_modulo', modulo=modulo, filename=caminho_limpo)
+    except Exception:
+        return f"/media/{modulo}/{caminho_limpo}"
