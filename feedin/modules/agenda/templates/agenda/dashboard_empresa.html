@@ -598,24 +598,52 @@
                                 </div>
                             </div>
 
-                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ENCERRAR TAREFA PENDENTE OU NOTA DE CONCLUÍDO #}
+                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ENCERRAR TAREFA PENDENTE OU LIQUIDAR COMANDA #}
                             {% if status_slug in ['em_atendimento', 'em_andamento'] %}
                                 <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <small class="text-primary fw-bold">
                                         <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                     </small>
 
-                                    {% if ns.tem_item_pendente and ns.proximo_item_id %}
+                                    {# Obtém o objeto de agendamento do contexto (item.agendamento se for um objeto slot/item, ou a própria variável item) #}
+                                    {% set obj_agendamento = item.agendamento if item is defined and hasattr(item, 'agendamento') and item.agendamento else item %}
+
+                                    {# 1. Mapeia os itens pendentes e os profissionais distintos #}
+                                    {% if obj_agendamento and hasattr(obj_agendamento, 'itens') and obj_agendamento.itens %}
+                                        {% set itens_pendentes = obj_agendamento.itens | selectattr('status_item', 'ne', 'concluido') | selectattr('status_item', 'ne', 'cancelado') | list %}
+                                        {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
+                                    {% else %}
+                                        {% set itens_pendentes = [] %}
+                                        {% set profs_unicos = [] %}
+                                    {% endif %}
+
+                                    {# CENÁRIO 1: Todos os serviços já foram concluídos -> Botão de Liquidar Comanda #}
+                                    {% if itens_pendentes | length == 0 %}
                                         <button type="button"
                                                 class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ ns.proximo_item_id }}', '{{ empresa.id }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir Tarefa
+                                                onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
+                                            <i class="bi bi-receipt me-1"></i> Liquidar Comanda
                                         </button>
-                                    {% else %}
+
+                                    {# CENÁRIO 2: Múltiplos Profissionais nos serviços pendentes #}
+                                    {% elif profs_unicos | length > 1 %}
+                                        {% set meu_item = (itens_pendentes | selectattr('profissional_id', 'eq', current_user.id) | first) or (itens_pendentes | first) %}
                                         <button type="button"
                                                 class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-receipt me-1"></i> Exibir Comanda / Caixa
+                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ meu_item.id }}', '{{ meu_item.servico.nome if meu_item.servico else '' }}', '{{ obj_agendamento.cliente.nome if obj_agendamento.cliente else '' }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ meu_item.servico.nome if meu_item.servico else 'Serviço' }}
+                                        </button>
+
+                                    {# CENÁRIO 3: Profissional Único / Serviço Único #}
+                                    {% else %}
+                                        {% set meu_item = itens_pendentes | first %}
+                                        {% set item_id_target = meu_item.id if meu_item else (ns.proximo_item_id if ns is defined and ns.proximo_item_id else '') %}
+                                        {% set servico_nome_target = meu_item.servico.nome if meu_item and meu_item.servico else '' %}
+
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target }}', '{{ obj_agendamento.cliente.nome if obj_agendamento and obj_agendamento.cliente else '' }}')">
+                                            <i class="bi bi-check2-square me-1"></i> Encerrar Atendimento
                                         </button>
                                     {% endif %}
                                 </div>
@@ -978,7 +1006,8 @@ function getCsrfToken() {
 // 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
 // =========================================================================
 
-window.abrirModalFinalizarItem = function(agendamentoId, itemId, nomeServico, nomeCliente) {
+// Prepara e abre o modal de conclusão de um item/serviço individual (AghAgendamentoItem)
+window.prepararModalFinalizarItem = function(agendamentoId, itemId, nomeServico, nomeCliente) {
     const inputAgendamento = document.getElementById('modal_agendamento_id');
     const inputItem = document.getElementById('modal_item_id');
     const spanServico = document.getElementById('modal_servico_nome');
@@ -989,42 +1018,23 @@ window.abrirModalFinalizarItem = function(agendamentoId, itemId, nomeServico, no
     if (spanServico) spanServico.textContent = nomeServico || 'Serviço';
     if (spanCliente) spanCliente.textContent = nomeCliente ? `Cliente: ${nomeCliente}` : 'Cliente: ---';
 
+    // Preenche a hora atual no campo visual
+    const agora = new Date();
+    const horaFormatada = agora.toTimeString().substring(0, 5);
+    const elemFim = document.getElementById('hora_fim_real');
+    if (elemFim) elemFim.value = horaFormatada;
+
     const modalEl = document.getElementById('modalFinalizarItem');
     if (modalEl && typeof bootstrap !== 'undefined') {
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 };
 
-window.abrirModalEncerramento = function(element) {
-    if (!element) return;
+window.abrirModalFinalizarItem = window.prepararModalFinalizarItem;
 
-    const btn = element.closest('button') || element;
-    const agendamentoId = btn.dataset.agendamentoId || btn.dataset.itemId || btn.getAttribute('data-agendamento-id');
-    const empresaId = btn.dataset.empresaId || btn.getAttribute('data-empresa-id') || '';
-
-    if (!agendamentoId) {
-        alert("Parâmetros agendamento-id ou item-id ausentes no botão.");
-        return;
-    }
-
-    const inputAgendamento = document.getElementById('encerrar_agendamento_id');
-    if (inputAgendamento) {
-        inputAgendamento.value = agendamentoId;
-    }
-
-    const formEncerrar = document.getElementById('form-encerrar-atendimento');
-    if (formEncerrar && empresaId) {
-        formEncerrar.action = `/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/encerrar`;
-    }
-
-    const modalEl = document.getElementById('modalEncerrarAtendimento');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
-    }
-};
-
+// Redireciona a ação do card direto para a abertura da Comanda/Caixa
 window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
-    if (!valorTotal) {
+    if (!valorTotal || valorTotal === 'None') {
         const cardEl = document.querySelector(`.item-agendamento[data-id="${agendamentoId}"]`);
         valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0,00';
     }
@@ -1036,24 +1046,72 @@ window.prepararEAbrirModalCaixa = function(agendamentoId, cardEl) {
     window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
-window.aoClicarEncerrarTarefa = function(event, elemento) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
+window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
+    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+};
 
-    const btn = elemento ? (elemento.closest('button') || elemento) : null;
-    if (!btn) return;
-
-    const agendamentoId = btn.dataset.agendamentoId || btn.getAttribute('data-agendamento-id');
-    const itemId = btn.dataset.itemId || btn.getAttribute('data-item-id');
+// PASSO 1: Confirma e Grava os Dados em AghAgendamentoItem
+window.confirmarEGravarEncerramentoItem = function() {
+    const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
+    const itemId = document.getElementById('modal_item_id')?.value;
+    const observacao = document.getElementById('modal_item_observacao')?.value || '';
+    const avaliacao = document.getElementById('modal_item_avaliacao')?.value || 5;
 
     if (!agendamentoId || !itemId) {
-        alert("Parâmetros agendamento-id ou item-id ausentes no botão.");
+        alert("IDs inválidos para conclusão do serviço.");
         return;
     }
 
-    fetch("{{ url_for('agenda.encerrar_clique') }}", {
+    const payload = {
+        agendamento_id: agendamentoId,
+        item_id: itemId,
+        observacao: observacao,
+        avaliacao: avaliacao
+    };
+
+    fetch("{{ url_for('agenda.concluir_item_agendamento') }}", {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.sucesso && !data.success) {
+            alert(data.mensagem || 'Erro ao concluir serviço.');
+            return;
+        }
+
+        // Esconde o modal do item
+        const modalElement = document.getElementById('modalFinalizarItem');
+        if (modalElement && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getInstance(modalElement)?.hide();
+        }
+
+        // Se era o último serviço / profissional único, abre direto o Modal da Comanda/Caixa
+        if (data.comanda_pronta) {
+            window.abrirModalFechamentoComanda(data.agendamento_id, data.valor_total);
+        } else {
+            window.location.reload();
+        }
+    })
+    .catch(err => {
+        console.error("Erro ao gravar encerramento do item:", err);
+        alert("Falha ao salvar as informações do serviço.");
+    });
+};
+
+// Ação de conclusão direta de tarefa/serviço (caso acionada direto do card)
+window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
+    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
+        alert("Erro: Parâmetros do agendamento ou do item ausentes.");
+        return;
+    }
+
+    fetch("{{ url_for('agenda.concluir_item_agendamento') }}", {
         method: 'POST',
         headers: {
             'Accept': 'application/json',
@@ -1065,112 +1123,25 @@ window.aoClicarEncerrarTarefa = function(event, elemento) {
             item_id: itemId
         })
     })
-    .then(async response => {
-        const isJson = response.headers.get('content-type')?.includes('application/json');
-        const data = isJson ? await response.json() : null;
-
-        if (!response.ok) {
-            throw new Error(data?.mensagem || `Erro no servidor (${response.status})`);
-        }
-        return data;
-    })
-    .then(data => {
-        if (!data || !data.sucesso) {
-            alert(data?.mensagem || "Erro ao iniciar encerramento do serviço.");
-            return;
-        }
-        window.popularModalFinalizar(data);
-    })
-    .catch(error => {
-        console.error("[CLIENTE] Erro no encerramento:", error);
-        alert(`Falha ao processar requisição: ${error.message}`);
-    });
-};
-
-window.popularModalFinalizar = function(dados) {
-    if (!dados) return;
-
-    const elAgendamento = document.getElementById('modal_agendamento_id');
-    const elItem = document.getElementById('modal_item_id');
-    const elServico = document.getElementById('modal_servico_nome');
-    const elCliente = document.getElementById('modal_cliente_nome');
-
-    if (elAgendamento) elAgendamento.value = dados.agendamento_id || '';
-    if (elItem) elItem.value = dados.item_id || '';
-    if (elServico) elServico.textContent = dados.servico_nome || 'Serviço';
-    if (elCliente) elCliente.textContent = 'Cliente: ' + (dados.cliente_nome || '---');
-
-    const elInicio = document.getElementById('hora_inicio_real');
-    const elFim = document.getElementById('hora_fim_real');
-
-    if (elInicio && dados.hora_inicio_real) {
-        elInicio.value = String(dados.hora_inicio_real).substring(0, 5);
-    }
-    if (elFim && dados.hora_fim_real) {
-        elFim.value = String(dados.hora_fim_real).substring(0, 5);
-    }
-
-    if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur();
-    }
-
-    const modalElement = document.getElementById('modalFinalizarItem');
-    if (modalElement && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalElement).show();
-    }
-};
-
-window.confirmarEGravarEncerramentoItem = function() {
-    const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
-    const itemId = document.getElementById('modal_item_id')?.value;
-    const observacao = document.getElementById('modal_item_observacao')?.value || '';
-    const avaliacao = document.getElementById('modal_item_avaliacao')?.value || null;
-
-    if (!agendamentoId || !itemId) {
-        alert("IDs inválidos para conclusão do item.");
-        return;
-    }
-
-    const payload = {
-        agendamento_id: agendamentoId,
-        item_id: itemId,
-        observacao: observacao,
-        avaliacao: avaliacao
-    };
-
-    fetch('/agenda/api/agendamento/concluir-item', {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify(payload)
-    })
     .then(res => res.json())
     .then(data => {
-        if (!data.sucesso) {
-            alert(data.mensagem || 'Erro ao concluir item.');
-            return;
-        }
-
-        const modalElement = document.getElementById('modalFinalizarItem');
-        if (modalElement && typeof bootstrap !== 'undefined') {
-            bootstrap.Modal.getInstance(modalElement)?.hide();
-        }
-
-        if (data.comanda_pronta) {
-            window.acaoFinalizarAtendimento(data.agendamento_id, data.valor_total);
+        if (data.sucesso || data.success) {
+            if (data.comanda_pronta) {
+                window.abrirModalFechamentoComanda(data.agendamento_id, data.valor_total);
+            } else {
+                window.location.reload();
+            }
         } else {
-            window.location.reload();
+            alert(data.mensagem || 'Erro ao concluir tarefa.');
         }
     })
-    .catch(err => {
-        console.error("Erro ao gravar encerramento do item:", err);
-        alert("Falha ao salvar as informações do serviço.");
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        alert('Ocorreu um erro ao processar a solicitação.');
     });
 };
 
+// PASSO 2: Abertura do Modal Financeiro (Comanda / Caixa)
 window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00') {
     const inputId = document.getElementById('modal-finalizar-agendamento-id');
     const inputValor = document.getElementById('modal-finalizar-valor');
@@ -1214,11 +1185,12 @@ window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,
     }
 };
 
+// PASSO 2 (Gravação Final): Confirma e Grava em AghAgendamento e AghAgendamentoEncerramento
 window.confirmarEGravarEncerramento = function() {
     const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
     const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
-    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value;
-    const observacao = document.getElementById('modal-finalizar-observacao')?.value;
+    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value || 'PIX';
+    const observacao = document.getElementById('modal-finalizar-observacao')?.value || '';
 
     if (!agendamentoId) {
         alert("ID do agendamento não informado.");
@@ -1230,14 +1202,13 @@ window.confirmarEGravarEncerramento = function() {
     if (isNaN(valorFinal)) valorFinal = 0.0;
 
     const payload = {
-        agendamento_id: agendamentoId,
-        valor_total: valorFinal,
-        valor_final_cobrado: valorFinal,
+        agendamento_id: parseInt(agendamentoId),
+        valor_final: valorFinal,
         forma_pagamento: formaPagamento,
         observacao: observacao
     };
 
-    fetch('/agenda/api/agendamento/concluir-processo', {
+    fetch("{{ url_for('agenda.encerrar_clique') }}", {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1257,7 +1228,7 @@ window.confirmarEGravarEncerramento = function() {
         }
     })
     .catch(error => {
-        console.error('Erro na requisição:', error);
+        console.error('Erro na requisição de encerramento:', error);
         alert('Falha ao processar liquidação.');
     });
 };
@@ -1315,43 +1286,6 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     .catch(err => {
         console.error('Erro ao iniciar atendimento:', err);
         alert(`Erro ao iniciar atendimento: ${err.message}`);
-    });
-};
-
-window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
-    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
-        alert("Erro no frontend: O ID do item ou do agendamento não foi encontrado no card.");
-        return;
-    }
-
-    // URL fixa direta sem depender de url_for do Flask
-    fetch("/agenda/api/agendamento/concluir-processo", {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-            agendamento_id: agendamentoId,
-            item_id: itemId
-        })
-    })
-    .then(async response => {
-        if (!response.ok) {
-            throw new Error(`Erro na requisição (Status: ${response.status})`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.status === 'sucesso' || data.success || data.sucesso) {
-            location.reload();
-        } else {
-            alert(data.message || data.mensagem || 'Erro ao concluir tarefa.');
-        }
-    })
-    .catch(error => {
-        console.error('Erro na requisição:', error);
-        alert('Ocorreu um erro ao processar a solicitação.');
     });
 };
 

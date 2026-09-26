@@ -8,6 +8,7 @@ from copy import deepcopy
 import pytz
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, date, time, timezone
+from feedin import csrf
 
 from PIL import Image, ImageOps
 from sqlalchemy import or_, distinct, exists, and_, func, case, Date
@@ -6207,31 +6208,39 @@ def iniciar_atendimento(agendamento_id, empresa_id=None):
         # 1. Atualização do status do agendamento principal
         agendamento.status = 'em_atendimento'
 
-        # 2. Atualiza itens vinculados para 'em_andamento'
+        # 2 e 3. Atualiza os itens E cria/atualiza o registro em AghAgendamentoEncerramento com o item_id amarrado!
         if hasattr(agendamento, 'itens') and agendamento.itens:
             for item in agendamento.itens:
                 st_item = str(getattr(item, 'status_item', '')).lower()
                 if st_item not in ['concluido', 'cancelado']:
                     item.status_item = 'em_andamento'
+                    if hasattr(item, 'data_hora_inicio_real') and not item.data_hora_inicio_real:
+                        item.data_hora_inicio_real = agora_sp
 
-        # 3. Criação ou atualização da ficha de encerramento
-        encerramento = AghAgendamentoEncerramento.query.filter_by(
-            agendamento_id=agendamento.id
-        ).first()
+                val_item = float(getattr(item, 'preco_unitario', 0.0) or 0.0)
 
-        if not encerramento:
-            encerramento = AghAgendamentoEncerramento(
-                agendamento_id=agendamento.id,
-                empresa_id=empresa_id,
-                colaborador_contrato_id=id_cliente_contrato,  # 👈 Agora envia o UUID (String 36)
-                usuario_id=cliente_uuid,  # 👈 Operador logado (String 36)
-                data_hora_inicio_real=agora_sp
-            )
-            db.session.add(encerramento)
-        else:
-            encerramento.colaborador_contrato_id = id_cliente_contrato
-            encerramento.usuario_id = cliente_uuid
-            encerramento.data_hora_inicio_real = agora_sp
+                # Busca encerramento para ESTE item específico
+                encerramento = AghAgendamentoEncerramento.query.filter_by(
+                    agendamento_id=agendamento.id,
+                    agendamento_item_id=item.id
+                ).first()
+
+                if not encerramento:
+                    encerramento = AghAgendamentoEncerramento(
+                        agendamento_id=agendamento.id,
+                        agendamento_item_id=item.id,  # 👈 CORREÇÃO: Passa o ID do item
+                        empresa_id=empresa_id,
+                        colaborador_contrato_id=id_cliente_contrato,
+                        usuario_id=cliente_uuid,
+                        data_hora_inicio_real=agora_sp,
+                        valor_total=val_item,
+                        valor_final_cobrado=val_item
+                    )
+                    db.session.add(encerramento)
+                else:
+                    encerramento.colaborador_contrato_id = id_cliente_contrato
+                    encerramento.usuario_id = cliente_uuid
+                    encerramento.data_hora_inicio_real = agora_sp
 
         # 4. Cálculo de desvio e histórico de presença
         data_agendada = agendamento.data_hora_inicio
@@ -7224,11 +7233,11 @@ def perfil_colaborador_modal(usuario_id):
 @login_required
 def concluir_processo():
     """
-    Registra o pagamento/encerramento financeiro da comanda (AghAgendamentoEncerramento)
-    e atualiza o status do agendamento pai para 'finalizado'.
+    Endpoint para concluir itens de serviço ou realizar o encerramento do processo/agendamento.
     """
     data = request.get_json() or {}
     agendamento_id = data.get('agendamento_id')
+    item_id = data.get('item_id')
 
     if not agendamento_id:
         return jsonify({'success': False, 'sucesso': False, 'message': 'ID do agendamento é obrigatório.'}), 400
@@ -7236,59 +7245,32 @@ def concluir_processo():
     agendamento = AghAgendamento.query.get_or_404(agendamento_id)
     agora = datetime.now()
 
-    # Calculation e Fallback de Valor
-    valor_total_req = data.get('valor_total') or data.get('valor_final_cobrado')
-    try:
-        valor_total_final = float(valor_total_req) if valor_total_req is not None else 0.0
-    except (ValueError, TypeError):
-        valor_total_final = 0.0
-
-    if valor_total_final == 0.0:
+    # 1. Tratamento caso venha um item específico a ser concluído
+    if item_id and item_id != 'None':
         for item in agendamento.itens:
-            val_item = getattr(item, 'valor', None) or getattr(item, 'preco', None) or getattr(item, 'valor_servico',
-                                                                                               None)
-            if (val_item is None or float(val_item or 0) == 0.0) and hasattr(item, 'servico') and item.servico:
-                val_item = getattr(item.servico, 'preco', None) or getattr(item.servico, 'valor', None)
-            try:
-                valor_total_final += float(val_item or 0.0)
-            except (ValueError, TypeError):
-                pass
-
-    valor_cobrado_final = data.get('valor_final_cobrado')
-    try:
-        valor_cobrado_final = float(valor_cobrado_final) if valor_cobrado_final is not None and float(
-            valor_cobrado_final) > 0 else valor_total_final
-    except (ValueError, TypeError):
-        valor_cobrado_final = valor_total_final
-
-    try:
-        encerramento = AghAgendamentoEncerramento.query.filter_by(agendamento_id=agendamento.id).first()
-
-        if not encerramento:
-            encerramento = AghAgendamentoEncerramento(
-                agendamento_id=agendamento.id,
-                empresa_id=agendamento.empresa_id,
-                usuario_id=current_user.id,
-                data_hora_encerramento=agora,
-                valor_total=valor_total_final,
-                valor_final_cobrado=valor_cobrado_final,
-                forma_pagamento=data.get('forma_pagamento', 'dinheiro'),
-                observacao=data.get('observacao')
-            )
-            db.session.add(encerramento)
-        else:
-            encerramento.usuario_id = current_user.id
-            encerramento.data_hora_encerramento = agora
-            encerramento.valor_total = valor_total_final
-            encerramento.valor_final_cobrado = valor_cobrado_final
-            encerramento.forma_pagamento = data.get('forma_pagamento', encerramento.forma_pagamento or 'dinheiro')
-            encerramento.observacao = data.get('observacao', encerramento.observacao)
-
-        # Garante status finalizado para todos os itens e para o agendamento pai
-        for item in agendamento.itens:
-            if item.status_item != 'cancelado':
+            if str(item.id) == str(item_id):
                 item.status_item = 'concluido'
-                if not getattr(item, 'data_hora_fim_real', None):
+                if hasattr(item, 'data_hora_fim_real') and not item.data_hora_fim_real:
+                    item.data_hora_fim_real = agora
+
+        # Se todos os itens estiverem concluídos ou cancelados, finaliza o agendamento pai
+        itens_pendentes = [i for i in agendamento.itens if getattr(i, 'status_item', None) not in ['concluido', 'cancelado']]
+        if not itens_pendentes:
+            agendamento.status = 'finalizado'
+
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'sucesso': True,
+            'message': 'Item/Tarefa concluído com sucesso!'
+        }), 200
+
+    # 2. Tratamento para conclusão total do agendamento
+    try:
+        for item in agendamento.itens:
+            if getattr(item, 'status_item', None) != 'cancelado':
+                item.status_item = 'concluido'
+                if hasattr(item, 'data_hora_fim_real') and not item.data_hora_fim_real:
                     item.data_hora_fim_real = agora
 
         agendamento.status = 'finalizado'
@@ -7297,17 +7279,16 @@ def concluir_processo():
         return jsonify({
             'success': True,
             'sucesso': True,
-            'message': 'Comanda liquidada e encerrada com sucesso!',
-            'mensagem': 'Comanda liquidada e encerrada com sucesso!',
-            'valor_total': valor_total_final
+            'message': 'Processo concluído com sucesso!'
         }), 200
 
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Erro ao concluir processo: {str(e)}")
         return jsonify({
             'success': False,
             'sucesso': False,
-            'message': f'Erro ao encerrar comanda: {str(e)}'
+            'message': f'Erro ao processar a solicitação: {str(e)}'
         }), 500
 
 
@@ -7441,16 +7422,15 @@ def reabrir_item(empresa_id, agendamento_id, item_id):
 @login_required
 def concluir_item_agendamento():
     """
-    Conclui um item individual do agendamento, registrando observação e nota.
-    Se for o último item pendente, marca a comanda (agendamento) como pronta para pagamento.
+    Passo 1 (Operacional / Execução do Item):
+    - Garante 'data_hora_inicio_real' (se nula) e grava 'data_hora_fim_real' e status 'concluido' no AghAgendamentoItem.
+    - Grava/Atualiza o registro individual na AghAgendamentoEncerramento preenchendo obrigatoriamente 'agendamento_item_id'.
+    - Prepara o payload completo da comanda (com avaliação e observações) para o Modal Frontend.
     """
-    data = request.get_json() or {}
+    data = request.get_json(force=True, silent=True) or {}
     agendamento_id = data.get('agendamento_id')
-    item_id = data.get('item_id')
-
-    # Dados de avaliação/observação vindos do modal do item
-    observacao_item = data.get('observacao')
-    avaliacao = data.get('avaliacao')  # ex: nota de 1 a 5
+    item_id = data.get('item_id') or data.get('agendamento_item_id')
+    empresa_id = session.get('empresa_id') or data.get('empresa_id') or 2
 
     if not agendamento_id or not item_id:
         return jsonify({'sucesso': False, 'mensagem': 'IDs de agendamento e item são obrigatórios.'}), 400
@@ -7460,67 +7440,168 @@ def concluir_item_agendamento():
 
     agora = obter_hora_local() if callable(globals().get('obter_hora_local')) else datetime.now()
 
-    # 1. Atualiza o item específico
-    item.status_item = 'concluido'
+    # 1. Garante inicio e grava fim no AghAgendamentoItem
+    if not item.data_hora_inicio_real:
+        item.data_hora_inicio_real = item.data_hora_inicio or agora
+
     item.data_hora_fim_real = agora
-    if hasattr(item, 'observacao'):
-        item.observacao = observacao_item
-    if hasattr(item, 'avaliacao'):
-        item.avaliacao = avaliacao
+    item.status_item = 'concluido'
 
-    # 2. Verifica se ainda existem itens pendentes na grade
-    itens_pendentes = [i for i in agendamento.itens if
-                       i.id != item.id and i.status_item not in ['concluido', 'cancelado']]
-    eh_ultimo_item = len(itens_pendentes) == 0
+    obs_recebida = data.get('observacao') or data.get('observacao_item') or ''
+    if obs_recebida:
+        item.observacao_item = obs_recebida
 
-    if eh_ultimo_item:
+    # Conclui em lote itens do mesmo profissional ou se for agendamento de item único
+    for outro_item in agendamento.itens:
+        if outro_item.status_item not in ['concluido', 'cancelado']:
+            if getattr(outro_item, 'profissional_id', None) == item.profissional_id or len(agendamento.itens) == 1:
+                if not outro_item.data_hora_inicio_real:
+                    outro_item.data_hora_inicio_real = outro_item.data_hora_inicio or agora
+                outro_item.data_hora_fim_real = agora
+                outro_item.status_item = 'concluido'
+
+    # 2. Grava ou Atualiza a tabela AghAgendamentoEncerramento COM 'agendamento_item_id' PREENCHIDO
+    for item_concluido in agendamento.itens:
+        if item_concluido.status_item == 'concluido':
+            enc = AghAgendamentoEncerramento.query.filter_by(
+                agendamento_id=agendamento.id,
+                agendamento_item_id=item_concluido.id
+            ).first()
+
+            val_item = float(item_concluido.preco_unitario or 0.0)
+
+            if not enc:
+                enc = AghAgendamentoEncerramento(
+                    agendamento_id=int(agendamento.id),
+                    agendamento_item_id=int(item_concluido.id),
+                    empresa_id=int(empresa_id),
+                    colaborador_contrato_id=str(
+                        item_concluido.profissional_id) if item_concluido.profissional_id else None,
+                    usuario_id=str(agendamento.cliente_id) if agendamento.cliente_id else None,
+                    data_hora_inicio_real=item_concluido.data_hora_inicio_real,
+                    data_hora_fim_real=item_concluido.data_hora_fim_real,
+                    valor_total=val_item,
+                    valor_final_cobrado=val_item,
+                    observacoes=obs_recebida if item_concluido.id == item.id else None
+                )
+                db.session.add(enc)
+            else:
+                enc.agendamento_item_id = int(item_concluido.id)
+                enc.data_hora_inicio_real = item_concluido.data_hora_inicio_real
+                enc.data_hora_fim_real = item_concluido.data_hora_fim_real
+                enc.valor_total = val_item
+                enc.valor_final_cobrado = val_item
+                if obs_recebida and item_concluido.id == item.id:
+                    enc.observacoes = obs_recebida
+
+    # 3. Verifica se toda a comanda está concluída
+    itens_pendentes = [i for i in agendamento.itens if i.status_item not in ['concluido', 'cancelado']]
+    comanda_pronta = len(itens_pendentes) == 0
+
+    if comanda_pronta:
         agendamento.status = 'aguardando_pagamento'
 
     db.session.commit()
 
-    # 3. Calcula o valor total acumulado para adiantar o modal da comanda
-    valor_total_calculado = 0.0
-    for it in agendamento.itens:
-        if it.status_item == 'concluido':
-            val = getattr(it, 'valor', None) or getattr(it, 'preco', None) or getattr(it, 'valor_servico', None)
-            if (val is None or float(val or 0) == 0) and hasattr(it, 'servico') and it.servico:
-                val = getattr(it.servico, 'preco', None) or getattr(it.servico, 'valor', None)
-            try:
-                valor_total_calculado += float(val or 0.0)
-            except (ValueError, TypeError):
-                pass
+    # 4. Monta o objeto retornado para exibição do Modal de Comanda/Avaliação no Frontend
+    valor_total_calculado = sum(
+        float(i.preco_unitario or 0.0) for i in agendamento.itens if i.status_item == 'concluido')
 
     return jsonify({
         'sucesso': True,
         'success': True,
-        'mensagem': 'Serviço concluído com sucesso!',
-        'comanda_pronta': eh_ultimo_item,
+        'mensagem': 'Item concluído e encerramento operacional gravado com sucesso!',
+        'comanda_pronta': comanda_pronta,
+        'exibir_comanda': comanda_pronta,
         'agendamento_id': agendamento.id,
-        'valor_total': valor_total_calculado
+        'cliente_nome': agendamento.cliente.nome if agendamento.cliente else 'Cliente',
+        'valor_total': valor_total_calculado,
+        'itens': [i.to_dict() for i in agendamento.itens]
     }), 200
 
 
-from feedin import csrf
-from flask import request, jsonify, session
-
 @agenda_bp.route('/api/agendamento/encerrar-clique', methods=['POST'])
-@csrf.exempt
 def encerrar_clique():
+    """
+    Passo 2 (Financeiro & Avaliação / Fechamento):
+    Grava a liquidação financeira, método de pagamento, observações e a Nota de Avaliação do Cliente
+    em AghAgendamento e AghAgendamentoEncerramento.
+    """
     data = request.get_json(force=True, silent=True) or {}
-    print(f"\n--- [DEBUG ROUTE] Requisição recebida em /encerrar-clique: {data} ---")
-
     agendamento_id = data.get('agendamento_id')
-    item_id = data.get('item_id')
     empresa_id = session.get('empresa_id') or data.get('empresa_id') or 2
 
-    if not agendamento_id or not item_id:
-        return jsonify({'sucesso': False, 'mensagem': 'Parâmetros agendamento_id e item_id são obrigatórios.'}), 400
+    if not agendamento_id:
+        return jsonify({'sucesso': False, 'mensagem': 'Parâmetro agendamento_id é obrigatório.'}), 400
 
-    resposta, status_code = AghAgendamentoEncerramento.encerrar_atendimento_servico(
-        agendamento_id=int(agendamento_id),
-        agendamento_item_id=int(item_id),
-        empresa_id=int(empresa_id)
-    )
+    agendamento = AghAgendamento.query.get(agendamento_id)
+    if not agendamento:
+        return jsonify({'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}), 404
 
-    print(f"--- [DEBUG ROUTE] Resposta da Model: {resposta} (Status: {status_code}) ---\n")
-    return jsonify(resposta), status_code
+    agora = obter_hora_local() if callable(globals().get('obter_hora_local')) else datetime.now()
+
+    # 1. Garante encerramento dos itens no modelo
+    for item in agendamento.itens:
+        if item.status_item not in ['concluido', 'cancelado']:
+            if not item.data_hora_inicio_real:
+                item.data_hora_inicio_real = item.data_hora_inicio or agora
+            item.data_hora_fim_real = agora
+            item.status_item = 'concluido'
+
+    # 2. Atualiza o status geral da comanda
+    agendamento.status = 'finalizado'
+    if hasattr(agendamento, 'data_hora_fim'):
+        agendamento.data_hora_fim = agora
+
+    # 3. Processa Financeiro, Observações e Avaliação
+    forma_pagto = data.get('forma_pagamento', 'PIX')
+    valor_final = data.get('valor_final') or data.get('valor_total') or float(agendamento.recalcular_total())
+    obs = data.get('observacao') or data.get('observacoes', '')
+    avaliacao = data.get('avaliacao') or data.get('nota_avaliacao_cliente') or None
+
+    try:
+        # Recupera os encerramentos associados a esta comanda
+        encerramentos = AghAgendamentoEncerramento.query.filter_by(agendamento_id=agendamento.id).all()
+
+        if encerramentos:
+            for enc in encerramentos:
+                enc.forma_pagamento = forma_pagto
+                enc.valor_final_cobrado = valor_final / len(encerramentos) if len(encerramentos) > 0 else valor_final
+                enc.data_hora_encerramento = agora
+                if obs:
+                    enc.observacao = obs
+                    enc.observacoes = obs
+                if avaliacao:
+                    enc.nota_avaliacao_cliente = int(avaliacao)
+        else:
+            primeiro_item = agendamento.itens[0] if agendamento.itens else None
+            novo_enc = AghAgendamentoEncerramento(
+                agendamento_id=int(agendamento.id),
+                agendamento_item_id=primeiro_item.id if primeiro_item else None,
+                empresa_id=int(empresa_id),
+                colaborador_contrato_id=str(
+                    primeiro_item.profissional_id) if primeiro_item and primeiro_item.profissional_id else None,
+                usuario_id=str(agendamento.cliente_id) if agendamento.cliente_id else None,
+                forma_pagamento=forma_pagto,
+                valor_total=agendamento.valor_total,
+                valor_final_cobrado=valor_final,
+                observacao=obs,
+                observacoes=obs,
+                nota_avaliacao_cliente=int(avaliacao) if avaliacao else None,
+                data_hora_inicio_real=agendamento.data_hora_inicio,
+                data_hora_fim_real=agora,
+                data_hora_encerramento=agora
+            )
+            db.session.add(novo_enc)
+
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Comanda e avaliação registradas com sucesso!',
+            'agendamento_id': agendamento.id
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao registrar encerramento: {str(e)}'}), 500
