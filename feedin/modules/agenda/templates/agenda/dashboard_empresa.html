@@ -418,6 +418,7 @@
 
                     {% if slot.tipo == 'ocupado' %}
                         <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug }} {% if status_slug in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento{% elif status_slug in ['concluido', 'finalizado'] %}item-agendamento-concluido{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
+                             onclick="abrirModalAtendimento('{{ agend_id }}')"
                              data-id="{{ agend_id }}"
                              data-tipo="ocupado"
                              data-status="{{ status_slug }}"
@@ -605,19 +606,21 @@
                                         <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                     </small>
 
-                                    {# Obtém o objeto de agendamento do contexto (item.agendamento se for um objeto slot/item, ou a própria variável item) #}
-                                    {% set obj_agendamento = item.agendamento if item is defined and hasattr(item, 'agendamento') and item.agendamento else item %}
+                                    {# Obtém a lista de itens diretamente a partir das chaves do 'slot' #}
+                                    {% set itens_lista = slot.get('itens', []) %}
 
-                                    {# 1. Mapeia os itens pendentes e os profissionais distintos #}
-                                    {% if obj_agendamento and hasattr(obj_agendamento, 'itens') and obj_agendamento.itens %}
-                                        {% set itens_pendentes = obj_agendamento.itens | selectattr('status_item', 'ne', 'concluido') | selectattr('status_item', 'ne', 'cancelado') | list %}
-                                        {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
-                                    {% else %}
-                                        {% set itens_pendentes = [] %}
-                                        {% set profs_unicos = [] %}
-                                    {% endif %}
+                                    {# Filtragem de itens pendentes do agendamento #}
+                                    {% set itens_pendentes = [] %}
+                                    {% for it in itens_lista %}
+                                        {% set st = (it.get('status_item') or it.get('status') or 'pendente') | lower %}
+                                        {% if st not in ['concluido', 'concluído', 'cancelado'] %}
+                                            {% set _ = itens_pendentes.append(it) %}
+                                        {% endif %}
+                                    {% endfor %}
 
-                                    {# CENÁRIO 1: Todos os serviços já foram concluídos -> Botão de Liquidar Comanda #}
+                                    {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
+
+                                    {# CENÁRIO 1: Todos os serviços executados -> Liquidar Comanda / Caixa #}
                                     {% if itens_pendentes | length == 0 %}
                                         <button type="button"
                                                 class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
@@ -625,57 +628,57 @@
                                             <i class="bi bi-receipt me-1"></i> Liquidar Comanda
                                         </button>
 
-                                    {# CENÁRIO 2: Múltiplos Profissionais nos serviços pendentes #}
+                                    {# CENÁRIO 2: Múltiplos Profissionais pendentes -> Concluir tarefa do profissional atual #}
                                     {% elif profs_unicos | length > 1 %}
                                         {% set meu_item = (itens_pendentes | selectattr('profissional_id', 'eq', current_user.id) | first) or (itens_pendentes | first) %}
+                                        {% set item_id_target = meu_item.get('id') or meu_item.get('item_id') if meu_item else '' %}
+                                        {% set servico_nome_target = (meu_item.get('servico', {}).get('nome') if meu_item.get('servico') else meu_item.get('nome_servico')) or '' %}
                                         <button type="button"
                                                 class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ meu_item.id }}', '{{ meu_item.servico.nome if meu_item.servico else '' }}', '{{ obj_agendamento.cliente.nome if obj_agendamento.cliente else '' }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ meu_item.servico.nome if meu_item.servico else 'Serviço' }}
+                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ nome_cliente | e }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target or 'Serviço' }}
                                         </button>
 
-                                    {# CENÁRIO 3: Profissional Único / Serviço Único #}
+                                    {# CENÁRIO 3: Profissional Único / Serviço Pendente -> Encerrar Atendimento Direto #}
                                     {% else %}
-                                        {% set meu_item = itens_pendentes | first %}
-                                        {% set item_id_target = meu_item.id if meu_item else (ns.proximo_item_id if ns is defined and ns.proximo_item_id else '') %}
-                                        {% set servico_nome_target = meu_item.servico.nome if meu_item and meu_item.servico else '' %}
-
                                         <button type="button"
-                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target }}', '{{ obj_agendamento.cliente.nome if obj_agendamento and obj_agendamento.cliente else '' }}')">
+                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
                                             <i class="bi bi-check2-square me-1"></i> Encerrar Atendimento
                                         </button>
                                     {% endif %}
+
                                 </div>
                             {% endif %}
-
                             {# PAINEL DE AÇÕES REVELADO POR DUPLO CLIQUE #}
                             <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
                                 {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    {% if ns.tem_item_pendente %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ ns.proximo_item_id }}', '{{ empresa.id }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir Tarefa
-                                        </button>
-                                    {% endif %}
+                                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <small class="text-primary fw-bold">
+                                            <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
+                                        </small>
 
-                                    {% if not ns.tem_item_pendente %}
-                                        <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-receipt me-1"></i>Fechar Comanda / Caixa
-                                        </button>
-                                    {% endif %}
+                                        {% set item_id_target = slot.get('item_id') or slot.get('id') or '' %}
+                                        {% set agend_id_target = slot.get('agendamento_id') or agend_id %}
+                                        {% set servico_nome_target = slot.get('servico_nome') or 'Serviço' %}
+                                        {% set cliente_nome_target = slot.get('cliente_nome') or nome_cliente or '' %}
+                                        {% set valor_target = slot.get('valor_formatado') or valor_total_fmt or '0,00' %}
+                                        {% set st_item = (slot.get('status_slug') or slot.get('status') or '') | lower %}
 
-                                {% elif status_slug not in ['concluido', 'finalizado', 'cancelado', 'falta'] %}
-                                    <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                            onclick="event.stopPropagation(); acaoIniciarAtendimento('{{ slot.id or slot.agendamento_id }}', '{{ empresa.id }}')">
-                                        <i class="bi bi-play-circle me-1"></i>Iniciar Atendimento
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-warning rounded-pill px-3 py-1 fw-semibold btn-marcar-falta"
-                                            onclick="event.stopPropagation(); abrirModalAtrasoPresenca('{{ agend_id }}', '{{ nome_cliente | e }}')">
-                                        <i class="bi bi-person-x me-1"></i>Marcar Falta
-                                    </button>
+                                        {% if st_item not in ['concluido', 'concluído', 'cancelado', 'finalizado'] %}
+                                            <button type="button"
+                                                    class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
+                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_target }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ cliente_nome_target | e }}')">
+                                                <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target }}
+                                            </button>
+                                        {% else %}
+                                            <button type="button"
+                                                    class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
+                                                    onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id_target }}', '{{ valor_target | e }}')">
+                                                <i class="bi bi-receipt me-1"></i> Liquidar Comanda
+                                            </button>
+                                        {% endif %}
+                                    </div>
                                 {% endif %}
 
                                 <button type="button" class="btn btn-sm btn-light border rounded-circle p-1 ms-1" title="Fechar Painel"
@@ -731,6 +734,10 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-3">
+                <!-- Adicionar logo após a abertura do modal-body -->
+                <input type="hidden" id="modal-finalizar-agendamento-id">
+                <input type="hidden" id="modal-finalizar-avaliacao" value="5">
+
                 <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
                     <div style="width: 50px; height: 50px; min-width: 50px; min-height: 50px;" class="position-relative flex-shrink-0">
                         <img id="modalClienteEmpresaFoto"
@@ -1007,26 +1014,27 @@ function getCsrfToken() {
 // =========================================================================
 
 // Prepara e abre o modal de conclusão de um item/serviço individual (AghAgendamentoItem)
-window.prepararModalFinalizarItem = function(agendamentoId, itemId, nomeServico, nomeCliente) {
-    const inputAgendamento = document.getElementById('modal_agendamento_id');
-    const inputItem = document.getElementById('modal_item_id');
-    const spanServico = document.getElementById('modal_servico_nome');
-    const spanCliente = document.getElementById('modal_cliente_nome');
+window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome, clienteNome) {
+    // Alimenta o formulário com os IDs nativos do seu HTML
+    if (document.getElementById('modal_agendamento_id')) {
+        document.getElementById('modal_agendamento_id').value = agendamentoId;
+    }
+    if (document.getElementById('modal_item_id')) {
+        document.getElementById('modal_item_id').value = itemId;
+    }
+    if (document.getElementById('modal_servico_nome')) {
+        document.getElementById('modal_servico_nome').textContent = servicoNome || 'Serviço';
+    }
+    if (document.getElementById('modal_cliente_nome')) {
+        document.getElementById('modal_cliente_nome').textContent = 'Cliente: ' + (clienteNome || '---');
+    }
 
-    if (inputAgendamento) inputAgendamento.value = agendamentoId || '';
-    if (inputItem) inputItem.value = itemId || '';
-    if (spanServico) spanServico.textContent = nomeServico || 'Serviço';
-    if (spanCliente) spanCliente.textContent = nomeCliente ? `Cliente: ${nomeCliente}` : 'Cliente: ---';
-
-    // Preenche a hora atual no campo visual
-    const agora = new Date();
-    const horaFormatada = agora.toTimeString().substring(0, 5);
-    const elemFim = document.getElementById('hora_fim_real');
-    if (elemFim) elemFim.value = horaFormatada;
-
-    const modalEl = document.getElementById('modalFinalizarItem');
+    // Dispara a exibição do modal nativo do Bootstrap
+    const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
+                 || document.getElementById('modalFinalizarItem');
     if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.show();
     }
 };
 
@@ -1050,61 +1058,75 @@ window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
     window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
-// PASSO 1: Confirma e Grava os Dados em AghAgendamentoItem
+// PASSO 1 & 2: Confirma e Grava os Dados do Item e a Avaliação do Colaborador
 window.confirmarEGravarEncerramentoItem = function() {
     const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
     const itemId = document.getElementById('modal_item_id')?.value;
     const observacao = document.getElementById('modal_item_observacao')?.value || '';
     const avaliacao = document.getElementById('modal_item_avaliacao')?.value || 5;
+    const comentario = document.getElementById('comentario_avaliacao_cliente')?.value || '';
 
-    if (!agendamentoId || !itemId) {
-        alert("IDs inválidos para conclusão do serviço.");
+    if (!agendamentoId) {
+        alert("ID do agendamento não informado.");
         return;
     }
 
-    const payload = {
-        agendamento_id: agendamentoId,
-        item_id: itemId,
-        observacao: observacao,
-        avaliacao: avaliacao
-    };
-
-    fetch("{{ url_for('agenda.concluir_item_agendamento') }}", {
+    // Requisição AJAX enviando os dados e o Token CSRF obrigatório
+    fetch('/agenda/api/agendamento/concluir-item', {
         method: 'POST',
         headers: {
-            'Accept': 'application/json',
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'X-CSRFToken': getCsrfToken()
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            agendamento_id: parseInt(agendamentoId),
+            item_id: itemId ? parseInt(itemId) : null,
+            observacao: observacao,
+            avaliacao: parseInt(avaliacao),
+            comentario_avaliacao: comentario
+        })
     })
-    .then(res => res.json())
-    .then(data => {
+    .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const textHTML = await res.text();
+            console.error("Resposta HTML inesperada do servidor:", textHTML);
+            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
+        }
+        return res.json();
+    })
+.then(data => {
         if (!data.sucesso && !data.success) {
-            alert(data.mensagem || 'Erro ao concluir serviço.');
+            alert(data.mensagem || "Erro ao concluir serviço.");
             return;
         }
 
-        // Esconde o modal do item
-        const modalElement = document.getElementById('modalFinalizarItem');
-        if (modalElement && typeof bootstrap !== 'undefined') {
-            bootstrap.Modal.getInstance(modalElement)?.hide();
+        // Oculta o modal do item/avaliação
+        const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
+                     || document.getElementById('modalFinalizarItem');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
         }
 
-        // Se era o último serviço / profissional único, abre direto o Modal da Comanda/Caixa
-        if (data.comanda_pronta) {
-            window.abrirModalFechamentoComanda(data.agendamento_id, data.valor_total);
+        // Só abre a comanda (Passo 3) se TODOS os itens do agendamento estiverem concluídos
+        if (data.comanda_pronta || data.exibir_comanda) {
+            if (window.abrirModalFechamentoComanda) {
+                window.abrirModalFechamentoComanda(agendamentoId, data.valor_total || '0,00');
+            }
         } else {
+            // Se ainda existem outros serviços/profissionais pendentes
             window.location.reload();
         }
     })
     .catch(err => {
-        console.error("Erro ao gravar encerramento do item:", err);
-        alert("Falha ao salvar as informações do serviço.");
+        console.error("Erro ao encerrar serviço:", err);
+        alert(err.message || "Ocorreu um erro ao processar a conclusão.");
     });
 };
 
-// Ação de conclusão direta de tarefa/serviço (caso acionada direto do card)
+// Ação de conclusão direta de tarefa/serviço
 window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
     if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
         alert("Erro: Parâmetros do agendamento ou do item ausentes.");
@@ -1119,14 +1141,14 @@ window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
             'X-CSRFToken': getCsrfToken()
         },
         body: JSON.stringify({
-            agendamento_id: agendamentoId,
-            item_id: itemId
+            agendamento_id: parseInt(agendamentoId),
+            item_id: parseInt(itemId)
         })
     })
     .then(res => res.json())
     .then(data => {
         if (data.sucesso || data.success) {
-            if (data.comanda_pronta) {
+            if (data.comanda_pronta || data.exibir_comanda) {
                 window.abrirModalFechamentoComanda(data.agendamento_id, data.valor_total);
             } else {
                 window.location.reload();
@@ -1141,13 +1163,17 @@ window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
     });
 };
 
-// PASSO 2: Abertura do Modal Financeiro (Comanda / Caixa)
-window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00') {
+// PASSO 3: Abertura do Modal Financeiro (Comanda / Caixa)
+window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00', avaliacao = 5, observacao = '') {
     const inputId = document.getElementById('modal-finalizar-agendamento-id');
     const inputValor = document.getElementById('modal-finalizar-valor');
     const elResumo = document.getElementById('modal-resumo-valor-previsto');
+    const inputAvaliacao = document.getElementById('modal-finalizar-avaliacao');
+    const inputObs = document.getElementById('modal-finalizar-observacao');
 
     if (inputId) inputId.value = agendamentoId;
+    if (inputAvaliacao) inputAvaliacao.value = avaliacao;
+    if (inputObs && observacao && !inputObs.value) inputObs.value = observacao;
 
     let valorNum = 0.0;
 
@@ -1185,12 +1211,13 @@ window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,
     }
 };
 
-// PASSO 2 (Gravação Final): Confirma e Grava em AghAgendamento e AghAgendamentoEncerramento
+// PASSO 3 (Liquidação Final): Grava o Pagamento Financeiro em AghAgendamento e AghAgendamentoEncerramento
 window.confirmarEGravarEncerramento = function() {
     const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
     const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
     const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value || 'PIX';
     const observacao = document.getElementById('modal-finalizar-observacao')?.value || '';
+    const avaliacao = document.getElementById('modal-finalizar-avaliacao')?.value || 5;
 
     if (!agendamentoId) {
         alert("ID do agendamento não informado.");
@@ -1201,35 +1228,43 @@ window.confirmarEGravarEncerramento = function() {
     let valorFinal = parseFloat(valorTratado);
     if (isNaN(valorFinal)) valorFinal = 0.0;
 
-    const payload = {
-        agendamento_id: parseInt(agendamentoId),
-        valor_final: valorFinal,
-        forma_pagamento: formaPagamento,
-        observacao: observacao
-    };
-
-    fetch("{{ url_for('agenda.encerrar_clique') }}", {
+    // Envia tudo para o backend encerrar financeiramente a comanda
+    fetch('/agenda/api/agendamento/encerrar-clique', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'X-CSRFToken': getCsrfToken()
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            agendamento_id: parseInt(agendamentoId),
+            valor_final: valorFinal,
+            forma_pagamento: formaPagamento,
+            observacao: observacao,
+            avaliacao: parseInt(avaliacao)
+        })
     })
-    .then(response => response.json())
+    .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+
+        if (!contentType || !contentType.includes("application/json")) {
+            const textHTML = await res.text();
+            console.error("Resposta HTML inesperada do servidor:", textHTML);
+            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
+        }
+
+        return res.json();
+    })
     .then(data => {
-        if (data.sucesso || data.success) {
-            if (document.activeElement instanceof HTMLElement) {
-                document.activeElement.blur();
-            }
+        if (data.sucesso || data.success || data.status === 'success') {
             window.location.reload();
         } else {
-            alert(data.mensagem || data.message || 'Erro ao liquidar comanda.');
+            alert(data.mensagem || "Erro ao encerrar comanda.");
         }
     })
-    .catch(error => {
-        console.error('Erro na requisição de encerramento:', error);
-        alert('Falha ao processar liquidação.');
+    .catch(err => {
+        console.error("Erro no encerramento:", err);
+        alert(err.message || "Falha na comunicação com o servidor.");
     });
 };
 
@@ -1245,7 +1280,7 @@ window.reabrirItemServico = function(agendamentoId, itemId) {
     })
     .then(res => res.json())
     .then(data => {
-        if (data.sucesso) location.reload();
+        if (data.sucesso || data.success) location.reload();
         else alert(data.mensagem || 'Erro ao reabrir item.');
     })
     .catch(err => console.error('Erro na reabertura do item:', err));

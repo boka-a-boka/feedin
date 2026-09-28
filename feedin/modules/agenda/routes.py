@@ -894,6 +894,7 @@ def dashboard_empresa(empresa_id):
     # =========================================================================
     # 🎯 8. RETORNO PARA O TEMPLATE (ENVIANDO slots_grade CONFORME ESPERADO)
     # =========================================================================
+
     return render_template(
         'agenda/dashboard_empresa.html',
         empresa=empresa,
@@ -7521,6 +7522,7 @@ def concluir_item_agendamento():
 
 
 @agenda_bp.route('/api/agendamento/encerrar-clique', methods=['POST'])
+@login_required
 def encerrar_clique():
     """
     Passo 2 (Financeiro & Avaliação / Fechamento):
@@ -7532,45 +7534,47 @@ def encerrar_clique():
     empresa_id = session.get('empresa_id') or data.get('empresa_id') or 2
 
     if not agendamento_id:
-        return jsonify({'sucesso': False, 'mensagem': 'Parâmetro agendamento_id é obrigatório.'}), 400
+        return jsonify({'sucesso': False, 'success': False, 'mensagem': 'Parâmetro agendamento_id é obrigatório.'}), 400
 
     agendamento = AghAgendamento.query.get(agendamento_id)
     if not agendamento:
-        return jsonify({'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}), 404
+        return jsonify({'sucesso': False, 'success': False, 'mensagem': 'Agendamento não encontrado.'}), 404
 
     agora = obter_hora_local() if callable(globals().get('obter_hora_local')) else datetime.now()
 
-    # 1. Garante encerramento dos itens no modelo
-    for item in agendamento.itens:
-        if item.status_item not in ['concluido', 'cancelado']:
-            if not item.data_hora_inicio_real:
-                item.data_hora_inicio_real = item.data_hora_inicio or agora
-            item.data_hora_fim_real = agora
-            item.status_item = 'concluido'
-
-    # 2. Atualiza o status geral da comanda
-    agendamento.status = 'finalizado'
-    if hasattr(agendamento, 'data_hora_fim'):
-        agendamento.data_hora_fim = agora
-
-    # 3. Processa Financeiro, Observações e Avaliação
-    forma_pagto = data.get('forma_pagamento', 'PIX')
-    valor_final = data.get('valor_final') or data.get('valor_total') or float(agendamento.recalcular_total())
-    obs = data.get('observacao') or data.get('observacoes', '')
-    avaliacao = data.get('avaliacao') or data.get('nota_avaliacao_cliente') or None
-
     try:
-        # Recupera os encerramentos associados a esta comanda
+        # 1. Garante encerramento dos itens no modelo
+        for item in agendamento.itens:
+            if item.status_item not in ['concluido', 'cancelado']:
+                if not item.data_hora_inicio_real:
+                    item.data_hora_inicio_real = item.data_hora_inicio or agora
+                item.data_hora_fim_real = agora
+                item.status_item = 'concluido'
+
+        # 2. Atualiza o status geral da comanda
+        agendamento.status = 'finalizado'
+        if hasattr(agendamento, 'data_hora_fim'):
+            agendamento.data_hora_fim = agora
+
+        # 3. Processa Financeiro, Observações e Avaliação
+        forma_pagto = data.get('forma_pagamento', 'PIX')
+        valor_final = data.get('valor_final') if data.get('valor_final') is not None else float(agendamento.recalcular_total())
+        obs = data.get('observacao') or data.get('observacoes', '')
+        avaliacao = data.get('avaliacao') or data.get('nota_avaliacao_cliente') or None
+
         encerramentos = AghAgendamentoEncerramento.query.filter_by(agendamento_id=agendamento.id).all()
 
         if encerramentos:
+            qtd = len(encerramentos)
             for enc in encerramentos:
                 enc.forma_pagamento = forma_pagto
-                enc.valor_final_cobrado = valor_final / len(encerramentos) if len(encerramentos) > 0 else valor_final
+                enc.valor_final_cobrado = valor_final / qtd if qtd > 0 else valor_final
                 enc.data_hora_encerramento = agora
                 if obs:
-                    enc.observacao = obs
-                    enc.observacoes = obs
+                    if hasattr(enc, 'observacao'):
+                        enc.observacao = obs
+                    if hasattr(enc, 'observacoes'):
+                        enc.observacoes = obs
                 if avaliacao:
                     enc.nota_avaliacao_cliente = int(avaliacao)
         else:
@@ -7579,14 +7583,13 @@ def encerrar_clique():
                 agendamento_id=int(agendamento.id),
                 agendamento_item_id=primeiro_item.id if primeiro_item else None,
                 empresa_id=int(empresa_id),
-                colaborador_contrato_id=str(
-                    primeiro_item.profissional_id) if primeiro_item and primeiro_item.profissional_id else None,
+                colaborador_contrato_id=str(primeiro_item.profissional_id) if primeiro_item and primeiro_item.profissional_id else None,
                 usuario_id=str(agendamento.cliente_id) if agendamento.cliente_id else None,
                 forma_pagamento=forma_pagto,
                 valor_total=agendamento.valor_total,
                 valor_final_cobrado=valor_final,
-                observacao=obs,
-                observacoes=obs,
+                observacao=obs if hasattr(AghAgendamentoEncerramento, 'observacao') else None,
+                observacoes=obs if hasattr(AghAgendamentoEncerramento, 'observacoes') else None,
                 nota_avaliacao_cliente=int(avaliacao) if avaliacao else None,
                 data_hora_inicio_real=agendamento.data_hora_inicio,
                 data_hora_fim_real=agora,
@@ -7598,10 +7601,15 @@ def encerrar_clique():
 
         return jsonify({
             'sucesso': True,
+            'success': True,
             'mensagem': 'Comanda e avaliação registradas com sucesso!',
             'agendamento_id': agendamento.id
         }), 200
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'sucesso': False, 'mensagem': f'Erro ao registrar encerramento: {str(e)}'}), 500
+        return jsonify({
+            'sucesso': False,
+            'success': False,
+            'mensagem': f'Erro ao registrar encerramento: {str(e)}'
+        }), 500
