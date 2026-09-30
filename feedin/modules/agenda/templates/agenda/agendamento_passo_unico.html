@@ -220,7 +220,6 @@
       </div>
 
       {% if trava_selecao %}
-        <!-- Alerta quando é obrigatório dividir a equipe por especialidade -->
         <div class="alert alert-info border-0 bg-light p-2.5 mb-2 rounded-3 small d-flex align-items-center gap-2">
           <i class="bi bi-info-circle-fill text-primary fs-5 flex-shrink-0"></i>
           <span class="text-secondary" style="font-size: 0.78rem;">
@@ -254,7 +253,6 @@
             {% set colab_id_str = colab.id|string %}
             {% set sel_prof_str = profissional_id_selecionado|string if profissional_id_selecionado is not none else '' %}
 
-            {# Tratamento do Colaborador #}
             {% set nome_colab = colab.nome or 'Profissional' %}
             {% set inicial_colab = nome_colab[0]|upper if nome_colab else 'P' %}
             {% set src_foto = colab.url_foto_profissional %}
@@ -273,7 +271,6 @@
                      for="colab_{{ colab_id_str }}"
                      {% if trava_selecao %}title="Estes serviços exigem mais de um especialista atrelado ao atendimento."{% endif %}>
 
-                {# Container Fixo do Avatar (40x40px) #}
                 <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
                   {% if src_foto %}
                     <img id="imgFotoColab_{{ colab_id_str }}"
@@ -291,7 +288,6 @@
                   </div>
                 </div>
 
-                {# Nome e Cargo #}
                 <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ nome_colab }}">
                   {{ nome_colab }}
                 </strong>
@@ -328,10 +324,29 @@
       </label>
 
       <div id="container-slots-horario" class="d-flex flex-wrap gap-2 mt-1">
-        <div class="text-muted small py-2 w-100 text-center">
-          <span class="spinner-border spinner-border-sm me-1" role="status"></span>
-          Consultando horários disponíveis...
-        </div>
+        {% if horarios_disponiveis %}
+          {% for item in horarios_disponiveis %}
+            {% set h_val = item.horario if item.horario is defined else item %}
+            {% set is_gap = item.is_gap if item.is_gap is defined else false %}
+            {% set is_sel = (horario_selecionado and (h_val == horario_selecionado or h_val.startswith(horario_selecionado))) %}
+
+            <button type="button"
+                    class="btn btn-slot-horario rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1 {% if is_sel %}btn-slot-ativo text-white{% elif is_gap %}btn-outline-warning text-dark{% else %}btn-outline-primary{% endif %}"
+                    data-is-gap="{{ 'true' if is_gap else 'false' }}"
+                    style="font-size: 0.85rem;"
+                    onclick="selecionarHorario(this, '{{ h_val }}')">
+              {{ h_val }}
+              {% if is_gap %}
+                <span class="badge bg-warning text-dark rounded-pill ms-1" style="font-size: 0.65rem;">Encaixe</span>
+              {% endif %}
+            </button>
+          {% endfor %}
+        {% else %}
+          <div class="text-muted small py-2 w-100 text-center">
+            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+            Consultando horários disponíveis...
+          </div>
+        {% endif %}
       </div>
     </div>
 
@@ -340,14 +355,14 @@
             id="btnConfirmarAgendamento"
             class="btn text-white btn-lg rounded-pill w-100 fw-bold shadow-sm py-3"
             style="background-color: {{ cor_empresa }}; border-color: {{ cor_empresa }};"
-            disabled>
+            {% if not horario_selecionado %}disabled{% endif %}>
       <i class="bi bi-check-circle-fill me-1"></i> Confirmar Agendamento
     </button>
   </form>
 </div>
 
 <script>
-  const horarioPreSelecionado = "{{ horario_selecionado or '' }}";
+  let horarioPreSelecionado = "{{ horario_selecionado or '' }}";
   const reagendarIdConst = "{{ agendamento_original.id if agendamento_original else '' }}";
   const empresaIdConst = "{{ empresa.id }}";
 
@@ -367,6 +382,9 @@
     const inputHorario = document.getElementById('inputHorarioSelecionado');
     if (inputHorario) inputHorario.value = horario;
 
+    // Atualiza o estado da variável de pré-seleção ativa
+    horarioPreSelecionado = horario;
+
     const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
     if (btnConfirmar) btnConfirmar.removeAttribute('disabled');
   }
@@ -385,9 +403,9 @@
     const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
 
     if (!container) return;
-    if (btnConfirmar) btnConfirmar.disabled = true;
 
     if (!servicos || servicos.trim() === '') {
+      if (btnConfirmar) btnConfirmar.disabled = true;
       container.innerHTML = `
         <div class="alert alert-info small py-2 text-center my-2 w-100" role="alert">
           <i class="bi bi-info-circle me-1"></i> Selecione ao menos um serviço para visualizar os horários.
@@ -396,6 +414,7 @@
     }
 
     if (!inputData || !inputData.value) {
+      if (btnConfirmar) btnConfirmar.disabled = true;
       container.innerHTML = `
         <div class="text-muted small py-2 text-center w-100">
           <i class="bi bi-calendar-event me-1"></i> Selecione a data para ver os horários disponíveis.
@@ -443,6 +462,7 @@
 
       if (listaHorarios.length > 0) {
         let elementoParaAutoSelecionar = null;
+        let selecionadoAindaExiste = false;
 
         listaHorarios.forEach(item => {
           const horarioStr = typeof item === 'object' ? (item.horario || item.hora || item.hora_inicio) : item;
@@ -473,14 +493,24 @@
 
           if (horarioPreSelecionado && horarioStr.startsWith(horarioPreSelecionado)) {
             elementoParaAutoSelecionar = btn;
+            selecionadoAindaExiste = true;
           }
         });
 
         if (elementoParaAutoSelecionar) {
           elementoParaAutoSelecionar.click();
+        } else {
+          // Se o horário anterior não existe nos novos slots, limpa a seleção e desabilita o botão
+          const inputHorario = document.getElementById('inputHorarioSelecionado');
+          if (inputHorario) inputHorario.value = '';
+          if (btnConfirmar) btnConfirmar.disabled = true;
         }
 
       } else {
+        const inputHorario = document.getElementById('inputHorarioSelecionado');
+        if (inputHorario) inputHorario.value = '';
+        if (btnConfirmar) btnConfirmar.disabled = true;
+
         container.innerHTML = `
           <div class="text-muted small py-2 w-100 text-center">
             <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para a data selecionada.
@@ -488,6 +518,8 @@
       }
     } catch (error) {
       console.error('Erro na consulta de horários:', error);
+      if (btnConfirmar) btnConfirmar.disabled = true;
+
       container.innerHTML = `
         <div class="text-danger small py-2 w-100 text-center">
           <i class="bi bi-exclamation-triangle me-1"></i> Falha ao carregar horários. Tente novamente.
@@ -508,7 +540,11 @@
       }
     });
 
-    atualizarHorariosDisponiveis();
+    // Executa a busca assíncrona para sincronizar slots caso não tenham sido renderizados via Jinja2
+    const container = document.getElementById('container-slots-horario');
+    if (!container || !container.querySelector('.btn-slot-horario')) {
+      atualizarHorariosDisponiveis();
+    }
   });
 </script>
 {% endblock %}

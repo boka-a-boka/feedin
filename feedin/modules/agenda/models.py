@@ -46,27 +46,13 @@ class AghAgendamento(db.Model):
     cliente_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True, index=True)
     beneficiario_id = db.Column(db.Integer, db.ForeignKey('cliente_beneficiarios.id'), nullable=True, index=True)
 
-    # 👤 PROFISSIONAL PRINCIPAL / TITULAR (OPCIONAL/NULLABLE)
-    profissional_id = db.Column(
-        db.Integer,
-        db.ForeignKey('colaborador_contratos.id', ondelete='SET NULL'),
-        nullable=True,
-        index=True,
-    )
-
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
     data_hora_inicio = db.Column(db.DateTime, nullable=False, index=True)  # Horário do 1º serviço
-    data_hora_fim = db.Column(db.DateTime, nullable=False)  # Horário final do último serviço
+    data_hora_fim = db.Column(db.DateTime, nullable=False)                 # Horário final do último serviço
 
     status = db.Column(db.String(30), default='agendado', nullable=False, index=True)
     tipo_origem = db.Column(db.String(20), default='online')
     session_token = db.Column(db.String(100), nullable=True, index=True)
-    # --- FOTO OU AVATAR DO BENEFICIÁRIO (PREPARADO PARA FUTURO CADASTRO) ---
-    foto_url = db.Column(
-        db.String(255),
-        nullable=True,
-        comment='Caminho relativo da foto do dependente, Pet ou logotipo do veículo'
-    )
     expira_em = db.Column(db.DateTime, nullable=True)
 
     criado_em = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -74,13 +60,9 @@ class AghAgendamento(db.Model):
     # RELACIONAMENTOS (ORM)
     empresa = db.relationship('EseEmpresa', backref='agendamentos', lazy=True)
     cliente = db.relationship('ModCadastroCliente', backref='agendamentos', lazy=True)
-
-    # 🎯 NOVO: RELACIONAMENTO COM BENEFICIÁRIO
     beneficiario = db.relationship('ClienteBeneficiario', foreign_keys=[beneficiario_id], lazy=True)
 
-    profissional = db.relationship('ColaboradorContrato', foreign_keys=[profissional_id], lazy=True)
-
-    # 🎯 VINCULAÇÃO EXPLÍCITA
+    # VINCULAÇÃO COM ITENS (Múltiplos serviços / profissionais)
     itens = db.relationship(
         'AghAgendamentoItem',
         back_populates='agendamento',
@@ -125,9 +107,9 @@ class AghAgendamentoItem(db.Model):
         index=True
     )
 
-    # 👤 PROFISSIONAL MANDATÓRIO DO ITEM (Aponta para colaborador_contratos.id)
-    profissional_id = db.Column(
-        db.Integer,
+    # 👤 PROFISSIONAL / COLABORADOR MANDATÓRIO DO ITEM (UUID em CHAR(36))
+    colaborador_id_contrato = db.Column(
+        db.String(36),
         db.ForeignKey('colaborador_contratos.id', ondelete='RESTRICT'),
         nullable=False,
         index=True
@@ -161,7 +143,16 @@ class AghAgendamentoItem(db.Model):
         overlaps="agendamento_pai"
     )
     servico = db.relationship('EseServicoOferecido', lazy='joined')
-    profissional = db.relationship('ColaboradorContrato', foreign_keys=[profissional_id], lazy='joined')
+    profissional = db.relationship(
+        'ColaboradorContrato',
+        foreign_keys=[colaborador_id_contrato],
+        lazy='joined'
+    )
+
+    @property
+    def profissional_id(self) -> str:
+        """Alias para compatibilidade de leitura com scripts legados."""
+        return str(self.colaborador_id_contrato) if self.colaborador_id_contrato else None
 
     @property
     def agendamento_pai(self):
@@ -179,7 +170,7 @@ class AghAgendamentoItem(db.Model):
     @property
     def nome_profissional(self) -> str:
         if not self.profissional:
-            return f"Profissional #{self.profissional_id}"
+            return f"Profissional {self.colaborador_id_contrato or 'N/A'}"
 
         # 1. Tenta atributos diretos do contrato
         for attr in ['nome_exibicao', 'nome', 'nome_completo']:
@@ -200,13 +191,14 @@ class AghAgendamentoItem(db.Model):
             if nome_usr:
                 return nome_usr
 
-        return f"Profissional #{self.profissional_id}"
+        return f"Profissional {self.colaborador_id_contrato}"
 
     def to_dict(self) -> dict:
         cliente_nome = "Cliente"
         if self.agendamento and getattr(self.agendamento, 'cliente', None):
-            cliente_nome = getattr(self.agendamento.cliente, 'nome', None) or getattr(self.agendamento.cliente,
-                                                                                      'razao_social', None) or "Cliente"
+            cliente_nome = getattr(self.agendamento.cliente, 'nome', None) or getattr(
+                self.agendamento.cliente, 'razao_social', None
+            ) or "Cliente"
 
         return {
             "id": self.id,
@@ -215,7 +207,8 @@ class AghAgendamentoItem(db.Model):
             "modo_execucao": self.modo_execucao,
             "servico_id": self.servico_id,
             "servico_nome": self.nome_servico,
-            "profissional_id": self.profissional_id,
+            "colaborador_id_contrato": str(self.colaborador_id_contrato) if self.colaborador_id_contrato else None,
+            "profissional_id": str(self.colaborador_id_contrato) if self.colaborador_id_contrato else None,
             "profissional_nome": self.nome_profissional,
             "cliente_nome": cliente_nome,
             "preco_unitario": float(self.preco_unitario) if self.preco_unitario is not None else 0.0,
@@ -225,6 +218,63 @@ class AghAgendamentoItem(db.Model):
             "status_item": self.status_item,
             "observacao_item": self.observacao_item
         }
+
+    @staticmethod
+    def iniciar_atendimento_servico(agendamento_id, agendamento_item_id, empresa_id, usuario_id, colaborador_id_contrato=None):
+        try:
+            # 1. Carrega o item específico
+            item = AghAgendamentoItem.query.get(agendamento_item_id)
+            if not item:
+                return {"status": "error", "mensagem": "Item de agendamento não encontrado."}, 404
+
+            tz_sp = ZoneInfo('America/Sao_Paulo')
+            agora = datetime.now(tz_sp)
+
+            # Atualiza o colaborador caso tenha sido explicitamente redefinido na abertura
+            if colaborador_id_contrato:
+                item.colaborador_id_contrato = str(colaborador_id_contrato).strip()
+
+            # 2. Atualiza APENAS o estado do item do serviço
+            item.status_item = 'em_atendimento'
+            item.data_hora_inicio_real = agora
+
+            # 3. Atualiza o status global do Agendamento PAI (se ainda for 'agendado'/'pendente')
+            agendamento_pai = item.agendamento
+            if agendamento_pai and getattr(agendamento_pai, 'status_slug', None) not in ['em_atendimento', 'concluido', 'finalizado']:
+                agendamento_pai.status_slug = 'em_atendimento'
+
+            # 4. Resgate do ID (CHAR 36) do colaborador associado
+            colaborador_uuid = str(item.colaborador_id_contrato).strip() if item.colaborador_id_contrato else None
+
+            # 5. Registra/Recupera a sessão de encerramento SOMENTE para este item
+            encerramento_item = AghAgendamentoEncerramento.query.filter_by(
+                agendamento_item_id=item.id
+            ).first()
+
+            if not encerramento_item:
+                encerramento_item = AghAgendamentoEncerramento(
+                    agendamento_id=agendamento_id,
+                    agendamento_item_id=item.id,
+                    empresa_id=empresa_id,
+                    colaborador_id_contrato=colaborador_uuid,  # 🟢 Gravação em String (CHAR 36)
+                    data_hora_inicio=agora,
+                    status='em_atendimento',
+                    criado_por=str(usuario_id)
+                )
+                db.session.add(encerramento_item)
+
+            db.session.commit()
+            return {"status": "success", "mensagem": f"Serviço #{item.id} iniciado com sucesso."}, 200
+
+        except Exception as e:
+            db.session.rollback()
+            return {"status": "error", "mensagem": f"Erro interno ao processar início: {str(e)}"}, 500
+
+    # --- ADICIONE ESTE BLOCO ---
+    @profissional_id.setter
+    def profissional_id(self, value):
+        """Permite gravar no colaborador_id_contrato através do alias."""
+        self.colaborador_id_contrato = str(value).strip() if value else None
 
 
 class AghAgendamentoRascunho(db.Model):
@@ -1060,6 +1110,12 @@ class AghAgendamentoEncerramento(db.Model):
     @classmethod
     def iniciar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int,
                                     colaborador_contrato_id: str = None, usuario_id: str = None):
+        """
+        Inicia o atendimento do serviço:
+        1. Altera o status do agendamento pai para 'em_atendimento'.
+        2. Altera o status_item em AghAgendamentoItem para 'em_andamento'.
+        3. Registra/Atualiza o inicio real em AghAgendamentoEncerramento (sem marcar encerramento).
+        """
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
@@ -1067,13 +1123,24 @@ class AghAgendamentoEncerramento(db.Model):
         if not agendamento:
             return {'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}, 404
 
-        status_permitidos = ['agendado', 'confirmado', 'aguardando', 'soft_lock']
-        if agendamento.status not in status_permitidos:
+        status_permitidos = ['agendado', 'confirmado', 'aguardando', 'soft_lock', 'pendente', 'ausente_pendente']
+        st_agendamento = str(getattr(agendamento, 'status', '')).lower().strip()
+
+        if st_agendamento not in status_permitidos and st_agendamento != 'em_atendimento':
             return {'sucesso': False, 'mensagem': f'Não é possível iniciar com status "{agendamento.status}".'}, 400
 
         try:
+            # 1. Transição de status do Agendamento Pai
             agendamento.status = 'em_atendimento'
 
+            # 2. Transição do Item Específico na AghAgendamentoItem
+            item = AghAgendamentoItem.query.get(agendamento_item_id)
+            if item:
+                item.status_item = 'em_andamento'
+                if not item.data_hora_inicio_real:
+                    item.data_hora_inicio_real = agora_sp
+
+            # 3. Registro / Upsert do início operacional na AghAgendamentoEncerramento
             encerramento = cls.query.filter_by(
                 agendamento_id=agendamento_id,
                 agendamento_item_id=agendamento_item_id
@@ -1087,20 +1154,23 @@ class AghAgendamentoEncerramento(db.Model):
                     colaborador_contrato_id=colaborador_contrato_id,
                     usuario_id=usuario_id,
                     data_hora_inicio_real=agora_sp,
+                    # Mantém data_hora_encerramento e data_hora_fim_real estritamente como None
                 )
                 db.session.add(encerramento)
             else:
-                encerramento.agendamento_item_id = agendamento_item_id
                 encerramento.colaborador_contrato_id = colaborador_contrato_id
                 if usuario_id:
                     encerramento.usuario_id = usuario_id
                 encerramento.data_hora_inicio_real = agora_sp
 
+            # 4. Histórico de Presença / Auditoria
             data_agendada = agendamento.data_hora_inicio
-            if data_agendada.tzinfo is None:
-                data_agendada = data_agendada.replace(tzinfo=tz_sp)
-
-            desvio_minutos = int((agora_sp - data_agendada).total_seconds() // 60)
+            if data_agendada:
+                if data_agendada.tzinfo is None:
+                    data_agendada = data_agendada.replace(tzinfo=tz_sp)
+                desvio_minutos = int((agora_sp - data_agendada).total_seconds() // 60)
+            else:
+                desvio_minutos = 0
 
             historico_presenca = AghHistoricoPresenca(
                 estabelecimento_id=empresa_id,
@@ -1115,6 +1185,7 @@ class AghAgendamentoEncerramento(db.Model):
             db.session.add(historico_presenca)
 
             db.session.commit()
+
             return {
                 'sucesso': True,
                 'mensagem': 'Atendimento iniciado com sucesso!',
@@ -1128,6 +1199,12 @@ class AghAgendamentoEncerramento(db.Model):
 
     @classmethod
     def encerrar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int):
+        """
+        Conclui o serviço individual:
+        1. Atualiza AghAgendamentoItem para 'concluido'.
+        2. Atualiza AghAgendamentoEncerramento marcando data_hora_encerramento e valores.
+        3. Verifica se restam itens em andamento/pendentes para liberar a comanda global.
+        """
         item = AghAgendamentoItem.query.get(agendamento_item_id)
         if not item:
             return {'sucesso': False, 'mensagem': 'Item de agendamento não encontrado.'}, 404
@@ -1135,58 +1212,65 @@ class AghAgendamentoEncerramento(db.Model):
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
-        item.status_item = 'concluido'
-        item.data_hora_fim_real = agora_sp
+        try:
+            # 1. Atualização da fonte da verdade do Item
+            item.status_item = 'concluido'
+            item.data_hora_fim_real = agora_sp
 
-        encerramento = cls.query.filter_by(
-            agendamento_id=agendamento_id,
-            agendamento_item_id=agendamento_item_id
-        ).first()
+            valor_item = float(getattr(item, 'preco_unitario', 0.0) or getattr(item, 'valor', 0.0) or 0.0)
 
-        # Busca o valor cadastrado no item (ou no serviço vinculado)
-        valor_item = float(getattr(item, 'valor', 0) or 0)
-
-        if encerramento:
-            encerramento.data_hora_fim_real = agora_sp
-            if not encerramento.valor_total or encerramento.valor_total == 0:
-                encerramento.valor_total = valor_item
-                encerramento.valor_final_cobrado = valor_item
-        else:
-            # Se não existia registro de encerramento ainda, cria um já preenchendo o valor
-            encerramento = cls(
+            # 2. Atualização / Preenchimento dos dados de Fechamento no Encerramento
+            encerramento = cls.query.filter_by(
                 agendamento_id=agendamento_id,
-                agendamento_item_id=agendamento_item_id,
-                empresa_id=empresa_id,
-                colaborador_contrato_id=getattr(item, 'colaborador_contrato_id', None),
-                data_hora_inicio_real=item.data_hora_inicio_real or agora_sp,
-                data_hora_fim_real=agora_sp,
-                data_hora_encerramento=agora_sp,
-                valor_total=valor_item,
-                valor_final_cobrado=valor_item
-            )
-            db.session.add(encerramento)
+                agendamento_item_id=agendamento_item_id
+            ).first()
 
-        # Verifica itens pendentes
-        itens_pendentes_totais = AghAgendamentoItem.query.filter(
-            AghAgendamentoItem.agendamento_id == agendamento_id,
-            db.func.lower(AghAgendamentoItem.status_item) != 'concluido'
-        ).count()
+            if encerramento:
+                encerramento.data_hora_fim_real = agora_sp
+                encerramento.data_hora_encerramento = agora_sp  # 👈 Atributo fundamental para validar conclusão
+                if not encerramento.valor_total or encerramento.valor_total == 0:
+                    encerramento.valor_total = valor_item
+                    encerramento.valor_final_cobrado = valor_item
+            else:
+                encerramento = cls(
+                    agendamento_id=agendamento_id,
+                    agendamento_item_id=agendamento_item_id,
+                    empresa_id=empresa_id,
+                    colaborador_contrato_id=getattr(item, 'profissional_id', None),
+                    data_hora_inicio_real=item.data_hora_inicio_real or agora_sp,
+                    data_hora_fim_real=agora_sp,
+                    data_hora_encerramento=agora_sp,
+                    valor_total=valor_item,
+                    valor_final_cobrado=valor_item
+                )
+                db.session.add(encerramento)
 
-        agendamento_totalmente_concluido = (itens_pendentes_totais == 0)
+            # 3. Checagem de itens pendentes no Agendamento Pai
+            itens_pendentes_totais = AghAgendamentoItem.query.filter(
+                AghAgendamentoItem.agendamento_id == agendamento_id,
+                db.func.lower(AghAgendamentoItem.status_item) != 'concluido'
+            ).count()
 
-        if agendamento_totalmente_concluido:
-            agendamento = AghAgendamento.query.get(agendamento_id)
-            if agendamento:
-                agendamento.status = 'finalizado'
+            agendamento_totalmente_concluido = (itens_pendentes_totais == 0)
 
-        db.session.commit()
+            # Se TODOS os itens do agendamento foram concluídos, atualiza o status pai
+            if agendamento_totalmente_concluido:
+                agendamento = AghAgendamento.query.get(agendamento_id)
+                if agendamento:
+                    agendamento.status = 'concluido'  # Pronto para 'Liquidar Comanda' / Financeiro
 
-        return {
-            'sucesso': True,
-            'mensagem': 'Serviço concluído com sucesso!',
-            'comanda_pronta': agendamento_totalmente_concluido,
-            'agendamento_id': agendamento_id
-        }, 200
+            db.session.commit()
+
+            return {
+                'sucesso': True,
+                'mensagem': 'Serviço concluído com sucesso!',
+                'comanda_pronta': agendamento_totalmente_concluido,
+                'agendamento_id': agendamento_id
+            }, 200
+
+        except Exception as e:
+            db.session.rollback()
+            return {'sucesso': False, 'mensagem': f'Erro ao encerrar serviço: {str(e)}'}, 500
 
 
 class AghSolicitacaoReagendamento(db.Model):

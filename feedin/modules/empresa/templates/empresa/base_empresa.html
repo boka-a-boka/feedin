@@ -68,7 +68,7 @@
             <div class="text-center mb-4">
                 <div class="d-inline-flex p-3 bg-white text-biz-primary rounded-4 shadow-sm border mb-2">
                     {% if empresa and empresa.logomarca %}
-                        <img src="{{ media_url('empresa', empresa.logomarca) }}"
+                        <img src="/media/empresas/{{ ese_empresa.id }}/branding/{{ ese_empresa.logo }}" alt="Logo" style="max-height: 40px;">
                              alt="Logo {{ empresa.nome }}"
                              class="rounded-3"
                              style="width: 50px; height: 50px; object-fit: contain;">

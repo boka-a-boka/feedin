@@ -373,6 +373,14 @@
         </div>
     </div>
 
+    <!-- Adicione um input hidden no topo da página ou dentro do form principal -->
+<input type="hidden" id="empresa_id" value="{{ empresa.id if empresa is defined else empresa_id }}">
+
+<script>
+    // Injeta a variável no escopo global window para acesso irrestrito do JS
+    window.EMPRESA_ID = "{{ empresa.id if empresa is defined else empresa_id }}";
+</script>
+
     <div id="conteudo-grade-atendimentos" class="position-relative min-vh-25">
         <div class="lista-agendamentos-container">
 
@@ -481,75 +489,131 @@
                                 </div>
 
                                 <div class="flex-grow-1 overflow-hidden">
-                                    <div class="mb-1">
+                                    {# 🟢 CORREÇÃO: Acesso direto por notação de ponto e fallback seguro #}
+                                    {% set foto_prof = slot.foto_profissional or slot.profissional_foto or None %}
+                                    <div class="mb-1 d-flex align-items-center gap-2">
+                                        {% if foto_prof and foto_prof != 'None' %}
+                                            <img src="{{ foto_prof }}"
+                                                 alt="{{ nome_prof }}"
+                                                 class="rounded-circle object-fit-cover border shadow-sm flex-shrink-0"
+                                                 style="width: 28px; height: 28px;"
+                                                 onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+                                            <div class="rounded-circle bg-primary text-white d-none align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                                 style="width: 28px; height: 28px; font-size: 0.7rem;">
+                                                {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
+                                            </div>
+                                        {% else %}
+                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                                 style="width: 28px; height: 28px; font-size: 0.7rem;">
+                                                {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
+                                            </div>
+                                        {% endif %}
+
                                         <h5 class="fw-bold text-dark m-0 text-truncate" style="font-size: 1.15rem; line-height: 1.2;" title="{{ nome_prof }}">
-                                            <i class="bi bi-person-badge-fill text-primary me-1.5"></i>{{ nome_prof }}
+                                            {{ nome_prof }}
                                         </h5>
                                     </div>
 
-                                    <div class="d-flex align-items-center gap-2 my-1">
-                                        <div class="position-relative flex-shrink-0" style="width: 38px; height: 38px;">
-                                            {% if slot.get('tem_beneficiario') %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 border-primary d-flex align-items-center justify-content-center text-primary shadow-sm"
-                                                     title="Beneficiário: {{ slot.get('nome_beneficiario') }}">
-                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ slot.get('nome_beneficiario') }}" onerror="this.style.display='none';">
-                                                    {% else %}
-                                                        {% set tp = slot.get('tipo_persona', 'humano') %}
-                                                        {% if tp == 'pet' %}
-                                                            <i class="bi bi-paw-fill fs-5"></i>
-                                                        {% elif tp == 'veiculo' %}
-                                                            <i class="bi bi-car-front-fill fs-5"></i>
+                                    <!-- Container do Card de Agendamento com os dados preenchidos e higienizados -->
+                                    <div class="card-agendamento-principal card p-2 mb-2 shadow-sm user-select-none"
+                                         style="cursor: pointer;"
+                                         title="Clique duas vezes para ver a ficha do atendido/cliente"
+                                         data-tem-beneficiario="{{ 'true' if slot.tem_beneficiario else 'false' }}"
+                                         data-atendido-nome="{{ (slot.nome_beneficiario if slot.tem_beneficiario else nome_cliente) | e }}"
+                                         data-atendido-foto="{{ url_foto_atendido if (url_foto_atendido and url_foto_atendido != 'None') else '' }}"
+                                         data-atendido-tipo="{{ slot.tipo_persona or 'humano' }}"
+                                         data-titular-nome="{{ nome_cliente | e }}"
+                                         data-titular-foto="{{ url_foto_titular if (url_foto_titular and url_foto_titular != 'None') else '' }}"
+                                         data-cliente-inicial="{{ inicial_cliente }}">
+
+                                        <!-- Bloco de Avatar e Nome do Atendido / Responsável -->
+                                        <div class="d-flex align-items-center gap-2 my-1">
+                                            <div class="position-relative flex-shrink-0" style="width: 38px; height: 38px;">
+                                                {% if slot.tem_beneficiario %}
+                                                    <!-- Avatar do Beneficiário (Pessoa, PET ou Veículo) -->
+                                                    <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 border-primary d-flex align-items-center justify-content-center text-primary shadow-sm"
+                                                         title="Beneficiário: {{ slot.nome_beneficiario | e }}">
+                                                        {% set tp = slot.tipo_persona or 'humano' %}
+                                                        {% if url_foto_atendido and url_foto_atendido != 'None' %}
+                                                            <img src="{{ url_foto_atendido }}"
+                                                                 class="w-100 h-100 object-fit-cover"
+                                                                 alt="{{ slot.nome_beneficiario | e }}"
+                                                                 onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+
+                                                            <!-- Fallback caso a foto falhe (inicia oculto via style inline) -->
+                                                            <div class="align-items-center justify-content-center w-100 h-100" style="display: none;">
+                                                                {% if tp == 'pet' %}
+                                                                    <i class="bi bi-paw-fill fs-5"></i>
+                                                                {% elif tp == 'veiculo' %}
+                                                                    <i class="bi bi-car-front-fill fs-5"></i>
+                                                                {% else %}
+                                                                    <i class="bi bi-person-fill fs-5"></i>
+                                                                {% endif %}
+                                                            </div>
                                                         {% else %}
-                                                            <i class="bi bi-person-fill fs-5"></i>
+                                                            {% if tp == 'pet' %}
+                                                                <i class="bi bi-paw-fill fs-5"></i>
+                                                            {% elif tp == 'veiculo' %}
+                                                                <i class="bi bi-car-front-fill fs-5"></i>
+                                                            {% else %}
+                                                                <i class="bi bi-person-fill fs-5"></i>
+                                                            {% endif %}
                                                         {% endif %}
-                                                    {% endif %}
-                                                </div>
+                                                    </div>
 
-                                                <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden"
-                                                     style="width: 16px; height: 16px;" title="Responsável: {{ slot.get('cliente_nome') }}">
-                                                    {% if url_foto_titular and url_foto_titular != 'None' %}
-                                                        <img src="{{ url_foto_titular }}" class="w-100 h-100 object-fit-cover" onerror="this.style.display='none';">
-                                                    {% else %}
-                                                        <span class="text-white fw-bold d-flex align-items-center justify-content-center h-100" style="font-size: 0.5rem;">
-                                                            {{ inicial_cliente }}
-                                                        </span>
-                                                    {% endif %}
-                                                </div>
-                                            {% else %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
-                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
-                                                        <span class="fw-bold text-primary fs-6 d-none">{{ inicial_cliente }}</span>
-                                                    {% else %}
-                                                        <span class="fw-bold text-primary fs-6">
-                                                            {{ inicial_cliente }}
-                                                        </span>
-                                                    {% endif %}
-                                                </div>
-                                            {% endif %}
-                                        </div>
+                                                    <!-- Badge Miniatura do Responsável Titular -->
+                                                    <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden d-flex align-items-center justify-content-center"
+                                                         style="width: 16px; height: 16px;" title="Responsável: {{ nome_cliente | e }}">
+                                                        {% if url_foto_titular and url_foto_titular != 'None' %}
+                                                            <img src="{{ url_foto_titular }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente | e }}"
+                                                                 onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
+                                                            <span class="text-white fw-bold d-none" style="font-size: 0.5rem;">
+                                                                {{ inicial_cliente }}
+                                                            </span>
+                                                        {% else %}
+                                                            <span class="text-white fw-bold" style="font-size: 0.5rem;">
+                                                                {{ inicial_cliente }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% else %}
+                                                    <!-- Avatar Direto do Cliente Titular -->
+                                                    <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
+                                                        {% if url_foto_atendido and url_foto_atendido != 'None' %}
+                                                            <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente | e }}"
+                                                                 onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
+                                                            <span class="fw-bold text-primary fs-6 d-none">{{ inicial_cliente }}</span>
+                                                        {% else %}
+                                                            <span class="fw-bold text-primary fs-6">
+                                                                {{ inicial_cliente }}
+                                                            </span>
+                                                        {% endif %}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
 
-                                        <div class="text-secondary fw-semibold text-truncate lh-sm" style="font-size: 0.85rem;">
-                                            {% if slot.get('tem_beneficiario') %}
-                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
-                                                    {{ slot.get('nome_beneficiario') }}
-                                                </div>
-                                                <div class="text-muted text-truncate" style="font-size: 0.75rem;">
-                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span>
-                                                </div>
-                                            {% else %}
-                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
-                                                    {{ nome_cliente }}
-                                                </div>
-                                            {% endif %}
+                                            <!-- Informações de Nome -->
+                                            <div class="text-secondary fw-semibold text-truncate lh-sm" style="font-size: 0.85rem;">
+                                                {% if slot.tem_beneficiario %}
+                                                    <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                        {{ slot.nome_beneficiario }}
+                                                    </div>
+                                                    <div class="text-muted text-truncate" style="font-size: 0.75rem;">
+                                                        Resp: <span class="fw-semibold">{{ nome_cliente }}</span>
+                                                    </div>
+                                                {% else %}
+                                                    <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                        {{ nome_cliente }}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
                                         </div>
                                     </div>
 
                                     {# LISTA DE ITENS DO AGENDAMENTO #}
                                     <div class="mt-2 pt-2 border-top">
-                                        {% if slot.get('itens') %}
-                                            {% for item in slot.get('itens') %}
+                                        {% if slot.itens %}
+                                            {% for item in slot.itens %}
                                                 {% set st_item = item.status_item or item.status or 'agendado' %}
                                                 {% set item_nome_txt = item.servico.nome if item.servico else (item.nome_servico or 'Serviço') %}
                                                 <div class="card mb-2 border-start border-4
@@ -599,86 +663,98 @@
                                 </div>
                             </div>
 
-                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ENCERRAR TAREFA PENDENTE OU LIQUIDAR COMANDA #}
-                            {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                            {# ========================================================================= #}
+                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ATENDIMENTO (CORRIGIDA)                  #}
+                            {# ========================================================================= #}
+                            {% if status_slug in ['agendado', 'confirmado', 'em_atendimento', 'em_andamento', 'em_atendimento_parcial'] %}
                                 <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
                                     <small class="text-primary fw-bold">
                                         <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                     </small>
 
-                                    {# Obtém a lista de itens diretamente a partir das chaves do 'slot' #}
-                                    {% set itens_lista = slot.get('itens', []) %}
+                                    <div class="d-flex align-items-center gap-1">
+                                        {% set itens_lista = slot.get('itens', []) or [] %}
 
-                                    {# Filtragem de itens pendentes do agendamento #}
-                                    {% set itens_pendentes = [] %}
-                                    {% for it in itens_lista %}
-                                        {% set st = (it.get('status_item') or it.get('status') or 'pendente') | lower %}
-                                        {% if st not in ['concluido', 'concluído', 'cancelado'] %}
-                                            {% set _ = itens_pendentes.append(it) %}
-                                        {% endif %}
-                                    {% endfor %}
+                                        {# Filtragem segura de itens pendentes #}
+                                        {% set itens_pendentes = [] %}
+                                        {% for it in itens_lista %}
+                                            {% set st = (it.get('status_item') or it.get('status') or 'pendente') | string | lower | trim %}
+                                            {% if st not in ['concluido', 'concluído', 'cancelado', 'finalizado'] %}
+                                                {% set _ = itens_pendentes.append(it) %}
+                                            {% endif %}
+                                        {% endfor %}
 
-                                    {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
+                                        {% set hora_inicio_valor = slot.data_inicio_real_fmt or slot.hora_inicio_real or slot.hora_inicio or '' %}
+                                        {% set id_empresa_ctx = empresa.id if (empresa is defined and empresa.id) else (empresa_id if empresa_id is defined else session.get('empresa_id', 2)) %}
 
-                                    {# CENÁRIO 1: Todos os serviços executados -> Liquidar Comanda / Caixa #}
-                                    {% if itens_pendentes | length == 0 %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-receipt me-1"></i> Liquidar Comanda
-                                        </button>
+                                        {% if itens_pendentes | length > 0 %}
+                                            {# Busca do item correspondente ao utilizador com verificação de tipo de dados #}
+                                            {% set ns_item = namespace(meu_item=none) %}
+                                            {% for it in itens_pendentes %}
+                                                {% if ns_item.meu_item is none and (it.get('profissional_id')|string == current_user.id|string) %}
+                                                    {% set ns_item.meu_item = it %}
+                                                {% endif %}
+                                            {% endfor %}
 
-                                    {# CENÁRIO 2: Múltiplos Profissionais pendentes -> Concluir tarefa do profissional atual #}
-                                    {% elif profs_unicos | length > 1 %}
-                                        {% set meu_item = (itens_pendentes | selectattr('profissional_id', 'eq', current_user.id) | first) or (itens_pendentes | first) %}
-                                        {% set item_id_target = meu_item.get('id') or meu_item.get('item_id') if meu_item else '' %}
-                                        {% set servico_nome_target = (meu_item.get('servico', {}).get('nome') if meu_item.get('servico') else meu_item.get('nome_servico')) or '' %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ nome_cliente | e }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target or 'Serviço' }}
-                                        </button>
+                                            {% set meu_item = ns_item.meu_item or (itens_pendentes | first) %}
+                                            {% set item_id_target = meu_item.get('id') or meu_item.get('item_id') or meu_item.get('agendamento_item_id') or '' %}
+                                            {% set servico_nome_target = (meu_item.get('servico', {}).get('nome') if meu_item.get('servico') else meu_item.get('nome_servico')) or 'Serviço' %}
+                                            {% set prof_id_target = meu_item.get('profissional_id') or slot.profissional_id or current_user.id %}
 
-                                    {# CENÁRIO 3: Profissional Único / Serviço Pendente -> Encerrar Atendimento Direto #}
-                                    {% else %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-check2-square me-1"></i> Encerrar Atendimento
-                                        </button>
-                                    {% endif %}
-
-                                </div>
-                            {% endif %}
-                            {# PAINEL DE AÇÕES REVELADO POR DUPLO CLIQUE #}
-                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
-                                {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <small class="text-primary fw-bold">
-                                            <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
-                                        </small>
-
-                                        {% set item_id_target = slot.get('item_id') or slot.get('id') or '' %}
-                                        {% set agend_id_target = slot.get('agendamento_id') or agend_id %}
-                                        {% set servico_nome_target = slot.get('servico_nome') or 'Serviço' %}
-                                        {% set cliente_nome_target = slot.get('cliente_nome') or nome_cliente or '' %}
-                                        {% set valor_target = slot.get('valor_formatado') or valor_total_fmt or '0,00' %}
-                                        {% set st_item = (slot.get('status_slug') or slot.get('status') or '') | lower %}
-
-                                        {% if st_item not in ['concluido', 'concluído', 'cancelado', 'finalizado'] %}
                                             <button type="button"
                                                     class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_target }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ cliente_nome_target | e }}')">
-                                                <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target }}
+                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ nome_cliente | e }}', '{{ hora_inicio_valor }}', '{{ prof_id_target }}', '{{ id_empresa_ctx }}')">
+                                                <i class="bi bi-check2-square me-1"></i> Concluir {{ servico_nome_target }}
                                             </button>
                                         {% else %}
                                             <button type="button"
                                                     class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                    onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id_target }}', '{{ valor_target | e }}')">
-                                                <i class="bi bi-receipt me-1"></i> Liquidar Comanda
+                                                    onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
+                                                <i class="bi bi-receipt me-1"></i> Fechar Comanda / Caixa
+                                            </button>
+                                        {% endif %}
+
+                                        {% if current_user.is_admin or session.get('user_role') == 'admin' %}
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-warning rounded-circle ms-1"
+                                                    title="Encerramento de Emergência / Liquidar Comanda"
+                                                    onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
+                                                <i class="bi bi-exclamation-triangle-fill"></i>
                                             </button>
                                         {% endif %}
                                     </div>
+                                </div>
+                            {% endif %}
+
+                            {# PAINEL DE AÇÕES REVELADO POR DUPLO CLIQUE #}
+                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
+
+                                {# Resgate unificado das variáveis do item/slot com fallback seguro #}
+                                {% set item_id_target = slot.get('item_id') or slot.get('id') or '' %}
+                                {% set agend_id_target = slot.get('agendamento_id') or agend_id %}
+                                {% set servico_nome_target = slot.get('servico_nome') or slot.get('nome_servico') or 'Serviço' %}
+                                {% set cliente_nome_target = slot.get('cliente_nome') or nome_cliente or '' %}
+                                {% set st_item = (slot.get('status_item') or slot.get('status_slug') or status_slug or '') | lower %}
+                                {% set id_empresa_contexto = empresa.id if (empresa is defined and empresa.id) else (empresa_id if empresa_id is defined else session.get('empresa_id', 2)) %}
+                                {% set prof_id_contexto = slot.get('profissional_id') or current_user.id %}
+                                {% set hora_inicio_contexto = slot.data_inicio_real_fmt or slot.hora_inicio_real or slot.hora_inicio or '' %}
+
+                                {# 1. INICIAR ATENDIMENTO (Item pendente ou não iniciado) #}
+                                {% if st_item not in ['em_atendimento', 'em_andamento', 'concluido', 'concluído', 'finalizado', 'cancelado'] %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                            onclick="event.stopPropagation(); acaoIniciarAtendimento('{{ agend_id_target }}', '{{ id_empresa_contexto }}', '{{ item_id_target }}')">
+                                        <i class="bi bi-play-fill me-1"></i> Iniciar Atendimento
+                                    </button>
+                                {% endif %}
+
+                                {# 2. CONCLUIR SERVIÇO (Permite concluir sem exigir prévia alteração de status) #}
+                                {% if st_item not in ['concluido', 'concluído', 'cancelado', 'finalizado'] %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-info text-white rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                            onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_target }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ cliente_nome_target | e }}', '{{ hora_inicio_contexto }}', '{{ prof_id_contexto }}', '{{ id_empresa_contexto }}')">
+                                        <i class="bi bi-check2-circle me-1"></i> Concluir {{ servico_nome_target }}
+                                    </button>
                                 {% endif %}
 
                                 <button type="button" class="btn btn-sm btn-light border rounded-circle p-1 ms-1" title="Fechar Painel"
@@ -723,7 +799,9 @@
     </div>
 </div>
 
-{# MODAL DE DETALHES DO CLIENTE #}
+{# ========================================================================= #}
+{# 1. MODAL DE DETALHES DO CLIENTE / AGENDAMENTO                             #}
+{# ========================================================================= #}
 <div class="modal fade" id="modalDetalhesClienteEmpresa" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 shadow">
@@ -734,9 +812,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-3">
-                <!-- Adicionar logo após a abertura do modal-body -->
-                <input type="hidden" id="modal-finalizar-agendamento-id">
-                <input type="hidden" id="modal-finalizar-avaliacao" value="5">
+                <input type="hidden" id="modal-detalhes-agendamento-id">
 
                 <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
                     <div style="width: 50px; height: 50px; min-width: 50px; min-height: 50px;" class="position-relative flex-shrink-0">
@@ -754,16 +830,37 @@
                         </div>
                     </div>
 
-                    <div>
-                        <h5 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Cliente</h5>
-                        <small class="text-muted" id="modalClienteEmpresaTelefone"><i class="bi bi-whatsapp text-success me-1"></i>--</small>
-                    </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <!-- Container da foto / Avatar -->
+                            <div id="modalClienteEmpresaFotoContainer" class="flex-shrink-0">
+                                <!-- Exemplo renderizado via JS/Jinja: -->
+                                <img id="modalClienteEmpresaFoto"
+                                     src=""
+                                     alt="Foto do Cliente"
+                                     class="rounded-circle object-fit-cover d-none"
+                                     style="width: 42px; height: 42px;">
+
+                                <!-- Placeholder para quando não houver foto -->
+                                <div id="modalClienteEmpresaAvatar"
+                                     class="rounded-circle bg-light text-secondary border d-flex align-items-center justify-content-center fw-bold"
+                                     style="width: 42px; height: 42px; font-size: 0.95rem;">
+                                    <i class="bi bi-person-fill fs-5"></i>
+                                </div>
+                            </div>
+
+                            <!-- Informações do Cliente -->
+                            <div>
+                                <h5 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Cliente</h5>
+                                <small class="text-muted" id="modalClienteEmpresaTelefone"><i class="bi bi-whatsapp text-success me-1"></i>--</small>
+                            </div>
+                        </div>
                 </div>
 
+                <!-- HORÁRIO PREVISTO E VALOR TOTAL -->
                 <div class="row g-2 mb-3">
                     <div class="col-6">
                         <div class="p-2 bg-light rounded-3 border">
-                            <small class="text-muted d-block">Horário</small>
+                            <small class="text-muted d-block">Horário Previsto</small>
                             <span class="fw-bold text-dark" id="modalClienteEmpresaHora">--:--</span>
                         </div>
                     </div>
@@ -775,15 +872,39 @@
                     </div>
                 </div>
 
+                <!-- INÍCIO REAL E FIM REAL (SOMENTE LEITURA / CAPTURADOS DO SISTEMA) -->
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block">Início Real</small>
+                            <input type="text"
+                                   id="modalClienteEmpresaInicioReal"
+                                   class="form-control form-control-sm bg-white border-0 fw-bold text-dark p-0"
+                                   value="--:--"
+                                   readonly>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block">Fim Real</small>
+                            <input type="text"
+                                   id="modalClienteEmpresaFimReal"
+                                   class="form-control form-control-sm bg-white border-0 fw-bold text-dark p-0"
+                                   value="--:--"
+                                   readonly>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-3">
-                    <label class="fw-semibold text-muted small d-block mb-1">Serviço Solicitado</label>
+                    <label class="fw-semibold text-muted small d-block mb-1">Serviço(s) Solicitado(s)</label>
                     <div class="p-2 bg-light rounded-3 border text-dark fw-medium" id="modalClienteEmpresaServico">
                         --
                     </div>
                 </div>
 
                 <div>
-                    <label class="fw-semibold text-muted small d-block mb-1">Observações</label>
+                    <label class="fw-semibold text-muted small d-block mb-1">Observações do Agendamento</label>
                     <div class="p-2 bg-light rounded-3 border text-secondary small" id="modalClienteEmpresaObs">
                         Nenhuma observação.
                     </div>
@@ -796,7 +917,9 @@
     </div>
 </div>
 
-{# MODAL DE REORGANIZAÇÃO DE COMANDA #}
+{# ========================================================================= #}
+{# 2. MODAL DE REORGANIZAÇÃO DE COMANDA                                       #}
+{# ========================================================================= #}
 <div class="modal fade" id="modalReorganizarComanda" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 rounded-4 shadow">
@@ -831,7 +954,9 @@
     </div>
 </div>
 
-{# MODAL DE CONFIRMAÇÃO DE PRESENÇA EM ATRASO #}
+{# ========================================================================= #}
+{# 3. MODAL DE CONFIRMAÇÃO DE PRESENÇA EM ATRASO                             #}
+{# ========================================================================= #}
 <div class="modal fade" id="modalConfirmarPresenca" tabindex="-1" aria-hidden="true">
     <input type="hidden" id="modal-atraso-agendamento-id" value="">
     <div class="modal-dialog modal-dialog-centered">
@@ -862,7 +987,9 @@
     </div>
 </div>
 
-<!-- MODAL PARA FINALIZAR ITEM DE SERVIÇO -->
+{# ========================================================================= #}
+{# 4. MODAL OPERACIONAL DE FINALIZAR SERVIÇO DO PROFISSIONAL                 #}
+{# ========================================================================= #}
 <div class="modal fade" id="modalFinalizarItem" tabindex="-1" aria-labelledby="modalFinalizarItemLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 rounded-4 shadow">
@@ -877,33 +1004,38 @@
         <div class="modal-body">
           <input type="hidden" id="modal_agendamento_id" name="agendamento_id" value="">
           <input type="hidden" id="modal_item_id" name="item_id" value="">
+          <input type="hidden" id="modal_profissional_id" name="profissional_id" value="">
+          <input type="hidden" id="modal_empresa_id" name="empresa_id" value="">
 
           <div class="alert alert-light border mb-3">
             <strong id="modal_servico_nome" class="d-block text-primary fs-6">Nome do Serviço</strong>
             <small class="text-muted" id="modal_cliente_nome">Cliente: ---</small>
           </div>
 
-          <!-- Horários Automatizados e Somente Leitura -->
-          <div class="row g-2 mb-3">
-            <div class="col-6">
-              <label for="hora_inicio_real" class="form-label small fw-bold">Início Real</label>
-              <div class="input-group">
-                <span class="input-group-text bg-light"><i class="bi bi-play-circle"></i></span>
-                <input type="time" class="form-control bg-light" id="hora_inicio_real" name="hora_inicio_real" readonly tabindex="-1">
-              </div>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label small text-muted">Início Real</label>
+                    <input type="text"
+                           id="modal_inicio_real"
+                           name="hora_inicio_real"
+                           class="form-control form-control-sm bg-light"
+                           value="--:--"
+                           readonly>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small text-muted">Fim Real</label>
+                    <input type="text"
+                           id="modal_fim_real"
+                           name="hora_fim_real"
+                           class="form-control form-control-sm bg-light"
+                           value="--:--"
+                           readonly>
+                </div>
             </div>
-            <div class="col-6">
-              <label for="hora_fim_real" class="form-label small fw-bold">Fim Real</label>
-              <div class="input-group">
-                <span class="input-group-text bg-light"><i class="bi bi-stop-circle"></i></span>
-                <input type="time" class="form-control bg-light" id="hora_fim_real" name="hora_fim_real" readonly tabindex="-1">
-              </div>
-            </div>
-          </div>
 
           <div class="mb-3">
             <label for="modal_item_observacao" class="form-label small fw-bold">Observações / Anotações do Atendimento</label>
-            <textarea class="form-control" id="modal_item_observacao" name="observacoes_tecnicas" rows="2" placeholder="Ex: Produto X utilizado, observações do cliente..."></textarea>
+            <textarea class="form-control" id="modal_item_observacao" name="observacao_item" rows="2" placeholder="Ex: Produto X utilizado, observações do cliente..."></textarea>
           </div>
 
           <div id="bloco_avaliacao_cliente" class="border-top pt-3 mt-3">
@@ -930,7 +1062,7 @@
         <div class="modal-footer bg-light">
           <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
           <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold">
-            <i class="bi bi-check-lg me-1"></i>Confirmar Conclusão
+            <i class="bi bi-check-lg me-1"></i>Confirmar Conclusão do Serviço
           </button>
         </div>
       </form>
@@ -938,7 +1070,9 @@
   </div>
 </div>
 
-{# MODAL DE FECHAMENTO FINANCEIRO DE COMANDA #}
+{# ========================================================================= #}
+{# 5. MODAL DE FECHAMENTO FINANCEIRO / LIQUIDAÇÃO DE COMANDA                 #}
+{# ========================================================================= #}
 <div class="modal fade" id="modalFinalizarAtendimento" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 rounded-4 shadow">
@@ -954,7 +1088,7 @@
                 <div class="alert alert-light border rounded-3 mb-3 p-3 small">
                     <div class="d-flex justify-content-between mb-1">
                         <span class="text-muted">Status dos Serviços:</span>
-                        <span class="badge bg-success-subtle text-success fw-bold">Todos Concluídos</span>
+                        <span class="badge bg-success-subtle text-success fw-bold">Pronto para Recebimento</span>
                     </div>
                     <div class="d-flex justify-content-between">
                         <span class="text-muted">Total Previsto dos Itens:</span>
@@ -987,20 +1121,98 @@
                               placeholder="Descontos aplicados, acréscimos ou detalhes do acerto..."></textarea>
                 </div>
             </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Manter Aberto</button>
-                <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold" onclick="confirmarEGravarEncerramento()">
-                    <i class="bi bi-wallet2 me-1"></i>Liquidar Comanda
+            <div class="modal-footer border-0 pt-0 d-flex justify-content-between gap-2">
+                <button type="button"
+                        class="btn btn-secondary rounded-pill px-3"
+                        data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+
+                <button type="button"
+                        class="btn btn-success rounded-pill px-4 fw-bold"
+                        onclick="confirmarEGravarEncerramento()">
+                    <i class="bi bi-check-lg me-1"></i>Confirmar Fechamento
                 </button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Modal Ficha do Cliente / Beneficiário -->
+<div class="modal fade" id="modalInfoCliente" tabindex="-1" aria-labelledby="modalInfoClienteLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom bg-light">
+                <h5 class="modal-title fw-bold text-dark fs-6" id="modalInfoClienteLabel">
+                    <i class="bi bi-person-vcard me-2 text-primary"></i>Ficha do Atendimento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+
+                <!-- ÁREA DAS FOTOS DO ATENDIDO E DO RESPONSÁVEL -->
+                <div class="text-center mb-3">
+                    <div class="position-relative d-inline-block mb-2">
+                        <!-- Container Foto Atendido -->
+                        <div class="rounded-circle overflow-hidden border border-2 border-primary shadow-sm mx-auto bg-light d-flex align-items-center justify-content-center text-primary"
+                             style="width: 80px; height: 80px;">
+                            <img id="infoAtendidoFoto" src="" class="w-100 h-100 object-fit-cover d-none" alt="Atendido"
+                                 onerror="this.classList.add('d-none'); document.getElementById('infoAtendidoIcone').classList.remove('d-none');">
+
+                            <div id="infoAtendidoIcone" class="d-flex align-items-center justify-content-center">
+                                <i id="infoAtendidoIconeBi" class="bi bi-person-fill fs-2"></i>
+                                <span id="infoAtendidoInicial" class="fw-bold fs-3 d-none">C</span>
+                            </div>
+                        </div>
+
+                        <!-- Miniatura do Titular Responsável (Exibido apenas se tiver Beneficiário) -->
+                        <div id="containerTitularBadge"
+                             class="position-absolute bottom-0 end-0 rounded-circle border border-2 border-white shadow bg-secondary overflow-hidden d-none"
+                             style="width: 28px; height: 28px;" title="Responsável Titular">
+                            <img id="infoTitularFoto" src="" class="w-100 h-100 object-fit-cover d-none"
+                                 onerror="this.classList.add('d-none'); document.getElementById('infoTitularInicial').classList.remove('d-none');">
+                            <span id="infoTitularInicial" class="text-white fw-bold d-flex align-items-center justify-content-center h-100" style="font-size: 0.65rem;">
+                                T
+                            </span>
+                        </div>
+                    </div>
+
+                    <h5 id="infoAtendidoNome" class="fw-bold mb-0 text-dark">Nome do Atendido</h5>
+                    <p id="infoTitularSubtitulo" class="text-muted small mb-0">Cliente Registrado</p>
+                </div>
+
+                <hr class="my-3 opacity-10">
+
+                <!-- Estrutura para os campos futuros -->
+                <div class="row g-2 text-center small mb-3">
+                    <div class="col-4 border-end">
+                        <div class="fw-bold text-dark" id="infoClienteAvaliacao">--</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Avaliação</div>
+                    </div>
+                    <div class="col-4 border-end">
+                        <div class="fw-bold text-dark" id="infoClienteUltimaVisita">--/--/----</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Última Visita</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="fw-bold text-dark" id="infoClienteTotalAgendamentos">0</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Atendimentos</div>
+                    </div>
+                </div>
+
+                <div class="bg-light p-3 rounded-3 border">
+                    <h6 class="fw-bold text-dark small mb-1"><i class="bi bi-chat-left-text text-primary me-1"></i>Observações:</h6>
+                    <p id="infoClienteObs" class="text-muted small mb-0 fst-italic">Sem observações cadastradas.</p>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-// =========================================================================
-// 1. UTILITÁRIOS E ESTADO GLOBAL
-// =========================================================================
+// 1. DECLARAÇÕES E ESTADO GLOBAL
 let filtroStatusAtual = 'todos';
 
 function getCsrfToken() {
@@ -1009,131 +1221,59 @@ function getCsrfToken() {
         || '';
 }
 
-// =========================================================================
-// 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
-// =========================================================================
+// 2. MODAIS E AÇÕES GLOBAIS
+window.abrirModalFinalizarItem = function(agendamentoId, itemId, nomeServico, nomeCliente) {
+    const inputAgendamento = document.getElementById('modal_agendamento_id');
+    const inputItem = document.getElementById('modal_item_id');
+    const spanServico = document.getElementById('modal_servico_nome');
+    const spanCliente = document.getElementById('modal_cliente_nome');
 
-// Prepara e abre o modal de conclusão de um item/serviço individual (AghAgendamentoItem)
-window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome, clienteNome) {
-    // Alimenta o formulário com os IDs nativos do seu HTML
-    if (document.getElementById('modal_agendamento_id')) {
-        document.getElementById('modal_agendamento_id').value = agendamentoId;
-    }
-    if (document.getElementById('modal_item_id')) {
-        document.getElementById('modal_item_id').value = itemId;
-    }
-    if (document.getElementById('modal_servico_nome')) {
-        document.getElementById('modal_servico_nome').textContent = servicoNome || 'Serviço';
-    }
-    if (document.getElementById('modal_cliente_nome')) {
-        document.getElementById('modal_cliente_nome').textContent = 'Cliente: ' + (clienteNome || '---');
-    }
+    if (inputAgendamento) inputAgendamento.value = agendamentoId || '';
+    if (inputItem) inputItem.value = itemId || '';
+    if (spanServico) spanServico.textContent = nomeServico || 'Serviço';
+    if (spanCliente) spanCliente.textContent = nomeCliente ? `Cliente: ${nomeCliente}` : 'Cliente: ---';
 
-    // Dispara a exibição do modal nativo do Bootstrap
-    const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
-                 || document.getElementById('modalFinalizarItem');
+    const modalEl = document.getElementById('modalFinalizarItem');
     if (modalEl && typeof bootstrap !== 'undefined') {
-        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modalInstance.show();
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
 };
 
-window.abrirModalFinalizarItem = window.prepararModalFinalizarItem;
-
-// Redireciona a ação do card direto para a abertura da Comanda/Caixa
 window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
-    if (!valorTotal || valorTotal === 'None') {
+    if (!valorTotal) {
+        // Fallback: Busca o card do agendamento no DOM e extrai a tag 'data-valor'
         const cardEl = document.querySelector(`.item-agendamento[data-id="${agendamentoId}"]`);
         valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0,00';
     }
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+
+    abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
 window.prepararEAbrirModalCaixa = function(agendamentoId, cardEl) {
     const valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0.00';
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+    abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
-window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
-};
+// GATILHO INICIAL: Clicar no botão da grade para encerrar o item
+function aoClicarEncerrarTarefa(event, elemento) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 
-// PASSO 1 & 2: Confirma e Grava os Dados do Item e a Avaliação do Colaborador
-window.confirmarEGravarEncerramentoItem = function() {
-    const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
-    const itemId = document.getElementById('modal_item_id')?.value;
-    const observacao = document.getElementById('modal_item_observacao')?.value || '';
-    const avaliacao = document.getElementById('modal_item_avaliacao')?.value || 5;
-    const comentario = document.getElementById('comentario_avaliacao_cliente')?.value || '';
+    const btn = elemento ? (elemento.closest('button') || elemento) : null;
+    if (!btn) return;
 
-    if (!agendamentoId) {
-        alert("ID do agendamento não informado.");
+    const agendamentoId = btn.dataset.agendamentoId || btn.getAttribute('data-agendamento-id');
+    const itemId = btn.dataset.itemId || btn.getAttribute('data-item-id');
+
+    if (!agendamentoId || !itemId) {
+        alert("Parâmetros agendamento-id ou item-id ausentes no botão.");
         return;
     }
 
-    // Requisição AJAX enviando os dados e o Token CSRF obrigatório
-    fetch('/agenda/api/agendamento/concluir-item', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            item_id: itemId ? parseInt(itemId) : null,
-            observacao: observacao,
-            avaliacao: parseInt(avaliacao),
-            comentario_avaliacao: comentario
-        })
-    })
-    .then(async (res) => {
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            const textHTML = await res.text();
-            console.error("Resposta HTML inesperada do servidor:", textHTML);
-            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
-        }
-        return res.json();
-    })
-.then(data => {
-        if (!data.sucesso && !data.success) {
-            alert(data.mensagem || "Erro ao concluir serviço.");
-            return;
-        }
-
-        // Oculta o modal do item/avaliação
-        const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
-                     || document.getElementById('modalFinalizarItem');
-        if (modalEl && typeof bootstrap !== 'undefined') {
-            const modalInstance = bootstrap.Modal.getInstance(modalEl);
-            if (modalInstance) modalInstance.hide();
-        }
-
-        // Só abre a comanda (Passo 3) se TODOS os itens do agendamento estiverem concluídos
-        if (data.comanda_pronta || data.exibir_comanda) {
-            if (window.abrirModalFechamentoComanda) {
-                window.abrirModalFechamentoComanda(agendamentoId, data.valor_total || '0,00');
-            }
-        } else {
-            // Se ainda existem outros serviços/profissionais pendentes
-            window.location.reload();
-        }
-    })
-    .catch(err => {
-        console.error("Erro ao encerrar serviço:", err);
-        alert(err.message || "Ocorreu um erro ao processar a conclusão.");
-    });
-};
-
-// Ação de conclusão direta de tarefa/serviço
-window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
-    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
-        alert("Erro: Parâmetros do agendamento ou do item ausentes.");
-        return;
-    }
-
-    fetch("{{ url_for('agenda.concluir_item_agendamento') }}", {
+    // Chama a rota intermediária para carregar os dados e marcar início/fim real
+    fetch("{{ url_for('agenda.encerrar_clique') }}", {
         method: 'POST',
         headers: {
             'Accept': 'application/json',
@@ -1141,166 +1281,9 @@ window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
             'X-CSRFToken': getCsrfToken()
         },
         body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            item_id: parseInt(itemId)
+            agendamento_id: parseInt(agendamentoId, 10),
+            item_id: parseInt(itemId, 10)
         })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso || data.success) {
-            if (data.comanda_pronta || data.exibir_comanda) {
-                window.abrirModalFechamentoComanda(data.agendamento_id, data.valor_total);
-            } else {
-                window.location.reload();
-            }
-        } else {
-            alert(data.mensagem || 'Erro ao concluir tarefa.');
-        }
-    })
-    .catch(error => {
-        console.error('Erro na requisição:', error);
-        alert('Ocorreu um erro ao processar a solicitação.');
-    });
-};
-
-// PASSO 3: Abertura do Modal Financeiro (Comanda / Caixa)
-window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00', avaliacao = 5, observacao = '') {
-    const inputId = document.getElementById('modal-finalizar-agendamento-id');
-    const inputValor = document.getElementById('modal-finalizar-valor');
-    const elResumo = document.getElementById('modal-resumo-valor-previsto');
-    const inputAvaliacao = document.getElementById('modal-finalizar-avaliacao');
-    const inputObs = document.getElementById('modal-finalizar-observacao');
-
-    if (inputId) inputId.value = agendamentoId;
-    if (inputAvaliacao) inputAvaliacao.value = avaliacao;
-    if (inputObs && observacao && !inputObs.value) inputObs.value = observacao;
-
-    let valorNum = 0.0;
-
-    if (typeof valorSugerido === 'number') {
-        valorNum = valorSugerido;
-    } else if (valorSugerido) {
-        let strLimpa = String(valorSugerido)
-            .replace("R$", "")
-            .replace(/\s/g, "")
-            .trim();
-
-        if (strLimpa.includes(',')) {
-            strLimpa = strLimpa.replace(/\./g, "").replace(",", ".");
-        }
-
-        valorNum = parseFloat(strLimpa);
-    }
-
-    if (isNaN(valorNum)) valorNum = 0.0;
-
-    const valorFormatado = valorNum.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-
-    if (inputValor) inputValor.value = valorFormatado;
-    if (elResumo) elResumo.innerText = `R$ ${valorFormatado}`;
-
-    const modalCaixaEl = document.getElementById('modalFinalizarAtendimento');
-    if (modalCaixaEl && typeof bootstrap !== 'undefined') {
-        if (document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur();
-        }
-        bootstrap.Modal.getOrCreateInstance(modalCaixaEl).show();
-    }
-};
-
-// PASSO 3 (Liquidação Final): Grava o Pagamento Financeiro em AghAgendamento e AghAgendamentoEncerramento
-window.confirmarEGravarEncerramento = function() {
-    const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
-    const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
-    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value || 'PIX';
-    const observacao = document.getElementById('modal-finalizar-observacao')?.value || '';
-    const avaliacao = document.getElementById('modal-finalizar-avaliacao')?.value || 5;
-
-    if (!agendamentoId) {
-        alert("ID do agendamento não informado.");
-        return;
-    }
-
-    let valorTratado = valorInput.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-    let valorFinal = parseFloat(valorTratado);
-    if (isNaN(valorFinal)) valorFinal = 0.0;
-
-    // Envia tudo para o backend encerrar financeiramente a comanda
-    fetch('/agenda/api/agendamento/encerrar-clique', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            valor_final: valorFinal,
-            forma_pagamento: formaPagamento,
-            observacao: observacao,
-            avaliacao: parseInt(avaliacao)
-        })
-    })
-    .then(async (res) => {
-        const contentType = res.headers.get("content-type");
-
-        if (!contentType || !contentType.includes("application/json")) {
-            const textHTML = await res.text();
-            console.error("Resposta HTML inesperada do servidor:", textHTML);
-            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
-        }
-
-        return res.json();
-    })
-    .then(data => {
-        if (data.sucesso || data.success || data.status === 'success') {
-            window.location.reload();
-        } else {
-            alert(data.mensagem || "Erro ao encerrar comanda.");
-        }
-    })
-    .catch(err => {
-        console.error("Erro no encerramento:", err);
-        alert(err.message || "Falha na comunicação com o servidor.");
-    });
-};
-
-window.reabrirItemServico = function(agendamentoId, itemId) {
-    if (!confirm("Deseja reabrir este serviço para alteração?")) return;
-
-    const empresaId = "{{ empresa.id if empresa is defined and empresa else '' }}";
-    fetch(`/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/itens/${itemId}/reabrir`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCsrfToken()
-        }
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso || data.success) location.reload();
-        else alert(data.mensagem || 'Erro ao reabrir item.');
-    })
-    .catch(err => console.error('Erro na reabertura do item:', err));
-};
-
-window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
-    if (!agendamentoId || !empresaId) {
-        alert("Erro de parâmetros: ID do agendamento ou da empresa ausentes.");
-        return;
-    }
-
-    const idLimpo = String(agendamentoId).split('_')[0];
-
-    fetch(`/agenda/empresa/${empresaId}/agendamentos/${idLimpo}/iniciar`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': getCsrfToken()
-        }
     })
     .then(async response => {
         const isJson = response.headers.get('content-type')?.includes('application/json');
@@ -1312,16 +1295,208 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
         return data;
     })
     .then(data => {
-        if (data && (data.sucesso || data.success)) {
+        if (!data.sucesso) {
+            alert(data.mensagem || "Erro ao iniciar encerramento do serviço.");
+            return;
+        }
+
+        // Popula os dados no modal de avaliação/obs e o exibe para o colaborador
+        popularModalFinalizar(data);
+    })
+    .catch(error => {
+        console.error("[CLIENTE] Erro no encerramento:", error);
+        alert(`Falha ao processar requisição: ${error.message}`);
+    });
+}
+
+// PREENCHIMENTO DO MODAL DE AVALIAÇÃO / OBSERVAÇÕES
+function popularModalFinalizar(dados) {
+    if (!dados) return;
+
+    // Preenche os inputs ocultos e labels do modal
+    const elAgendamento = document.getElementById('modal_agendamento_id');
+    const elItem = document.getElementById('modal_item_id');
+    const elServico = document.getElementById('modal_servico_nome');
+    const elCliente = document.getElementById('modal_cliente_nome');
+
+    if (elAgendamento) elAgendamento.value = dados.agendamento_id || '';
+    if (elItem) elItem.value = dados.item_id || '';
+    if (elServico) elServico.textContent = dados.servico_nome || 'Serviço';
+    if (elCliente) elCliente.textContent = 'Cliente: ' + (dados.cliente_nome || '---');
+
+    const elInicio = document.getElementById('hora_inicio_real');
+    const elFim = document.getElementById('hora_fim_real');
+
+    if (elInicio && dados.hora_inicio_real) {
+        elInicio.value = String(dados.hora_inicio_real).substring(0, 5);
+    }
+    if (elFim && dados.hora_fim_real) {
+        elFim.value = String(dados.hora_fim_real).substring(0, 5);
+    }
+
+    if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+    }
+
+    // Exibe o Modal
+    const modalElement = document.getElementById('modalFinalizarItem');
+    if (modalElement && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
+    }
+}
+
+window.abrirModalAtendimento = function(agendamentoId, empresaId, itemId) {
+    // Se não houver modal, redireciona para a ação de início:
+    acaoIniciarAtendimento(agendamentoId, empresaId, itemId);
+};
+
+// CONFIRMAÇÃO COM CONVERSÃO FLOAT E ENVIO PARA ROTA UNIFICADA
+window.confirmarEGravarEncerramento = function() {
+    const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
+    const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
+    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value;
+    const observacao = document.getElementById('modal-finalizar-observacao')?.value;
+
+    if (!agendamentoId) {
+        alert("ID do agendamento não informado.");
+        return;
+    }
+
+    let valorTratado = valorInput.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+    let valorFinal = parseFloat(valorTratado);
+    if (isNaN(valorFinal)) valorFinal = 0.0;
+
+    const payload = {
+        agendamento_id: parseInt(agendamentoId, 10),
+        valor_total: valorFinal,
+        valor_final_cobrado: valorFinal,
+        forma_pagamento: formaPagamento,
+        observacao: observacao
+    };
+
+    fetch('/agenda/api/agendamento/concluir-processo', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso || data.success) {
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
             window.location.reload();
         } else {
-            alert(data?.mensagem || 'Não foi possível iniciar o atendimento.');
+            alert(data.mensagem || data.message || 'Erro ao liquidar comanda.');
         }
     })
-    .catch(err => {
-        console.error('Erro ao iniciar atendimento:', err);
-        alert(`Erro ao iniciar atendimento: ${err.message}`);
+    .catch(error => {
+        console.error('Erro na requisição:', error);
+        alert('Falha ao processar liquidação.');
     });
+};
+
+window.reabrirItemServico = function(agendamentoId, itemId) {
+    if (!confirm("Deseja reabrir este serviço para alteração?")) return;
+
+    const empresaId = "{{ empresa.id }}";
+    fetch(`/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/itens/${itemId}/reabrir`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken()
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) location.reload();
+        else alert(data.mensagem || 'Erro ao reabrir item.');
+    })
+    .catch(err => console.error('Erro na reabertura do item:', err));
+};
+
+function acaoIniciarAtendimento(agendamentoId, empresaId, itemId) {
+    // 🟢 1. Tratamento para extrair apenas o ID numérico do agendamento caso venha no formato "1_1"
+    let agendIdPuro = agendamentoId;
+    if (typeof agendamentoId === 'string' && agendamentoId.includes('_')) {
+        const partes = agendamentoId.split('_');
+        agendIdPuro = partes[0]; // Pega apenas a primeira parte ("1")
+        if (!itemId && partes[1]) {
+            itemId = partes[1]; // Pega o item_id da segunda parte caso não tenha vindo separado
+        }
+    }
+
+    // 🟢 2. Fallback para empresaId se estiver undefined/vazio
+    let empresaIdPura = empresaId;
+    if (!empresaIdPura || empresaIdPura === 'undefined') {
+        // Tenta recuperar de um input hidden ou atributo global da página
+        empresaIdPura = document.getElementById('empresa_id')?.value
+                     || document.body.dataset.empresaId
+                     || window.EMPRESA_ID;
+    }
+
+    if (!empresaIdPura || empresaIdPura === 'undefined') {
+        alert('Erro: ID da empresa não foi identificado.');
+        return;
+    }
+
+    // 🟢 3. Sanitização estrita do itemId no JS e montagem do Payload
+    const payload = {};
+    if (itemId !== undefined && itemId !== null && itemId !== '' && !isNaN(itemId)) {
+        payload.agendamento_item_id = parseInt(itemId, 10);
+    } else {
+        console.warn("[JS DEBUG] itemId inválido ou não informado:", itemId);
+    }
+
+    console.log("[JS DEBUG] Payload enviado:", JSON.stringify(payload));
+
+    // 🟢 4. Monta a URL sanitizada (ex: /agenda/empresa/2/agendamentos/1/iniciar)
+    const url = `/agenda/empresa/${empresaIdPura}/agendamentos/${agendIdPuro}/iniciar`;
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCsrfToken()  // 🟢 AJUSTE PONTUAL: Inclusão do token CSRF exigido pelo Flask
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async response => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok) {
+            // 🟢 Exibe a mensagem exata de erro retornada pelo Flask
+            const errorMsg = (data && (data.mensagem || data.error))
+                || `Erro HTTP ${response.status}: Falha no processamento da requisição.`;
+            throw new Error(errorMsg);
+        }
+        return data;
+    })
+    .then(data => {
+        if (data && (data.status === 'success' || data.sucesso)) {
+            if (typeof recarregarAgenda === 'function') {
+                recarregarAgenda();
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert(data.mensagem || 'Erro ao iniciar o atendimento.');
+        }
+    })
+    .catch(error => {
+        console.error('Erro no processamento:', error);
+        alert(error.message || 'Erro de comunicação com o servidor.');
+    });
+}
+
+// Retrocompatibilidade se houver elementos antigos chamando abrirModalAtendimento no onclick
+window.abrirModalAtendimento = function(agendamentoId, empresaId, itemId) {
+    acaoIniciarAtendimento(agendamentoId, empresaId, itemId);
 };
 
 window.gerenciarAcoesSlot = function(elemento) {
@@ -1425,7 +1600,7 @@ window.filtrarGrade = function(status) {
         cardAtivo.classList.add('active');
         cardAtivo.style.opacity = '1';
     }
-    window.aplicarFiltrosGlobais();
+    aplicarFiltrosGlobais();
 };
 
 window.abrirModalReorganizarComanda = function(agendamentoId) {
@@ -1453,11 +1628,43 @@ window.abrirModalAtrasoPresenca = function(agendamentoId, nomeCliente) {
     }
 };
 
-// =========================================================================
-// 3. INICIALIZAÇÃO E EVENTOS DOM
-// =========================================================================
+function acaoConcluirTarefaDireta(agendamentoId, itemId, empresaId) {
+    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
+        alert("Erro no frontend: O ID do item ou do agendamento não foi encontrado no card.");
+        return;
+    }
+
+    fetch('/agenda/api/agendamento/concluir-processo', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify({
+            agendamento_id: parseInt(agendamentoId, 10),
+            agendamento_item_id: parseInt(itemId, 10),
+            empresa_id: parseInt(empresaId, 10)
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso || data.success) {
+            if (data.comanda_pronta) {
+                const valorCalculado = data.valor_total || data.valor || '0.00';
+                acaoFinalizarAtendimento(agendamentoId, valorCalculado);
+            } else {
+                location.reload();
+            }
+        } else {
+            alert(data.mensagem || data.message || 'Erro ao concluir tarefa.');
+        }
+    })
+    .catch(err => console.error('Erro na requisição:', err));
+}
+
+// 3. INICIALIZAÇÃO
 document.addEventListener('DOMContentLoaded', () => {
-    window.aplicarFiltrosGlobais();
+    aplicarFiltrosGlobais();
 
     const cards = document.querySelectorAll('.item-agendamento');
     cards.forEach(card => {
@@ -1465,7 +1672,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.addEventListener('dblclick', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            window.gerenciarAcoesSlot(this);
+            gerenciarAcoesSlot(this);
         });
     });
 
@@ -1484,5 +1691,320 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+/**
+ * 🟢 Prepara o Modal de Encerramento do Item / Atendimento
+ * Suporta a assinatura de 7 parâmetros emitida pelo Jinja2 no Dashboard
+ */
+/**
+ * 1. CONCLUIR ITEM / SERVIÇO INDIVIDUAL (#modalFinalizarItem)
+ * Chamada pelo onclick do botão "Concluir <Serviço>" no Jinja
+ */
+window.prepararModalFinalizarItem = function(
+    agendamentoId,
+    itemId,
+    servicoNome = '',
+    clienteNome = '',
+    horaInicioReal = '',
+    profissionalId = '',
+    empresaId = ''
+) {
+    console.log("[JS DEBUG] Abrindo Modal de Conclusão do Item:", {
+        agendamentoId, itemId, servicoNome, clienteNome, horaInicioReal, profissionalId, empresaId
+    });
+
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || '';
+    };
+
+    // Preenche IDs nos hidden inputs do #modalFinalizarItem
+    setVal('modal_agendamento_id', agendamentoId);
+    setVal('modal_item_id', itemId);
+    setVal('modal_profissional_id', profissionalId);
+    setVal('modal_empresa_id', empresaId);
+
+    // Atualiza labels e dados visuais
+    const elServico = document.getElementById('modal_servico_nome');
+    const elCliente = document.getElementById('modal_cliente_nome');
+    const elInicio = document.getElementById('modal_inicio_real');
+    const elFim = document.getElementById('modal_fim_real');
+
+    if (elServico) elServico.textContent = servicoNome || 'Conclusão de Serviço';
+    if (elCliente) elCliente.textContent = clienteNome ? `Cliente: ${clienteNome}` : 'Cliente: ---';
+    if (elInicio) elInicio.value = horaInicioReal || '--:--';
+
+    // Sugere o horário atual para Fim Real
+    if (elFim) {
+        const agora = new Date();
+        const hh = String(agora.getHours()).padStart(2, '0');
+        const mm = String(agora.getMinutes()).padStart(2, '0');
+        elFim.value = `${hh}:${mm}`;
+    }
+
+    // Limpa observação anterior
+    setVal('modal_item_observacao', '');
+    setVal('comentario_avaliacao_cliente', '');
+
+    // Abre o modal operacional
+    const modalEl = document.getElementById('modalFinalizarItem');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
+
+/**
+ * 2. SUBMETER CONCLUSÃO DO ITEM (#modalFinalizarItem)
+ * Disparado pelo submit do formulário formFinalizarItem
+ */
+window.confirmarEGravarEncerramentoItem = function() {
+    // 1. Recupera os IDs com fallbacks para evitar envio de null
+    const agendamentoId = document.getElementById('modal_agendamento_id')?.value ||
+                          document.getElementById('card_agendamento_id')?.value;
+
+    const itemId = document.getElementById('modal_item_id')?.value ||
+                   document.getElementById('card_item_id')?.value;
+
+    if (!agendamentoId) {
+        alert("Atenção: O ID do agendamento não foi informado.");
+        return;
+    }
+
+    // 2. Prepara o payload
+    const payload = {
+        agendamento_id: parseInt(agendamentoId, 10),
+        agendamento_item_id: itemId ? parseInt(itemId, 10) : null,
+        observacao_item: document.getElementById('modal_item_observacao')?.value || '',
+        nota_avaliacao_cliente: document.getElementById('modal_item_avaliacao')?.value || null
+    };
+
+    // 3. ROTA CORRETA: /agenda/api/agendamento/concluir-item
+    const url = '/agenda/api/agendamento/concluir-item';
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async response => {
+        // Trata respostas não-JSON (como páginas de erro 404/500 em HTML)
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            throw new Error(`Erro no servidor (${response.status}). Rota não encontrada ou erro interno.`);
+        }
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.mensagem || `Erro HTTP ${response.status}`);
+        }
+        return data;
+    })
+    .then(data => {
+        if (data.sucesso) {
+            // Esconde o modal de item
+            const modalEl = document.getElementById('modalFinalizarItem');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const bsModal = bootstrap.Modal.getInstance(modalEl);
+                if (bsModal) bsModal.hide();
+            }
+
+            // Se for o último item do agendamento, abre direto a comanda/caixa
+            if (data.comanda_pronta || data.comanda_concluida || data.sem_pendencias) {
+                if (typeof abrirModalEncerramentoComanda === 'function') {
+                    abrirModalEncerramentoComanda(data.agendamento_id, data.valor_total_fmt || data.valor_total);
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                // Ainda há itens pendentes, recarrega a grade
+                if (typeof recarregarAgenda === 'function') {
+                    recarregarAgenda();
+                } else {
+                    window.location.reload();
+                }
+            }
+        } else {
+            alert(data.mensagem || "Não foi possível concluir o item.");
+        }
+    })
+    .catch(err => {
+        console.error("[JS ERROR] Falha na conclusão:", err);
+        alert(err.message || "Falha de comunicação com o servidor.");
+    });
+};
+
+/**
+ * 3. ABRIR FECHAMENTO FINANCEIRO / LIQUIDAÇÃO DE COMANDA (#modalFinalizarAtendimento ou #modalEncerrarAtendimento)
+ * Mantida para compatibilidade de botões que usam data-attributes ou a ação de emergência/admin
+ */
+window.abrirModalEncerramento = function(element) {
+    if (!element) return;
+
+    // Se for passado um ID direto de agendamento em vez de elemento HTML (compatibilidade)
+    if (typeof element === 'string' || typeof element === 'number') {
+        const inputAgendamento = document.getElementById('modal-finalizar-agendamento-id') || document.getElementById('encerrar_agendamento_id');
+        if (inputAgendamento) inputAgendamento.value = element;
+
+        const modalEl = document.getElementById('modalFinalizarAtendimento') || document.getElementById('modalEncerrarAtendimento');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+        return;
+    }
+
+    const btn = element.closest('button') || element;
+    const agendamentoId = btn.dataset.agendamentoId || btn.dataset.itemId || btn.getAttribute('data-agendamento-id');
+    const empresaId = btn.dataset.empresaId || btn.getAttribute('data-empresa-id');
+
+    if (!agendamentoId) {
+        alert("Parâmetros agendamento-id ausentes no botão.");
+        return;
+    }
+
+    const inputAgendamento = document.getElementById('encerrar_agendamento_id') || document.getElementById('modal-finalizar-agendamento-id');
+    if (inputAgendamento) {
+        inputAgendamento.value = agendamentoId;
+    }
+
+    const formEncerrar = document.getElementById('form-encerrar-atendimento');
+    if (formEncerrar) {
+        formEncerrar.action = `/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/encerrar`;
+    }
+
+    const modalEl = document.getElementById('modalEncerrarAtendimento') || document.getElementById('modalFinalizarAtendimento');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
+
+// Aliases para os nomes chamados pelo Jinja do modal financeiro/exceção:
+window.abrirModalEncerramentoComanda = window.abrirModalEncerramento;
+
+// MODAL DE INFORMAÇÕES DO CLIENTE / BENEFICIÁRIO
+const modalCliente = document.getElementById('modalInfoCliente');
+if (modalCliente) {
+    modalCliente.addEventListener('show.bs.modal', function (event) {
+        const card = event.relatedTarget;
+        if (!card) return;
+
+        const temBeneficiario = card.getAttribute('data-tem-beneficiario') === 'true';
+        const atendidoNome = card.getAttribute('data-atendido-nome') || 'Cliente';
+        const atendidoFoto = card.getAttribute('data-atendido-foto') || '';
+        const atendidoTipo = card.getAttribute('data-atendido-tipo') || 'humano';
+
+        const titularNome = card.getAttribute('data-titular-nome') || 'Titular';
+        const titularFoto = card.getAttribute('data-titular-foto') || '';
+        const clienteInicial = card.getAttribute('data-cliente-inicial') || atendidoNome.charAt(0).toUpperCase();
+
+        // Nome principal e subtítulo
+        document.getElementById('infoAtendidoNome').textContent = atendidoNome;
+        const subEl = document.getElementById('infoTitularSubtitulo');
+
+        if (temBeneficiario) {
+            subEl.textContent = `Resp: ${titularNome}`;
+        } else {
+            subEl.textContent = 'Cliente Titular';
+        }
+
+        // Elementos de Mídia do Atendido
+        const imgAtendido = document.getElementById('infoAtendidoFoto');
+        const iconeBi = document.getElementById('infoAtendidoIconeBi');
+        const spanInicial = document.getElementById('infoAtendidoInicial');
+
+        // Reset
+        imgAtendido.classList.add('d-none');
+        iconeBi.className = 'bi fs-2';
+        spanInicial.classList.add('d-none');
+
+        if (atendidoFoto && atendidoFoto.trim() !== '' && atendidoFoto !== 'None') {
+            imgAtendido.src = atendidoFoto;
+            imgAtendido.classList.remove('d-none');
+        } else {
+            if (atendidoTipo === 'pet') {
+                iconeBi.classList.add('bi-paw-fill');
+            } else if (atendidoTipo === 'veiculo') {
+                iconeBi.classList.add('bi-car-front-fill');
+            } else {
+                spanInicial.textContent = clienteInicial;
+                spanInicial.classList.remove('d-none');
+            }
+        }
+
+        // Elementos do Badge Titular (Quando houver beneficiário)
+        const containerBadge = document.getElementById('containerTitularBadge');
+        const imgTitular = document.getElementById('infoTitularFoto');
+        const spanTitularInicial = document.getElementById('infoTitularInicial');
+
+        if (temBeneficiario) {
+            containerBadge.classList.remove('d-none');
+            spanTitularInicial.textContent = clienteInicial;
+
+            if (titularFoto && titularFoto.trim() !== '' && titularFoto !== 'None') {
+                imgTitular.src = titularFoto;
+                imgTitular.classList.remove('d-none');
+                spanTitularInicial.classList.add('d-none');
+            } else {
+                imgTitular.src = '';
+                imgTitular.classList.add('d-none');
+                spanTitularInicial.classList.remove('d-none');
+            }
+        } else {
+            containerBadge.classList.add('d-none');
+        }
+    });
+}
+// 🟢 LISTENERS DE DUPLO CLIQUE (EVENT DELEGATION UNIFICADO)
+    document.addEventListener('dblclick', function(e) {
+
+        // 1. Se o clique foi no sub-card do SERVIÇO/COLABORADOR -> Abre Modal do Serviço
+        const cardServico = e.target.closest('.item-servico-card');
+        if (cardServico) {
+            e.preventDefault();
+            e.stopPropagation();
+            const modalServicoEl = document.getElementById('modalInfoAtendimento');
+            if (modalServicoEl && typeof bootstrap !== 'undefined') {
+                const bsModal = bootstrap.Modal.getOrCreateInstance(modalServicoEl);
+                bsModal.show(cardServico);
+            }
+            return;
+        }
+
+        // 2. Se o clique foi no CARD PRINCIPAL DO AGENDAMENTO -> Abre Modal do Cliente/Atendido
+        const cardAgendamento = e.target.closest('.card-agendamento-principal');
+        if (cardAgendamento) {
+            e.preventDefault();
+            const modalClienteEl = document.getElementById('modalInfoCliente');
+            if (modalClienteEl && typeof bootstrap !== 'undefined') {
+                const bsModal = bootstrap.Modal.getOrCreateInstance(modalClienteEl);
+                bsModal.show(cardAgendamento);
+            }
+        }
+    });
+
+function popularModalCliente(cliente) {
+    document.getElementById('modalClienteEmpresaNome').innerText = cliente.nome || 'Cliente sem nome';
+    document.getElementById('modalClienteEmpresaTelefone').innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${cliente.telefone || '--'}`;
+
+    const imgEl = document.getElementById('modalClienteEmpresaFoto');
+    const avatarEl = document.getElementById('modalClienteEmpresaAvatar');
+
+    if (cliente.foto_url) {
+        imgEl.src = cliente.foto_url;
+        imgEl.classList.remove('d-none');
+        avatarEl.classList.add('d-none');
+    } else {
+        imgEl.src = '';
+        imgEl.classList.add('d-none');
+
+        // Exibe as 2 primeiras letras do nome no avatar caso queira, ou mantém o ícone bi-person
+        const iniciais = (cliente.nome || 'C').trim().substring(0, 2).toUpperCase();
+        avatarEl.innerText = iniciais;
+        avatarEl.classList.remove('d-none');
+    }
+}
 </script>
 {% endblock %}

@@ -444,11 +444,11 @@
         {% endif %}
     </div>
 
-    {% if agendamentos %}
+    {% if agendamentos and agendamentos|length > 0 %}
     <div class="d-flex flex-column gap-2 pe-1" style="max-height: 420px; overflow-y: auto;">
         {% for item in agendamentos %}
         {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
-        {% set slug_empresa_destinataria = item.empresa.slug if item.empresa is defined and item.empresa and item.empresa.slug else 'geral' %}
+        {% set slug_empresa_destinataria = item.empresa.slug if (item.empresa is defined and item.empresa and item.empresa.slug) else 'geral' %}
         {% set itens_lista = item.itens if (item.itens is defined and item.itens) else [] %}
 
         {# 1. Configurações de Cancelamento #}
@@ -465,7 +465,7 @@
         <!-- CARD DO AGENDAMENTO CONSOLIDADO -->
         <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item">
 
-            {# Cabeçalho do Card: Empresa e Status Generalizado #}
+            {# Cabeçalho do Card #}
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
                     <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
@@ -500,151 +500,98 @@
                 {% endif %}
             </div>
 
-            {% if esta_atrasado and item.mensagem_atraso %}
-            <div class="alert alert-warning border-0 py-2 px-3 small d-flex align-items-center my-2 rounded-3" style="font-size: 0.75rem;">
-                <i class="bi bi-exclamation-triangle-fill text-warning-emphasis me-2 fs-6"></i>
-                <span class="text-dark-emphasis">{{ item.mensagem_atraso }}</span>
-            </div>
-            {% endif %}
-
             <hr class="my-2 text-black-50 opacity-10">
 
-            {# CONSOLIDAÇÃO DOS SERVIÇOS AGRUPADOS POR COLABORADOR #}
+            {# CONSOLIDAÇÃO DOS SERVIÇOS #}
             {% if itens_lista|length > 0 %}
             <div class="d-flex flex-column gap-2 my-2">
-                {% for colab_id, itens_colaborador in itens_lista | groupby('profissional_id') %}
-                {% set primeiro_sub_item = itens_colaborador[0] %}
-                {% set prof_obj = primeiro_sub_item.profissional if primeiro_sub_item.profissional else (item.profissional if item.profissional else None) %}
+                {% for srv_item in itens_lista %}
+{% set prof_obj = srv_item.profissional if (srv_item is defined and srv_item.profissional) else (item.profissional if item.profissional is defined else None) %}
+                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Profissional Integrante' %}
+                {% set especialidade_prof = prof_obj.especialidade if (prof_obj and prof_obj.especialidade) else 'Especialista' %}
+                {% set bio_prof = prof_obj.bio if (prof_obj and prof_obj.bio) else 'Sem biografia disponível.' %}
+                {% set nome_servico = srv_item.servico.nome if (srv_item.servico and srv_item.servico.nome) else (srv_item.nome_servico or 'Serviço') %}
+                {% set desc_servico = srv_item.servico.descricao if (srv_item.servico and srv_item.servico.descricao) else 'Serviço agendado.' %}
+                {% set valor_servico = srv_item.preco_unitario if (srv_item.preco_unitario is defined and srv_item.preco_unitario is not none) else (srv_item.valor or 0.0) %}
 
-                {# RESOLUÇÃO DEFENSIVA DA FOTO COM HELPER #}
-                {% set foto_prof_raw = None %}
-                {% if prof_obj %}
-                    {% if prof_obj.foto_url is defined and prof_obj.foto_url %}
-                        {% set foto_prof_raw = prof_obj.foto_url %}
-                    {% elif prof_obj.foto is defined and prof_obj.foto %}
-                        {% set foto_prof_raw = prof_obj.foto %}
-                    {% elif prof_obj.foto_profissional is defined and prof_obj.foto_profissional %}
-                        {% set foto_prof_raw = prof_obj.foto_profissional %}
-                    {% elif prof_obj.avatar is defined and prof_obj.avatar %}
-                        {% set foto_prof_raw = prof_obj.avatar %}
-                    {% elif prof_obj.usuario is defined and prof_obj.usuario %}
-                        {% if prof_obj.usuario.foto_url is defined and prof_obj.usuario.foto_url %}
-                            {% set foto_prof_raw = prof_obj.usuario.foto_url %}
-                        {% elif prof_obj.usuario.foto is defined and prof_obj.usuario.foto %}
-                            {% set foto_prof_raw = prof_obj.usuario.foto %}
-                        {% endif %}
+                {# 🟢 SANITIZAÇÃO DA URL DA FOTO DO PROFISSIONAL #}
+                {% set foto_raw = prof_obj.url_foto_perfil if (prof_obj and prof_obj.url_foto_perfil) else (prof_obj.foto_profissional if prof_obj else None) %}
+                {% set foto_prof_url = None %}
+                {% if foto_raw and foto_raw != 'None' %}
+                    {% if foto_raw.startswith('http') or foto_raw.startswith('/media/') %}
+                        {% set foto_prof_url = foto_raw %}
+                    {% elif foto_raw.startswith('/agenda/Uploads/') %}
+                        {% set foto_prof_url = foto_raw | replace('/agenda/Uploads/', '/media/empresa/Uploads/') %}
+                    {% elif foto_raw.startswith('Uploads/') %}
+                        {% set foto_prof_url = '/media/empresa/' ~ foto_raw %}
+                    {% else %}
+                        {% set foto_prof_url = foto_raw %}
                     {% endif %}
                 {% endif %}
 
-                {% set url_foto_prof = get_avatar_url(foto_prof_raw) if (foto_prof_raw and get_avatar_url is defined) else None %}
-                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Profissional Integrante' %}
-
-                <!-- Container do Colaborador com Disparo de Modal JS -->
-                <div class="bg-light p-2.5 rounded-3 border-start border-3 border-primary shadow-xs cursor-pointer hover-shadow transition mb-2"
-                     data-bs-toggle="modal"
-                     data-bs-target="#modalInfoAtendimento"
+                {# 🟢 CARD COM EVENTO DE DUPLO CLIQUE E DATA-ATTRIBUTES #}
+                <div class="item-servico-card bg-light p-2 rounded-3 border-start border-3 border-primary mb-1 user-select-none"
+                     style="cursor: pointer;"
+                     title="Clique duas vezes para ver detalhes do colaborador"
                      data-prof-nome="{{ nome_prof }}"
-                     data-prof-especialidade="{{ prof_obj.especialidade if (prof_obj and prof_obj.especialidade) else 'Profissional Integrante' }}"
-                     data-prof-bio="{{ prof_obj.biografia or prof_obj.bio if prof_obj else 'Profissional responsável pelo seu atendimento.' }}"
-                     data-prof-foto="{{ url_foto_prof or '' }}"
-                     data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Estabelecimento') }}"
-                     data-servico-nome="{% for s in itens_colaborador %}{{ s.servico.nome if (s.servico and s.servico.nome) else (s.nome_servico or 'Serviço') }}{% if not loop.last %}, {% endif %}{% endfor %}"
-                     data-servico-desc="Atendimento presencial agrupado para a região/colaborador selecionado."
+                     data-prof-especialidade="{{ especialidade_prof }}"
+                     data-prof-bio="{{ bio_prof }}"
+                     data-prof-foto="{{ foto_prof_url or '' }}"
+                     data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Empresa') }}"
+                     data-servico-nome="{{ nome_servico }}"
+                     data-servico-desc="{{ desc_servico }}"
                      data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
-                     data-valor="R$ {{ "%.2f"|format(itens_colaborador | sum(attribute='preco_unitario')) }}"
-                     style="cursor: pointer;">
+                     data-valor="R$ {{ '%.2f'|format(valor_servico) }}">
 
-                    {# Linha do Colaborador (Foto + Nome + Dica Modal JS) #}
-                    <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle">
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="position-relative flex-shrink-0" style="width: 32px; height: 32px;">
-                                {% if url_foto_prof %}
-                                <img src="{{ url_foto_prof }}"
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
+                            {% if foto_prof_url %}
+                                <img src="{{ foto_prof_url }}"
                                      alt="{{ nome_prof }}"
-                                     class="rounded-circle border object-fit-cover w-100 h-100 d-block"
-                                     onerror="this.onerror=null; this.classList.add('d-none'); this.nextElementSibling.classList.remove('d-none'); this.nextElementSibling.classList.add('d-flex');">
-                                {% endif %}
-                                <div class="rounded-circle bg-secondary text-white align-items-center justify-content-center fw-bold w-100 h-100 {% if url_foto_prof %}d-none{% else %}d-flex{% endif %}" style="font-size: 0.75rem;">
-                                    {{ (nome_prof or 'E')[0] | upper }}
+                                     class="rounded-circle object-fit-cover border shadow-sm flex-shrink-0"
+                                     style="width: 24px; height: 24px;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+                                <div class="rounded-circle bg-primary text-white d-none align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                     style="width: 24px; height: 24px; font-size: 0.65rem;">
+                                    {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
                                 </div>
-                            </div>
-                            <div>
-                                <span class="fw-bold text-dark d-block leading-tight" style="font-size: 0.82rem;">{{ nome_prof }}</span>
-                                <small class="text-primary d-block" style="font-size: 0.68rem;"><i class="bi bi-info-circle me-1"></i>Toque para ver ficha</small>
-                            </div>
+                            {% else %}
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                     style="width: 24px; height: 24px; font-size: 0.65rem;">
+                                    {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
+                                </div>
+                            {% endif %}
+
+                            <span class="fw-bold text-dark small text-truncate" style="font-size: 0.8rem;" title="{{ nome_prof }}">
+                                {{ nome_prof }}
+                            </span>
                         </div>
-                        <i class="bi bi-chevron-right text-muted fs-7"></i>
+
+                        <span class="fw-semibold text-dark small flex-shrink-0" style="font-size: 0.78rem;">
+                            R$ {{ "%.2f"|format(valor_servico) }}
+                        </span>
                     </div>
-
-                    {# LISTA DOS SERVIÇOS DO COLABORADOR COM HORÁRIO E VALOR #}
-                    <div class="d-flex flex-column gap-1 ms-1">
-                        {% for srv_item in itens_colaborador %}
-                        {% set nome_servico = srv_item.servico.nome if (srv_item.servico and srv_item.servico.nome) else (srv_item.nome_servico or 'Serviço') %}
-                        {% set valor_servico = srv_item.preco_unitario if (srv_item.preco_unitario is defined and srv_item.preco_unitario is not none) else (srv_item.valor or 0.0) %}
-                        {% set hora_inicio_servico = srv_item.data_hora_inicio if srv_item.data_hora_inicio is defined and srv_item.data_hora_inicio else item.data_hora_inicio %}
-
-                        <div class="d-flex justify-content-between align-items-center small" style="font-size: 0.75rem;">
-                            <div class="text-truncate me-2" style="max-width: 60%;">
-                                <i class="bi bi-dot text-primary me-1"></i>
-                                <span class="text-secondary">{{ nome_servico }}</span>
-                            </div>
-                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                <span class="badge bg-light text-dark border border-secondary-subtle px-1.5 py-0.5" style="font-size: 0.68rem;">
-                                    <i class="bi bi-clock me-1 text-muted"></i>{{ hora_inicio_servico.strftime('%H:%M') if hora_inicio_servico else '--:--' }}
-                                </span>
-                                <span class="fw-semibold text-dark">
-                                    R$ {{ "%.2f"|format(valor_servico) }}
-                                </span>
-                            </div>
-                        </div>
-                        {% endfor %}
+                    <div class="text-secondary small text-truncate" style="font-size: 0.75rem;">
+                        <i class="bi bi-dot text-primary me-1"></i>{{ nome_servico }}
                     </div>
                 </div>
                 {% endfor %}
             </div>
             {% endif %}
 
-            {# Rodapé do Card: Valor Total e Ações #}
+            {# Rodapé do Card #}
             <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
                 <div class="fw-bold text-dark small" style="font-size: 0.82rem;">
                     Total: R$ {{ "%.2f"|format(item.valor_total if item.valor_total is defined and item.valor_total is not none else (item.preco_cobrado or 0.0)) }}
                 </div>
 
-                {# AÇÕES DO CARD #}
                 <div class="d-flex align-items-center gap-1">
                     {% if item.id and item.status != 'cancelado' %}
                         <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}"
                            class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
-                           style="font-size: 0.73rem;"
-                           onclick="event.stopPropagation();">
+                           style="font-size: 0.73rem;">
                             <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
                         </a>
-
-                        {% if permite_cancelar %}
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 btn-modal-cancelar"
-                                    style="font-size: 0.73rem;"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#modalCancelarAgendamento"
-                                    data-agendamento-id="{{ item.id }}"
-                                    onclick="event.stopPropagation();">
-                                Cancelar
-                            </button>
-                        {% else %}
-                            <span class="d-inline-block"
-                                  tabindex="0"
-                                  data-bs-toggle="tooltip"
-                                  title="O prazo limite de antecedência para cancelamento autônomo ({{ (minutos_antecedencia / 60)|round(1) }}h antes) expirou. Entre em contato com o estabelecimento."
-                                  onclick="event.stopPropagation();">
-                                <button class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1" style="font-size: 0.73rem;" disabled>
-                                    Cancelar
-                                </button>
-                            </span>
-                        {% endif %}
-                    {% elif item.status == 'cancelado' %}
-                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill py-1 px-2" style="font-size: 0.68rem;">
-                            <i class="bi bi-slash-circle me-1"></i> Cancelado
-                        </span>
                     {% endif %}
                 </div>
             </div>
@@ -1175,7 +1122,6 @@ function exibirToast(titulo, mensagem, tipo = 'info') {
         const toastBody = toastEl.querySelector('.toast-body');
         if (toastBody) toastBody.innerText = mensagem;
 
-        // Ajusta classe temática se houver no elemento do toast
         toastEl.className = `toast align-items-center text-bg-${tipo} border-0`;
 
         const toast = bootstrap.Toast.getOrCreateInstance(toastEl);
@@ -1236,7 +1182,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             if (imgFoto && divFallback) {
-                if (profFoto && profFoto.trim() !== '') {
+                if (profFoto && profFoto.trim() !== '' && profFoto !== 'None') {
                     imgFoto.src = profFoto;
                     imgFoto.classList.remove('d-none');
                     divFallback.classList.add('d-none');
@@ -1256,7 +1202,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (modalCancelarEl) {
         const bsModal = bootstrap.Modal.getOrCreateInstance(modalCancelarEl);
 
-        // Captura o elemento que abriu o modal e popula o ID
         modalCancelarEl.addEventListener('show.bs.modal', function (event) {
             botaoDisparadorModal = event.relatedTarget;
             if (botaoDisparadorModal) {
@@ -1266,14 +1211,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Devolve o foco de maneira segura ao fechar
         modalCancelarEl.addEventListener('hidden.bs.modal', function () {
             if (botaoDisparadorModal && typeof botaoDisparadorModal.focus === 'function') {
                 setTimeout(() => botaoDisparadorModal.focus(), 50);
             }
         });
 
-        // Confirmar Cancelamento via AJAX
         const btnConfirmar = document.getElementById('btnConfirmarCancelamento');
         if (btnConfirmar) {
             btnConfirmar.addEventListener('click', function() {
@@ -1331,6 +1274,20 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+
+    // 🟢 4. ACIONAMENTO POR DUPLO CLIQUE NO CARD DO SERVIÇO/COLABORADOR
+    document.addEventListener('dblclick', function(e) {
+        const elementoAlvo = e.target.closest('.item-servico-card, .card-atendimento-item');
+        if (elementoAlvo) {
+            e.preventDefault();
+            const modalEl = document.getElementById('modalInfoAtendimento');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                bsModal.show(elementoAlvo);
+            }
+        }
+    });
+
 });
 </script>
 {% endblock %}

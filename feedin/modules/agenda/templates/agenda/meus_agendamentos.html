@@ -19,7 +19,7 @@
         <ul class="nav nav-pills nav-fill bg-white p-1 rounded-4 border shadow-sm mb-3" id="tabAgendamentos" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active rounded-3 fw-semibold py-2" id="proximos-tab" data-bs-toggle="tab" data-bs-target="#proximos" type="button" role="tab" style="font-size: 0.85rem;">
-                    Próximos ({{ proximos|length }})
+                    Próximos ({{ proximos|length if proximos else 0 }})
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -31,7 +31,7 @@
 
         {# CONTEÚDO DAS ABAS #}
         <div class="tab-content" id="tabAgendamentosContent">
-            
+
             {# 1. ABA PRÓXIMOS AGENDAMENTOS #}
             <div class="tab-pane fade show active" id="proximos" role="tabpanel">
                 {% if proximos %}
@@ -43,15 +43,15 @@
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
                                     <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill mb-1" style="font-size: 0.68rem;">
-                                        {{ agendamento.status | upper }}
+                                        {{ (agendamento.status if agendamento.status else 'AGENDADO') | upper }}
                                     </span>
                                     <h6 class="fw-bold text-dark m-0">
-                                        {{ agendamento.empresa.nome_fantasia if agendamento.empresa else 'Agendamento #' ~ agendamento.id }}
+                                        {{ agendamento.empresa.nome_fantasia if (agendamento.empresa and agendamento.empresa.nome_fantasia) else (agendamento.empresa.nome if agendamento.empresa else 'Agendamento #' ~ agendamento.id) }}
                                     </h6>
                                 </div>
                                 <div class="text-end">
                                     <span class="fw-bold text-dark fs-6 d-block">
-                                        R$ {{ "%.2f"|format(agendamento.valor_total if agendamento.valor_total is not none else 0.0) }}
+                                        R$ {{ "%.2f"|format(agendamento.valor_total if (agendamento.valor_total is defined and agendamento.valor_total is not none) else (agendamento.preco_cobrado or 0.0)) }}
                                     </span>
                                 </div>
                             </div>
@@ -60,84 +60,97 @@
                             <div class="bg-light p-2 rounded-3 mb-3 d-flex align-items-center justify-content-between" style="font-size: 0.82rem;">
                                 <div>
                                     <i class="bi bi-calendar3 me-1 text-primary"></i>
-                                    <strong>{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') }}</strong>
+                                    <strong>{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') if agendamento.data_hora_inicio else '--/--/----' }}</strong>
                                 </div>
                                 <div>
                                     <i class="bi bi-clock me-1 text-primary"></i>
-                                    <strong>{{ agendamento.data_hora_inicio.strftime('%H:%M') }} às {{ agendamento.data_hora_fim.strftime('%H:%M') }}</strong>
+                                    <strong>
+                                        {{ agendamento.data_hora_inicio.strftime('%H:%M') if agendamento.data_hora_inicio else '--:--' }}
+                                        às
+                                        {{ agendamento.data_hora_fim.strftime('%H:%M') if agendamento.data_hora_fim else '--:--' }}
+                                    </strong>
                                 </div>
                             </div>
 
-                            {# DETALHAMENTO CONSOLIDADO POR COLABORADOR COM FOTO #}
-                            {% set itens_lista = agendamento.itens if agendamento.itens else [] %}
-                            {% if itens_lista|length > 0 %}
-                                <div class="border-top pt-2 mb-3">
-                                    <span class="text-muted fw-bold d-block mb-2" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                                        EQUIPE &amp; SERVIÇOS
-                                    </span>
+{# DETALHAMENTO DOS COLABORADORES E SERVIÇOS #}
+{% set itens_lista = agendamento.itens if agendamento.itens else [] %}
+{% if itens_lista|length > 0 %}
+    <div class="border-top pt-2 mb-3">
+        <span class="text-muted fw-bold d-block mb-2" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+            EQUIPE &amp; SERVIÇOS
+        </span>
 
-                                    <div class="d-flex flex-column gap-2">
-                                        {# Agrupa a lista de itens pelo ID do colaborador contratado #}
-                                        {% for colab_id, itens_colaborador in itens_lista | groupby('profissional_id') %}
-                                            {% set primeiro_item = itens_colaborador[0] %}
-                                            {% set colaborador = primeiro_item.profissional_contrato %}
-                                            {% set nome_colaborador = colaborador.nome if colaborador else (agendamento.profissional.nome if agendamento.profissional else 'Profissional') %}
+        <div class="d-flex flex-column gap-2">
+            {% for item in itens_lista %}
+                {# 1. Resgata o contrato original (ColaboradorContrato) #}
+                {% set colaborador = item.profissional if item.profissional else item.profissional_contrato %}
 
-                                            {# Resgata a foto do perfil ou monta avatar com as iniciais como fallback #}
-                                            {% set foto_url = colaborador.foto_url if (colaborador and colaborador.foto_url) else None %}
+                {# 2. Resolução limpa e direta consumindo a @property da Model #}
+                {% set foto_caminho_prof = colaborador.url_foto_profissional if (colaborador and colaborador.url_foto_profissional) else None %}
+                {% set nome_colaborador = colaborador.nome if (colaborador and colaborador.nome) else 'Profissional' %}
 
-                                            <div class="bg-light p-2.5 rounded-3 border-start border-3 border-primary shadow-xs">
+                {# 3. Dados do serviço #}
+                {% set nome_servico = item.servico_oferecido.servico_taxonomia.nome if (item.servico_oferecido and item.servico_oferecido.servico_taxonomia) else (item.servico.nome if item.servico else (item.nome_servico or 'Serviço')) %}
+                {% set valor_servico = item.preco_unitario if (item.preco_unitario is defined and item.preco_unitario is not none) else (item.valor or 0.0) %}
 
-                                                {# Cabeçalho do Colaborador (Foto + Nome + Qtd Serviços) #}
-                                                <div class="d-flex align-items-center justify-content-between mb-2">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        {% if foto_url %}
-                                                            <img src="{{ foto_url }}" alt="{{ nome_colaborador }}" class="rounded-circle object-fit-cover border" style="width: 32px; height: 32px;">
-                                                        {% else %}
-                                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs" style="width: 32px; height: 32px; font-size: 0.75rem;">
-                                                                {{ nome_colaborador[:2] | upper }}
-                                                            </div>
-                                                        {% endif %}
-                                                        <div>
-                                                            <strong class="text-dark d-block lh-1" style="font-size: 0.85rem;">{{ nome_colaborador }}</strong>
-                                                            <span class="text-muted" style="font-size: 0.7rem;">Especialista</span>
-                                                        </div>
-                                                    </div>
-                                                    <span class="badge bg-white text-secondary border fw-normal" style="font-size: 0.68rem;">
-                                                        {{ itens_colaborador|length }} {{ 'serviço' if itens_colaborador|length == 1 else 'serviços' }}
-                                                    </span>
-                                                </div>
+                <div class="bg-light p-2.5 rounded-3 border-start border-3 border-primary shadow-xs mb-1">
 
-                                                {# Lista Interna de Serviços do Colaborador #}
-                                                <div class="ps-2 pe-1 d-flex flex-column gap-1 border-top pt-1.5" style="border-color: rgba(0,0,0,0.05) !important;">
-                                                    {% for item in itens_colaborador | sort(attribute='ordem_execucao') %}
-                                                        {% set nome_servico = item.servico_oferecido.servico_taxonomia.nome if (item.servico_oferecido and item.servico_oferecido.servico_taxonomia) else 'Serviço' %}
-                                                        <div class="d-flex justify-content-between align-items-center" style="font-size: 0.78rem;">
-                                                            <span class="text-secondary fw-medium">
-                                                                <i class="bi bi-chevron-right me-1 text-primary" style="font-size: 0.65rem;"></i>{{ nome_servico }}
-                                                            </span>
-                                                            <span class="badge bg-white text-dark border fw-normal" style="font-size: 0.7rem;">
-                                                                {{ item.data_hora_inicio.strftime('%H:%M') if item.data_hora_inicio else '' }} - {{ item.data_hora_fim.strftime('%H:%M') if item.data_hora_fim else '' }}
-                                                            </span>
-                                                        </div>
-                                                    {% endfor %}
-                                                </div>
-
-                                            </div>
-                                        {% endfor %}
-                                    </div>
+                    {# Cabeçalho do Colaborador (Foto + Nome + Cargo + Valor) #}
+                    <div class="d-flex align-items-center justify-content-between mb-1.5">
+                        <div class="d-flex align-items-center gap-2">
+                            {% if foto_caminho_prof %}
+                                {# Exibe a foto oficial do colaborador tratada e resolvida pelo backend #}
+                                <img src="{{ foto_caminho_prof }}"
+                                     alt="Foto de {{ nome_colaborador }}"
+                                     class="rounded-circle object-fit-cover border"
+                                     style="width: 32px; height: 32px;">
+                            {% else %}
+                                {# Fallback padronizado: Renderiza apenas a inicial quando foto_caminho_prof for None #}
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs"
+                                     style="width: 32px; height: 32px; font-size: 0.75rem;">
+                                    {{ nome_colaborador[0] | upper }}
                                 </div>
                             {% endif %}
+                            <div>
+                                <strong class="text-dark d-block lh-1" style="font-size: 0.85rem;">{{ nome_colaborador }}</strong>
+                                <span class="text-muted" style="font-size: 0.7rem;">
+                                    {{ colaborador.nome_cargo_formatado if colaborador else 'Especialista' }}
+                                </span>
+                            </div>
+                        </div>
+                        <span class="fw-semibold text-dark small" style="font-size: 0.78rem;">
+                            R$ {{ "%.2f"|format(valor_servico) }}
+                        </span>
+                    </div>
+
+                    {# Detalhe do Serviço #}
+                    <div class="ps-1 pe-1 d-flex justify-content-between align-items-center border-top pt-1.5" style="border-color: rgba(0,0,0,0.05) !important; font-size: 0.78rem;">
+                        <span class="text-secondary fw-medium">
+                            <i class="bi bi-chevron-right me-1 text-primary" style="font-size: 0.65rem;"></i>{{ nome_servico }}
+                        </span>
+                        {% if item.data_hora_inicio and item.data_hora_fim %}
+                            <span class="badge bg-white text-dark border fw-normal" style="font-size: 0.7rem;">
+                                {{ item.data_hora_inicio.strftime('%H:%M') }} - {{ item.data_hora_fim.strftime('%H:%M') }}
+                            </span>
+                        {% endif %}
+                    </div>
+
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
 
                             {# AÇÕES DO AGENDAMENTO #}
+                            {% set slug_empresa = agendamento.empresa.slug if (agendamento.empresa and agendamento.empresa.slug) else 'geral' %}
                             <div class="d-flex gap-2 border-top pt-2">
                                 {# Botão Reagendar #}
-                                <a href="{{ url_for('agenda.agendar', slug_empresa=agendamento.empresa.slug, reagendar_id=agendamento.id) }}"
+                                <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa, reagendar_id=agendamento.id) }}"
                                    class="btn btn-outline-primary btn-sm rounded-pill w-50 fw-semibold py-1.5" style="font-size: 0.78rem;">
                                     <i class="bi bi-arrow-repeat me-1"></i> Reagendar
                                 </a>
 
-                                {# Botão Cancelar (Chama a rota de cancelamento via AJAX ou Submit) #}
+                                {# Botão Cancelar #}
                                 <button type="button"
                                         class="btn btn-outline-danger btn-sm rounded-pill w-50 fw-semibold py-1.5"
                                         style="font-size: 0.78rem;"
@@ -170,15 +183,15 @@
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <div>
                                     <h6 class="fw-bold text-dark m-0" style="font-size: 0.88rem;">
-                                        {{ item.empresa.nome_fantasia if item.empresa else 'Agendamento #' ~ item.id }}
+                                        {{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Agendamento #' ~ item.id) }}
                                     </h6>
                                     <span class="text-muted d-block" style="font-size: 0.78rem;">
-                                        {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') }}
+                                        {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
                                     </span>
                                 </div>
                                 <div>
                                     <span class="badge {% if item.status == 'cancelado' %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-secondary{% endif %} rounded-pill" style="font-size: 0.7rem;">
-                                        {{ item.status | upper }}
+                                        {{ (item.status if item.status else 'ENCERRADO') | upper }}
                                     </span>
                                 </div>
                             </div>
@@ -188,9 +201,13 @@
                                     <span class="text-muted d-block mb-1" style="font-size: 0.72rem;">Serviços realizados:</span>
                                     <ul class="list-unstyled mb-0" style="font-size: 0.75rem;">
                                         {% for srv in item.itens %}
-                                            <li class="text-secondary">
-                                                • {{ srv.servico_oferecido.servico_taxonomia.nome if (srv.servico_oferecido and srv.servico_oferecido.servico_taxonomia) else 'Serviço' }}
-                                                <small class="text-muted">({{ srv.profissional_contrato.nome if srv.profissional_contrato else 'Especialista' }})</small>
+                                            {% set nome_srv_hist = srv.servico_oferecido.servico_taxonomia.nome if (srv.servico_oferecido and srv.servico_oferecido.servico_taxonomia) else (srv.servico.nome if srv.servico else (srv.nome_servico or 'Serviço')) %}
+                                            {% set colab_hist = srv.profissional_contrato if srv.profissional_contrato else (srv.profissional if srv.profissional else (item.profissional if item.profissional else None)) %}
+                                            {% set nome_colab_hist = colab_hist.nome if (colab_hist and colab_hist.nome) else 'Especialista' %}
+
+                                            <li class="text-secondary mb-0.5">
+                                                <i class="bi bi-dot text-primary"></i> {{ nome_srv_hist }}
+                                                <small class="text-muted">({{ nome_colab_hist }})</small>
                                             </li>
                                         {% endfor %}
                                     </ul>

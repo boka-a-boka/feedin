@@ -172,7 +172,7 @@
                         <span class="text-white-50 small font-monospace" style="font-size: 0.75rem;">TABELA OFICIAL</span>
                     </div>
                     {% if ese_empresa.logo %}
-                    <img src="/empresa/static/uploads/empresas/{{ ese_empresa.id }}/branding/{{ ese_empresa.logo }}" alt="Logo" style="max-height: 40px;">
+                    <img src="{{ media_url('empresa', 'empresas/' ~ ese_empresa.id ~ '/branding/' ~ ese_empresa.logo) }}" alt="Logo" style="max-height: 40px;">
                     {% endif %}
                 </div>
 

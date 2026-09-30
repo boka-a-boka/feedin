@@ -126,80 +126,64 @@ def create_app():
             cursor.execute("PRAGMA synchronous=NORMAL")  # Melhora a performance de gravação
             cursor.close()
 
-        # --- SERVIDOR DE MÍDIAS DA APLICAÇÃO (MULTI-MÓDULO DESENVOLVIMENTO) ---
         @app.route('/media/<path:filename>')
         def serve_media(filename):
             """
-            =============================================================================
             ROTA GLOBAL DE ENTREGA DE MÍDIAS E UPLOADS (DESENVOLVIMENTO & FALLBACK)
-            =============================================================================
-            Busca iterativa do arquivo físico nos diretórios de uploads dos módulos.
             """
-            print(f"\n--- [DEBUG MEDIA - ENTROU NA ROTA] ---")
-            print(f"Filename recebido: {filename}")
-
-            # 1. Normalização do caminho (limpa barras e prefixos redundantes)
             filename_limpo = filename.replace('\\', '/').strip('/')
-            for prefixo in ['media/', 'uploads/']:
-                if filename_limpo.startswith(prefixo):
+
+            # Limpa prefixos redundantes
+            for prefixo in ['media/', 'uploads/', 'empresa/uploads/', 'agenda/uploads/']:
+                if filename_limpo.lower().startswith(prefixo):
                     filename_limpo = filename_limpo[len(prefixo):]
 
-            # 2. Caminho raiz do pacote 'feedin'
-            base_dir = current_app.root_path
+            base_dir = current_app.root_path  # Aponta para .../ProjetoFeedIn/feedin
 
-            # 3. Mapeamento dos diretórios físicos reais do projeto
-            pastas_busca = [
-                # Módulo Empresa (Logos e Colaboradores)
-                os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads'),
-                # Módulo Agenda (Avatares)
-                os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads'),
-                # Módulo Core / Raiz
-                os.path.join(base_dir, 'static', 'uploads'),
-                # Fallback configurado no app.config
-                current_app.config.get('UPLOAD_FOLDER', '')
-            ]
+            # 1. Pastas exatas do seu projeto
+            pasta_agenda_uploads = os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads')
+            pasta_empresa_uploads = os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads')
 
-            # 4. Verificação e entrega do arquivo físico
-            for pasta in pastas_busca:
-                if not pasta or not os.path.exists(pasta):
-                    print(f"Pasta inexistente: {pasta}")
-                    continue
+            # Teste 1: Busca direta a partir de modules/empresa/static/uploads
+            caminho_empresa = os.path.join(pasta_empresa_uploads, filename_limpo)
+            if os.path.isfile(caminho_empresa):
+                return send_from_directory(os.path.dirname(caminho_empresa), os.path.basename(caminho_empresa))
 
-                caminho_completo = os.path.join(pasta, filename_limpo)
-                existe = os.path.isfile(caminho_completo)
-                print(f"Testando: {caminho_completo} -> Existe? {existe}")
+            # Teste 2: Busca direta a partir de modules/agenda/static/uploads
+            caminho_agenda = os.path.join(pasta_agenda_uploads, filename_limpo)
+            if os.path.isfile(caminho_agenda):
+                return send_from_directory(os.path.dirname(caminho_agenda), os.path.basename(caminho_agenda))
 
-                if existe:
-                    subpasta = os.path.dirname(caminho_completo)
-                    nome_arquivo = os.path.basename(caminho_completo)
-                    print(f"SUCESSO! Servindo: {nome_arquivo} de {subpasta}")
-                    return send_from_directory(subpasta, nome_arquivo)
+            # Teste 3: Busca recursiva dentro da estrutura /empresas/<ID>/colaboradores
+            nome_arquivo = os.path.basename(filename_limpo)
+            if nome_arquivo and os.path.exists(pasta_empresa_uploads):
+                for root, _, files in os.walk(pasta_empresa_uploads):
+                    if nome_arquivo in files:
+                        return send_from_directory(root, nome_arquivo)
 
-            # 5. Log e encerramento em caso de arquivo inexistente no disco
-            print(f"--- [FIM DEBUG MEDIA - 404 REAL] ---\n")
-            current_app.logger.error(
-                f"[MEDIA 404] Arquivo '{filename}' não localizado em nenhuma das pastas: {pastas_busca}"
-            )
             abort(404)
 
-        # --- HELPER GLOBAL JINJA2 PARA MIDIAS CROSS-MODULE ---
+        # --- HELPER GLOBAL JINJA2 PARA MÍDIAS CROSS-MODULE ---
         @app.template_global()
         def media_url(modulo: str, caminho_relativo: str) -> str:
             """
-            Resolve a URL de mídias de qualquer módulo com suporte a fallback de erros.
-            Exemplo no Jinja2: {{ media_url('empresa', empresa.logo_path) }}
+            Gera a URL pública aparente direcionada para a rota `/media/`.
+            Exemplo no Jinja2: {{ media_url('empresa', colaborador.foto_profissional) }}
             """
             fallback = url_for('static', filename='img/default_avatar.webp')
             if not caminho_relativo:
                 return fallback
-            try:
-                caminho_limpo = str(caminho_relativo).replace('\\', '/')
-                return url_for(f'{modulo}.static', filename=caminho_limpo)
-            except Exception as err:
-                current_app.logger.warning(
-                    f"[MEDIA_URL] Falha ao resolver estático para módulo '{modulo}' com caminho '{caminho_relativo}': {err}"
-                )
-                return fallback
+
+            caminho_limpo = str(caminho_relativo).replace('\\', '/').strip('/')
+
+            # Se já for uma URL completa ou já começar com /media/
+            if caminho_limpo.startswith('http://') or caminho_limpo.startswith('https://'):
+                return caminho_limpo
+            if caminho_limpo.startswith('media/'):
+                return f"/{caminho_limpo}"
+
+            # Retorna o apontamento direto para o endpoint serve_media
+            return url_for('serve_media', filename=f"{modulo}/{caminho_limpo}")
 
         # Carrega rotas e modelos bases do Core
         from feedin import routes, models
@@ -208,12 +192,14 @@ def create_app():
         from feedin.modules.agenda import agenda_bp
         from feedin.modules.empresa import empresa_bp
         from feedin.modules.auth import auth_bp
+        from feedin.modules.billing import billing_bp
         from feedin.utils import media_bp
 
         # Registrar definindo o prefixo de cada URL:
         app.register_blueprint(agenda_bp, url_prefix='/agenda')
         app.register_blueprint(empresa_bp, url_prefix='/empresa')
         app.register_blueprint(auth_bp, url_prefix='/auth')
+
 
         # 🚀 REGISTRO DO BLUEPRINT DE MÍDIA GLOBAL
         from feedin.utils import media_bp
