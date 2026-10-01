@@ -9,7 +9,7 @@ from feedin import database as db
 from datetime import datetime, timezone
 from flask import url_for
 from decimal import Decimal, InvalidOperation
-from utils import resolver_url_midia
+from feedin.utils import resolver_url_midia
 
 # =====================================================================
 # 🏛️ ENTIDADES CORE E PERIFÉRICAS DO MÓDULO

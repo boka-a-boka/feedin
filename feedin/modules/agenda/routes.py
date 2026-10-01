@@ -30,7 +30,7 @@ from feedin.middlewares import empresa_acesso_required
 
 # 3. UTILS DO SISTEMA
 import feedin.utils as utils
-from utils import (_parse_profissional_id, converter_duracao_para_minutos, resolver_url_midia,)
+from feedin.utils import (_parse_profissional_id, converter_duracao_para_minutos, resolver_url_midia,)
 
 # 4. 🧩 CONTRATO OFICIAL DO BLUEPRINT E QUERIES DO MÓDULO AGENDA
 # Mantido em ÚNICO local para evitar duplicidade e desconexão de rotas
@@ -81,37 +81,43 @@ from feedin.modules.agenda.services.agendamento_service import (_encontrar_colab
 
 def resolver_foto_cliente_agenda(cliente_uuid):
     """
-    Busca o cadastro do cliente pelo UUID (char 36), valida se está ativo
-    e usa o método de classe oficial `ModVinculoModulo.obter_vinculo_cliente`
-    com modulo_slug='agenda', cpf_hash e email do cadastro para obter o vínculo
-    e retornar a property `url_foto_perfil`.
+    Busca o cadastro do cliente pelo UUID.
+    Garante o resgate da foto de perfil via vínculo ativo do módulo ou cadastro base,
+    retornando a URL da foto, a inicial do nome para avatar e a instância do cliente.
     """
     if not cliente_uuid:
         return None, "C", None
 
-    # 1. Busca o cadastro em ModCadastroCliente pelo UUID (char 36)
+    # 1. Recupera o cadastro base do cliente
     cad_cliente = ModCadastroCliente.query.get(str(cliente_uuid).strip())
-
-    # 2. Se não existir ou não estiver ativo, aborta
-    if not cad_cliente or cad_cliente.status_conta != 'ativo':
+    if not cad_cliente:
         return None, "C", None
 
-    # 3. Define a letra inicial para fallback de avatar
-    nome_ref = cad_cliente.nome or "Cliente"
+    nome_ref = getattr(cad_cliente, 'nome', None) or getattr(cad_cliente, 'razao_social', None) or "Cliente"
     inicial = nome_ref[0].upper() if nome_ref else "C"
 
-    # 4. Busca o vínculo usando o método oficial da classe ModVinculoModulo
-    # Exige estritamente os 3 parâmetros: 'agenda', cpf_hash e email
-    vinculo = ModVinculoModulo.obter_vinculo_cliente(
-        modulo_slug='agenda',
-        cpf_hash=cad_cliente.cpf_hash,
-        email=cad_cliente.email
-    )
+    # 2. Prioridade 1: Tenta extrair a foto direto do vinculo ativo no módulo 'agenda'
+    cpf_hash = getattr(cad_cliente, 'cpf_hash', None)
+    email = getattr(cad_cliente, 'email', None)
 
-    # 5. Obtém a foto através da property nativa da model
-    foto_url = vinculo.url_foto_perfil if vinculo else None
+    try:
+        vinculo = ModVinculoModulo.obter_vinculo_cliente(
+            modulo_slug='agenda',
+            cpf_hash=cpf_hash,
+            email=email
+        )
+        if vinculo and getattr(vinculo, 'url_foto_perfil', None):
+            return vinculo.url_foto_perfil, inicial, cad_cliente
+    except Exception:
+        pass  # Fallback para atributo direto em caso de oscilação
 
-    return foto_url, inicial, cad_cliente
+    # 3. Prioridade 2: Atributo direto de foto no cadastro base (se houver)
+    foto_direta = getattr(cad_cliente, 'foto_url', None) or getattr(cad_cliente, 'url_foto_perfil', None) or getattr(cad_cliente, 'foto', None)
+    if foto_direta:
+        return foto_direta, inicial, cad_cliente
+
+    # 4. Caso o cliente não possua foto cadastrada (retorna None para o JS renderizar o badge com a inicial)
+    return None, inicial, cad_cliente
 
 
 @agenda_bp.route(
@@ -2604,21 +2610,26 @@ def dashboard_cliente():
             print(f"[Dashboard Cliente] Erro ao carregar empresa ativa: {err}")
 
     # ----------------------------------------------------------------------------------
-    # 3. NOTIFICAÇÕES
+    # 3. NOTIFICAÇÕES (CORRIGIDO: AGORA FORA DO EXCEPT)
     # ----------------------------------------------------------------------------------
     notificacoes = []
     total_nao_lidas = 0
 
     try:
-        user_id_str = str(cliente.id).strip().lower()
+        user_id_str = str(cliente.id).strip()
+
+        # Filtro direto por comparação de string (sem func.lower)
         notificacoes = AghNotificacao.query.filter(
-            func.lower(AghNotificacao.destinatario_id) == user_id_str,
-            AghNotificacao.lida == False
-        ).order_by(AghNotificacao.criado_em.desc()).all()
+            AghNotificacao.destinatario_id == user_id_str,
+            AghNotificacao.lida.is_(False)
+        ).order_by(AghNotificacao.id.desc()).all()
 
         total_nao_lidas = len(notificacoes)
     except Exception as err:
-        print(f"[Dashboard Cliente] Erro ao carregar notificações: {err}")
+        db.session.rollback()
+        print(f"[Dashboard Cliente] Aviso ao carregar notificações: {err}")
+        notificacoes = []
+        total_nao_lidas = 0
 
     # ----------------------------------------------------------------------------------
     # 4. HISTÓRICO E AGENDAMENTOS ATIVOS (DECLARAÇÃO DE VARIÁVEIS FORA DO TRY)
@@ -2635,14 +2646,10 @@ def dashboard_cliente():
             selectinload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)
         ]
 
-        ultimos_agendamentos = (
-            AghAgendamento.query.options(*opcoes_carregamento)
-            .filter_by(cliente_id=cliente.id)
-            .filter(AghAgendamento.status.in_(['concluido', 'finalizado', 'cancelado']))
-            .order_by(AghAgendamento.data_hora_inicio.desc())
-            .limit(5)
-            .all()
-        )
+        ultimos_agendamentos = AghAgendamento.query.options(*opcoes_carregamento) \
+            .filter(AghAgendamento.data_hora_inicio.isnot(None)) \
+            .order_by(AghAgendamento.data_hora_inicio.desc()) \
+            .limit(10).all()
 
         agendamentos_ausente_pendentes = (
             AghAgendamento.query.options(*opcoes_carregamento)
@@ -2685,7 +2692,12 @@ def dashboard_cliente():
                 agendamentos_ativos.append(ag)
 
         if houve_alteracao_banco:
-            db.session.commit()
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                # Log do erro para depuração
+                print(f"Erro capturado em dashboard_cliente: {e}")
 
     except Exception as err:
         db.session.rollback()
@@ -6799,40 +6811,65 @@ def visualizar_agenda():
     )
 
 
+from feedin.modules.auth.models import ModVinculoModulo  # Importe o modelo de vínculo
+
+from feedin.modules.auth.models import ModVinculoModulo  # Importe o modelo de vínculo
+
+
 @agenda_bp.route('/api/grade-agendamentos', methods=['GET'])
 @login_required
 def carregar_grade_agendamentos():
     data_str = request.args.get('data')
-    data_selecionada = datetime.strptime(data_str, '%Y-%m-%d').date() if data_str else date.today()
+    try:
+        data_selecionada = datetime.strptime(data_str, '%Y-%m-%d').date() if data_str else date.today()
+    except ValueError:
+        data_selecionada = date.today()
 
-    # 1. Verifica permissões de administração/gestão
-    eh_admin = current_user.tem_permissao('admin_agenda') or current_user.is_admin
+    eh_admin = current_user.tem_permissao('admin_agenda') or getattr(current_user, 'is_admin', False)
 
     query = db.session.query(AghAgendamentoItem).join(AghAgendamento).filter(
         db.func.date(AghAgendamentoItem.data_hora_inicio) == data_selecionada
     )
 
+    # Filtro de profissional (Aceita string UUID via synonym)
     if eh_admin:
-        # Se for admin e houver um filtro específico selecionado na tela
-        colaborador_filtro_id = request.args.get('profissional_id', type=int)
-        if colaborador_filtro_id:
-            query = query.filter(AghAgendamentoItem.profissional_id == colaborador_filtro_id)
+        colaborador_filtro_id = request.args.get('profissional_id', type=str)
+        if colaborador_filtro_id and colaborador_filtro_id.strip():
+            query = query.filter(AghAgendamentoItem.profissional_id == colaborador_filtro_id.strip())
     else:
-        # Colaborador comum: força a filtragem exclusiva pelo seu próprio contrato_id
-        colaborador_id_usuario = current_user.colaborador_contrato_id
-        query = query.filter(AghAgendamentoItem.profissional_id == colaborador_id_usuario)
+        colaborador_id_usuario = getattr(current_user, 'colaborador_contrato_id', None)
+        if colaborador_id_usuario:
+            query = query.filter(AghAgendamentoItem.profissional_id == str(colaborador_id_usuario).strip())
 
-    # Ordenação pela ordem de execução e horário inicial
     itens = query.order_by(
         AghAgendamentoItem.ordem_execucao.asc(),
         AghAgendamentoItem.data_hora_inicio.asc()
     ).all()
 
+    itens_json = []
+    for item in itens:
+        item_dict = item.to_dict()
+
+        agendamento = item.agendamento
+        cliente = agendamento.cliente if agendamento else None
+
+        foto_cliente_url = None
+        inicial = "C"
+
+        if cliente and getattr(cliente, 'id', None):
+            foto_cliente_url, inicial, _ = resolver_foto_cliente_agenda(cliente.id)
+
+        # Injeta identificadores e dados visuais completos no dicionário do item
+        item_dict['cliente_id'] = cliente.id if cliente else None
+        item_dict['cliente_foto'] = foto_cliente_url
+        item_dict['cliente_inicial'] = inicial
+
+        itens_json.append(item_dict)
+
     return jsonify({
         "exibir_filtro_admin": eh_admin,
-        "itens": [item.to_dict() for item in itens]
+        "itens": itens_json
     })
-
 
 def resolver_nome_profissional(prof_obj) -> str:
     """

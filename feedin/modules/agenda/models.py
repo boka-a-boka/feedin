@@ -3,6 +3,7 @@ import random
 import uuid
 import logging
 from sqlalchemy import func
+from sqlalchemy.orm import synonym
 from feedin import database as db
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -270,11 +271,7 @@ class AghAgendamentoItem(db.Model):
             db.session.rollback()
             return {"status": "error", "mensagem": f"Erro interno ao processar início: {str(e)}"}, 500
 
-    # --- ADICIONE ESTE BLOCO ---
-    @profissional_id.setter
-    def profissional_id(self, value):
-        """Permite gravar no colaborador_id_contrato através do alias."""
-        self.colaborador_id_contrato = str(value).strip() if value else None
+    profissional_id = synonym('colaborador_id_contrato')
 
 
 class AghAgendamentoRascunho(db.Model):

@@ -33,6 +33,7 @@ def create_app():
     """
     load_dotenv()
     app = Flask(__name__)
+    app.config['PROPAGATE_EXCEPTIONS'] = True
 
     # --- CONFIGURAÇÃO PARA PROXY REVERSO (NGINX / VPS) ---
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
