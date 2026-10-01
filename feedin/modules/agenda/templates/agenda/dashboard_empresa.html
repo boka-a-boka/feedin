@@ -155,18 +155,13 @@
     color: #ffc107 !important;
 }
 
-.area-cliente-detalhes * {
-    pointer-events: none; /* Garante que os filhos repassem o evento de clique para o contêiner pai */
-}
-
 .area-cliente-detalhes {
     cursor: pointer;
-    user-select: none; /* Evita seleção acidental de texto durante o duplo clique */
+    user-select: none;
 }
 
-/* Os elementos internos repassam os cliques diretamente para o container pai */
 .area-cliente-detalhes * {
-    pointer-events: none;
+    pointer-events: none; /* Garante que os filhos repassem o evento de clique para o contêiner pai */
 }
 </style>
 
@@ -448,13 +443,13 @@
                              data-cliente="{{ nome_cliente | e }}"
                              data-cliente-id="{{ cliente_id_slot }}"
                              data-colaborador-id="{{ prof_id_slot }}"
-                             data-cliente-foto="{{ url_foto_atendido }}"
+                             data-cliente-foto="{{ url_foto_atendido or '' }}"
                              data-servico="{{ nome_servico | e }}"
                              data-valor="{{ valor_total_fmt }}"
                              data-cliente-telefone="{{ slot.get('cliente_telefone', 'Contato via Plataforma') }}"
                              data-obs="{{ slot.get('observacoes', 'Sem observações adicionais.') }}"
                              data-profissional-id="{{ prof_id_slot }}"
-                             title="Clique para ações no card | Duplo clique sobre o cliente para ver detalhes"
+                             title="Clique para ações no card | Duplo clique ou toque longo no cliente para detalhes"
                              style="cursor: pointer; {% if e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
 
                             <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
@@ -509,9 +504,9 @@
                                         </h5>
                                     </div>
 
-                                    <!-- ÁREA DO CLIENTE: Isolada para receber o evento de duplo clique -->
-                                    <div class="area-clientelhes d-flex align-items-center gap-2 my-1 p-1 rounded"
-                                         title="Duplo clique para abrir a ficha do cliente"
+                                    <!-- ÁREA DO CLIENTE: Isolada para receber duplo clique e clique longo -->
+                                    <div class="area-cliente-detalhes d-flex align-items-center gap-2 my-1 p-1 rounded"
+                                         title="Duplo clique ou toque longo para abrir a ficha do cliente"
                                          style="cursor: pointer; user-select: none;">
                                         <div class="position-relative flex-shrink-0" style="width: 38px; height: 38px;">
                                             {% if slot.get('tem_beneficiario') %}
@@ -544,7 +539,7 @@
                                             {% else %}
                                                 <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
                                                     {% if url_foto_atendido and url_foto_atendido != 'None' %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
+                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
                                                         <span class="fw-bold text-primary fs-6 d-none">{{ inicial_cliente }}</span>
                                                     {% else %}
                                                         <span class="fw-bold text-primary fs-6">
@@ -596,7 +591,7 @@
                                                                     <button type="button" class="btn btn-sm btn-outline-success"
                                                                             data-agendamento-id="{{ agend_id }}"
                                                                             data-item-id="{{ item.id }}"
-                                                                            onclick="aoClicarEncerrarTarefa(event, this)">
+                                                                            onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ item.id }}')">
                                                                         <i class="bi bi-check-lg"></i> Concluir
                                                                     </button>
                                                                 {% else %}
@@ -631,10 +626,7 @@
                                         <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                     </small>
 
-                                    {# Obtém a lista de itens diretamente a partir das chaves do 'slot' #}
                                     {% set itens_lista = slot.get('itens', []) %}
-
-                                    {# Filtragem de itens pendentes do agendamento #}
                                     {% set itens_pendentes = [] %}
                                     {% for it in itens_lista %}
                                         {% set st = (it.get('status_item') or it.get('status') or 'pendente') | lower %}
@@ -645,15 +637,12 @@
 
                                     {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
 
-                                    {# CENÁRIO 1: Todos os serviços executados -> Liquidar Comanda / Caixa #}
                                     {% if itens_pendentes | length == 0 %}
                                         <button type="button"
                                                 class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
                                                 onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
                                             <i class="bi bi-receipt me-1"></i> Liquidar Comanda
                                         </button>
-
-                                    {# CENÁRIO 2: Múltiplos Profissionais pendentes -> Concluir tarefa do profissional atual #}
                                     {% elif profs_unicos | length > 1 %}
                                         {% set meu_item = (itens_pendentes | selectattr('profissional_id', 'eq', current_user.id) | first) or (itens_pendentes | first) %}
                                         {% set item_id_target = meu_item.get('id') or meu_item.get('item_id') if meu_item else '' %}
@@ -663,8 +652,6 @@
                                                 onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ nome_cliente | e }}')">
                                             <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target or 'Serviço' }}
                                         </button>
-
-                                    {# CENÁRIO 3: Profissional Único / Serviço Pendente -> Encerrar Atendimento Direto #}
                                     {% else %}
                                         <button type="button"
                                                 class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
@@ -672,14 +659,13 @@
                                             <i class="bi bi-check2-square me-1"></i> Encerrar Atendimento
                                         </button>
                                     {% endif %}
-
                                 </div>
                             {% endif %}
 
-                            {# PAINEL DE AÇÕES REVELADO POR DUPLO CLIQUE #}
+                            {# PAINEL DE AÇÕES REVELADO POR CLIQUE LONGO OU AÇÃO MANUAL #}
                             <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
                                 {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2 w-100">
                                         <small class="text-primary fw-bold">
                                             <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                         </small>
@@ -760,7 +746,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-3">
-                <!-- Adicionar logo após a abertura do modal-body -->
                 <input type="hidden" id="modal-finalizar-agendamento-id">
                 <input type="hidden" id="modal-finalizar-avaliacao" value="5">
 
@@ -1035,72 +1020,81 @@ function getCsrfToken() {
         || '';
 }
 
-// Adicione este ouvinte global para limpar o foco de qualquer modal Bootstrap ao fechar
+// Limpa o foco de qualquer elemento ativo ao fechar modais no Bootstrap
 document.addEventListener('hide.bs.modal', function (event) {
     if (document.activeElement && event.target.contains(document.activeElement)) {
         document.activeElement.blur();
     }
 });
 
-const btnClose = modalElement.querySelector('.btn-close');
-if (btnClose) btnClose.blur();
-
 function obterEmpresaIdContexto() {
-    // Tenta obter do input hidden ou da URL atual (/agenda/empresa/2/dashboard)
     const hiddenInput = document.getElementById('empresa_id_hidden');
     if (hiddenInput && hiddenInput.value) return hiddenInput.value;
 
     const matchUrl = window.location.pathname.match(/\/empresa\/(\d+)/);
     if (matchUrl && matchUrl[1]) return matchUrl[1];
 
-    return '2'; // Fallback padronizado
+    return '2';
 }
 
 // =========================================================================
 // 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
 // =========================================================================
 
-// Exibe o modal de detalhes do cliente (Foto, Nome, Telefone)
+// Exibe o modal de detalhes do cliente (Leitura padronizada dos atributos dataset)
 window.abrirModalDetalhesCliente = function(elemento) {
     if (!elemento) return;
 
-    // Se recebeu o card, busca a .area-cliente-detalhes interna
     const area = elemento.classList.contains('area-cliente-detalhes')
         ? elemento
         : elemento.querySelector('.area-cliente-detalhes');
 
-    // Se não encontrou a .area-cliente-detalhes, usa o próprio elemento como fallback
-    const alvo = area || elemento;
+    const cardPai = elemento.closest('.item-agendamento') || elemento;
 
-    // Leitura dos dados expandidos
     const dadosCliente = {
-        id: alvo.dataset.clienteId || alvo.dataset.id,
-        nome: alvo.dataset.clienteNome || alvo.dataset.cliente,
-        telefone: alvo.dataset.clienteTelefone,
-        email: alvo.dataset.clienteEmail
+        nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
+        telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
+        hora: cardPai.dataset.hora || '--:--',
+        valor: cardPai.dataset.valor || 'R$ 0,00',
+        servico: cardPai.dataset.servico || 'Não informado',
+        obs: cardPai.dataset.obs || 'Nenhuma observação.',
+        foto: (area && area.dataset.clienteFoto) || cardPai.dataset.clienteFoto || ''
     };
 
-    // Preenchimento dos campos no modal
-    const elNome = document.getElementById('modalClienteNome');
-    const elTel = document.getElementById('modalClienteTelefone');
-    const elEmail = document.getElementById('modalClienteEmail');
+    const elNome = document.getElementById('modalClienteEmpresaNome');
+    const elTel = document.getElementById('modalClienteEmpresaTelefone');
+    const elHora = document.getElementById('modalClienteEmpresaHora');
+    const elValor = document.getElementById('modalClienteEmpresaValor');
+    const elServico = document.getElementById('modalClienteEmpresaServico');
+    const elObs = document.getElementById('modalClienteEmpresaObs');
+    const elFoto = document.getElementById('modalClienteEmpresaFoto');
+    const elInicial = document.getElementById('modalClienteEmpresaInicial');
 
-    if (elNome) elNome.textContent = dadosCliente.nome || 'Não informado';
-    if (elTel) elTel.textContent = dadosCliente.telefone || 'Não informado';
-    if (elEmail) elEmail.textContent = dadosCliente.email || 'Não informado';
+    if (elNome) elNome.textContent = dadosCliente.nome;
+    if (elTel) elTel.innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${dadosCliente.telefone}`;
+    if (elHora) elHora.textContent = dadosCliente.hora;
+    if (elValor) elValor.textContent = dadosCliente.valor;
+    if (elServico) elServico.textContent = dadosCliente.servico;
+    if (elObs) elObs.textContent = dadosCliente.obs;
 
-    // Busca o elemento do modal garantindo que a variável 'modalEl' existe no escopo
-    const modalEl = document.getElementById('modalDetalhesClienteEmpresa') || document.getElementById('modalDetalhesCliente');
-
-    if (modalEl) {
-        const modalBs = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modalBs.show();
-    } else {
-        console.error('Modal de detalhes do cliente não foi encontrado no DOM.');
+    if (elFoto && elInicial) {
+        if (dadosCliente.foto && dadosCliente.foto !== 'None' && dadosCliente.foto !== '') {
+            elFoto.src = dadosCliente.foto;
+            elFoto.style.display = 'block';
+            elInicial.style.display = 'none';
+        } else {
+            elFoto.style.display = 'none';
+            elInicial.style.display = 'flex';
+            elInicial.textContent = (dadosCliente.nome[0] || 'C').toUpperCase();
+        }
     }
-};q
 
-// Inicia o atendimento do agendamento (Requisição POST no servidor)
+    const modalEl = document.getElementById('modalDetalhesClienteEmpresa');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+};
+
 window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     const empIdFinal = empresaId || obterEmpresaIdContexto();
 
@@ -1110,7 +1104,6 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     }
 
     const idLimpo = String(agendamentoId).split('_')[0];
-    console.log(`[ATENDIMENTO] Iniciando atendimento. Agendamento: ${idLimpo}, Empresa: ${empIdFinal}`);
 
     fetch(`/agenda/empresa/${empIdFinal}/agendamentos/${idLimpo}/iniciar`, {
         method: 'POST',
@@ -1131,7 +1124,6 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     })
     .then(data => {
         if (data && (data.sucesso || data.success)) {
-            console.log("[ATENDIMENTO] Sucesso ao iniciar. Recarregando página...");
             window.location.reload();
         } else {
             alert(data?.mensagem || 'Não foi possível iniciar o atendimento.');
@@ -1143,7 +1135,6 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     });
 };
 
-// Ação Inteligente ao clicar no Card de Agendamento
 window.abrirModalAtendimento = function(cardElement) {
     if (!cardElement || !(cardElement instanceof HTMLElement)) return;
 
@@ -1151,7 +1142,6 @@ window.abrirModalAtendimento = function(cardElement) {
     const status = cardElement.getAttribute('data-status') || '';
     const empresaId = obterEmpresaIdContexto();
 
-    // Se já estiver em atendimento, abre a comanda/fechamento; se pendente, inicia o atendimento
     if (['em_atendimento', 'em_andamento'].includes(status)) {
         const valorTotal = cardElement.getAttribute('data-valor') || '0,00';
         window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
@@ -1160,7 +1150,6 @@ window.abrirModalAtendimento = function(cardElement) {
     }
 };
 
-// Prepara e abre o modal de conclusão de um item/serviço individual
 window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome, clienteNome) {
     if (document.getElementById('modal_agendamento_id')) {
         document.getElementById('modal_agendamento_id').value = agendamentoId;
@@ -1175,8 +1164,7 @@ window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome,
         document.getElementById('modal_cliente_nome').textContent = 'Cliente: ' + (clienteNome || '---');
     }
 
-    const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
-                 || document.getElementById('modalFinalizarItem');
+    const modalEl = document.getElementById('modalFinalizarItem');
     if (modalEl && typeof bootstrap !== 'undefined') {
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
@@ -1184,7 +1172,6 @@ window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome,
 
 window.abrirModalFinalizarItem = window.prepararModalFinalizarItem;
 
-// Redireciona a ação do card direto para a Comanda/Caixa
 window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
     if (!valorTotal || valorTotal === 'None') {
         const cardEl = document.querySelector(`.item-agendamento[data-id="${agendamentoId}"]`);
@@ -1202,7 +1189,6 @@ window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
     window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
-// Confirma e Grava a Conclusão do Item
 window.confirmarEGravarEncerramentoItem = function() {
     const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
     const itemId = document.getElementById('modal_item_id')?.value;
@@ -1234,7 +1220,6 @@ window.confirmarEGravarEncerramentoItem = function() {
         const contentType = res.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
             const textHTML = await res.text();
-            console.error("Resposta HTML inesperada do servidor:", textHTML);
             throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
         }
         return res.json();
@@ -1245,8 +1230,7 @@ window.confirmarEGravarEncerramentoItem = function() {
             return;
         }
 
-        const modalEl = document.getElementById('formFinalizarItem')?.closest('.modal')
-                     || document.getElementById('modalFinalizarItem');
+        const modalEl = document.getElementById('modalFinalizarItem');
         if (modalEl && typeof bootstrap !== 'undefined') {
             const modalInstance = bootstrap.Modal.getInstance(modalEl);
             if (modalInstance) modalInstance.hide();
@@ -1266,8 +1250,7 @@ window.confirmarEGravarEncerramentoItem = function() {
     });
 };
 
-// Ação de conclusão direta de tarefa/serviço
-window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
+window.acaoConcluirTarefaDireta = function(agendamentoId, itemId) {
     if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
         alert("Erro: Parâmetros do agendamento ou do item ausentes.");
         return;
@@ -1303,7 +1286,6 @@ window.acaoConcluirTarefaDireta = function(agendamentoId, itemId, empresaId) {
     });
 };
 
-// Abertura do Modal Financeiro (Comanda / Caixa)
 window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00', avaliacao = 5, observacao = '') {
     const inputId = document.getElementById('modal-finalizar-agendamento-id');
     const inputValor = document.getElementById('modal-finalizar-valor');
@@ -1339,14 +1321,10 @@ window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,
 
     const modalCaixaEl = document.getElementById('modalFinalizarAtendimento');
     if (modalCaixaEl && typeof bootstrap !== 'undefined') {
-        if (document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur();
-        }
         bootstrap.Modal.getOrCreateInstance(modalCaixaEl).show();
     }
 };
 
-// Grava o Pagamento Financeiro
 window.confirmarEGravarEncerramento = function() {
     const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
     const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
@@ -1382,7 +1360,6 @@ window.confirmarEGravarEncerramento = function() {
         const contentType = res.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
             const textHTML = await res.text();
-            console.error("Resposta HTML inesperada do servidor:", textHTML);
             throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
         }
         return res.json();
@@ -1423,7 +1400,7 @@ window.gerenciarAcoesSlot = function(elemento) {
     document.querySelectorAll('.painel-acoes-slot').forEach(p => p.classList.add('d-none'));
     const painelAtual = elemento.querySelector('.painel-acoes-slot');
     if (painelAtual) {
-        painelAtual.classList.remove('d-none');
+        painelAtual.classList.toggle('d-none');
     }
 };
 
@@ -1549,7 +1526,7 @@ window.abrirModalAtrasoPresenca = function(agendamentoId, nomeCliente) {
 };
 
 // =========================================================================
-// 3. REGISTRO DE EVENTOS DOM (DELEGAÇÃO DE CLIQUE E DUPLO CLIQUE)
+// 3. REGISTRO DE EVENTOS DOM (CLIQUE SIMPLES, DUPLO CLIQUE E CLIQUE LONGO)
 // =========================================================================
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof window.aplicarFiltrosGlobais === 'function') {
@@ -1557,52 +1534,88 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let clickTimer = null;
+    let longPressTimer = null;
+    let isLongPress = false;
 
-    // 1. DUPLO CLIQUE EXCLUSIVO NA ÁREA DO CLIENTE OU NO CARD
+    // A. DELEGAÇÃO PARA DUPLO CLIQUE (Ficha do Cliente)
     document.body.addEventListener('dblclick', function(e) {
-    // Procura a área do cliente clicada ou o card pai
-    const areaCliente = e.target.closest('.area-cliente-detalhes');
+        const areaCliente = e.target.closest('.area-cliente-detalhes');
+        if (!areaCliente) return;
 
-    if (!areaCliente) return;
+        if (clickTimer) {
+            clearTimeout(clickTimer);
+            clickTimer = null;
+        }
 
-    // Cancela qualquer timer de clique simples ativo
-    if (typeof clickTimer !== 'undefined' && clickTimer) {
-        clearTimeout(clickTimer);
-        clickTimer = null;
-    }
+        e.preventDefault();
+        e.stopPropagation();
 
-    e.preventDefault();
-    e.stopPropagation();
+        if (window.abrirModalDetalhesCliente) {
+            window.abrirModalDetalhesCliente(areaCliente);
+        }
+    });
 
-    const cardPai = areaCliente.closest('.item-agendamento');
-    console.log('[CLIENTE] Duplo clique capturado na área do cliente.');
-
-    if (window.abrirModalDetalhesCliente) {
-        // Passa a área do cliente (ou o card) para a modal
-        window.abrirModalDetalhesCliente(areaCliente || cardPai);
-    }
-});
-
-    // 2. CLIQUE SIMPLES NO CARD DE AGENDAMENTO (com temporizador para não conflitar com dblclick)
+    // B. DELEGAÇÃO PARA CLIQUE SIMPLES NO CARD DE AGENDAMENTO
     document.body.addEventListener('click', function(e) {
+        if (isLongPress) {
+            isLongPress = false;
+            return;
+        }
+
         const card = e.target.closest('.item-agendamento');
         if (!card) return;
 
-        // Ignora botões, inputs e a área do cliente se for para detalhes
+        // Ignora botões, links, selects e a área do cliente (para não colidir com dblclick)
         if (e.target.closest('button, a, input, select, .btn, .area-cliente-detalhes')) {
             return;
         }
 
         e.preventDefault();
 
-        // Aguarda 250ms para garantir que não é a primeira etapa de um duplo clique
+        // Janela de atraso para diferenciar do duplo clique
         if (clickTimer) clearTimeout(clickTimer);
 
         clickTimer = setTimeout(() => {
-            console.log('[CARD] Clique simples verificado.');
             window.abrirModalAtendimento(card);
             clickTimer = null;
-        }, 250);
+        }, 300);
+    });
+
+    // C. SUPORTE A CLIQUE LONGO / TOUCH-PRESS (Em Dispositivos Móveis e Touchscreens)
+    document.body.addEventListener('touchstart', function(e) {
+        const card = e.target.closest('.item-agendamento');
+        if (!card || e.target.closest('button, a, input, select, .btn')) return;
+
+        isLongPress = false;
+        longPressTimer = setTimeout(() => {
+            isLongPress = true;
+
+            // Vibração tátil no celular se suportado
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+
+            const areaCliente = e.target.closest('.area-cliente-detalhes');
+            if (areaCliente) {
+                window.abrirModalDetalhesCliente(areaCliente);
+            } else {
+                window.gerenciarAcoesSlot(card);
+            }
+        }, 600); // 600ms de pressão contínua
+    }, { passive: true });
+
+    document.body.addEventListener('touchend', function() {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    });
+
+    document.body.addEventListener('touchmove', function() {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
     });
 });
 </script>
