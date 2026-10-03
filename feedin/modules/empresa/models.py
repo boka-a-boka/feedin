@@ -550,6 +550,19 @@ class ColaboradorContrato(db.Model):
             return cargo_obj
         return 'Especialista'
 
+    # -------------------------------------------------------------------------
+    # IDENTIFICADOR CHAR(36) OFICIAL DO COLABORADOR
+    # -------------------------------------------------------------------------
+    @property
+    def uuid_colaborador(self) -> str | None:
+        """
+        Retorna estritamente o ID CHAR(36) do colaborador vinculando ao cadastro do cliente.
+        Evita o uso da PK autoincrement Integer (self.id).
+        """
+        if self.id_cadastro_cliente:
+            return str(self.id_cadastro_cliente).strip()
+        return None
+
 class ColaboradorDetalhesPessoais(db.Model):
     """
     📌 COLABORADOR_DETALHES_PESSOAIS: Ficha de Autodeclaração do Trabalhador

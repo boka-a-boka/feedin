@@ -5,7 +5,7 @@ agenda_bp = Blueprint(
     __name__,
     template_folder='templates',
     static_folder='static',
-    static_url_path='/agenda/static'  # Isolado para não colidir com o Core/outros módulos
+    static_url_path='/static'  # Isolado para não colidir com o Core/outros módulos
 )
 
 

@@ -169,30 +169,81 @@ class AghAgendamentoItem(db.Model):
         return f"Serviço #{self.servico_id}"
 
     @property
+    def _obter_contrato_profissional(self):
+        """
+        Método auxiliar interno para recuperar o contrato do colaborador.
+        Faz a ponte caso o relacionamento ORM nativo falhe devido à divergência entre
+        a Foreign Key String e a PK Integer de ColaboradorContrato.
+        """
+        if self.profissional:
+            return self.profissional
+
+        if self.colaborador_id_contrato:
+            try:
+                from feedin.models import ColaboradorContrato
+                uuid_limpo = str(self.colaborador_id_contrato).strip()
+
+                # Busca principal via id_cadastro_cliente (CHAR 36 oficial do contrato)
+                contrato = ColaboradorContrato.query.filter_by(id_cadastro_cliente=uuid_limpo).first()
+                if contrato:
+                    return contrato
+
+                # Fallback secundário se o ID gravado for numérico
+                if uuid_limpo.isdigit():
+                    return ColaboradorContrato.query.get(int(uuid_limpo))
+            except Exception:
+                return None
+
+        return None
+
+    @property
     def nome_profissional(self) -> str:
-        if not self.profissional:
-            return f"Profissional {self.colaborador_id_contrato or 'N/A'}"
+        """
+        Consome a @property 'nome' oficial de ColaboradorContrato com fallbacks limpos.
+        """
+        prof = self._obter_contrato_profissional
+        if not prof:
+            return "Profissional"
 
-        # 1. Tenta atributos diretos do contrato
-        for attr in ['nome_exibicao', 'nome', 'nome_completo']:
-            val = getattr(self.profissional, attr, None)
-            if val:
-                return val
+        # 1. Tenta a property 'nome' nativa da ColaboradorContrato
+        nome_resolvido = getattr(prof, 'nome', None)
+        if nome_resolvido and nome_resolvido != "Profissional Sem Nome":
+            return nome_resolvido
 
-        # 2. Tenta recuperar através da relação cadastro_modulo
-        if hasattr(self.profissional, 'cadastro_modulo') and self.profissional.cadastro_modulo:
-            nome_mod = getattr(self.profissional.cadastro_modulo, 'nome', None) or getattr(
-                self.profissional.cadastro_modulo, 'razao_social', None)
-            if nome_mod:
-                return nome_mod
+        # 2. Fallbacks diretos para atributos de exibição
+        return getattr(prof, 'nome_exibicao', None) or getattr(prof, 'nome_completo', None) or "Profissional"
 
-        # 3. Tenta recuperar através do relacionamento com o usuário base
-        if hasattr(self.profissional, 'usuario') and self.profissional.usuario:
-            nome_usr = getattr(self.profissional.usuario, 'nome', None)
-            if nome_usr:
-                return nome_usr
+    @property
+    def foto_profissional_url(self) -> str:
+        """
+        Resolve a URL pública da foto do profissional consumindo a @property
+        'url_foto_profissional' oficial da ColaboradorContrato ou formatando o caminho relativo.
+        """
+        prof = self._obter_contrato_profissional
+        if not prof:
+            return None
 
-        return f"Profissional {self.colaborador_id_contrato}"
+        # 1. Tenta a @property oficial da ColaboradorContrato (resolvida via resolver_url_midia)
+        foto_oficial = getattr(prof, 'url_foto_profissional', None)
+        if foto_oficial:
+            return foto_oficial
+
+        # 2. Resgate e formatação direta do arquivo caso a property oficial venha nula
+        foto_bruta = (
+            getattr(prof, 'foto_profissional', None)
+            or getattr(prof, 'url_foto_perfil', None)
+            or getattr(prof, 'foto_url', None)
+        )
+
+        if not foto_bruta:
+            return None
+
+        if str(foto_bruta).startswith(('http://', 'https://', '/')):
+            return str(foto_bruta)
+
+        # Formatação para o caminho estático do módulo
+        empresa_id = getattr(prof, 'id_local', None) or getattr(prof, 'empresa_id', None) or '2'
+        return f"/empresa/empresa/static/uploads/empresas/{empresa_id}/colaboradores/{str(foto_bruta).lstrip('/')}"
 
     def to_dict(self) -> dict:
         cliente_nome = "Cliente"
@@ -211,6 +262,7 @@ class AghAgendamentoItem(db.Model):
             "colaborador_id_contrato": str(self.colaborador_id_contrato) if self.colaborador_id_contrato else None,
             "profissional_id": str(self.colaborador_id_contrato) if self.colaborador_id_contrato else None,
             "profissional_nome": self.nome_profissional,
+            "profissional_foto_url": self.foto_profissional_url,
             "cliente_nome": cliente_nome,
             "preco_unitario": float(self.preco_unitario) if self.preco_unitario is not None else 0.0,
             "duracao_minutos": self.duracao_minutos,
@@ -311,7 +363,7 @@ class AghAgendamentoRascunho(db.Model):
     # 💰 VALOR TOTAL
     valor_total = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
 
-    # ⚙️ MÁQUINA DE ESTADO DO RASCUNHO
+    # ⚙️️ MÁQUINA DE ESTADO DO RASCUNHO
     status = db.Column(
         db.String(30), default='servicos_selecionados', nullable=False
     )
@@ -375,7 +427,6 @@ class AghAgendamentoRascunhoItem(db.Model):
         index=True,
     )
 
-    # 📌 CORRIGIDO: Aponta corretamente para a tabela ese_servico_oferecido
     servico_id = db.Column(
         db.Integer,
         db.ForeignKey('ese_servico_oferecido.id'),

@@ -329,7 +329,7 @@
             <small class="text-muted">Ordem cronológica por horário de atendimento.</small>
         </div>
 
-        <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+        <div class="d-flexlign-items-center gap-2 flex-wrap ms-auto">
             <input type="date"
                    id="filtro-data"
                    name="data"
@@ -349,7 +349,10 @@
                             <select id="filtro-profissional" class="form-select border-0 shadow-sm rounded-3 fw-semibold" onchange="alternarProfissionalOuData()">
                                 <option value="">Todos os Profissionais</option>
                                 {% for prof in profissionais_ativos %}
-                                    {% set prof_nome = resolver_nome_profissional(prof) if resolver_nome_profissional else (prof.nome or 'Profissional') %}
+                                    {% set prof_nome = (resolver_nome_profissional(prof) if (resolver_nome_profissional is defined and resolver_nome_profissional) else None)
+                                                       or (prof.nome if prof.nome is defined and prof.nome else None)
+                                                       or (prof.usuario.nome if (prof.usuario is defined and prof.usuario and prof.usuario.nome) else None)
+                                                       or 'Profissional' %}
                                     <option value="{{ prof.id }}" {% if prof_id_param == prof.id %}selected{% endif %}>
                                         {{ prof_nome }}
                                     </option>
@@ -357,7 +360,10 @@
                             </select>
                         {% else %}
                             {% set meu_prof_id = colaboradorcontrato.id if colaboradorcontrato else (prof_id_param or '') %}
-                            {% set meu_nome = resolver_nome_profissional(colaboradorcontrato) if (resolver_nome_profissional and colaboradorcontrato) else 'Meu Perfil' %}
+                            {% set meu_nome = (resolver_nome_profissional(colaboradorcontrato) if (resolver_nome_profissional is defined and resolver_nome_profissional and colaboradorcontrato) else None)
+                                              or (colaboradorcontrato.nome if (colaboradorcontrato and colaboradorcontrato.nome) else None)
+                                              or (colaboradorcontrato.usuario.nome if (colaboradorcontrato and colaboradorcontrato.usuario and colaboradorcontrato.usuario.nome) else None)
+                                              or 'Meu Perfil' %}
 
                             <div class="input-group shadow-sm rounded-3">
                                 <span class="input-group-text bg-light border-0 text-muted">
@@ -373,17 +379,16 @@
                 {% endif %}
             {% endif %}
         </div>
-    </div>
 
-    <div class="d-flex align-items-center justify-content-end gap-2 mt-2 pt-2 border-top">
-        {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-            <!-- Botão Único para Encerramento/Liquidação -->
-            <button type="button"
-                    class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                    onclick="event.stopPropagation(); window.abrirModalFechamentoComanda('{{ agend_id_target }}', '{{ valor_target | e }}')">
-                <i class="bi bi-receipt me-1"></i> Encerrar Comanda
-            </button>
-        {% endif %}
+        <!-- Botão de Alternância de Filtro de Grade -->
+        <button type="button"
+                id="btnFiltrarAgendados"
+                class="btn btn-sm btn-outline-secondary rounded-pill ms-2 fw-semibold"
+                onclick="toggleFiltroApenasAgendados()"
+                data-filtrado="false">
+            <i class="bi bi-filter-circle me-1"></i> Apenas Agendados
+        </button>
+
     </div>
 
     <div id="conteudo-grade-atendimentos" class="position-relative min-vh-25">
@@ -392,102 +397,172 @@
             {% if slots_grade %}
                 {% for slot in slots_grade %}
 
-                    {# EXTRAÇÃO DE VARIÁVEIS AUXILIARES DO SLOT #}
-                    {% set status_slug = (slot.status or 'agendado') | lower | trim %}
-                    {% set agend_id = slot.id or slot.agendamento_id %}
-                    {% set hora_inicio_txt = slot.hora_inicio or '00:00' %}
-                    {% set hora_fim_txt = slot.hora_fim or '00:00' %}
-                    {% set nome_cliente = slot.cliente_nome or 'Cliente' %}
-                    {% set cliente_id_slot = slot.cliente_id or '' %}
-                    {% set prof_id_slot = slot.profissional_id or '' %}
-                    {% set nome_prof = slot.profissional_nome or 'Profissional' %}
-                    {% set nome_servico = slot.servico_nome or 'Serviço' %}
-                    {% set valor_total_fmt = slot.valor_formatado or 'R$ 0,00' %}
-                    {% set url_foto_atendido = slot.foto_atendido %}
-                    {% set url_foto_titular = slot.foto_titular %}
-                    {% set inicial_cliente = (nome_cliente[:1] | upper) if nome_cliente else 'C' %}
-                    {% set e_atrasado = (status_slug == 'atrasado') %}
+                    {# 🟢 1. TRATAMENTO E EXTRAÇÃO DE CLIENTE #}
+                    {% set raw_cliente = slot.cliente_nome or (slot.cliente.nome if slot.cliente else '') or (slot.agendamento.cliente.nome if slot.agendamento and slot.agendamento.cliente else '') or (slot.agendamento.cliente_nome if slot.agendamento else '') %}
+                    {% set nome_cliente = raw_cliente if (raw_cliente and raw_cliente | string not in ['None', 'null', '']) else 'Cliente' %}
+                    {% set cliente_id_slot = slot.cliente_id or (slot.cliente.id if slot.cliente else '') or (slot.agendamento.cliente_id if slot.agendamento else '') %}
 
-                    {# LÓGICA DE DETECÇÃO DE PENDÊNCIAS DE ITENS DO SLOT #}
-                    {% set ns = namespace(tem_item_pendente=false, proximo_item_id='', proximo_item_nome='') %}
+                    {# 🟢 2. VARREDURA COMPLETA DE PROFISSIONAL (OBJETO, SLOT, AGENDAMENTO E ITEM) #}
+                    {% set item_primeiro = (slot.itens[0] if slot.itens is defined and slot.itens and slot.itens | length > 0 else (slot.agendamento.itens[0] if slot.agendamento and slot.agendamento.itens and slot.agendamento.itens | length > 0 else {})) %}
+                    {% set prof_obj = slot.colaborador or slot.profissional or (slot.agendamento.colaborador if slot.agendamento else None) or (slot.agendamento.profissional if slot.agendamento else None) or (item_primeiro.colaborador if item_primeiro and item_primeiro.colaborador is defined else None) or (item_primeiro.profissional if item_primeiro and item_primeiro.profissional is defined else None) or {} %}
 
-                    {% if slot.get('itens') and slot.get('itens')|length > 0 %}
-                        {% for item_p in slot.get('itens') %}
-                            {% set st_it = (item_p.get('status_item') or item_p.get('status') or 'agendado') | lower | trim %}
+                    {# Nome do Profissional #}
+                    {% set raw_prof = (prof_obj.nome if prof_obj and prof_obj.nome is defined else '') or slot.profissional_nome or slot.colaborador_nome or slot.nome_profissional or (prof_obj.get('nome') if prof_obj and prof_obj.get is defined else '') or (item_primeiro.profissional_nome if item_primeiro and item_primeiro.profissional_nome is defined else '') or (item_primeiro.colaborador_nome if item_primeiro and item_primeiro.colaborador_nome is defined else '') %}
+                    {% set nome_prof_slot = raw_prof if (raw_prof and raw_prof | string not in ['None', 'null', '']) else 'Profissional' %}
 
-                            {% if st_it not in ['concluido', 'concluído', 'cancelado'] and not ns.tem_item_pendente %}
-                                {% set ns.tem_item_pendente = true %}
-                                {% set ns.proximo_item_id = item_p.get('id') or item_p.get('item_id') or agend_id %}
-                                {% set ns.proximo_item_nome = (item_p.get('servico', {}).get('nome') if item_p.get('servico') else item_p.get('nome_servico')) or nome_servico %}
+                    {# Foto do Profissional #}
+                    {% set raw_foto_p = (prof_obj.url_foto_profissional if prof_obj and prof_obj.url_foto_profissional is defined else '') or (prof_obj.foto_profissional if prof_obj and prof_obj.foto_profissional is defined else '') or slot.foto_profissional or slot.profissional_foto or slot.colaborador_foto or (prof_obj.foto if prof_obj and prof_obj.foto is defined else '') or (prof_obj.get('foto') if prof_obj and prof_obj.get is defined else '') %}
+                    {% set foto_prof_slot = raw_foto_p if (raw_foto_p and raw_foto_p | string not in ['None', 'null', 'None None', '']) else '' %}
+
+                    {# ID do Profissional #}
+                    {% set prof_id_slot = slot.colaborador_id or slot.profissional_id or (prof_obj.id if prof_obj and prof_obj.id is defined else '') or (prof_obj.uuid_colaborador if prof_obj and prof_obj.uuid_colaborador is defined else '') %}
+
+                    {# 🟢 3. VARREDURA COMPLETA DO NOME DO SERVIÇO #}
+                    {% set serv_obj = slot.servico or (slot.agendamento.servico if slot.agendamento else {}) %}
+                    {% set raw_servico = slot.servico_nome or slot.nome_servico or slot.servico_titulo or (serv_obj.nome if serv_obj and serv_obj.nome is defined else '') or (serv_obj.titulo if serv_obj and serv_obj.titulo is defined else '') or (item_primeiro.nome_servico if item_primeiro and item_primeiro.nome_servico is defined else '') %}
+                    {% set nome_servico = raw_servico if (raw_servico and raw_servico | string not in ['None', 'null', '']) else 'Serviço' %}
+
+                    {# 🟢 4. EXTRAÇÃO DO INÍCIO REAL (BUSCA DIRETA EM ENCERRAMENTO, ITEM E SLOTS) #}
+                    {% set status_slug_norm = (slot.status if slot.status is defined else (slot.get('status') if slot.get is defined else 'agendado')) | string | lower | trim | replace(' ', '_') %}
+
+                    {% set inicio_real_fmt = slot.inicio_real_fmt if (slot.inicio_real_fmt is defined and slot.inicio_real_fmt) else '--:--' %}
+
+                    {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
+                        {# 1. Mapeia o objeto de encerramento, se existir no slot ou no agendamento #}
+                        {% set encerramento_obj = slot.encerramento or (slot.agendamento.encerramento if slot.agendamento and slot.agendamento.encerramento else {}) %}
+                        {% set item_em_execucao = (itens_pendentes | first) if (itens_pendentes is defined and itens_pendentes and itens_pendentes | length > 0) else item_primeiro %}
+
+                        {# 2. Varredura com prioridade: Encerramento -> Item -> Slot -> Agendamento #}
+                        {% set raw_inicio_real = (encerramento_obj.data_hora_inicio_real if encerramento_obj and encerramento_obj.data_hora_inicio_real is defined else '')
+                            or (encerramento_obj.get('data_hora_inicio_real') if encerramento_obj and encerramento_obj.get is defined else '')
+                            or (item_em_execucao.data_hora_inicio_real if item_em_execucao and item_em_execucao.data_hora_inicio_real is defined else '')
+                            or (item_em_execucao.get('data_hora_inicio_real') if item_em_execucao and item_em_execucao.get is defined else '')
+                            or slot.data_hora_inicio_real or slot.inicio_real or (slot.agendamento.data_hora_inicio_real if slot.agendamento else '') %}
+
+                        {# 3. Formatação estrita para HH:MM #}
+                        {% if raw_inicio_real and raw_inicio_real | string not in ['None', 'null', ''] %}
+                            {% if raw_inicio_real.strftime is defined %}
+                                {% set inicio_real_fmt = raw_inicio_real.strftime('%H:%M') %}
+                            {% else %}
+                                {% set str_inicio = raw_inicio_real | string %}
+                                {% if ' ' in str_inicio %}
+                                    {% set inicio_real_fmt = str_inicio.split(' ')[1][:5] %}
+                                {% elif 'T' in str_inicio %}
+                                    {% set inicio_real_fmt = str_inicio.split('T')[1][:5] %}
+                                {% else %}
+                                    {% set inicio_real_fmt = str_inicio[:5] %}
+                                {% endif %}
                             {% endif %}
-                        {% endfor %}
-                    {% else %}
-                        {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                            {% set ns.tem_item_pendente = true %}
-                            {% set ns.proximo_item_id = agend_id %}
-                            {% set ns.proximo_item_nome = nome_servico %}
                         {% endif %}
                     {% endif %}
 
-                    {% if slot.tipo == 'ocupado' %}
-                        {# Extração segura dos dados do cliente e profissional vinculados ao slot #}
-                        {% set cliente_id_slot = slot.cliente_id or (slot.cliente.id if slot.cliente else '') or (slot.agendamento.cliente.id if slot.agendamento and slot.agendamento.cliente else '') %}
-                        {% set prof_id_slot = slot.profissional_id or (slot.profissional.id if slot.profissional else '') or (slot.agendamento.profissional.id if slot.agendamento and slot.agendamento.profissional else '') %}
-                        {% set agend_id = slot.agendamento_id or slot.id or (slot.agendamento.id if slot.agendamento else '') %}
+                    {# Outras variáveis básicas #}
+                    {% set status_slug = (slot.status or 'agendado') | string | lower | trim %}
+                    {% set hora_inicio_txt = slot.hora_inicio or '00:00' %}
+                    {% set hora_fim_txt = slot.hora_fim or '00:00' %}
+                    {% set valor_total_fmt = slot.valor_formatado or 'R$ 0,00' %}
 
-                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug }} {% if status_slug in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento{% elif status_slug in ['concluido', 'finalizado'] %}item-agendamento-concluido{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
-                             data-id="{{ agend_id }}"
+                    {# Fotos do Cliente/Atendido #}
+                    {% set raw_foto_cli = slot.foto_atendido or slot.cliente_foto or slot.foto_cliente or slot.foto or (slot.cliente.foto if slot.cliente else '') %}
+                    {% set url_foto_atendido = raw_foto_cli if (raw_foto_cli and raw_foto_cli | string not in ['None', 'null', '']) else '' %}
+
+                    {% set raw_foto_tit = slot.foto_titular or (slot.titular.foto if slot.titular else '') %}
+                    {% set url_foto_titular = raw_foto_tit if (raw_foto_tit and raw_foto_tit | string not in ['None', 'null', '']) else '' %}
+
+                    {% set inicial_cliente = (nome_cliente[:1] | upper) if nome_cliente else 'C' %}
+                    {% set e_atrasado = (status_slug == 'atrasado') %}
+
+                    {% if slot.tipo == 'ocupado' or slot.get('tipo') == 'ocupado' %}
+                        {# IDs #}
+                        {% set agend_id_val = slot.agendamento_id if slot.agendamento_id is defined and slot.agendamento_id else (slot.get('agendamento_id') if slot.get is defined and slot.get('agendamento_id') else (slot.agendamento.id if slot.agendamento and slot.agendamento.id else slot.id)) %}
+                        {% set item_id_val = slot.item_id if slot.item_id is defined and slot.item_id else (slot.get('item_id') if slot.get is defined and slot.get('item_id') else slot.id) %}
+
+                        {# Status Normalizado #}
+                        {% set raw_status = slot.status if slot.status is defined else (slot.get('status') if slot.get is defined else (status_slug if status_slug is defined else 'agendado')) %}
+                        {% set status_slug_norm = (raw_status | string | lower | trim | replace(' ', '_')) %}
+
+                        {# Filtro de itens da lista #}
+                        {% set itens_lista = (slot.itens if slot.itens is defined else slot.get('itens', [])) or (slot.agendamento.itens if slot.agendamento and slot.agendamento.itens else []) %}
+                        {% if not itens_lista %}
+                            {% set itens_lista = [slot] %}
+                        {% endif %}
+
+                        {% set itens_pendentes = [] %}
+                        {% for it in itens_lista %}
+                            {% set st_item_raw = (it.status_item if it.status_item is defined else (it.get('status_item') if it.get is defined and it.get('status_item') else (it.status if it.status is defined else (it.get('status') if it.get is defined else 'pendente')))) %}
+                            {% set st_norm = (st_item_raw | string | lower | trim | replace(' ', '_')) %}
+
+                            {% if st_norm not in ['concluido', 'concluído', 'finalizado', 'cancelado'] %}
+                                {% set _ = itens_pendentes.append(it) %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug_norm }} {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento border-primary border-2{% elif status_slug_norm in ['concluido', 'finalizado'] %}item-agendamento-concluido bg-light bg-opacity-75 text-muted border-light-subtle opacity-75{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
+                             data-id="{{ agend_id_val }}"
                              data-tipo="ocupado"
-                             data-status="{{ status_slug }}"
+                             data-status="{{ status_slug_norm }}"
                              data-hora="{{ hora_inicio_txt }}"
                              data-cliente="{{ nome_cliente | e }}"
                              data-cliente-id="{{ cliente_id_slot }}"
                              data-colaborador-id="{{ prof_id_slot }}"
-                             data-cliente-foto="{{ url_foto_atendido or '' }}"
+                             data-cliente-foto="{{ url_foto_atendido }}"
                              data-servico="{{ nome_servico | e }}"
                              data-valor="{{ valor_total_fmt }}"
-                             data-cliente-telefone="{{ slot.get('cliente_telefone', 'Contato via Plataforma') }}"
-                             data-obs="{{ slot.get('observacoes', 'Sem observações adicionais.') }}"
+                             data-cliente-telefone="{{ slot.cliente_telefone if slot.cliente_telefone is defined else (slot.get('cliente_telefone') if slot.get is defined else 'Contato via Plataforma') }}"
+                             data-obs="{{ slot.observacoes if slot.observacoes is defined else (slot.get('observacoes') if slot.get is defined else 'Sem observações adicionais.') }}"
                              data-profissional-id="{{ prof_id_slot }}"
-                             title="Clique para ações no card | Duplo clique ou toque longo no cliente para detalhes"
-                             style="cursor: pointer; {% if e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
+                             data-profissional-nome="{{ nome_prof_slot | e }}"
+                             data-profissional-foto="{{ foto_prof_slot }}"
+                             style="cursor: pointer; {% if status_slug_norm in ['concluido', 'finalizado'] %}background-color: #f8f9fa;{% elif e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
 
+                            <!-- CABEÇALHO DO STATUS -->
                             <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
-                                {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    <span class="badge bg-primary text-white px-2.5 py-1 text-uppercase tracking-wide shadow-sm d-inline-flex align-items-center gap-1" style="font-size: 0.68rem; letter-spacing: 0.5px;">
-                                        <span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true" style="width: 0.5rem; height: 0.5rem;"></span>
-                                        Em Atendimento
+                                {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
+                                    <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.75rem;">
+                                        <span class="d-inline-flex align-items-center gap-1">
+                                            <i class="bi bi-play-circle-fill text-success"></i> Início Real:
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold" style="font-size: 0.72rem;">
+                                                {{ inicio_real_fmt }}
+                                            </span>
+                                        </span>
+                                    </div>
+                                {% elif status_slug_norm in ['concluido', 'finalizado'] %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem;">
+                                        <i class="bi bi-check-circle-fill me-1 text-secondary"></i>Concluído
                                     </span>
                                 {% else %}
-                                    <span class="badge {{ status_badge_class }} px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem; letter-spacing: 0.5px;">
-                                        <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>{{ status_label }}
+                                    <span class="badge bg-primary text-white px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem;">
+                                        <i class="bi bi-circle-fill me-1" style="font-size: 0.45rem;"></i>Agendado
                                     </span>
                                 {% endif %}
 
                                 <div class="d-flex align-items-center gap-2">
-                                    {% if slot.get('ordem_execucao') %}
-                                        <small class="text-muted fw-bold" style="font-size: 0.72rem;">Etapa #{{ slot.get('ordem_execucao') }}</small>
+                                    {% set ordem_exe = slot.ordem_execucao if slot.ordem_execucao is defined else (slot.get('ordem_execucao') if slot.get is defined else None) %}
+                                    {% if ordem_exe %}
+                                        <small class="text-muted fw-bold" style="font-size: 0.72rem;">Etapa #{{ ordem_exe }}</small>
                                     {% endif %}
 
                                     <button type="button" class="btn btn-sm btn-light border rounded-pill px-2 py-0 ms-1 text-secondary"
                                             title="Ajustar Ordem/Simultaneidade de Tarefas"
-                                            onclick="event.stopPropagation(); abrirModalReorganizarComanda('{{ agend_id }}')">
+                                            onclick="event.stopPropagation(); abrirModalReorganizarComanda('{{ agend_id_val }}')">
                                         <i class="bi bi-arrow-down-up" style="font-size: 0.75rem;"></i>
                                     </button>
                                 </div>
                             </div>
 
+                            <!-- ESTRUTURA PRINCIPAL -->
                             <div class="d-flex align-items-start gap-3 w-100">
-                                <div class="box-horario text-center px-2.5 py-2 rounded-3 {% if status_slug in ['em_atendimento', 'em_andamento'] %}box-horario-atendimento{% elif status_slug in ['concluido', 'finalizado'] %}box-horario-concluido{% else %}bg-light text-dark{% endif %} border flex-shrink-0 shadow-sm" style="min-width: 85px;">
+                                <!-- BOX HORÁRIO -->
+                                <div class="box-horario text-center px-2.5 py-2 rounded-3 {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}box-horario-atendimento{% elif status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary bg-opacity-10 text-secondary border-secondary-subtle{% else %}bg-light text-dark{% endif %} border flex-shrink-0 shadow-sm" style="min-width: 85px;">
                                     <span class="d-block fw-bold fs-5 leading-none">{{ hora_inicio_txt }}</span>
                                     <small class="d-block mb-1.5 opacity-75" style="font-size: 0.65rem;">até {{ hora_fim_txt }}</small>
 
-                                    {% if status_slug in ['em_atendimento', 'em_andamento'] %}
+                                    {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
                                         <div class="rounded py-1 px-1 fw-bold w-100 shadow-sm" style="font-size: 0.75rem; background-color: rgba(255, 255, 255, 0.2); color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.3);">
                                             {{ valor_total_fmt }}
                                         </div>
-                                    {% elif status_slug in ['concluido', 'finalizado'] %}
-                                        <div class="badge bg-success-subtle text-success border border-success-subtle fw-bold w-100 py-1" style="font-size: 0.75rem;">
+                                    {% elif status_slug_norm in ['concluido', 'finalizado'] %}
+                                        <div class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold w-100 py-1" style="font-size: 0.75rem;">
                                             {{ valor_total_fmt }}
                                         </div>
                                     {% else %}
@@ -497,28 +572,61 @@
                                     {% endif %}
                                 </div>
 
+                                <!-- DETALHES -->
                                 <div class="flex-grow-1 overflow-hidden">
-                                    <div class="mb-1">
-                                        <h5 class="fw-bold text-dark m-0 text-truncate" style="font-size: 1.15rem; line-height: 1.2;" title="{{ nome_prof }}">
-                                            <i class="bi bi-person-badge-fill text-primary me-1.5"></i>{{ nome_prof }}
-                                        </h5>
+
+                                    <!-- PROFISSIONAL -->
+                                    <div class="mb-2 d-flex align-items-center gap-2 pb-1 border-bottom">
+                                        <div class="position-relative flex-shrink-0" style="width: 30px; height: 30px;">
+                                            {% if foto_prof_slot %}
+                                                <img src="{{ foto_prof_slot }}"
+                                                     class="w-100 h-100 rounded-circle object-fit-cover border shadow-sm {% if status_slug_norm in ['concluido', 'finalizado'] %}grayscale-50{% endif %}"
+                                                     alt="{{ nome_prof_slot }}"
+                                                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
+                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex align-items-center justify-content-center fw-bold shadow-xs d-none" style="font-size: 0.7rem;">
+                                                    {{ (nome_prof_slot[:1] | upper) if nome_prof_slot else 'P' }}
+                                                </div>
+                                            {% else %}
+                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex align-items-center justify-content-center fw-bold shadow-xs" style="font-size: 0.7rem;">
+                                                    {{ (nome_prof_slot[:1] | upper) if nome_prof_slot else 'P' }}
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="overflow-hidden">
+                                            <small class="text-muted d-block leading-none" style="font-size: 0.62rem; font-weight: 600; text-transform: uppercase;">Profissional</small>
+                                            <h6 class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-dark{% endif %} m-0 text-truncate" style="font-size: 0.95rem; line-height: 1.1;" title="{{ nome_prof_slot }}">
+                                                {{ nome_prof_slot }}
+                                            </h6>
+                                        </div>
                                     </div>
 
-                                    <!-- ÁREA DO CLIENTE: Isolada para receber duplo clique e clique longo -->
+                                    <!-- CLIENTE E SERVIÇO -->
                                     <div class="area-cliente-detalhes d-flex align-items-center gap-2 my-1 p-1 rounded"
+                                         data-cliente-nome="{{ nome_cliente | e }}"
+                                         data-cliente-telefone="{{ slot.cliente_telefone if slot.cliente_telefone is defined else (slot.get('cliente_telefone') if slot.get is defined else 'Contato via Plataforma') }}"
+                                         data-cliente-foto="{{ url_foto_atendido }}"
+                                         data-servico="{{ nome_servico | e }}"
+                                         data-valor="{{ valor_total_fmt }}"
+                                         data-obs="{{ slot.observacoes if slot.observacoes is defined else (slot.get('observacoes') if slot.get is defined else 'Sem observações adicionais.') }}"
+                                         data-hora="{{ hora_inicio_txt }}"
                                          title="Duplo clique ou toque longo para abrir a ficha do cliente"
                                          style="cursor: pointer; user-select: none;">
-                                        <div class="position-relative flex-shrink-0" style="width: 38px; height: 38px;">
-                                            {% if slot.get('tem_beneficiario') %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 border-primary d-flex align-items-center justify-content-center text-primary shadow-sm"
-                                                     title="Beneficiário: {{ slot.get('nome_beneficiario') }}">
-                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ slot.get('nome_beneficiario') }}" onerror="this.style.display='none';">
+
+                                        <div class="position-relative flex-shrink-0" style="width: 36px; height: 36px;">
+                                            {% set tem_benef = slot.tem_beneficiario if slot.tem_beneficiario is defined else (slot.get('tem_beneficiario') if slot.get is defined else false) %}
+                                            {% set raw_benef = slot.nome_beneficiario if slot.nome_beneficiario is defined else (slot.get('nome_beneficiario') if slot.get is defined else '') %}
+                                            {% set nome_benef = raw_benef if (raw_benef and raw_benef | string not in ['None', 'null', '']) else '' %}
+                                            {% set tipo_persona = slot.tipo_persona if slot.tipo_persona is defined else (slot.get('tipo_persona') if slot.get is defined else 'humano') %}
+
+                                            {% if tem_benef %}
+                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 {% if status_slug_norm in ['concluido', 'finalizado'] %}border-secondary{% else %}border-primary{% endif %} d-flex align-items-center justify-content-center {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} shadow-sm"
+                                                     title="Beneficiário: {{ nome_benef }}">
+                                                    {% if url_foto_atendido %}
+                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_benef }}" onerror="this.style.display='none';">
                                                     {% else %}
-                                                        {% set tp = slot.get('tipo_persona', 'humano') %}
-                                                        {% if tp == 'pet' %}
+                                                        {% if tipo_persona == 'pet' %}
                                                             <i class="bi bi-paw-fill fs-5"></i>
-                                                        {% elif tp == 'veiculo' %}
+                                                        {% elif tipo_persona == 'veiculo' %}
                                                             <i class="bi bi-car-front-fill fs-5"></i>
                                                         {% else %}
                                                             <i class="bi bi-person-fill fs-5"></i>
@@ -527,8 +635,8 @@
                                                 </div>
 
                                                 <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden"
-                                                     style="width: 16px; height: 16px;" title="Responsável: {{ slot.get('cliente_nome') }}">
-                                                    {% if url_foto_titular and url_foto_titular != 'None' %}
+                                                     style="width: 16px; height: 16px;" title="Responsável: {{ nome_cliente }}">
+                                                    {% if url_foto_titular %}
                                                         <img src="{{ url_foto_titular }}" class="w-100 h-100 object-fit-cover" onerror="this.style.display='none';">
                                                     {% else %}
                                                         <span class="text-white fw-bold d-flex align-items-center justify-content-center h-100" style="font-size: 0.5rem;">
@@ -538,11 +646,11 @@
                                                 </div>
                                             {% else %}
                                                 <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
-                                                    {% if url_foto_atendido and url_foto_atendido != 'None' %}
+                                                    {% if url_foto_atendido %}
                                                         <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
-                                                        <span class="fw-bold text-primary fs-6 d-none">{{ inicial_cliente }}</span>
+                                                        <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
                                                     {% else %}
-                                                        <span class="fw-bold text-primary fs-6">
+                                                        <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} fs-6">
                                                             {{ inicial_cliente }}
                                                         </span>
                                                     {% endif %}
@@ -551,149 +659,106 @@
                                         </div>
 
                                         <div class="text-secondary fw-semibold text-truncate lh-sm" style="font-size: 0.85rem;">
-                                            {% if slot.get('tem_beneficiario') %}
-                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
-                                                    {{ slot.get('nome_beneficiario') }}
+                                            {% if tem_benef %}
+                                                <div class="{% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary text-decoration-line-through opacity-75{% else %}text-dark{% endif %} fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                    {{ nome_benef }}
                                                 </div>
                                                 <div class="text-muted text-truncate" style="font-size: 0.75rem;">
-                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span>
+                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span> | <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-dark{% endif %}">{{ nome_servico }}</span>
                                                 </div>
                                             {% else %}
-                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                <div class="{% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary text-decoration-line-through opacity-75{% else %}text-dark{% endif %} fw-bold text-truncate" style="font-size: 0.9rem;">
                                                     {{ nome_cliente }}
+                                                </div>
+                                                <div class="text-muted text-truncate" style="font-size: 0.78rem;">
+                                                    <i class="bi bi-scissors me-1"></i>{{ nome_servico }}
                                                 </div>
                                             {% endif %}
                                         </div>
                                     </div>
 
-                                    {# LISTA DE ITENS DO AGENDAMENTO #}
-                                    <div class="mt-2 pt-2 border-top">
-                                        {% if slot.get('itens') %}
-                                            {% for item in slot.get('itens') %}
-                                                {% set st_item = item.status_item or item.status or 'agendado' %}
-                                                {% set item_nome_txt = item.servico.nome if item.servico else (item.nome_servico or 'Serviço') %}
-                                                <div class="card mb-2 border-start border-4
-                                                     {% if st_item == 'concluido' %}border-success bg-light
-                                                     {% elif st_item in ['em_andamento', 'em_atendimento'] %}border-warning bg-warning-subtle
-                                                     {% else %}border-primary{% endif %}">
-
-                                                    <div class="card-body p-2 d-flex justify-content-between align-items-center">
-                                                        <div>
-                                                            <strong class="d-block small">{{ item_nome_txt }}</strong>
-                                                            <span class="badge {% if st_item == 'concluido' %}bg-success{% else %}bg-secondary{% endif %}">
-                                                                {{ st_item | replace('_', ' ') | title }}
-                                                            </span>
-                                                        </div>
-
-                                                        <div>
-                                                            {% if status_slug not in ['concluido', 'finalizado'] %}
-                                                                {% if st_item != 'concluido' %}
-                                                                    <button type="button" class="btn btn-sm btn-outline-success"
-                                                                            data-agendamento-id="{{ agend_id }}"
-                                                                            data-item-id="{{ item.id }}"
-                                                                            onclick="event.stopPropagation(); acaoConcluirTarefaDireta('{{ agend_id }}', '{{ item.id }}')">
-                                                                        <i class="bi bi-check-lg"></i> Concluir
-                                                                    </button>
-                                                                {% else %}
-                                                                    <button type="button" class="btn btn-sm btn-link text-muted p-0" title="Reabrir item"
-                                                                            onclick="event.stopPropagation(); reabrirItemServico('{{ agend_id }}', '{{ item.id }}')">
-                                                                        <i class="bi bi-arrow-counterclockwise"></i> Reabrir
-                                                                    </button>
-                                                                {% endif %}
-                                                            {% endif %}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            {% endfor %}
-                                        {% else %}
-                                            <div class="p-2 rounded-3 bg-light-subtle border text-dark mt-1" style="font-size: 0.82rem;">
-                                                <div class="d-flex align-items-start gap-1.5">
-                                                    <i class="bi bi-scissors text-secondary me-1 flex-shrink-0 mt-0.5"></i>
-                                                    <span class="fw-medium text-break" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25;">
-                                                        {{ nome_servico }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        {% endif %}
-                                    </div>
                                 </div>
                             </div>
 
-                            {# ÁREA INFERIOR DO CARD: AÇÕES DE ENCERRAR TAREFA PENDENTE OU LIQUIDAR COMANDA #}
-                            {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                    <small class="text-primary fw-bold">
-                                        <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
-                                    </small>
+                            {# ÁREA INFERIOR DE CONCLUSÃO E INÍCIO REAL #}
+                            {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
+                                <div class="mt-2 pt-2 border-top d-flex flex-column gap-2">
 
-                                    {% set itens_lista = slot.get('itens', []) %}
-                                    {% set itens_pendentes = [] %}
-                                    {% for it in itens_lista %}
-                                        {% set st = (it.get('status_item') or it.get('status') or 'pendente') | lower %}
-                                        {% if st not in ['concluido', 'concluído', 'cancelado'] %}
-                                            {% set _ = itens_pendentes.append(it) %}
-                                        {% endif %}
-                                    {% endfor %}
-
-                                    {% set profs_unicos = itens_pendentes | map(attribute='profissional_id') | unique | list %}
-
-                                    {% if itens_pendentes | length == 0 %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); abrirModalEncerramentoComanda('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-receipt me-1"></i> Liquidar Comanda
-                                        </button>
-                                    {% elif profs_unicos | length > 1 %}
-                                        {% set meu_item = (itens_pendentes | selectattr('profissional_id', 'eq', current_user.id) | first) or (itens_pendentes | first) %}
-                                        {% set item_id_target = meu_item.get('id') or meu_item.get('item_id') if meu_item else '' %}
-                                        {% set servico_nome_target = (meu_item.get('servico', {}).get('nome') if meu_item.get('servico') else meu_item.get('nome_servico')) or '' %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ nome_cliente | e }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target or 'Serviço' }}
-                                        </button>
-                                    {% else %}
-                                        <button type="button"
-                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id }}', '{{ valor_total_fmt | e }}')">
-                                            <i class="bi bi-check2-square me-1"></i> Encerrar Atendimento
-                                        </button>
-                                    {% endif %}
-                                </div>
-                            {% endif %}
-
-                            {# PAINEL DE AÇÕES REVELADO POR CLIQUE LONGO OU AÇÃO MANUAL #}
-                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
-                                {% if status_slug in ['em_atendimento', 'em_andamento'] %}
-                                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2 w-100">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                         <small class="text-primary fw-bold">
                                             <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                         </small>
 
-                                        {% set item_id_target = slot.get('item_id') or slot.get('id') or '' %}
-                                        {% set agend_id_target = slot.get('agendamento_id') or agend_id %}
-                                        {% set servico_nome_target = slot.get('servico_nome') or 'Serviço' %}
-                                        {% set cliente_nome_target = slot.get('cliente_nome') or nome_cliente or '' %}
-                                        {% set valor_target = slot.get('valor_formatado') or valor_total_fmt or '0,00' %}
-                                        {% set st_item = (slot.get('status_slug') or slot.get('status') or '') | lower %}
+                                        {% if itens_pendentes | length > 0 %}
+                                            {% set item_alvo_p = itens_pendentes | first %}
+                                            {% set item_id_target_p = item_alvo_p.item_id if item_alvo_p.item_id is defined and item_alvo_p.item_id else (item_alvo_p.get('item_id') if item_alvo_p.get is defined and item_alvo_p.get('item_id') else (item_alvo_p.id if item_alvo_p.id is defined else item_id_val)) %}
 
-                                        {% if st_item not in ['concluido', 'concluído', 'cancelado', 'finalizado'] %}
+                                            {% set raw_serv_target = item_alvo_p.nome_servico or item_alvo_p.servico_nome or (item_alvo_p.servico.nome if item_alvo_p.servico is defined and item_alvo_p.servico else '') or (item_alvo_p.get('nome_servico') if item_alvo_p.get is defined else '') or nome_servico %}
+                                            {% set servico_nome_target_p = raw_serv_target if (raw_serv_target and raw_serv_target | string not in ['None', 'null', '']) else 'Serviço' %}
+
+                                            {% set raw_init_target = item_alvo_p.inicio_real or (item_alvo_p.get('inicio_real') if item_alvo_p.get is defined else '') or inicio_real_fmt %}
+                                            {% set inicio_item = raw_init_target if (raw_init_target and raw_init_target | string not in ['None', 'null', '']) else '--:--' %}
+
                                             <button type="button"
-                                                    class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
-                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_target }}', '{{ item_id_target }}', '{{ servico_nome_target | e }}', '{{ cliente_nome_target | e }}')">
-                                                <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target }}
+                                                    class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item }}')">
+                                                <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
                                             </button>
                                         {% else %}
                                             <button type="button"
-                                                    class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold"
-                                                    onclick="event.stopPropagation(); acaoFinalizarAtendimento('{{ agend_id_target }}', '{{ valor_target | e }}')">
+                                                    class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                                    onclick="event.stopPropagation(); registrarFimRealEEncerrar('{{ agend_id_val }}', '{{ valor_total_fmt | e }}', '{{ inicio_real_fmt }}')">
                                                 <i class="bi bi-receipt me-1"></i> Liquidar Comanda
                                             </button>
                                         {% endif %}
                                     </div>
+                                </div>
+                            {% endif %}
+
+                            {# PAINEL EXPANSÍVEL DE AÇÕES #}
+                            <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
+
+                                {% if status_slug_norm not in ['em_atendimento', 'em_andamento', 'concluido', 'finalizado', 'cancelado'] %}
+                                    {% set item_inicial = itens_pendentes | first if itens_pendentes else (itens_lista | first if itens_lista else None) %}
+                                    {% set item_id_param = item_id_val %}
+                                    {% if item_inicial %}
+                                        {% set item_id_param = item_inicial.item_id if item_inicial.item_id is defined and item_inicial.item_id else (item_inicial.get('item_id') if item_inicial.get is defined and item_inicial.get('item_id') else (item_inicial.id if item_inicial.id is defined else item_id_val)) %}
+                                    {% endif %}
+
+                                    <button type="button"
+                                            class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                            onclick="event.stopPropagation(); acaoIniciarAtendimento('{{ agend_id_val }}', '{{ empresa.id if empresa is defined else "" }}', '{{ item_id_param }}', '{{ prof_id_slot }}')">
+                                        <i class="bi bi-play-fill me-1"></i> Iniciar Atendimento
+                                    </button>
                                 {% endif %}
 
-                                <button type="button" class="btn btn-sm btn-light border rounded-circle p-1 ms-1" title="Fechar Painel"
+                                {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
+                                    {% if itens_pendentes | length > 0 %}
+                                        {% set item_alvo_p = itens_pendentes | first %}
+                                        {% set item_id_target_p = item_alvo_p.item_id if item_alvo_p.item_id is defined and item_alvo_p.item_id else (item_alvo_p.get('item_id') if item_alvo_p.get is defined and item_alvo_p.get('item_id') else (item_alvo_p.id if item_alvo_p.id is defined else item_id_val)) %}
+                                        {% set raw_serv_target = item_alvo_p.nome_servico or item_alvo_p.servico_nome or (item_alvo_p.servico.nome if item_alvo_p.servico is defined and item_alvo_p.servico else '') or (item_alvo_p.get('nome_servico') if item_alvo_p.get is defined else '') or nome_servico %}
+                                        {% set servico_nome_target_p = raw_serv_target if (raw_serv_target and raw_serv_target | string not in ['None', 'null', '']) else 'Serviço' %}
+
+                                        {% set raw_init_target_panel = item_alvo_p.inicio_real or (item_alvo_p.get('inicio_real') if item_alvo_p.get is defined else '') or inicio_real_fmt %}
+                                        {% set inicio_item_panel = raw_init_target_panel if (raw_init_target_panel and raw_init_target_panel | string not in ['None', 'null', '']) else '--:--' %}
+
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item_panel }}')">
+                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
+                                        </button>
+                                    {% else %}
+                                        <button type="button"
+                                                class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                                onclick="event.stopPropagation(); registrarFimRealEEncerrar('{{ agend_id_val }}', '{{ valor_total_fmt | e }}')">
+                                            <i class="bi bi-receipt me-1"></i> Liquidar Comanda
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+
+                                <button type="button"
+                                        class="btn btn-sm btn-light border rounded-circle p-1 ms-1"
+                                        title="Fechar Painel"
                                         onclick="event.stopPropagation(); fecharPainelAcoes(this)">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
@@ -900,14 +965,14 @@
               <label for="hora_inicio_real" class="form-label small fw-bold">Início Real</label>
               <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-play-circle"></i></span>
-                <input type="time" class="form-control bg-light" id="hora_inicio_real" name="hora_inicio_real" readonly tabindex="-1">
+                <input type="text" class="form-control bg-light text-center fw-semibold" id="hora_inicio_real" name="hora_inicio_real" readonly tabindex="-1">
               </div>
             </div>
             <div class="col-6">
               <label for="hora_fim_real" class="form-label small fw-bold">Fim Real</label>
               <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-stop-circle"></i></span>
-                <input type="time" class="form-control bg-light" id="hora_fim_real" name="hora_fim_real" readonly tabindex="-1">
+                <input type="text" class="form-control bg-light text-center fw-semibold text-danger" id="hora_fim_real" name="hora_fim_real" readonly tabindex="-1">
               </div>
             </div>
           </div>
@@ -940,7 +1005,7 @@
         </div>
         <div class="modal-footer bg-light">
           <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold">
+          <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
             <i class="bi bi-check-lg me-1"></i>Confirmar Conclusão
           </button>
         </div>
@@ -1052,14 +1117,16 @@ window.abrirModalDetalhesCliente = function(elemento) {
     const cardPai = elemento.closest('.item-agendamento') || elemento;
 
     const dadosCliente = {
-        nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
-        telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
-        hora: cardPai.dataset.hora || '--:--',
-        valor: cardPai.dataset.valor || 'R$ 0,00',
-        servico: cardPai.dataset.servico || 'Não informado',
-        obs: cardPai.dataset.obs || 'Nenhuma observação.',
-        foto: (area && area.dataset.clienteFoto) || cardPai.dataset.clienteFoto || ''
-    };
+            nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
+            telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
+            hora: cardPai.dataset.hora || '--:--',
+            valor: cardPai.dataset.valor || 'R$ 0,00',
+            servico: cardPai.dataset.servico || 'Não informado',
+            obs: cardPai.dataset.obs || 'Nenhuma observação.',
+            // Aceita qualquer uma das variações possíveis do atributo de foto
+            foto: (area && (area.dataset.clienteFoto || area.dataset.fotoAtendido || area.dataset.foto)) ||
+                  (cardPai.dataset.clienteFoto || cardPai.dataset.fotoAtendido || cardPai.dataset.foto) || ''
+        };
 
     const elNome = document.getElementById('modalClienteEmpresaNome');
     const elTel = document.getElementById('modalClienteEmpresaTelefone');
@@ -1095,8 +1162,37 @@ window.abrirModalDetalhesCliente = function(elemento) {
     }
 };
 
-window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
-    const empIdFinal = empresaId || obterEmpresaIdContexto();
+/**
+ * Alterna a exibição do painel de ações ao clicar no card.
+ * Previne acionamentos automáticos e acidentais.
+ */
+function togglePainelAcoes(cardElement) {
+    const painel = cardElement.querySelector('.painel-acoes-slot');
+    if (painel) {
+        // Se desejar fechar os outros painéis abertos ao abrir um novo:
+        document.querySelectorAll('.painel-acoes-slot').forEach(el => {
+            if (el !== painel) el.classList.add('d-none');
+        });
+
+        painel.classList.toggle('d-none');
+    }
+}
+
+/**
+ * Esconde o painel de ações manualmente.
+ */
+function fecharPainelAcoes(btnElement) {
+    const painel = btnElement.closest('.painel-acoes-slot');
+    if (painel) {
+        painel.classList.add('d-none');
+    }
+}
+
+/**
+ * Executa a requisição de início do atendimento com validação de parâmetros e CSRF.
+ */
+window.acaoIniciarAtendimento = function(agendamentoId, empresaId, itemId = null, colaboradorContratoId = null) {
+    const empIdFinal = empresaId || (typeof obterEmpresaIdContexto === 'function' ? obterEmpresaIdContexto() : null);
 
     if (!agendamentoId || !empIdFinal) {
         alert("Erro de parâmetros: ID do agendamento ou da empresa ausentes.");
@@ -1105,13 +1201,21 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
 
     const idLimpo = String(agendamentoId).split('_')[0];
 
+    // Payload estruturado enviando os dados do item e colaborador
+    const payload = {
+        empresa_id: empIdFinal
+    };
+    if (itemId) payload.agendamento_item_id = itemId;
+    if (colaboradorContratoId) payload.colaborador_contrato_id = colaboradorContratoId;
+
     fetch(`/agenda/empresa/${empIdFinal}/agendamentos/${idLimpo}/iniciar`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': getCsrfToken()
-        }
+            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
+        },
+        body: JSON.stringify(payload)
     })
     .then(async response => {
         const isJson = response.headers.get('content-type')?.includes('application/json');
@@ -1123,7 +1227,7 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
         return data;
     })
     .then(data => {
-        if (data && (data.sucesso || data.success)) {
+        if (data && (data.sucesso || data.status === 'success' || data.success)) {
             window.location.reload();
         } else {
             alert(data?.mensagem || 'Não foi possível iniciar o atendimento.');
@@ -1135,6 +1239,10 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId) {
     });
 };
 
+// =========================================================================
+// AJUSTE PONTUAL DA FUNÇÃO ABRIR MODAL / AÇÃO
+// =========================================================================
+
 window.abrirModalAtendimento = function(cardElement) {
     if (!cardElement || !(cardElement instanceof HTMLElement)) return;
 
@@ -1142,33 +1250,58 @@ window.abrirModalAtendimento = function(cardElement) {
     const status = cardElement.getAttribute('data-status') || '';
     const empresaId = obterEmpresaIdContexto();
 
+    // Se já estiver em atendimento, abre a comanda para finalização
     if (['em_atendimento', 'em_andamento'].includes(status)) {
         const valorTotal = cardElement.getAttribute('data-valor') || '0,00';
         window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
     } else {
-        window.acaoIniciarAtendimento(agendamentoId, empresaId);
+        // Se ainda não iniciou, apenas abre o painel/modal de ações em vez de disparar a API direto
+        window.gerenciarAcoesSlot(cardElement);
     }
 };
 
-window.prepararModalFinalizarItem = function(agendamentoId, itemId, servicoNome, clienteNome) {
-    if (document.getElementById('modal_agendamento_id')) {
-        document.getElementById('modal_agendamento_id').value = agendamentoId;
-    }
-    if (document.getElementById('modal_item_id')) {
-        document.getElementById('modal_item_id').value = itemId;
-    }
-    if (document.getElementById('modal_servico_nome')) {
-        document.getElementById('modal_servico_nome').textContent = servicoNome || 'Serviço';
-    }
-    if (document.getElementById('modal_cliente_nome')) {
-        document.getElementById('modal_cliente_nome').textContent = 'Cliente: ' + (clienteNome || '---');
+function prepararModalFinalizarItem(agendId, itemId, servicoNome, clienteNome, inicioReal) {
+    const agora = new Date();
+    const horaFimFormatada = agora.toTimeString().substring(0, 5); // Formato HH:MM
+
+    // Preenche os campos básicos
+    document.getElementById('modal_agendamento_id').value = agendId;
+    document.getElementById('modal_item_id').value = itemId;
+    document.getElementById('modal_servico_nome').innerText = servicoNome || 'Serviço';
+    document.getElementById('modal_cliente_nome').innerText = 'Cliente: ' + (clienteNome || '---');
+
+    // Tratamento robusto para o Início Real (evita exibir "None" ou vazio)
+    let horaInicioTratada = '--:--';
+    if (inicioReal && inicioReal !== 'None' && inicioReal !== 'null' && inicioReal.trim() !== '') {
+        // Se vier no formato completo de data/hora do banco (ex: 2026-06-07 14:30:00 ou ISO), extrai apenas a hora
+        if (inicioReal.includes('T') || inicioReal.includes(' ')) {
+            const partes = inicioReal.split(/T| /);
+            const horaPart = partes[1]; // Pega a parte da hora
+            if (horaPart) {
+                horaInicioTratada = horaPart.substring(0, 5); // HH:MM
+            }
+        } else {
+            horaInicioTratada = inicioReal.substring(0, 5); // Caso já venha como "14:30"
+        }
     }
 
-    const modalEl = document.getElementById('modalFinalizarItem');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    document.getElementById('hora_inicio_real').value = horaInicioTratada;
+    document.getElementById('hora_fim_real').value = horaFimFormatada;
+
+    // Limpa campos opcionais
+    document.getElementById('modal_item_observacao').value = '';
+    document.getElementById('comentario_avaliacao_cliente').value = '';
+
+    // Salva o ISO completo para envio posterior
+    window.currentFimRealIso = agora.toISOString();
+
+    // Abre o modal
+    const modalElement = document.getElementById('modalFinalizarItem');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
     }
-};
+}
 
 window.abrirModalFinalizarItem = window.prepararModalFinalizarItem;
 
@@ -1189,66 +1322,84 @@ window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
     window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
 };
 
-window.confirmarEGravarEncerramentoItem = function() {
-    const agendamentoId = document.getElementById('modal_agendamento_id')?.value;
-    const itemId = document.getElementById('modal_item_id')?.value;
-    const observacao = document.getElementById('modal_item_observacao')?.value || '';
-    const avaliacao = document.getElementById('modal_item_avaliacao')?.value || 5;
-    const comentario = document.getElementById('comentario_avaliacao_cliente')?.value || '';
+/**
+ * Acionado ao submeter o formulário do modal ("Confirmar Conclusão")
+ */
+/**
+ * Acionado ao submeter o formulário do modal ("Confirmar Conclusão")
+ */
+function confirmarEGravarEncerramentoItem() {
+    const agendamentoId = document.getElementById('modal_agendamento_id').value;
+    const itemId = document.getElementById('modal_item_id').value;
+    const observacoes = document.getElementById('modal_item_observacao').value;
+    const notaAvaliacao = document.getElementById('modal_item_avaliacao')?.value;
+    const comentarioAvaliacao = document.getElementById('comentario_avaliacao_cliente').value;
+    const fimReal = window.currentFimRealIso;
 
-    if (!agendamentoId) {
-        alert("ID do agendamento não informado.");
-        return;
+    // Monta o payload ajustado para os nomes que a Python @agenda_bp espera
+    const dadosEnvio = {
+        agendamento_id: parseInt(agendamentoId),
+        item_id: parseInt(itemId),
+        observacao_item: observacoes,
+        nota_avaliacao_cliente: notaAvaliacao,
+        comentario_avaliacao_cliente: comentarioAvaliacao,
+        fim_real: fimReal
+    };
+
+    // Desativa o botão de submit para evitar duplo clique
+    const btnSubmit = document.querySelector('#formFinalizarItem button[type="submit"]');
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Salvando...`;
     }
 
+    // 🟢 ROTA CORRETA DO BACKEND FLASK
     fetch('/agenda/api/agendamento/concluir-item', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'X-CSRFToken': getCsrfToken()
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
         },
-        body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            item_id: itemId ? parseInt(itemId) : null,
-            observacao: observacao,
-            avaliacao: parseInt(avaliacao),
-            comentario_avaliacao: comentario
-        })
+        body: JSON.stringify(dadosEnvio)
     })
-    .then(async (res) => {
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            const textHTML = await res.text();
-            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
+    .then(async response => {
+        const data = await response.json();
+        if (!response.ok || !data.sucesso) {
+            throw new Error(data.mensagem || 'Erro ao salvar o encerramento do item no servidor.');
         }
-        return res.json();
+        return data;
     })
     .then(data => {
-        if (!data.sucesso && !data.success) {
-            alert(data.mensagem || "Erro ao concluir serviço.");
-            return;
+        // Fecha o modal
+        const modalElement = document.getElementById('modalFinalizarItem');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (modalInstance) {
+            modalInstance.hide();
         }
 
-        const modalEl = document.getElementById('modalFinalizarItem');
-        if (modalEl && typeof bootstrap !== 'undefined') {
-            const modalInstance = bootstrap.Modal.getInstance(modalEl);
-            if (modalInstance) modalInstance.hide();
-        }
-
+        // Se a comanda inteira foi concluída, redireciona para a modal de caixa/fechamento
         if (data.comanda_pronta || data.exibir_comanda) {
-            if (window.abrirModalFechamentoComanda) {
-                window.abrirModalFechamentoComanda(agendamentoId, data.valor_total || '0,00');
-            }
+            window.abrirModalFechamentoComanda(
+                data.agendamento_id || agendamentoId,
+                data.valor_total_fmt || data.valor_total
+            );
         } else {
-            window.location.reload();
+            location.reload();
         }
     })
-    .catch(err => {
-        console.error("Erro ao encerrar serviço:", err);
-        alert(err.message || "Ocorreu um erro ao processar a conclusão.");
+    .catch(error => {
+        console.error('Erro:', error);
+        alert(error.message || 'Não foi possível concluir o item. Por favor, tente novamente.');
+
+        // Restaura o botão caso ocorra erro
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = `<i class="bi bi-check-lg me-1"></i>Confirmar Conclusão`;
+        }
     });
-};
+}
 
 window.acaoConcluirTarefaDireta = function(agendamentoId, itemId) {
     if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
@@ -1404,12 +1555,6 @@ window.gerenciarAcoesSlot = function(elemento) {
     }
 };
 
-window.fecharPainelAcoes = function(btn) {
-    if (!btn) return;
-    const painel = btn.closest('.painel-acoes-slot');
-    if (painel) painel.classList.add('d-none');
-};
-
 window.alternarData = function(element) {
     const dataSelecionada = element.value;
     if (!dataSelecionada) return;
@@ -1537,11 +1682,31 @@ document.addEventListener('DOMContentLoaded', () => {
     let longPressTimer = null;
     let isLongPress = false;
 
-    // A. DELEGAÇÃO PARA DUPLO CLIQUE (Ficha do Cliente)
-    document.body.addEventListener('dblclick', function(e) {
-        const areaCliente = e.target.closest('.area-cliente-detalhes');
-        if (!areaCliente) return;
+    // A. DELEGAÇÃO PARA BOTÃO EXPLÍCITO DE INICIAR ATENDIMENTO
+    document.body.addEventListener('click', function(e) {
+        const btnIniciar = e.target.closest('.btn-iniciar-atendimento');
+        if (!btnIniciar) return;
 
+        e.preventDefault();
+        e.stopPropagation();
+
+        const card = btnIniciar.closest('.item-agendamento');
+        const agendamentoId = btnIniciar.dataset.agendamentoId || (card ? card.dataset.id : null);
+        const empresaId = btnIniciar.dataset.empresaId || obterEmpresaIdContexto();
+        const itemId = btnIniciar.dataset.itemId || (card ? card.dataset.itemId : null);
+        const colaboradorId = btnIniciar.dataset.colaboradorId || (card ? card.dataset.colaboradorId : null);
+
+        if (agendamentoId) {
+            window.acaoIniciarAtendimento(agendamentoId, empresaId, itemId, colaboradorId);
+        }
+    });
+
+    // B. DELEGAÇÃO PARA DUPLO CLIQUE (Abre ficha do cliente / Detalhes)
+    document.body.addEventListener('dblclick', function(e) {
+        const card = e.target.closest('.item-agendamento');
+        if (!card) return;
+
+        // Cancela o clique simples pendente
         if (clickTimer) {
             clearTimeout(clickTimer);
             clickTimer = null;
@@ -1550,12 +1715,13 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         e.stopPropagation();
 
+        const areaCliente = e.target.closest('.area-cliente-detalhes') || card;
         if (window.abrirModalDetalhesCliente) {
             window.abrirModalDetalhesCliente(areaCliente);
         }
     });
 
-    // B. DELEGAÇÃO PARA CLIQUE SIMPLES NO CARD DE AGENDAMENTO
+    // C. DELEGAÇÃO PARA CLIQUE SIMPLES NO CARD (Abre painel/modal de ações)
     document.body.addEventListener('click', function(e) {
         if (isLongPress) {
             isLongPress = false;
@@ -1565,23 +1731,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = e.target.closest('.item-agendamento');
         if (!card) return;
 
-        // Ignora botões, links, selects e a área do cliente (para não colidir com dblclick)
-        if (e.target.closest('button, a, input, select, .btn, .area-cliente-detalhes')) {
+        // Ignora botões, inputs e links internos
+        if (e.target.closest('button, a, input, select, .btn')) {
             return;
         }
 
         e.preventDefault();
 
-        // Janela de atraso para diferenciar do duplo clique
         if (clickTimer) clearTimeout(clickTimer);
 
         clickTimer = setTimeout(() => {
             window.abrirModalAtendimento(card);
             clickTimer = null;
-        }, 300);
+        }, 250);
     });
 
-    // C. SUPORTE A CLIQUE LONGO / TOUCH-PRESS (Em Dispositivos Móveis e Touchscreens)
+    // D. SUPORTE A CLIQUE LONGO / TOUCH-PRESS
     document.body.addEventListener('touchstart', function(e) {
         const card = e.target.closest('.item-agendamento');
         if (!card || e.target.closest('button, a, input, select, .btn')) return;
@@ -1590,18 +1755,12 @@ document.addEventListener('DOMContentLoaded', () => {
         longPressTimer = setTimeout(() => {
             isLongPress = true;
 
-            // Vibração tátil no celular se suportado
             if (navigator.vibrate) {
                 navigator.vibrate(50);
             }
 
-            const areaCliente = e.target.closest('.area-cliente-detalhes');
-            if (areaCliente) {
-                window.abrirModalDetalhesCliente(areaCliente);
-            } else {
-                window.gerenciarAcoesSlot(card);
-            }
-        }, 600); // 600ms de pressão contínua
+            window.gerenciarAcoesSlot(card);
+        }, 600);
     }, { passive: true });
 
     document.body.addEventListener('touchend', function() {
@@ -1618,5 +1777,170 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+/**
+ * Exemplo de handler após a conclusão de um item/serviço no modal.
+ */
+function callbackPosConclusaoItem(respostaServidor) {
+    // Se a resposta indicar sucesso e informar que a comanda está pronta para liquidação
+    if (respostaServidor.sucesso) {
+        if (respostaServidor.comanda_pronta || respostaServidor.itens_pendentes_qtd === 0) {
+            // Fecha a modal atual de conclusão do item (se estiver aberta)
+            if (typeof fecharModalConclusaoItem === 'function') {
+                fecharModalConclusaoItem();
+            }
+
+            // Abre automaticamente a modal de encerramento da comanda
+            abrirModalEncerramentoComanda(
+                respostaServidor.agendamento_id,
+                respostaServidor.valor_total_fmt
+            );
+        } else {
+            // Caso ainda existam outros itens pendentes no agendamento, apenas recarrega/atualiza
+            window.location.reload();
+        }
+    } else {
+        alert(respostaServidor.mensagem || "Erro ao concluir o item.");
+    }
+}
+
+/**
+ * Alterna a visibilidade dos slots sem agendamento na grade
+ */
+function toggleFiltroApenasAgendados() {
+    const btn = document.getElementById('btnFiltrarAgendados');
+    if (!btn) return;
+
+    const estaFiltrado = btn.getAttribute('data-filtrado') === 'true';
+    const novoEstado = !estaFiltrado;
+
+    // Atualiza o atributo e o estilo visual do botão
+    btn.setAttribute('data-filtrado', novoEstado);
+    if (novoEstado) {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-secondary');
+    } else {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+    }
+
+    // Seleciona os slots livres cobrindo classes e o atributo data-tipo="livre" do seu HTML
+    const slotsVagos = document.querySelectorAll('.slot-vago, .slot-livre, [data-tipo="livre"], [data-agendado="false"]');
+
+    slotsVagos.forEach(el => {
+        if (novoEstado) {
+            el.classList.add('d-none');
+        } else {
+            el.classList.remove('d-none');
+        }
+    });
+
+    // ATENÇÃO: Se a função abaixo recalcular os filtros globais baseada em inputs/pesquisa,
+    // ela pode estar desfazendo o 'd-none'. Comente-a temporariamente se persistir o erro.
+    if (typeof window.aplicarFiltrosGlobais === 'function') {
+        // window.aplicarFiltrosGlobais();
+    }
+}
+
+function registrarFimRealItemEAbrirModal(agendId, itemId, servicoNome, clienteNome, inicioItem) {
+        const fimRealTimestamp = new Date().toISOString();
+        console.log("Fim real do item gravado na AghAgendamentoItem:", fimRealTimestamp);
+
+        // Exemplo: se houver uma função JS que abre o modal injetando os dados da AghAgendamentoItem:
+        if (typeof prepararModalFinalizarItem === 'function') {
+            prepararModalFinalizarItem(agendId, itemId, servicoNome, clienteNome, inicioItem, fimRealTimestamp);
+        } else {
+            console.error("Função prepararModalFinalizarItem não encontrada.");
+        }
+    }
+
+function registrarFimRealEEncerrar(agendId, valorTotalFmt) {
+        // Gera o timestamp atual do cliente (ou envia o gatilho automático)
+        const fimRealTimestamp = new Date().toISOString();
+
+        // Se houver uma função global que salva o fim real via API antes de abrir o modal, chame-a aqui.
+        // Exemplo: fetch('/api/agendamentos/' + agendId + '/registrar-fim', { method: 'POST', ... })
+
+        console.log("Fim real registrado automaticamente no clique:", fimRealTimestamp);
+
+        // Chama a função original de abertura do modal de encerramento
+        if (typeof abrirModalEncerramentoComanda === 'function') {
+            abrirModalEncerramentoComanda(agendId, valorTotalFmt);
+        } else {
+            console.error("Função abrirModalEncerramentoComanda não encontrada.");
+        }
+    }
+
+/**
+ * Conclui um item/serviço individual do agendamento.
+ *
+ * @param {number|string} agendamentoId - ID do agendamento pai.
+ * @param {number|string} itemId - ID do item/serviço a ser concluído.
+ * @param {Object} [opcoes={}] - Dados adicionais como observacoes, nota, comentario e fimReal.
+ */
+window.concluirItemAgendamento = function(agendamentoId, itemId, opcoes = {}) {
+    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
+        alert("Erro de parâmetros: ID do agendamento ou do item ausentes.");
+        return;
+    }
+
+    const idAgendamentoLimpo = parseInt(String(agendamentoId).split('_')[0], 10);
+    const idItemLimpo = parseInt(String(itemId), 10);
+
+    const payload = {
+        agendamento_id: idAgendamentoLimpo,
+        item_id: idItemLimpo,
+        fim_real: opcoes.fimReal || new Date().toISOString(),
+        observacoes_tecnicas: opcoes.observacoes || opcoes.observacoes_tecnicas || '',
+        nota_avaliacao_cliente: opcoes.nota || opcoes.nota_avaliacao_cliente || 5,
+        comentario_avaliacao_cliente: opcoes.comentario || opcoes.comentario_avaliacao_cliente || ''
+    };
+
+    // Tenta primeiro a rota unificada de API de itens
+    fetch(`/api/agendamentos/${idAgendamentoLimpo}/itens/${idItemLimpo}/concluir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async (response) => {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const data = isJson ? await response.json() : null;
+
+        if (!response.ok) {
+            throw new Error(data?.mensagem || `Erro no servidor (${response.status})`);
+        }
+        return data;
+    })
+    .then(data => {
+        if (data && (data.sucesso || data.success || data.status === 'success')) {
+            // Se o callback padrão já existir no seu escopo, podemos reaproveitá-lo:
+            if (typeof callbackPosConclusaoItem === 'function') {
+                callbackPosConclusaoItem(data);
+                return;
+            }
+
+            // Fluxo padrão de encerramento do item
+            if (data.comanda_pronta || data.exibir_comanda || data.itens_pendentes_qtd === 0) {
+                const valorTotal = data.valor_total_fmt || data.valor_total || '0,00';
+                window.abrirModalFechamentoComanda(idAgendamentoLimpo, valorTotal);
+            } else if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert(data?.mensagem || 'Não foi possível concluir o item do agendamento.');
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao concluir item do agendamento:', error);
+        alert(`Erro ao concluir item: ${error.message}`);
+    });
+};
 </script>
 {% endblock %}

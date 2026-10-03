@@ -495,6 +495,49 @@ def api_horarios_disponiveis():
 TEMPO_SOFT_LOCK_MINUTOS = 10
 
 
+@agenda_bp.route('/empresa/<int:empresa_id>/balcao', methods=['GET'])
+@login_required
+def agenda_balcao(empresa_id):
+    empresa = EseEmpresa.query.get_or_404(empresa_id)
+    hoje = datetime.now()
+
+    profissionais_ativos = getattr(empresa, 'profissionais', [])
+    eh_proprietario = True
+    cargo_atribuicao = "Gerente" if eh_proprietario else "Profissional"
+    contrato_ativo = None
+
+    # Contagem de notificações pendentes para o balcão
+    usuario_uuid_lower = str(current_user.id).strip().lower()
+    total_notificacoes_nao_lidas = 0
+    try:
+        total_notificacoes_nao_lidas = AghNotificacao.query.filter(
+            func.lower(AghNotificacao.destinatario_id) == usuario_uuid_lower,
+            AghNotificacao.lida == False,
+            or_(
+                AghNotificacao.empresa_id == empresa_id,
+                AghNotificacao.empresa_id.is_(None)
+            )
+        ).count()
+    except Exception as e:
+        print(f"DEBUG BALCAO EMPRESA: Erro ao contar notificações -> {e}")
+
+    return render_template(
+        'agenda/agenda_balcao.html',
+        empresa=empresa,
+        hoje=hoje,
+        agora=hoje,
+        cargo_atribuicao=cargo_atribuicao,
+        eh_proprietario=eh_proprietario,
+        contrato_ativo=contrato_ativo,
+        profissionais_ativos=profissionais_ativos,
+        total_notificacoes_nao_lidas=total_notificacoes_nao_lidas,
+        metricas_hoje={'total': 0, 'pendentes': 0, 'concluidos': 0, 'cancelados': 0}
+    )
+
+
+# =========================================================================
+# 2. ROTA DO BALCÃO (OPERAÇÃO / FRENTE DE LOJA)
+# =========================================================================
 @agenda_bp.route('/empresa/<int:empresa_id>/dashboard', methods=['GET'])
 @login_required
 def dashboard_empresa(empresa_id):
@@ -511,9 +554,9 @@ def dashboard_empresa(empresa_id):
     # 🎯 CONSISTÊNCIA DE MÍDIA DA EMPRESA (LOGOMARCA)
     # =========================================================================
     raw_logo_empresa = (
-        getattr(empresa, 'logo_url', None) or
-        getattr(empresa, 'url_logo', None) or
-        getattr(empresa, 'logo', None)
+            getattr(empresa, 'logo_url', None) or
+            getattr(empresa, 'url_logo', None) or
+            getattr(empresa, 'logo', None)
     )
     empresa_logo_url = get_avatar_url(raw_logo_empresa) if raw_logo_empresa else None
 
@@ -552,13 +595,13 @@ def dashboard_empresa(empresa_id):
     else:
         data_filtro = hoje
 
-    prof_id_param = request.args.get('profissional_id', type=int)
+    prof_id_param = request.args.get('profissional_id', type=str)  # Tratamento como string para UUID/CHAR(36)
 
     if not pode_gerenciar:
-        ids_filtro_sql = [contrato_colaborador.id]
-        prof_id_param = contrato_colaborador.id
+        ids_filtro_sql = [str(contrato_colaborador.id)]
+        prof_id_param = str(contrato_colaborador.id)
     else:
-        ids_filtro_sql = [prof_id_param] if prof_id_param is not None else None
+        ids_filtro_sql = [str(prof_id_param)] if prof_id_param else None
 
     prof_ids_permitidos_str = {str(x).strip().lower() for x in ids_filtro_sql} if ids_filtro_sql else None
 
@@ -591,10 +634,10 @@ def dashboard_empresa(empresa_id):
 
     if ids_filtro_sql:
         query_em_andamento = query_em_andamento.filter(
-            AghAgendamentoItem.profissional_id.in_(ids_filtro_sql)
+            AghAgendamentoItem.colaborador_id_contrato.in_(ids_filtro_sql)
         )
         query_proximo_espera = query_proximo_espera.filter(
-            AghAgendamento.itens.any(AghAgendamentoItem.profissional_id.in_(ids_filtro_sql))
+            AghAgendamento.itens.any(AghAgendamentoItem.colaborador_id_contrato.in_(ids_filtro_sql))
         )
 
     fila_operacional = {
@@ -609,7 +652,7 @@ def dashboard_empresa(empresa_id):
         joinedload(AghAgendamento.cliente),
         joinedload(AghAgendamento.beneficiario),
         joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.servico),
-        joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)
+        joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)  # 🟢 Relação ORM
     ).filter(
         AghAgendamento.empresa_id == empresa_id,
         AghAgendamento.data_hora_inicio >= inicio_dia,
@@ -618,7 +661,7 @@ def dashboard_empresa(empresa_id):
 
     if ids_filtro_sql:
         query_agendamentos = query_agendamentos.filter(
-            AghAgendamento.itens.any(AghAgendamentoItem.profissional_id.in_(ids_filtro_sql))
+            AghAgendamento.itens.any(AghAgendamentoItem.colaborador_id_contrato.in_(ids_filtro_sql))
         )
 
     todos_agendamentos = query_agendamentos.all()
@@ -639,16 +682,18 @@ def dashboard_empresa(empresa_id):
     }
 
     status_map = {
-        'agendado': {'label': 'Agendado', 'badge': 'bg-primary'},
+        'agendado': {'label': 'Agendado', 'badge': 'bg-primary text-white'},
         'confirmado': {'label': 'Confirmado', 'badge': 'bg-info text-dark'},
         'aguardando': {'label': 'Aguardando', 'badge': 'bg-warning text-dark'},
-        'em_atendimento': {'label': 'Em Atendimento', 'badge': 'bg-primary'},
-        'em_andamento': {'label': 'Em Atendimento', 'badge': 'bg-primary'},
-        'concluido': {'label': 'Concluído', 'badge': 'bg-success'},
-        'finalizado': {'label': 'Finalizado', 'badge': 'bg-success'},
-        'cancelado': {'label': 'Cancelado', 'badge': 'bg-danger'},
-        'falta': {'label': 'Falta', 'badge': 'bg-secondary'},
-        'ausente_pendente': {'label': 'Ausente', 'badge': 'bg-secondary'},
+        'em_atendimento': {'label': 'Em Atendimento', 'badge': 'bg-primary text-white'},
+        'em_andamento': {'label': 'Em Atendimento', 'badge': 'bg-primary text-white'},
+        'concluido': {'label': 'Concluído',
+                      'badge': 'bg-secondary-subtle text-secondary border border-secondary-subtle'},
+        'finalizado': {'label': 'Finalizado',
+                       'badge': 'bg-secondary-subtle text-secondary border border-secondary-subtle'},
+        'cancelado': {'label': 'Cancelado', 'badge': 'bg-danger text-white'},
+        'falta': {'label': 'Falta', 'badge': 'bg-dark text-white'},
+        'ausente_pendente': {'label': 'Ausente', 'badge': 'bg-dark text-white'},
         'pendente': {'label': 'Pendente', 'badge': 'bg-warning text-dark'},
     }
 
@@ -666,9 +711,9 @@ def dashboard_empresa(empresa_id):
         nome_cliente = "Cliente Avulso"
         if cliente_obj:
             nome_cliente = (
-                getattr(cliente_obj, 'nome', None) or
-                getattr(cliente_obj, 'razao_social', None) or
-                "Cliente Avulso"
+                    getattr(cliente_obj, 'nome', None) or
+                    getattr(cliente_obj, 'razao_social', None) or
+                    "Cliente Avulso"
             )
 
         tem_beneficiario = beneficiario_obj is not None
@@ -680,16 +725,16 @@ def dashboard_empresa(empresa_id):
         raw_foto_atendido = None
         if beneficiario_obj:
             raw_foto_atendido = (
-                getattr(beneficiario_obj, 'foto_url', None) or
-                getattr(beneficiario_obj, 'foto', None) or
-                getattr(beneficiario_obj, 'avatar', None)
+                    getattr(beneficiario_obj, 'foto_url', None) or
+                    getattr(beneficiario_obj, 'foto', None) or
+                    getattr(beneficiario_obj, 'avatar', None)
             )
 
         if not raw_foto_atendido and cliente_obj:
             raw_foto_atendido = (
-                getattr(cliente_obj, 'foto_url', None) or
-                getattr(cliente_obj, 'foto', None) or
-                getattr(cliente_obj, 'avatar', None)
+                    getattr(cliente_obj, 'foto_url', None) or
+                    getattr(cliente_obj, 'foto', None) or
+                    getattr(cliente_obj, 'avatar', None)
             )
 
         foto_atendido_url = get_avatar_url(raw_foto_atendido) if raw_foto_atendido else None
@@ -698,15 +743,15 @@ def dashboard_empresa(empresa_id):
         whatsapp_cliente = None
         if cliente_obj:
             whatsapp_cliente = (
-                getattr(cliente_obj, 'whatsapp', None) or
-                getattr(cliente_obj, 'celular', None) or
-                getattr(cliente_obj, 'telefone', None)
+                    getattr(cliente_obj, 'whatsapp', None) or
+                    getattr(cliente_obj, 'celular', None) or
+                    getattr(cliente_obj, 'telefone', None)
             )
 
         obj_atendido = beneficiario_obj or cliente_obj
         id_atendido_uuid = (
-            getattr(obj_atendido, 'id', None) or
-            getattr(obj_atendido, 'uuid', None)
+                getattr(obj_atendido, 'id', None) or
+                getattr(obj_atendido, 'uuid', None)
         ) if obj_atendido else None
 
         # Processamento dos itens do Agendamento
@@ -718,14 +763,16 @@ def dashboard_empresa(empresa_id):
             inicio_item_anterior = item.data_hora_inicio
 
             for sub_index, it in enumerate(itens_ordenados):
-                prof_item_id_raw = getattr(it, 'profissional_id', None)
+                # 🟢 Resgate estrito da chave em string (UUID / CHAR(36))
+                prof_item_id_raw = it.colaborador_id_contrato or getattr(it, 'profissional_id', None)
                 if not prof_item_id_raw:
                     continue
 
                 prof_item_id_str = str(prof_item_id_raw).strip().lower()
 
                 if prof_ids_permitidos_str and prof_item_id_str not in prof_ids_permitidos_str:
-                    duracao_servico = getattr(it.servico, 'duracao_em_minutos', 30) if getattr(it, 'servico', None) else 30
+                    duracao_servico = getattr(it.servico, 'duracao_em_minutos', 30) if getattr(it, 'servico',
+                                                                                               None) else 30
                     modo = getattr(it, 'modo_execucao', 'sequencial')
 
                     if modo == 'sequencial':
@@ -733,18 +780,26 @@ def dashboard_empresa(empresa_id):
                         cursor_horario = cursor_horario + timedelta(minutes=duracao_servico)
                     continue
 
-                prof_obj = getattr(it, 'profissional', None)
-                prof_item_nome = resolver_nome_profissional(prof_obj) if prof_obj else f"Profissional #{prof_item_id_raw}"
+                # 🟢 1. Nome Robusto do Profissional (com múltiplos fallbacks)
+                prof_obj = it.profissional
+                prof_item_nome = (
+                        getattr(it, 'nome_profissional', None) or
+                        getattr(prof_obj, 'nome', None) or
+                        getattr(getattr(prof_obj, 'usuario', None), 'nome', None) or
+                        'Profissional'
+                )
 
-                # 🟢 RESOLUÇÃO DA FOTO DO PROFISSIONAL VIA MODEL PROPERTY
-                prof_foto_url = None
+                # 🟢 2. Foto Tratada do Profissional (passando por get_avatar_url)
+                raw_foto_prof = None
                 if prof_obj:
-                    prof_foto_url = (
-                        getattr(prof_obj, 'url_foto_profissional', None) or
-                        getattr(prof_obj, 'foto_profissional', None)
+                    raw_foto_prof = (
+                            getattr(prof_obj, 'url_foto_profissional', None) or
+                            getattr(prof_obj, 'foto_url', None) or
+                            getattr(prof_obj, 'url_foto', None) or
+                            getattr(prof_obj, 'foto', None) or
+                            getattr(getattr(prof_obj, 'usuario', None), 'url_foto_perfil', None)
                     )
-                    if prof_foto_url and not prof_foto_url.startswith('/'):
-                        prof_foto_url = get_avatar_url(prof_foto_url)
+                prof_foto_url = get_avatar_url(raw_foto_prof) if raw_foto_prof else None
 
                 duracao_servico = getattr(it.servico, 'duracao_em_minutos', 30) if getattr(it, 'servico', None) else 30
                 modo = getattr(it, 'modo_execucao', 'sequencial')
@@ -762,7 +817,18 @@ def dashboard_empresa(empresa_id):
                 item_status = getattr(it, 'status_item', getattr(it, 'status', None))
                 raw_item_st = item_status.value if hasattr(item_status, 'value') else item_status
 
-                effective_st = str(raw_item_st).lower().strip() if raw_item_st is not None else (st if st else 'pendente')
+                effective_st = str(raw_item_st).lower().strip() if raw_item_st is not None else (
+                    st if st else 'pendente')
+
+                # 🟢 Leitura e Formatação do Início Real do Item
+                raw_dt_inicio_real = getattr(it, 'data_hora_inicio_real', None)
+                inicio_real_fmt = '--:--'
+                if raw_dt_inicio_real:
+                    if hasattr(raw_dt_inicio_real, 'strftime'):
+                        inicio_real_fmt = raw_dt_inicio_real.strftime('%H:%M')
+                    else:
+                        str_dt = str(raw_dt_inicio_real)
+                        inicio_real_fmt = str_dt.split(' ')[1][:5] if ' ' in str_dt else str_dt[:5]
 
                 # 🟢 Apuração de Métricas por ITEM individual
                 metricas_hoje['total'] += 1
@@ -784,9 +850,9 @@ def dashboard_empresa(empresa_id):
 
                 limite_inicio_item = inicio_item_dt + timedelta(minutes=TOLERANCIA_MINUTOS)
                 esta_atrasado_item = (
-                    data_filtro == hoje and
-                    effective_st in ['agendado', 'confirmado', 'aguardando', 'pendente', 'ausente_pendente'] and
-                    agora_tz > limite_inicio_item
+                        data_filtro == hoje and
+                        effective_st in ['agendado', 'confirmado', 'aguardando', 'pendente', 'ausente_pendente'] and
+                        agora_tz > limite_inicio_item
                 )
 
                 if esta_atrasado_item:
@@ -799,7 +865,8 @@ def dashboard_empresa(empresa_id):
                     info_status['label'] = 'Atrasado'
                     info_status['badge'] = 'bg-danger text-white'
 
-                nome_servico = getattr(it.servico, 'nome', 'Serviço Geral') if getattr(it, 'servico', None) else 'Serviço Geral'
+                nome_servico = getattr(it.servico, 'nome', 'Serviço Geral') if getattr(it, 'servico',
+                                                                                       None) else 'Serviço Geral'
                 val_un = getattr(it, 'preco_unitario', None)
                 valor_fmt = f"R$ {val_un:,.2f}".replace('.', ',') if val_un is not None else "R$ 0,00"
 
@@ -811,12 +878,15 @@ def dashboard_empresa(empresa_id):
                     'status': effective_st,
                     'profissional_id': prof_item_id_str,
                     'profissional_nome': prof_item_nome,
-                    'foto_profissional': prof_foto_url,  # 🟢 PASSANDO A URL TRATADA DA FOTO DO PROFISSIONAL
+                    'foto_profissional': prof_foto_url,  # 🟢 URL TRATADA PELA PROPERTY DO MODEL
                     'inicio_dt': inicio_item_dt,
                     'fim_dt': fim_item_dt,
                     'fim_bloqueio_dt': fim_item_dt,
                     'hora_inicio': inicio_item_dt.strftime('%H:%M'),
                     'hora_fim': fim_item_dt.strftime('%H:%M'),
+
+                    'inicio_real_fmt': inicio_real_fmt,
+                    'data_hora_inicio_real': raw_dt_inicio_real,
 
                     'cliente_nome': nome_cliente,
                     'foto_atendido': foto_atendido_url,
@@ -837,7 +907,8 @@ def dashboard_empresa(empresa_id):
                     'esta_atrasado': esta_atrasado_item,
                     'modo_execucao': modo,
                     'ordem_execucao': getattr(it, 'ordem_execucao', sub_index + 1),
-                    'observacoes': getattr(item, 'observacoes', '') or getattr(item, 'observacao', '') or 'Nenhuma observação.'
+                    'observacoes': getattr(item, 'observacoes', '') or getattr(item, 'observacao',
+                                                                               '') or 'Nenhuma observação.'
                 })
 
     # =========================================================================
@@ -856,7 +927,8 @@ def dashboard_empresa(empresa_id):
     agendamentos_ocupados.sort(key=lambda x: x['inicio_dt'])
 
     while hora_atual_dt < hora_limite_dt:
-        ags_no_horario = [ag for ag in agendamentos_ocupados if ag['inicio_dt'] <= hora_atual_dt < ag['fim_bloqueio_dt']]
+        ags_no_horario = [ag for ag in agendamentos_ocupados if
+                          ag['inicio_dt'] <= hora_atual_dt < ag['fim_bloqueio_dt']]
 
         if ags_no_horario:
             for ag in ags_no_horario:
@@ -885,9 +957,16 @@ def dashboard_empresa(empresa_id):
     # =========================================================================
     # 🎯 7. PROFISSIONAIS ATIVOS E NOTIFICAÇÕES
     # =========================================================================
-    profissionais_ativos = ColaboradorContrato.query.filter_by(
-        id_local=empresa_id, status_profissional='ativo'
-    ).all() if pode_gerenciar else []
+    profissionais_ativos = []
+
+    if pode_gerenciar:
+        profissionais_ativos = ColaboradorContrato.query.options(
+            joinedload(ColaboradorContrato.cadastro_modulo),
+            joinedload(ColaboradorContrato.usuario)
+        ).filter_by(
+            id_local=empresa_id,
+            status_profissional='ativo'
+        ).all()
 
     usuario_uuid_lower = usuario_uuid.strip().lower()
     notificacoes_empresa = []
@@ -928,49 +1007,6 @@ def dashboard_empresa(empresa_id):
         e_colaborador=e_colaborador,
         colaboradorcontrato=contrato_colaborador,
         hoje=hoje
-    )
-
-
-# =========================================================================
-# 2. ROTA DO BALCÃO (OPERAÇÃO / FRENTE DE LOJA)
-# =========================================================================
-@agenda_bp.route('/empresa/<int:empresa_id>/balcao', methods=['GET'])
-@login_required
-def agenda_balcao(empresa_id):
-    empresa = EseEmpresa.query.get_or_404(empresa_id)
-    hoje = datetime.now()
-
-    profissionais_ativos = getattr(empresa, 'profissionais', [])
-    eh_proprietario = True
-    cargo_atribuicao = "Gerente" if eh_proprietario else "Profissional"
-    contrato_ativo = None
-
-    # Contagem de notificações pendentes para o balcão
-    usuario_uuid_lower = str(current_user.id).strip().lower()
-    total_notificacoes_nao_lidas = 0
-    try:
-        total_notificacoes_nao_lidas = AghNotificacao.query.filter(
-            func.lower(AghNotificacao.destinatario_id) == usuario_uuid_lower,
-            AghNotificacao.lida == False,
-            or_(
-                AghNotificacao.empresa_id == empresa_id,
-                AghNotificacao.empresa_id.is_(None)
-            )
-        ).count()
-    except Exception as e:
-        print(f"DEBUG BALCAO EMPRESA: Erro ao contar notificações -> {e}")
-
-    return render_template(
-        'agenda/agenda_balcao.html',
-        empresa=empresa,
-        hoje=hoje,
-        agora=hoje,
-        cargo_atribuicao=cargo_atribuicao,
-        eh_proprietario=eh_proprietario,
-        contrato_ativo=contrato_ativo,
-        profissionais_ativos=profissionais_ativos,
-        total_notificacoes_nao_lidas=total_notificacoes_nao_lidas,
-        metricas_hoje={'total': 0, 'pendentes': 0, 'concluidos': 0, 'cancelados': 0}
     )
 
 
@@ -2610,7 +2646,7 @@ def dashboard_cliente():
             print(f"[Dashboard Cliente] Erro ao carregar empresa ativa: {err}")
 
     # ----------------------------------------------------------------------------------
-    # 3. NOTIFICAÇÕES (CORRIGIDO: AGORA FORA DO EXCEPT)
+    # 3. NOTIFICAÇÕES (DESENCOPOSTO E ISOLADO)
     # ----------------------------------------------------------------------------------
     notificacoes = []
     total_nao_lidas = 0
@@ -2618,7 +2654,6 @@ def dashboard_cliente():
     try:
         user_id_str = str(cliente.id).strip()
 
-        # Filtro direto por comparação de string (sem func.lower)
         notificacoes = AghNotificacao.query.filter(
             AghNotificacao.destinatario_id == user_id_str,
             AghNotificacao.lida.is_(False)
@@ -2632,41 +2667,109 @@ def dashboard_cliente():
         total_nao_lidas = 0
 
     # ----------------------------------------------------------------------------------
-    # 4. HISTÓRICO E AGENDAMENTOS ATIVOS (DECLARAÇÃO DE VARIÁVEIS FORA DO TRY)
+    # 4. HISTÓRICO E AGENDAMENTOS ATIVOS (ENRIQUECIDO COM DADOS DO COLABORADOR/PROFISSIONAL)
     # ----------------------------------------------------------------------------------
     ultimos_agendamentos = []
     agendamentos_ativos = []
     agendamentos_ausente_pendentes = []
 
     try:
-        # Opções de carregamento otimizadas e seguras
         opcoes_carregamento = [
             joinedload(AghAgendamento.empresa),
-            selectinload(AghAgendamento.itens).joinedload(AghAgendamentoItem.servico),
-            selectinload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)
+            selectinload(AghAgendamento.itens)
         ]
 
-        ultimos_agendamentos = AghAgendamento.query.options(*opcoes_carregamento) \
-            .filter(AghAgendamento.data_hora_inicio.isnot(None)) \
-            .order_by(AghAgendamento.data_hora_inicio.desc()) \
-            .limit(10).all()
-
-        agendamentos_ausente_pendentes = (
+        # 🟢 1. BUSCA O HISTÓRICO DE ÚLTIMOS AGENDAMENTOS DO CLIENTE
+        ultimos_agendamentos = (
             AghAgendamento.query.options(*opcoes_carregamento)
             .filter_by(cliente_id=cliente.id)
-            .filter(AghAgendamento.status.in_(['ausente_pendente', 'reagendamento_pendente']))
             .order_by(AghAgendamento.data_hora_inicio.desc())
+            .limit(10)
             .all()
         )
 
+        # 🟢 2. BUSCA OS AGENDAMENTOS EM ABERTO/ATIVOS
         agendamentos_brutos = (
             AghAgendamento.query.options(*opcoes_carregamento)
             .filter_by(cliente_id=cliente.id)
-            .filter(AghAgendamento.status.in_(['agendado', 'confirmado', 'aguardando', 'em_atendimento', 'soft_lock']))
+            .filter(
+                AghAgendamento.status.in_(['agendado', 'confirmado', 'aguardando', 'em_atendimento', 'soft_lock']))
             .order_by(AghAgendamento.data_hora_inicio.asc())
             .all()
         )
 
+        # ------------------------------------------------------------------------------
+        # 🚀 MAPEAMENTO ROBUSTO E EM LOTE DOS PROFISSIONAIS PARA OS ITENS DOS AGENDAMENTOS
+        # ------------------------------------------------------------------------------
+        todos_agendamentos_lista = ultimos_agendamentos + agendamentos_brutos
+        uuids_colaboradores = set()
+
+        # 1. Coleta os UUIDs/IDs garantindo execução do relacionamento de itens
+        for ag_ref in todos_agendamentos_lista:
+            # Garante a resolução de itens caso seja AppenderQuery ou lista
+            itens_ag = ag_ref.itens.all() if hasattr(ag_ref.itens, 'all') else getattr(ag_ref, 'itens', [])
+            for srv_item in itens_ag:
+                colab_uuid = getattr(srv_item, 'colaborador_id_contrato', None)
+                if colab_uuid:
+                    uuids_colaboradores.add(str(colab_uuid).strip())
+
+        mapa_colaboradores = {}
+
+        if uuids_colaboradores:
+            # Busca os colaboradores no banco considerando ID numérico, id_cadastro_cliente e uuid_colaborador
+            colabs_db = ColaboradorContrato.query.filter(
+                (ColaboradorContrato.id.in_(list(uuids_colaboradores))) |
+                (ColaboradorContrato.id_cadastro_cliente.in_(list(uuids_colaboradores)))
+            ).all()
+
+            for colab in colabs_db:
+                # Povoa as possíveis chaves de busca no dicionário
+                mapa_colaboradores[str(colab.id)] = colab
+                if getattr(colab, 'id_cadastro_cliente', None):
+                    mapa_colaboradores[str(colab.id_cadastro_cliente).strip()] = colab
+                if getattr(colab, 'uuid_colaborador', None):
+                    mapa_colaboradores[str(colab.uuid_colaborador).strip()] = colab
+
+        # 2. Injeta as propriedades usando nomes que não conflitem com as propriedades do modelo
+        # Injeção segura de atributos dinâmicos nos itens de agendamento
+        for ag_ref in todos_agendamentos_lista:
+            itens_ag = ag_ref.itens.all() if hasattr(ag_ref.itens, 'all') else getattr(ag_ref, 'itens', [])
+
+            for srv_item in itens_ag:
+                colab_uuid = str(getattr(srv_item, 'colaborador_id_contrato', '') or '').strip()
+                colab_obj = mapa_colaboradores.get(colab_uuid)
+
+                if colab_obj:
+                    nome_resolvido = (
+                            getattr(colab_obj, 'nome', None) or
+                            getattr(colab_obj, 'nome_completo', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'nome', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'nome_completo', None) or
+                            'Profissional'
+                    )
+                    # RESOLUÇÃO DA FOTO (Varre todas as propriedades comuns de mídia/avatar)
+                    foto_resolvida = (
+                            getattr(colab_obj, 'url_foto_profissional', None) or
+                            getattr(colab_obj, 'foto_url', None) or
+                            getattr(colab_obj, 'url_foto', None) or
+                            getattr(colab_obj, 'url_foto_perfil', None) or
+                            getattr(colab_obj, 'foto', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'url_foto_perfil', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'foto_url', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'url_foto', None)
+                    )
+
+                    # Usa atributos dinâmicos seguros
+                    srv_item.nome_prof_exibicao = nome_resolvido
+                    srv_item.foto_prof_exibicao = foto_resolvida
+                    srv_item.profissional = colab_obj
+                else:
+                    srv_item.nome_prof_exibicao = 'Profissional'
+                    srv_item.foto_prof_exibicao = None
+                    srv_item.profissional = None
+        # ------------------------------------------------------------------------------
+        # LÓGICA DE CONCILIAÇÃO DE HORÁRIOS / ATRASOS (MANTIDA NATIVA)
+        # ------------------------------------------------------------------------------
         houve_alteracao_banco = False
 
         for ag in agendamentos_brutos:
@@ -2696,15 +2799,14 @@ def dashboard_cliente():
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                # Log do erro para depuração
-                print(f"Erro capturado em dashboard_cliente: {e}")
+                print(f"[Dashboard Cliente] Erro no commit: {e}")
 
     except Exception as err:
         db.session.rollback()
         print(f"[Dashboard Cliente] Erro na consulta de agendamentos: {err}")
 
     # ----------------------------------------------------------------------------------
-    # 5. EMPRESAS FAVORITAS (AJUSTE PONTUAL PARA EXTRAIR A ENTIDADE EMPRESA)
+    # 5. EMPRESAS FAVORITAS
     # ----------------------------------------------------------------------------------
     empresas_favoritas = []
     try:
@@ -2716,7 +2818,6 @@ def dashboard_cliente():
             )
             .all()
         )
-        # Unpack para entregar diretamente os objetos EseEmpresa ao template
         empresas_favoritas = [fav.empresa for fav in favoritos_rel if fav.empresa]
     except Exception as err:
         print(f"[Dashboard Cliente] Erro ao carregar empresas favoritas: {err}")
@@ -2789,7 +2890,7 @@ def dashboard_cliente():
         'agenda/dashboard_cliente.html',
         cliente=cliente,
         agora=agora_naive,
-        timedelta=timedelta, # Passagem explicita para o Jinja poder calcular o tempo limite de cancelamento
+        timedelta=timedelta,
         notificacoes=notificacoes,
         total_notificacoes_nao_lidas=total_nao_lidas,
         ultimos_agendamentos=ultimos_agendamentos,
@@ -4356,7 +4457,7 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id: int, data_consulta, s
 
 
 # =============================================================================
-# 🚀 CONTROLLER PRINCIPAL (REFATORADA - VÍNCULO VIA AGH_SOLICITACAO_REAGENDAMENTO)
+# 🚀 CONTROLLER PRINCIPAL (REFATORADA - SUPORTE A UUID EM COLABORADOR_ID_CONTRATO)
 # =============================================================================
 @agenda_bp.route('/<string:slug_empresa>/agendar', methods=['GET', 'POST'])
 def agendar(slug_empresa: str):
@@ -4372,6 +4473,21 @@ def agendar(slug_empresa: str):
         if val is not None and str(val).isdigit():
             return int(val)
         return None
+
+    def _obter_str_dict(dicionario, chave):
+        val = dicionario.get(chave)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+        return None
+
+    def _normalizar_uuid_colaborador(val):
+        """🟢 GARANTE A MANUTENÇÃO DE STRING/UUID E DESCARTA VALORES INVÁLIDOS/NULOS"""
+        if val is None:
+            return None
+        val_str = str(val).strip()
+        if val_str in ('', 'None', 'null', '0', 'undefined'):
+            return None
+        return val_str
 
     reagendar_id = (
             request.args.get('reagendar_id', type=int) or
@@ -4492,12 +4608,45 @@ def agendar(slug_empresa: str):
         # 🎯 ALOCAÇÃO INTELIGENTE DE PROFISSIONAIS POR ESPECIALIDADE E HORÁRIO
         # ---------------------------------------------------------------------
         ignorar_id = agendamento_original.id if agendamento_original else None
-        itens_planejados, duracao_total, erro_alocacao = _atribuir_profissionais_e_horarios(
-            empresa_id=empresa.id,
-            objs_servicos=objs_servicos,
-            data_inicio_base=inicio_dt,
-            ignorar_agendamento_id=ignorar_id
+
+        # 🟢 EXTRAÇÃO DO PROFISSIONAL PRETENDIDO (MANTÉM COMO STRING/UUID)
+        profissional_orig_id = None
+        if agendamento_original:
+            itens_orig_list = agendamento_original.itens.all() if hasattr(agendamento_original.itens, 'all') else agendamento_original.itens
+            if itens_orig_list:
+                val_colab = getattr(itens_orig_list[0], 'colaborador_id_contrato', None)
+                profissional_orig_id = _normalizar_uuid_colaborador(val_colab)
+
+        colab_post_val = (
+            _obter_str_dict(dados_post, 'colaborador_id_contrato') or
+            _obter_str_dict(dados_post, 'profissional_id') or
+            _obter_str_dict(dados_post, 'colaborador_id')
         )
+
+        rascunho_colab = getattr(rascunho, 'colaborador_id', None) if rascunho else None
+
+        profissional_pretendido_id = (
+            _normalizar_uuid_colaborador(colab_post_val) or
+            _normalizar_uuid_colaborador(rascunho_colab) or
+            profissional_orig_id
+        )
+
+        # Passa o profissional_pretendido_id para o alocador
+        try:
+            itens_planejados, duracao_total, erro_alocacao = _atribuir_profissionais_e_horarios(
+                empresa_id=empresa.id,
+                objs_servicos=objs_servicos,
+                data_inicio_base=inicio_dt,
+                ignorar_agendamento_id=ignorar_id,
+                profissional_id_forcado=profissional_pretendido_id
+            )
+        except TypeError:
+            itens_planejados, duracao_total, erro_alocacao = _atribuir_profissionais_e_horarios(
+                empresa_id=empresa.id,
+                objs_servicos=objs_servicos,
+                data_inicio_base=inicio_dt,
+                ignorar_agendamento_id=ignorar_id
+            )
 
         if erro_alocacao:
             return _resposta_erro(erro_alocacao, 409, empresa.slug, reagendar_id, 'warning')
@@ -4535,12 +4684,13 @@ def agendar(slug_empresa: str):
         # Persistência no Banco de Dados
         # ---------------------------------------------------------------------
         try:
-            profissional_titular_id = itens_planejados[0]['colaborador_id'] if itens_planejados else None
+            # Identifica o profissional titular de referência mantendo estritamente o formato String/UUID
+            colab_item_0 = itens_planejados[0].get('colaborador_id') if itens_planejados else None
+            profissional_titular_id = _normalizar_uuid_colaborador(colab_item_0) or profissional_pretendido_id
 
             if agendamento_original:
                 agendamento_original.status = 'reagendado'
 
-            # 🟢 CORREÇÃO: Remoção de 'colaborador_id_contrato' na criação do objeto Pai
             agendamento = AghAgendamento(
                 empresa_id=empresa.id,
                 cliente_id=cliente_id or (agendamento_original.cliente_id if agendamento_original else None),
@@ -4606,14 +4756,38 @@ def agendar(slug_empresa: str):
                     )
                     db.session.add(ocorrencia)
 
-            # Grava cada item do agendamento (ONDE O PROFISSIONAL DEVE FICAR)
+            # -----------------------------------------------------------------
+            # 🟢 GRAVAÇÃO BLINDADA DOS ITENS DO AGENDAMENTO (CHAR36 / UUID)
+            # -----------------------------------------------------------------
             profissionais_notificar_ids = set()
 
             for item in itens_planejados:
+                # Resolve o colaborador a partir do objeto ou do ID retornado no dicionário
+                colab_obj = item.get('colaborador_obj')
+                colaborador_item_id = None
+
+                if colab_obj and getattr(colab_obj, 'id_cadastro_cliente', None):
+                    colaborador_item_id = str(colab_obj.id_cadastro_cliente).strip()
+                elif item.get('colaborador_id'):
+                    raw_id = item.get('colaborador_id')
+                    raw_str = str(raw_id).strip()
+
+                    # Se a alocação devolveu o PK Integer (ex: 1), busca o registro para extrair o CHAR(36)
+                    if raw_str.isdigit():
+                        c_db = ColaboradorContrato.query.get(int(raw_str))
+                        if c_db and c_db.id_cadastro_cliente:
+                            colaborador_item_id = str(c_db.id_cadastro_cliente).strip()
+                    elif len(raw_str) == 36:
+                        colaborador_item_id = raw_str
+
+                # Fallback para o profissional selecionado no topo
+                if not colaborador_item_id:
+                    colaborador_item_id = _normalizar_uuid_colaborador(profissional_titular_id)
+
                 novo_item = AghAgendamentoItem(
                     agendamento_id=agendamento.id,
                     servico_id=item['servico_id'],
-                    colaborador_id_contrato=item['colaborador_id'],
+                    colaborador_id_contrato=colaborador_item_id,  # 👈 CHAR(36) GARANTIDO
                     preco_unitario=item['preco_unitario'],
                     duracao_minutos=item['duracao_minutos'],
                     ordem_execucao=item['ordem_execucao'],
@@ -4622,8 +4796,9 @@ def agendar(slug_empresa: str):
                     status_item='pendente'
                 )
                 db.session.add(novo_item)
-                if item['colaborador_id']:
-                    profissionais_notificar_ids.add(item['colaborador_id'])
+
+                if colaborador_item_id:
+                    profissionais_notificar_ids.add(colaborador_item_id)
 
             db.session.commit()
 
@@ -4672,11 +4847,11 @@ def agendar(slug_empresa: str):
             colaboradores_notif = ColaboradorContrato.query.options(
                 joinedload(ColaboradorContrato.cadastro_modulo)
             ).filter(
-                ColaboradorContrato.id.in_(profissionais_notificar_ids)
+                ColaboradorContrato.id.in_(list(profissionais_notificar_ids))
             ).all()
 
             for colab in colaboradores_notif:
-                destinatario_uuid = (
+                destinatario_uuid = _normalizar_uuid_colaborador(
                     getattr(colab, 'id_contrato', None) or
                     getattr(colab, 'uuid', None) or
                     getattr(colab, 'usuario_id', None) or
@@ -4686,7 +4861,7 @@ def agendar(slug_empresa: str):
                 if destinatario_uuid:
                     _enviar_notificacao_segura(
                         empresa_id=empresa.id,
-                        destinatario_id=str(destinatario_uuid).strip(),
+                        destinatario_id=destinatario_uuid,
                         papel_destinatario='colaborador',
                         agendamento_id=agendamento.id,
                         titulo="Novo Agendamento Multi-Especialista",
@@ -4799,9 +4974,10 @@ def agendar(slug_empresa: str):
         lista_habs = habs.all() if hasattr(habs, 'all') else habs
 
         ids_hab = {
-            c.id for c in lista_habs
+            _normalizar_uuid_colaborador(c.id) for c in lista_habs
             if getattr(c, 'status_profissional', 'ativo') == 'ativo'
                and getattr(c, 'data_desligamento', None) is None
+               and _normalizar_uuid_colaborador(c.id) is not None
         }
         sets_colaboradores.append(ids_hab)
 
@@ -4812,15 +4988,21 @@ def agendar(slug_empresa: str):
 
     permite_escolha_profissional = (len(servicos_selecionados) <= 1) or (len(colaboradores_capazes_de_tudo) > 0)
 
-    # 🟢 CORREÇÃO: Resgate do profissional do agendamento original através do 1º item
+    # 🟢 Resgate do profissional do agendamento original através do 1º item (String/UUID)
     profissional_orig_id = None
     if agendamento_original:
         primeiro_item = agendamento_original.itens[0] if getattr(agendamento_original, 'itens', None) else None
         if primeiro_item:
-            profissional_orig_id = getattr(primeiro_item, 'colaborador_id_contrato', None)
+            val_orig = getattr(primeiro_item, 'colaborador_id_contrato', None)
+            profissional_orig_id = _normalizar_uuid_colaborador(val_orig)
 
-    profissional_id_selecionado = request.args.get('profissional_id', type=int) or (
-        rascunho.colaborador_id if rascunho else profissional_orig_id
+    prof_arg = request.args.get('profissional_id') or request.args.get('colaborador_id_contrato')
+    rascunho_colab_get = getattr(rascunho, 'colaborador_id', None) if rascunho else None
+
+    profissional_id_selecionado = (
+        _normalizar_uuid_colaborador(prof_arg) or
+        _normalizar_uuid_colaborador(rascunho_colab_get) or
+        profissional_orig_id
     )
 
     colaboradores = ColaboradorContrato.query.options(
@@ -4834,7 +5016,7 @@ def agendar(slug_empresa: str):
 
     colaboradores_payload = [
         {
-            'id': c.id,
+            'id': c.uuid_colaborador or str(c.id),  # 👈 PRIORIZA O CHAR(36) (id_cadastro_cliente)
             'nome': c.nome,
             'cargo': getattr(c, 'nome_cargo_formatado', 'Especialista'),
             'foto_url': c.url_foto_profissional,
@@ -4934,22 +5116,18 @@ def obter_profissionais_empresa(empresa_id):
     )
 
 
-def buscar_colaboradores_elegiveis(id_local: int, id_contrato: int = None) -> list[ColaboradorContrato]:
-    """
-    Recupera colaboradores com contrato ativo E escala de trabalho ativa para um determinado estabelecimento.
-    """
+def buscar_colaboradores_elegiveis(id_local: int, id_contrato=None) -> list[ColaboradorContrato]:
     if not id_local:
         return []
 
-    # Subquery: garante que só entram profissionais com escala de trabalho ativa
     tem_escala_ativa = exists().where(
         EscalaTrabalhoColaborador.contrato_id == ColaboradorContrato.id,
         EscalaTrabalhoColaborador.ativo == True
     )
 
     query = ColaboradorContrato.query.options(
-        joinedload(ColaboradorContrato.cadastro_modulo),  # Traz os dados do perfil (nome, foto)
-        joinedload(ColaboradorContrato.cargo)             # Traz o cargo cadastrado
+        joinedload(ColaboradorContrato.cadastro_modulo),
+        joinedload(ColaboradorContrato.cargo)
     ).filter(
         ColaboradorContrato.id_local == id_local,
         ColaboradorContrato.status_profissional == 'ativo',
@@ -4958,7 +5136,12 @@ def buscar_colaboradores_elegiveis(id_local: int, id_contrato: int = None) -> li
     )
 
     if id_contrato:
-        query = query.filter(ColaboradorContrato.id == id_contrato)
+        id_str = str(id_contrato).strip()
+        # Permite buscar tanto pelo CHAR(36) id_cadastro_cliente quanto pela PK Integer
+        query = query.filter(
+            (ColaboradorContrato.id_cadastro_cliente == id_str) |
+            (ColaboradorContrato.id == id_contrato if id_str.isdigit() else False)
+        )
 
     return query.all()
 
@@ -6257,17 +6440,13 @@ import traceback
 @requer_nivel(min_nivel=300)
 def iniciar_atendimento(agendamento_id, empresa_id):
     try:
-        # 1. Tenta extrair o JSON garantindo fallback silencioso
         dados = request.get_json(silent=True, force=True) or {}
-        item_id = dados.get('agendamento_item_id')
+        item_id = dados.get('agendamento_item_id') or dados.get('item_id')
         cliente_uuid = str(current_user.id)
 
-        # Extrai o colaborador_id_contrato vindo do payload (se enviado)
-        colaborador_contrato_id = dados.get('colaborador_id_contrato')
-
-        # 2. Busca do Item
         item_alvo = None
 
+        # 1. Busca direta pelo item informado
         if item_id:
             item_alvo = AghAgendamentoItem.query.filter_by(
                 id=item_id,
@@ -6275,36 +6454,25 @@ def iniciar_atendimento(agendamento_id, empresa_id):
             ).first()
 
             if not item_alvo:
-                print(f"[DEBUG INICIAR] ❌ Item {item_id} não pertence ao agendamento {agendamento_id}")
                 return jsonify({
                     "status": "error",
                     "mensagem": f"O item #{item_id} não foi encontrado dentro do agendamento #{agendamento_id}."
                 }), 400
-        else:
-            print("[DEBUG INICIAR] ⚠️ NENHUM item_id recebido no JSON! Executando fallback...")
-            # Fallback buscando o primeiro item pendente do agendamento
-            item_alvo = AghAgendamentoItem.query.filter_by(
-                agendamento_id=agendamento_id,
-                status_item='pendente'
-            ).order_by(AghAgendamentoItem.ordem_execucao.asc()).first()
+
+        # 2. Fallback: Pega o primeiro item pendente/em aberto do agendamento
+        if not item_alvo:
+            item_alvo = AghAgendamentoItem.query.filter_by(agendamento_id=agendamento_id)\
+                .filter(~AghAgendamentoItem.status_item.in_(['concluido', 'concluído', 'finalizado', 'cancelado']))\
+                .order_by(AghAgendamentoItem.id.asc())\
+                .first()
 
             if not item_alvo:
-                print(f"[DEBUG INICIAR] ❌ Nenhum item pendente encontrado para o agendamento {agendamento_id}")
                 return jsonify({
                     "status": "error",
                     "mensagem": "Nenhum item pendente foi encontrado para iniciar neste agendamento."
                 }), 404
 
-        print(f"[DEBUG INICIAR] 🟢 Item Alvo selecionado: ID {item_alvo.id}")
-
-        # 3. Se o ID do contrato do colaborador foi fornecido no payload, atualiza o item
-        if colaborador_contrato_id:
-            item_alvo.colaborador_id_contrato = str(colaborador_contrato_id).strip()
-            db.session.add(item_alvo)
-            db.session.commit()
-
-        # 4. Executa método estático repassando o colaborador_id_contrato (caso a assinatura do método aceite)
-        # Se o método ainda não aceitar o parâmetro explicitamente, o vínculo no item_alvo já estará garantido acima.
+        # 3. Execução do serviço (o próprio método da model já trata a criação/atualização do encerramento)
         kwargs_iniciar = {
             "agendamento_id": agendamento_id,
             "agendamento_item_id": item_alvo.id,
@@ -6312,23 +6480,14 @@ def iniciar_atendimento(agendamento_id, empresa_id):
             "usuario_id": cliente_uuid
         }
 
-        # Repassa se houver colaborador associado ao item
-        colaborador_final = item_alvo.colaborador_id_contrato or colaborador_contrato_id
-        if colaborador_final:
-            kwargs_iniciar["colaborador_id_contrato"] = str(colaborador_final).strip()
+        colaborador_id = getattr(item_alvo, 'colaborador_id_contrato', None) or dados.get('colaborador_id_contrato')
+        if colaborador_id:
+            kwargs_iniciar["colaborador_contrato_id"] = str(colaborador_id).strip()
 
-        try:
-            resposta, status_code = AghAgendamentoEncerramento.iniciar_atendimento_servico(**kwargs_iniciar)
-        except TypeError:
-            # Fallback caso a assinatura do método estático ainda não aceite o parâmetro colaborador_id_contrato
-            kwargs_iniciar.pop("colaborador_id_contrato", None)
-            resposta, status_code = AghAgendamentoEncerramento.iniciar_atendimento_servico(**kwargs_iniciar)
-
-        print(f"[DEBUG INICIAR] Retorno do método estático: {resposta} (Status {status_code})")
+        resposta, status_code = AghAgendamentoEncerramento.iniciar_atendimento_servico(**kwargs_iniciar)
         return jsonify(resposta), status_code
 
     except Exception as e:
-        print("\n❌ ERRO GRAVE DE EXECUÇÃO NA ROTA INICIAR:")
         traceback.print_exc()
         return jsonify({
             "status": "error",
@@ -7492,7 +7651,8 @@ def concluir_item_agendamento():
         # 1. RESGATE DO ITEM
         if not item_id and agendamento.itens:
             item_pendente = next(
-                (i for i in agendamento.itens if str(i.status_item).lower() not in ['concluido', 'concluído', 'cancelado']),
+                (i for i in agendamento.itens if
+                 str(i.status_item).lower() not in ['concluido', 'concluído', 'cancelado']),
                 None
             )
             item_id = item_pendente.id if item_pendente else agendamento.itens[0].id
@@ -7504,13 +7664,17 @@ def concluir_item_agendamento():
         if not item_alvo:
             return jsonify({'sucesso': False, 'mensagem': 'Item de agendamento não encontrado.'}), 404
 
-        # 2. TRATAMENTO DO INÍCIO REAL NULO
+        # 2. TRATAMENTO DO INÍCIO REAL NULO E STATUS DO ITEM
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
         if not item_alvo.data_hora_inicio_real:
             item_alvo.data_hora_inicio_real = item_alvo.data_hora_inicio or agendamento.data_hora_inicio or agora_sp
-            db.session.add(item_alvo)
+
+        # Atualiza status do item individual
+        item_alvo.status_item = 'concluido'
+        if hasattr(item_alvo, 'data_hora_fim_real') and not item_alvo.data_hora_fim_real:
+            item_alvo.data_hora_fim_real = agora_sp
 
         # 3. EXECUTA O MÉTODO DE ENCERRAMENTO NATIVO
         res_enc, status_code = AghAgendamentoEncerramento.encerrar_atendimento_servico(
@@ -7522,54 +7686,88 @@ def concluir_item_agendamento():
         if status_code != 200 or not res_enc.get('sucesso'):
             return jsonify(res_enc), status_code
 
-        # 4. CAPTURA AVALIAÇÃO, OBSERVAÇÕES E COLABORADOR DO CONTRATO
-        obs_item = data.get('observacao_item') or data.get('observacao')
-        comentario_cliente = data.get('comentario_avaliacao_cliente')
+        # 4. CAPTURA E ATUALIZAÇÃO ESTRITA DOS CAMPOS DE ENCERRAMENTO
+        obs_item = (
+                data.get('observacoes_tecnicas') or
+                data.get('observacao_item') or
+                data.get('observacao') or
+                ''
+        ).strip()
+
+        comentario_cliente = (data.get('comentario_avaliacao_cliente') or '').strip()
         nota_avaliacao = data.get('nota_avaliacao_cliente') or data.get('avaliacao')
 
-        # Unifica as observações caso ambas tenham sido preenchidas
-        observacao_final = " - ".join(filter(None, [obs_item, comentario_cliente]))
+        observacao_final = " - ".join(filter(None, [obs_item, comentario_cliente])) or obs_item
 
-        # Busca o registro de encerramento gerado para atualizar dados adicionais
         enc = AghAgendamentoEncerramento.query.filter_by(
             agendamento_id=agendamento.id,
             agendamento_item_id=item_alvo.id
         ).first()
 
-        if enc:
-            if observacao_final:
-                enc.observacoes = observacao_final
+        if not enc:
+            enc = AghAgendamentoEncerramento(
+                agendamento_id=agendamento.id,
+                agendamento_item_id=item_alvo.id,
+                empresa_id=empresa_id,
+                data_hora_inicio_real=item_alvo.data_hora_inicio_real,
+                data_hora_fim_real=agora_sp
+            )
+            db.session.add(enc)
+
+        # Gravação de observações e notas
+        if observacao_final:
+            enc.observacoes = observacao_final
+            if hasattr(item_alvo, 'observacao_item'):
                 item_alvo.observacao_item = observacao_final
+            if hasattr(item_alvo, 'observacoes'):
+                item_alvo.observacoes = observacao_final
 
-            if nota_avaliacao is not None and str(nota_avaliacao).strip() != '':
-                try:
-                    enc.nota_avaliacao_cliente = int(nota_avaliacao)
-                except (ValueError, TypeError):
-                    pass
-
-            # Vincula o colaborador cadastrado no item no ato da abertura
-            colaborador_id = getattr(item_alvo, 'colaborador_id_contrato', None) or data.get('colaborador_id_contrato')
-            if colaborador_id and not enc.colaborador_id_contrato:
-                enc.colaborador_id_contrato = str(colaborador_id).strip()
-
+        if nota_avaliacao is not None and str(nota_avaliacao).strip() != '':
             try:
-                db.session.commit()
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"[ERRO ENCERRAMENTO] Erro ao persistir dados complementares: {str(e)}")
+                enc.nota_avaliacao_cliente = int(nota_avaliacao)
+            except (ValueError, TypeError):
+                pass
 
-        # Recarrega o agendamento atualizado para recalcular o total
+        # 🟢 ATRIBUIÇÃO SEGURA DA FK DO COLABORADOR
+        colaborador_id = getattr(item_alvo, 'colaborador_id_contrato', None) or getattr(item_alvo,
+                                                                                        'colaborador_contrato_id',
+                                                                                        None) or data.get(
+            'colaborador_id_contrato') or data.get('colaborador_contrato_id')
+        if colaborador_id:
+            col_id_str = str(colaborador_id).strip()
+            if hasattr(enc, 'colaborador_contrato_id'):
+                enc.colaborador_contrato_id = col_id_str
+            elif hasattr(enc, 'colaborador_id_contrato'):
+                enc.colaborador_id_contrato = col_id_str
+
+        # Persiste todas as alterações no banco sem estourar exceção
+        db.session.commit()
+
+        # Recarrega e checa pendências
         db.session.refresh(agendamento)
+
+        # 🟢 VERIFICAÇÃO DE ITENS PENDENTES PARA DISPARAR O FECHAMENTO DA COMANDA
+        itens_restantes = [
+            i for i in agendamento.itens
+            if str(getattr(i, 'status_item', getattr(i, 'status', ''))).lower().strip() not in ['concluido',
+                                                                                                'concluído',
+                                                                                                'finalizado',
+                                                                                                'cancelado']
+        ]
+        comanda_pronta = len(itens_restantes) == 0
+
         valor_total_calculado = float(agendamento.recalcular_total())
 
         return jsonify({
             'sucesso': True,
-            'mensagem': res_enc.get('mensagem', 'Serviço concluído com sucesso!'),
-            'comanda_concluida': res_enc.get('comanda_pronta', False),
-            'comanda_pronta': res_enc.get('comanda_pronta', False),
-            'sem_pendencias': res_enc.get('comanda_pronta', False),
+            'mensagem': 'Serviço concluído com sucesso!',
+            'comanda_concluida': comanda_pronta,
+            'comanda_pronta': comanda_pronta,
+            'sem_pendencias': comanda_pronta,
+            'itens_pendentes_qtd': len(itens_restantes),
             'valor_total': valor_total_calculado,
-            'valor_total_fmt': f'R$ {valor_total_calculado:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.'),
+            'valor_total_fmt': f'R$ {valor_total_calculado:,.2f}'.replace(',', 'X').replace('.', ',').replace('X',
+                                                                                                              '.'),
             'agendamento_id': agendamento.id
         }), 200
 
@@ -7686,6 +7884,38 @@ def item_to_dict(item):
         'data_hora_inicio_real': inicio_real_str,
         'inicio_real': inicio_real_str,  # Compatibilidade com as referências no JS
         'status_item': item.status_item
+    }
+
+
+def normalizar_payload_colaborador(colab):
+    """Garante uma estrutura de dicionário uniforme para renderização em qualquer template Jinja2."""
+    if not colab:
+        return {
+            'id': '',
+            'nome': 'Profissional',
+            'foto_url': None,
+            'cargo': 'Especialista'
+        }
+
+    # Resolve Nome
+    nome = getattr(colab, 'nome', None) or getattr(getattr(colab, 'usuario', None), 'nome', 'Profissional')
+
+    # Resolve Foto de Perfil
+    foto_url = (
+            getattr(colab, 'url_foto_profissional', None) or
+            getattr(colab, 'foto_url', None) or
+            getattr(getattr(colab, 'usuario', None), 'url_foto_perfil', None)
+    )
+
+    # Resolve Cargo/Especialidade
+    cargo = getattr(colab, 'nome_cargo_formatado', None) or getattr(getattr(colab, 'cargo', None), 'nome',
+                                                                    'Especialista')
+
+    return {
+        'id': str(getattr(colab, 'uuid_colaborador', None) or getattr(colab, 'id', '')),
+        'nome': nome,
+        'foto_url': foto_url,
+        'cargo': cargo
     }
 
 

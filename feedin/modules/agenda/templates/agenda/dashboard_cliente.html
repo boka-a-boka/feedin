@@ -1,815 +1,769 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Início{% endblock %}
+
+{% block content %}
+<!-- META CSRF PARA REQUISIÇÕES FETCH JAVASCRIPT -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<style>
+    /* 🎨 FUNDO ACETINADO (PWA) */
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+
+    /* 👤 AVATAR & UPLOAD HUB */
+    :root {
+        --avatar-size: 64px;
+        --badge-size: 24px;
+    }
+
+    /* 👤 AVATAR FIXO 64x64px */
+    .avatar-upload-wrapper {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        margin: 0 auto;
+        display: inline-block;
+    }
+
+    /* Container circular para a Imagem ou Letra */
+    .avatar-trigger-area {
+        width: 64px !important;
+        height: 64px !important;
+        border-radius: 50% !important;
+        overflow: hidden;
+        cursor: pointer;
+        position: relative;
+        background-color: #212529 !important; /* Cor de fundo escura garantida */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .avatar-circle {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        aspect-ratio: 1 / 1;          /* Força 1:1 na imagem e na div da letra */
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .avatar-circle-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    .avatar-letra-box {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #212529 !important; /* bg-dark rígido */
+        color: #ffffff !important;
+        font-weight: bold;
+        font-size: 1.5rem;
+    }
+
+    /* Badge da Câmera (Posicionada sobre a borda do círculo) */
+    .avatar-badge-camera {
+        position: absolute;
+        bottom: -2px;
+        right: -2px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 2px solid #ffffff;
+        z-index: 10;
+    }
+
+    .avatar-badge-camera:hover {
+        transform: scale(1.1);
+    }
+
+    /* 🏷️ IDENTIDADE VISUAL & NOTIFICAÇÕES */
+    .bg-gradient-brand {
+        background: linear-gradient(135deg, #212529 0%, #343a40 100%);
+    }
+
+    .badge-sininho {
+        font-size: 0.65rem;
+        padding: 0.25em 0.45em;
+        transform: translate(30%, -30%) !important;
+    }
+
+    /* Modal com efeito flutuante (Glassmorphism & Sombra Suave) */
+    .modal-flutuante .modal-content {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25), 0 10px 20px rgba(0, 0, 0, 0.15);
+        border-radius: 1.5rem !important;
+    }
+
+    /* Fundo escurecido suave */
+    .modal-flutuante-backdrop {
+        background-color: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(4px);
+    }
+
+    /* Moldura Fotográfica 3x4 / Proporção Retrato */
+    .container-foto-3x4 {
+        width: 100%;
+        max-width: 220px;
+        aspect-ratio: 3 / 4;
+        border-radius: 1rem;
+        overflow: hidden;
+        background-color: #f1f5f9;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+        border: 3px solid #ffffff;
+    }
+
+    /* Animação suave de entrada do modal */
+    .modal.fade .modal-dialog {
+        transform: scale(0.95) translateY(20px);
+        transition: transform 0.25s ease-out, opacity 0.25s ease-out;
+    }
+
+    .modal.show .modal-dialog {
+        transform: scale(1) translateY(0);
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 position-relative">
+    <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+
+        {# 🚪 BOTÃO DE SAIR REAPROVEITANDO A SUA ROTA EXISTENTE #}
+        <div class="position-absolute top-0 end-0 me-3 mt-3">
+            <a href="{{ url_for('agenda.logout') }}"
+               class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
+               title="Sair do módulo Agenda"
+               style="font-size: 0.75rem; text-decoration: none;">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Sair</span>
+            </a>
+        </div>
+
+        {# 1. HEADER DINÂMICO DE PERFIL COM HUB DE CONFIGURAÇÕES #}
+        <div class="text-center mb-3">
+            <div class="avatar-upload-wrapper">
+                <div role="button"
+                     data-bs-toggle="offcanvas"
+                     data-bs-target="#offcanvasPerfilCliente"
+                     title="Abrir Central da Conta"
+                     class="avatar-trigger-area border border-2 border-white shadow-sm">
+
+                    {# Resolução limpa e direta consumindo a @property da Model #}
+                    {% set foto_caminho = cliente.url_foto_perfil if (cliente and cliente.url_foto_perfil) else None %}
+
+                    {% if foto_caminho %}
+                        {# 1. Exibe a foto oficial tratada e resolvida pelo backend #}
+                        <img id="imgAvatarPreview"
+                             src="{{ foto_caminho }}"
+                             alt="Foto de {{ cliente.nome if (cliente and cliente.nome) else 'Cliente' }}"
+                             class="avatar-circle-img">
+                    {% else %}
+                        {# 2. Fallback padronizado: Renderiza apenas a inicial quando foto_caminho for None #}
+                        <div id="avatarLetraPreview" class="avatar-letra-box d-flex">
+                            {{ (cliente.nome if (cliente and cliente.nome) else 'U')[0] | upper }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                {# Badge da Câmera #}
+                <label for="inputFotoPerfil"
+                       class="avatar-badge-camera bg-primary text-white shadow-sm cursor-pointer"
+                       title="Tirar foto ou escolher da galeria">
+                    <i class="bi bi-camera-fill" style="font-size: 0.75rem;"></i>
+                </label>
+            </div>
+
+            {# Form Escondido #}
+            <form id="formFotoPerfil" method="POST" action="{{ url_for('agenda.upload_foto_perfil') }}" enctype="multipart/form-data" class="d-none">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" id="inputFotoPerfil" name="foto" accept="image/png, image/jpeg, image/webp" onchange="submeterFotoPerfil(this)">
+            </form>
+        </div>
+
+        {# 2. OFFCANVAS DA CENTRAL DA CONTA DO CLIENTE #}
+        <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasPerfilCliente" aria-labelledby="offcanvasPerfilClienteLabel">
+            <div class="offcanvas-header border-bottom">
+                <h5 class="offcanvas-title fw-bold" id="offcanvasPerfilClienteLabel">
+                    <i class="bi bi-person-gear me-2 text-primary"></i>Minha Conta - Agenda
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body p-3">
+                <div class="list-group list-group-flush">
+                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="bi bi-person-vcard fs-5 text-primary"></i>
+                            <div>
+                                <strong class="d-block text-dark">Editar Perfil</strong>
+                                <small class="text-muted">Seus dados de contato e identificação</small>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted"></i>
+                    </a>
+
+                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="bi bi-clock-history fs-5 text-success"></i>
+                            <div>
+                                <strong class="d-block text-dark">Histórico & Relatórios</strong>
+                                <small class="text-muted">Atendimentos passados e consumos</small>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted"></i>
+                    </a>
+
+                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="bi bi-sliders fs-5 text-warning"></i>
+                            <div>
+                                <strong class="d-block text-dark">Preferências de Notificação</strong>
+                                <small class="text-muted">Canais de recebimento (WhatsApp / E-mail)</small>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {# 3. CONVITE / FICHA DE ADMISSÃO PENDENTE #}
+        {% if ficha_pendente %}
+            <div class="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">📋</span>
+                    <div>
+                        <h4 class="font-bold text-sm">Convite de Trabalho Pendente</h4>
+                        <p class="text-xs text-amber-300/80">
+                            Identificamos uma ficha cadastral pendente para vínculo profissional.
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ url_for('auth.preencher_ficha_colaborador', convite_id=ficha_pendente.id) }}"
+                   class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-semibold rounded-lg transition-colors">
+                    Preencher Ficha
+                </a>
+            </div>
+        {% endif %}
+
+        {# 4. ALTERNÂNCIA: MODALIDADE PROFISSIONAL / GESTÃO #}
+        {% if eh_colaborador or eh_gestor %}
+            <div class="card border-0 bg-dark text-white rounded-4 shadow-sm mb-3">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center me-3">
+                        <div class="bg-white bg-opacity-10 p-2 rounded-3 me-3 text-white">
+                            <i class="bi {% if eh_gestor %}bi-speedometer2{% else %}bi-briefcase-fill{% endif %} fs-5"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-white small">
+                                {% if eh_gestor %}Painel do Gestor{% else %}Painel Profissional{% endif %}
+                            </h6>
+                            <small class="text-white-50" style="font-size: 0.75rem;">
+                                {% if eh_gestor %}Gerenciamento do estabelecimento.{% else %}Sua grade de atendimento e balcão.{% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    {% if eh_gestor %}
+                        <a href="{{ url_for('agenda.painel_gestao') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
+                            Gerenciar <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('agenda.painel_interno_loja') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
+                            Atender <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {# 5. CARD HERO: EXPLORAR ESTABELECIMENTOS #}
+        <div class="card border-0 shadow-sm rounded-4 mb-3 bg-gradient-brand text-white overflow-hidden position-relative">
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-8">
+                        <h6 class="fw-bold mb-1">Descubra Novos Espaços</h6>
+                        <p class="text-white-50 mb-3" style="font-size: 0.75rem;">Explore estabelecimentos, confira horários e faça seu agendamento.</p>
+                        <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-warning text-dark rounded-pill fw-bold shadow-sm px-3" style="font-size: 0.78rem;">
+                            <i class="bi bi-binoculars-fill me-1"></i> Explorar Catálogo
+                        </a>
+                    </div>
+                    <div class="col-4 text-end">
+                        <i class="bi bi-binoculars text-white-50 opacity-25" style="font-size: 3.2rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# 6. ACESSO RÁPIDO (EMPRESAS FAVORITAS) #}
+        <div class="mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-2 px-1">
+                <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
+                    <i class="bi bi-star-fill text-warning me-1"></i> Minhas Empresas Favoritas
+                </h6>
+                <span class="badge bg-light text-muted border rounded-pill">
+                    {{ empresas_favoritas | length if empresas_favoritas else 0 }}
+                </span>
+            </div>
+
+            {% if empresas_favoritas %}
+                {# Container com rolagem horizontal fluida para suportar 1 ou N empresas sem quebrar a tela #}
+                <div class="d-flex gap-2 overflow-x-auto pb-2 scrollbar-hidden" style="scroll-snap-type: x mandatory;">
+                    {% for empresa in empresas_favoritas %}
+                        {% set src_logo = empresa.url_logomarca %}
+                        <div class="flex-shrink-0" style="width: 220px; scroll-snap-align: start;">
+                            <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
+                                <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
+                                    <div class="d-flex align-items-center gap-2">
+
+                                        {# Container Fixo da Logo (40x40px) #}
+                                        <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                                            {% if src_logo %}
+                                                <img id="imgLogoEmpresa_{{ empresa.id }}"
+                                                     src="{{ src_logo }}"
+                                                     class="rounded-circle border object-fit-contain w-100 h-100 p-1"
+                                                     style="background-color: #fcfbfa; display: block;"
+                                                     alt="{{ empresa.nome }}"
+                                                     onerror="this.style.display='none'; document.getElementById('logoLetraEmpresa_{{ empresa.id }}').style.display='flex';">
+                                            {% endif %}
+
+                                            <div id="logoLetraEmpresa_{{ empresa.id }}"
+                                                 class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100"
+                                                 style="background-color: #f6f4ee; display: {% if src_logo %}none{% else %}flex{% endif %};">
+                                                {{ (empresa.nome or 'E')[0] | upper }}
+                                            </div>
                                         </div>
-                                        {% extends "agenda/base_agenda.html" %}
 
-                                        {% block title %}FeedIn | Início{% endblock %}
+                                        {# Nome e Categoria #}
+                                        <div class="text-truncate min-w-0">
+                                            <span class="d-block text-dark fw-semibold small text-truncate">
+                                                {{ empresa.nome }}
+                                            </span>
+                                            <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
+                                                {{ empresa.categoria_rel.nome if empresa.categoria_rel else 'Estabelecimento' }}
+                                            </small>
+                                        </div>
 
-                                        {% block content %}
-                                        <!-- META CSRF PARA REQUISIÇÕES FETCH JAVASCRIPT -->
-                                        <meta name="csrf-token" content="{{ csrf_token() }}">
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
+                    <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
+                    <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
+                </div>
+            {% endif %}
+        </div>
 
-                                        <style>
-                                            /* 🎨 FUNDO ACETINADO (PWA) */
-                                            .fundo-acetinado-pwa {
-                                                background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
-                                                min-height: 100vh;
-                                            }
+        {# 7. RECADOS E NOTIFICAÇÕES EM DESTAQUE #}
+        {% if notificacoes %}
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
+                        <i class="bi bi-chat-square-text-fill text-primary me-1"></i> Recados e Notificações
+                    </h6>
+                    <button class="btn btn-sm btn-link text-decoration-none p-0 small fw-semibold"
+                            type="button"
+                            data-bs-toggle="offcanvas"
+                            data-bs-target="#offcanvasNotificacoes">
+                        Ver todas ({{ total_nao_lidas }})
+                    </button>
+                </div>
 
-                                            /* 👤 AVATAR & UPLOAD HUB */
-                                            :root {
-                                                --avatar-size: 64px;
-                                                --badge-size: 24px;
-                                            }
+                <div class="list-group gap-2" id="lista-notificacoes">
+                    {% for notificacao in notificacoes[:2] %}
+                        {% set tipo_notif = (notificacao.tipo or notificacao.tipo_evento or 'geral') | lower %}
+                        {% set borda_cor = 'border-primary' %}
+                        {% if tipo_notif in ['empresa', 'loja'] %}
+                            {% set borda_cor = 'border-info' %}
+                        {% elif tipo_notif in ['alerta', 'urgente', 'cancelamento'] %}
+                            {% set borda_cor = 'border-danger' %}
+                        {% elif tipo_notif in ['sistema', 'convite', 'aviso'] %}
+                            {% set borda_cor = 'border-warning' %}
+                        {% endif %}
 
-                                            /* 👤 AVATAR FIXO 64x64px */
-                                            .avatar-upload-wrapper {
-                                                position: relative;
-                                                width: 64px;
-                                                height: 64px;
-                                                margin: 0 auto;
-                                                display: inline-block;
-                                            }
+                        <div id="card-notificacao-{{ notificacao.id }}"
+                             class="list-group-item rounded-4 shadow-sm border-start border-4 {{ borda_cor }} p-3 position-relative"
+                             style="transition: all 0.3s ease;">
 
-                                            /* Container circular para a Imagem ou Letra */
-                                            .avatar-trigger-area {
-                                                width: 64px !important;
-                                                height: 64px !important;
-                                                border-radius: 50% !important;
-                                                overflow: hidden;
-                                                cursor: pointer;
-                                                position: relative;
-                                                background-color: #212529 !important; /* Cor de fundo escura garantida */
-                                                display: flex;
-                                                align-items: center;
-                                                justify-content: center;
-                                            }
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <h6 class="fw-bold text-dark mb-0 text-truncate" style="font-size: 0.88rem; max-width: 80%;">
+                                    {{ notificacao.titulo or 'Nova Notificação' }}
+                                </h6>
+                                <small class="text-muted flex-shrink-0" style="font-size: 0.7rem;">
+                                    {{ notificacao.criado_em.strftime('%d/%m %H:%M') if notificacao.criado_em else '' }}
+                                </small>
+                            </div>
 
-                                            .avatar-circle {
-                                                width: 100%;
-                                                height: 100%;
-                                                object-fit: cover;
-                                                aspect-ratio: 1 / 1;          /* Força 1:1 na imagem e na div da letra */
-                                                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-                                            }
+                            <p class="mb-2 text-secondary small text-break" style="font-size: 0.82rem;">
+                                {{ notificacao.mensagem or notificacao.conteudo or '' }}
+                            </p>
 
-                                            .avatar-circle-img {
-                                                width: 100%;
-                                                height: 100%;
-                                                object-fit: cover;
-                                                border-radius: 50%;
-                                            }
+                            <div class="d-flex justify-content-end">
+                                <button type="button"
+                                        class="btn btn-sm btn-light border rounded-pill py-1 px-3 text-muted btn-arquivar-notif"
+                                        data-notificacao-id="{{ notificacao.id }}"
+                                        style="font-size: 0.70rem;">
+                                    <i class="bi bi-archive me-1"></i>Toque para arquivar
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
 
-                                            .avatar-letra-box {
-                                                width: 100%;
-                                                height: 100%;
-                                                display: flex;
-                                                align-items: center;
-                                                justify-content: center;
-                                                background-color: #212529 !important; /* bg-dark rígido */
-                                                color: #ffffff !important;
-                                                font-weight: bold;
-                                                font-size: 1.5rem;
-                                            }
-
-                                            /* Badge da Câmera (Posicionada sobre a borda do círculo) */
-                                            .avatar-badge-camera {
-                                                position: absolute;
-                                                bottom: -2px;
-                                                right: -2px;
-                                                width: 26px;
-                                                height: 26px;
-                                                border-radius: 50%;
-                                                display: flex;
-                                                align-items: center;
-                                                justify-content: center;
-                                                cursor: pointer;
-                                                border: 2px solid #ffffff;
-                                                z-index: 10;
-                                            }
-
-                                            .avatar-badge-camera:hover {
-                                                transform: scale(1.1);
-                                            }
-
-                                            /* 🏷️ IDENTIDADE VISUAL & NOTIFICAÇÕES */
-                                            .bg-gradient-brand {
-                                                background: linear-gradient(135deg, #212529 0%, #343a40 100%);
-                                            }
-
-                                            .badge-sininho {
-                                                font-size: 0.65rem;
-                                                padding: 0.25em 0.45em;
-                                                transform: translate(30%, -30%) !important;
-                                            }
-
-                                            /* Modal com efeito flutuante (Glassmorphism & Sombra Suave) */
-                                            .modal-flutuante .modal-content {
-                                                background: rgba(255, 255, 255, 0.95);
-                                                backdrop-filter: blur(12px);
-                                                -webkit-backdrop-filter: blur(12px);
-                                                border: 1px solid rgba(255, 255, 255, 0.4);
-                                                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25), 0 10px 20px rgba(0, 0, 0, 0.15);
-                                                border-radius: 1.5rem !important;
-                                            }
-
-                                            /* Fundo escurecido suave */
-                                            .modal-flutuante-backdrop {
-                                                background-color: rgba(15, 23, 42, 0.6) !important;
-                                                backdrop-filter: blur(4px);
-                                            }
-
-                                            /* Moldura Fotográfica 3x4 / Proporção Retrato */
-                                            .container-foto-3x4 {
-                                                width: 100%;
-                                                max-width: 220px;
-                                                aspect-ratio: 3 / 4;
-                                                border-radius: 1rem;
-                                                overflow: hidden;
-                                                background-color: #f1f5f9;
-                                                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-                                                border: 3px solid #ffffff;
-                                            }
-
-                                            /* Animação suave de entrada do modal */
-                                            .modal.fade .modal-dialog {
-                                                transform: scale(0.95) translateY(20px);
-                                                transition: transform 0.25s ease-out, opacity 0.25s ease-out;
-                                            }
-                                            .modal.show .modal-dialog {
-                                                transform: scale(1) translateY(0);
-                                            }
-                                        </style>
-
-                                        <div class="fundo-acetinado-pwa w-100 py-4 position-relative">
-                                            <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
-
-                                                {# 🚪 BOTÃO DE SAIR REAPROVEITANDO A SUA ROTA EXISTENTE #}
-                                                <div class="position-absolute top-0 end-0 me-3 mt-3">
-                                                    <a href="{{ url_for('agenda.logout') }}"
-                                                       class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
-                                                       title="Sair do módulo Agenda"
-                                                       style="font-size: 0.75rem; text-decoration: none;">
-                                                        <i class="bi bi-box-arrow-right"></i>
-                                                        <span>Sair</span>
-                                                    </a>
-                                                </div>
-
-                                                {# 1. HEADER DINÂMICO DE PERFIL COM HUB DE CONFIGURAÇÕES #}
-                                                <div class="text-center mb-3">
-                                                    <div class="avatar-upload-wrapper">
-
-                                                        <div role="button"
-                                                             data-bs-toggle="offcanvas"
-                                                             data-bs-target="#offcanvasPerfilCliente"
-                                                             title="Abrir Central da Conta"
-                                                             class="avatar-trigger-area border border-2 border-white shadow-sm">
-
-                                                            {# Resoluçao limpa e direta consumindo a @property da Model #}
-                                                            {% set foto_caminho = cliente.url_foto_perfil if (cliente and cliente.url_foto_perfil) else None %}
-
-                                                            {% if foto_caminho %}
-                                                            {# 1. Exibe a foto oficial tratada e resolvida pelo backend #}
-                                                            <img id="imgAvatarPreview"
-                                                                 src="{{ foto_caminho }}"
-                                                                 alt="Foto de {{ cliente.nome if (cliente and cliente.nome) else 'Cliente' }}"
-                                                                 class="avatar-circle-img">
-                                                            {% else %}
-                                                            {# 2. Fallback padronizado: Renderiza apenas a inicial quando foto_caminho for None #}
-                                                            <div id="avatarLetraPreview" class="avatar-letra-box d-flex">
-                                                                {{ (cliente.nome if (cliente and cliente.nome) else 'U')[0] | upper }}
-                                                            </div>
-                                                            {% endif %}
-
-                                                        </div>
-
-                                                        {# Badge da Câmera #}
-                                                        <label for="inputFotoPerfil"
-                                                               class="avatar-badge-camera bg-primary text-white shadow-sm cursor-pointer"
-                                                               title="Tirar foto ou escolher da galeria">
-                                                            <i class="bi bi-camera-fill" style="font-size: 0.75rem;"></i>
-                                                        </label>
-
-                                                    </div>
-
-                                                    {# Form Escondido #}
-                                                    <form id="formFotoPerfil" method="POST" action="{{ url_for('agenda.upload_foto_perfil') }}" enctype="multipart/form-data" class="d-none">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <input type="file" id="inputFotoPerfil" name="foto" accept="image/png, image/jpeg, image/webp" onchange="submeterFotoPerfil(this)">
-                                                    </form>
-                                                </div>
-
-                                                {# 2. OFFCANVAS DA CENTRAL DA CONTA DO CLIENTE #}
-                                                <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasPerfilCliente" aria-labelledby="offcanvasPerfilClienteLabel">
-                                                    <div class="offcanvas-header border-bottom">
-                                                        <h5 class="offcanvas-title fw-bold" id="offcanvasPerfilClienteLabel">
-                                                            <i class="bi bi-person-gear me-2 text-primary"></i>Minha Conta - Agenda
-                                                        </h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-                                                    </div>
-                                                    <div class="offcanvas-body p-3">
-                                                        <div class="list-group list-group-flush">
-                                                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                                                                <div class="d-flex align-items-center gap-3">
-                                                                    <i class="bi bi-person-vcard fs-5 text-primary"></i>
-                                                                    <div>
-                                                                        <strong class="d-block text-dark">Editar Perfil</strong>
-                                                                        <small class="text-muted">Seus dados de contato e identificação</small>
-                                                                    </div>
-                                                                </div>
-                                                                <i class="bi bi-chevron-right text-muted"></i>
-                                                            </a>
-
-                                                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                                                                <div class="d-flex align-items-center gap-3">
-                                                                    <i class="bi bi-clock-history fs-5 text-success"></i>
-                                                                    <div>
-                                                                        <strong class="d-block text-dark">Histórico & Relatórios</strong>
-                                                                        <small class="text-muted">Atendimentos passados e consumos</small>
-                                                                    </div>
-                                                                </div>
-                                                                <i class="bi bi-chevron-right text-muted"></i>
-                                                            </a>
-
-                                                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                                                                <div class="d-flex align-items-center gap-3">
-                                                                    <i class="bi bi-sliders fs-5 text-warning"></i>
-                                                                    <div>
-                                                                        <strong class="d-block text-dark">Preferências de Notificação</strong>
-                                                                        <small class="text-muted">Canais de recebimento (WhatsApp / E-mail)</small>
-                                                                    </div>
-                                                                </div>
-                                                                <i class="bi bi-chevron-right text-muted"></i>
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {# 3. CONVITE / FICHA DE ADMISSÃO PENDENTE #}
-                                                {% if ficha_pendente %}
-                                                <div class="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 flex items-center justify-between">
-                                                    <div class="flex items-center gap-3">
-                                                        <span class="text-2xl">📋</span>
-                                                        <div>
-                                                            <h4 class="font-bold text-sm">Convite de Trabalho Pendente</h4>
-                                                            <p class="text-xs text-amber-300/80">
-                                                                Identificamos uma ficha cadastral pendente para vínculo profissional.
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <a href="{{ url_for('auth.preencher_ficha_colaborador', convite_id=ficha_pendente.id) }}"
-                                                       class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-semibold rounded-lg transition-colors">
-                                                        Preencher Ficha
-                                                    </a>
-                                                </div>
-                                                {% endif %}
-
-                                                {# 4. ALTERNÂNCIA: MODALIDADE PROFISSIONAL / GESTÃO #}
-                                                {% if eh_colaborador or eh_gestor %}
-                                                <div class="card border-0 bg-dark text-white rounded-4 shadow-sm mb-3">
-                                                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                                                        <div class="d-flex align-items-center me-3">
-                                                            <div class="bg-white bg-opacity-10 p-2 rounded-3 me-3 text-white">
-                                                                <i class="bi {% if eh_gestor %}bi-speedometer2{% else %}bi-briefcase-fill{% endif %} fs-5"></i>
-                                                            </div>
-                                                            <div>
-                                                                <h6 class="fw-bold mb-0 text-white small">
-                                                                    {% if eh_gestor %}Painel do Gestor{% else %}Painel Profissional{% endif %}
-                                                                </h6>
-                                                                <small class="text-white-50" style="font-size: 0.75rem;">
-                                                                    {% if eh_gestor %}Gerenciamento do estabelecimento.{% else %}Sua grade de atendimento e balcão.{% endif %}
-                                                                </small>
-                                                            </div>
-                                                        </div>
-                                                        {% if eh_gestor %}
-                                                        <a href="{{ url_for('agenda.painel_gestao') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
-                                                            Gerenciar <i class="bi bi-arrow-right ms-1"></i>
-                                                        </a>
-                                                        {% else %}
-                                                        <a href="{{ url_for('agenda.painel_interno_loja') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold" style="font-size: 0.75rem;">
-                                                            Atender <i class="bi bi-arrow-right ms-1"></i>
-                                                        </a>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                                {% endif %}
-
-                                                {# 5. CARD HERO: EXPLORAR ESTABELECIMENTOS #}
-                                                <div class="card border-0 shadow-sm rounded-4 mb-3 bg-gradient-brand text-white overflow-hidden position-relative">
-                                                    <div class="card-body p-3">
-                                                        <div class="row align-items-center">
-                                                            <div class="col-8">
-                                                                <h6 class="fw-bold mb-1">Descubra Novos Espaços</h6>
-                                                                <p class="text-white-50 mb-3" style="font-size: 0.75rem;">Explore estabelecimentos, confira horários e faça seu agendamento.</p>
-                                                                <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-warning text-dark rounded-pill fw-bold shadow-sm px-3" style="font-size: 0.78rem;">
-                                                                    <i class="bi bi-binoculars-fill me-1"></i> Explorar Catálogo
-                                                                </a>
-                                                            </div>
-                                                            <div class="col-4 text-end">
-                                                                <i class="bi bi-binoculars text-white-50 opacity-25" style="font-size: 3.2rem;"></i>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {# 6. ACESSO RÁPIDO (EMPRESAS FAVORITAS) #}
-                                                <div class="mb-4">
-                                                    <div class="d-flex align-items-center justify-content-between mb-2 px-1">
-                                                        <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
-                                                            <i class="bi bi-star-fill text-warning me-1"></i> Minhas Empresas Favoritas
-                                                        </h6>
-                                                        <span class="badge bg-light text-muted border rounded-pill">
-            {{ empresas_favoritas | length if empresas_favoritas else 0 }}
-        </span>
-                                                    </div>
-
-                                                    {% if empresas_favoritas %}
-                                                    {# Container com rolagem horizontal fluida para suportar 1 ou N empresas sem quebrar a tela #}
-                                                    <div class="d-flex gap-2 overflow-x-auto pb-2 scrollbar-hidden" style="scroll-snap-type: x mandatory;">
-                                                        {% for empresa in empresas_favoritas %}
-                                                        {% set src_logo = empresa.url_logomarca %}
-
-                                                        <div class="flex-shrink-0" style="width: 220px; scroll-snap-align: start;">
-                                                            <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}" class="text-decoration-none">
-                                                                <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
-                                                                    <div class="d-flex align-items-center gap-2">
-
-                                                                        {# Container Fixo da Logo (40x40px) #}
-                                                                        <div class="position-relative flex-shrink-0" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
-                                                                            {% if src_logo %}
-                                                                            <img id="imgLogoEmpresa_{{ empresa.id }}"
-                                                                                 src="{{ src_logo }}"
-                                                                                 class="rounded-circle border object-fit-contain w-100 h-100 p-1"
-                                                                                 style="background-color: #fcfbfa; display: block;"
-                                                                                 alt="{{ empresa.nome }}"
-                                                                                 onerror="this.style.display='none'; document.getElementById('logoLetraEmpresa_{{ empresa.id }}').style.display='flex';">
-                                                                            {% endif %}
-
-                                                                            <div id="logoLetraEmpresa_{{ empresa.id }}"
-                                                                                 class="rounded-circle border text-secondary align-items-center justify-content-center fw-bold fs-6 w-100 h-100"
-                                                                                 style="background-color: #f6f4ee; display: {% if src_logo %}none{% else %}flex{% endif %};">
-                                                                                {{ (empresa.nome or 'E')[0] | upper }}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {# Nome e Categoria #}
-                                                                        <div class="text-truncate min-w-0">
-                                <span class="d-block text-dark fw-semibold small text-truncate">
-                                    {{ empresa.nome }}
-                                </span>
-                                                                            <small class="text-muted d-block text-truncate" style="font-size: 0.7rem;">
-                                                                                {{ empresa.categoria_rel.nome if empresa.categoria_rel else 'Estabelecimento' }}
-                                                                            </small>
-                                                                        </div>
-
-                                                                    </div>
-                                                                </div>
-                                                            </a>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                    {% else %}
-                                                    <div class="text-center py-3 bg-white rounded-4 border border-dashed shadow-sm">
-                                                        <i class="bi bi-star text-muted fs-4 d-block mb-1"></i>
-                                                        <small class="text-muted d-block">Você ainda não favoritou nenhuma empresa.</small>
-                                                    </div>
-                                                    {% endif %}
-                                                </div>
-
-                                                {# 7. RECADOS E NOTIFICAÇÕES EM DESTAQUE #}
-                                                {% if notificacoes %}
-                                                <div class="mb-3">
-                                                    <div class="d-flex justify-content-between align-items-center mb-2 px-1">
-                                                        <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
-                                                            <i class="bi bi-chat-square-text-fill text-primary me-1"></i> Recados e Notificações
-                                                        </h6>
-                                                        <button class="btn btn-sm btn-link text-decoration-none p-0 small fw-semibold"
-                                                                type="button"
-                                                                data-bs-toggle="offcanvas"
-                                                                data-bs-target="#offcanvasNotificacoes">
-                                                            Ver todas ({{ total_nao_lidas }})
-                                                        </button>
-                                                    </div>
-
-                                                    <div class="list-group gap-2" id="lista-notificacoes">
-                                                        {% for notificacao in notificacoes[:2] %}
-                                                        {% set tipo_notif = (notificacao.tipo or notificacao.tipo_evento or 'geral') | lower %}
-                                                        {% set borda_cor = 'border-primary' %}
-                                                        {% if tipo_notif in ['empresa', 'loja'] %}
-                                                        {% set borda_cor = 'border-info' %}
-                                                        {% elif tipo_notif in ['alerta', 'urgente', 'cancelamento'] %}
-                                                        {% set borda_cor = 'border-danger' %}
-                                                        {% elif tipo_notif in ['sistema', 'convite', 'aviso'] %}
-                                                        {% set borda_cor = 'border-warning' %}
-                                                        {% endif %}
-
-                                                        <div id="card-notificacao-{{ notificacao.id }}"
-                                                             class="list-group-item rounded-4 shadow-sm border-start border-4 {{ borda_cor }} p-3 position-relative"
-                                                             style="transition: all 0.3s ease;">
-
-                                                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                                                <h6 class="fw-bold text-dark mb-0 text-truncate" style="font-size: 0.88rem; max-width: 80%;">
-                                                                    {{ notificacao.titulo or 'Nova Notificação' }}
-                                                                </h6>
-                                                                <small class="text-muted flex-shrink-0" style="font-size: 0.7rem;">
-                                                                    {{ notificacao.criado_em.strftime('%d/%m %H:%M') if notificacao.criado_em else '' }}
-                                                                </small>
-                                                            </div>
-
-                                                            <p class="mb-2 text-secondary small text-break" style="font-size: 0.82rem;">
-                                                                {{ notificacao.mensagem or notificacao.conteudo or '' }}
-                                                            </p>
-
-                                                            <div class="d-flex justify-content-end">
-                                                                <button type="button"
-                                                                        class="btn btn-sm btn-light border rounded-pill py-1 px-3 text-muted btn-arquivar-notif"
-                                                                        data-notificacao-id="{{ notificacao.id }}"
-                                                                        style="font-size: 0.70rem;">
-                                                                    <i class="bi bi-archive me-1"></i>Toque para arquivar
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                </div>
-                                                {% endif %}
-
-                                                {# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
-                                                <div class="mb-4">
-                                                    <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
-                                                        <h6 class="fw-bold text-primary m-0" style="font-size: 0.85rem;">
-                                                            <i class="bi bi-calendar-event-fill me-1"></i> Meus Próximos Agendamentos
-                                                        </h6>
-                                                        {% if agendamentos %}
-                                                        <span class="badge bg-primary text-white rounded-pill" style="font-size: 0.7rem;">
-            {{ agendamentos|length }}
-        </span>
-                                                        {% endif %}
-                                                    </div>
-
-                                                    {% if agendamentos and agendamentos|length > 0 %}
-                                                    <div class="d-flex flex-column gap-2 pe-1" style="max-height: 420px; overflow-y: auto;">
-                                                        {% for item in agendamentos %}
-                                                        {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
-                                                        {% set slug_empresa_destinataria = item.empresa.slug if (item.empresa is defined and item.empresa and item.empresa.slug) else 'geral' %}
-                                                        {% set itens_lista = item.itens if (item.itens is defined and item.itens) else [] %}
-
-                                                        {# 1. Configurações de Cancelamento #}
-                                                        {% set config_agenda = item.empresa.configuracao_agenda if (item.empresa is defined and item.empresa and item.empresa.configuracao_agenda is defined) else None %}
-                                                        {% set minutos_antecedencia = config_agenda.antecedencia_minima_reagendamento_min if (config_agenda and config_agenda.antecedencia_minima_reagendamento_min is not none) else 120 %}
-
-                                                        {% if item.data_hora_inicio and agora is defined and timedelta is defined %}
-                                                        {% set limite_cancelamento = item.data_hora_inicio - timedelta(minutes=minutos_antecedencia) %}
-                                                        {% set permite_cancelar = (item.status in ['pendente', 'confirmado', 'aguardando']) and (agora < limite_cancelamento) %}
-                                                        {% else %}
-                                                        {% set permite_cancelar = False %}
-                                                        {% endif %}
-
-                                                        <!-- CARD DO AGENDAMENTO CONSOLIDADO -->
-                                                        <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item">
-
-                                                            {# Cabeçalho do Card #}
-                                                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                                                <div>
-                                                                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
-                                                                        {{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Agendamento') }}
-                                                                    </h6>
-                                                                    <span class="text-muted d-block" style="font-size: 0.72rem;">
-                        <i class="bi bi-clock me-1 text-primary"></i>
-                        {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
+        {# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
+                <h6 class="fw-bold text-primary m-0" style="font-size: 0.85rem;">
+                    <i class="bi bi-calendar-event-fill me-1"></i> Meus Próximos Agendamentos
+                </h6>
+                {% if agendamentos %}
+                    <span class="badge bg-primary text-white rounded-pill" style="font-size: 0.7rem;">
+                        {{ agendamentos|length }}
                     </span>
-                                                                </div>
+                {% endif %}
+            </div>
 
-                                                                {% if item.status == 'aguardando' %}
-                                                                <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                    <i class="bi bi-geo-alt-fill me-1"></i> Recepção
-                </span>
-                                                                {% elif item.status == 'em_atendimento' %}
-                                                                <span class="badge bg-primary text-white rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                    <i class="bi bi-scissors me-1"></i> Em Atendimento
-                </span>
-                                                                {% elif item.status == 'confirmado' %}
-                                                                <span class="badge bg-success-subtle text-success rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                    <i class="bi bi-check-circle-fill me-1"></i> Confirmado
-                </span>
-                                                                {% elif item.status == 'cancelado' %}
-                                                                <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                    <i class="bi bi-slash-circle me-1"></i> Cancelado
-                </span>
-                                                                {% else %}
-                                                                <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                    {{ item.status | upper }}
-                </span>
-                                                                {% endif %}
-                                                            </div>
+            {% if agendamentos and agendamentos|length > 0 %}
+                <div class="d-flex flex-column gap-2 pe-1" style="max-height: 420px; overflow-y: auto;">
 
-                                                            <hr class="my-2 text-black-50 opacity-10">
+                    {# 1. INÍCIO DO LAÇO DOS AGENDAMENTOS #}
+                    {% for item in agendamentos %}
+                        {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
+                        {% set slug_empresa_destinataria = item.empresa.slug if (item.empresa is defined and item.empresa and item.empresa.slug) else 'geral' %}
+                        {% set itens_lista = item.itens if (item.itens is defined and item.itens) else [] %}
 
-                                                            {# CONSOLIDAÇÃO DOS SERVIÇOS #}
-                                                            {% if itens_lista|length > 0 %}
-                                                            <div class="d-flex flex-column gap-2 my-2">
-                                                                {% for srv_item in itens_lista %}
-                                                                {% set prof_obj = srv_item.profissional if (srv_item is defined and srv_item.profissional) else (item.profissional if item.profissional is defined else None) %}
-                                                                {% set nome_prof = prof_obj.nome if (prof_obj and prof_obj.nome) else 'Profissional Integrante' %}
-                                                                {% set especialidade_prof = prof_obj.especialidade if (prof_obj and prof_obj.especialidade) else 'Especialista' %}
-                                                                {% set bio_prof = prof_obj.bio if (prof_obj and prof_obj.bio) else 'Sem biografia disponível.' %}
-                                                                {% set nome_servico = srv_item.servico.nome if (srv_item.servico and srv_item.servico.nome) else (srv_item.nome_servico or 'Serviço') %}
-                                                                {% set desc_servico = srv_item.servico.descricao if (srv_item.servico and srv_item.servico.descricao) else 'Serviço agendado.' %}
-                                                                {% set valor_servico = srv_item.preco_unitario if (srv_item.preco_unitario is defined and srv_item.preco_unitario is not none) else (srv_item.valor or 0.0) %}
+                        <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item">
 
-                                                                {# 🟢 SANITIZAÇÃO DA URL DA FOTO DO PROFISSIONAL #}
-                                                                {% set foto_raw = prof_obj.url_foto_perfil if (prof_obj and prof_obj.url_foto_perfil) else (prof_obj.foto_profissional if prof_obj else None) %}
-                                                                {% set foto_prof_url = None %}
-                                                                {% if foto_raw and foto_raw != 'None' %}
-                                                                {% if foto_raw.startswith('http') or foto_raw.startswith('/media/') %}
-                                                                {% set foto_prof_url = foto_raw %}
-                                                                {% elif foto_raw.startswith('/agenda/Uploads/') %}
-                                                                {% set foto_prof_url = foto_raw | replace('/agenda/Uploads/', '/media/empresa/Uploads/') %}
-                                                                {% elif foto_raw.startswith('Uploads/') %}
-                                                                {% set foto_prof_url = '/media/empresa/' ~ foto_raw %}
-                                                                {% else %}
-                                                                {% set foto_prof_url = foto_raw %}
-                                                                {% endif %}
-                                                                {% endif %}
-
-                                                                {# 🟢 CARD COM EVENTO DE DUPLO CLIQUE E DATA-ATTRIBUTES #}
-                                                                <div class="item-servico-card bg-light p-2 rounded-3 border-start border-3 border-primary mb-1 user-select-none"
-                                                                     style="cursor: pointer;"
-                                                                     title="Clique duas vezes para ver detalhes do colaborador"
-                                                                     data-prof-nome="{{ nome_prof }}"
-                                                                     data-prof-especialidade="{{ especialidade_prof }}"
-                                                                     data-prof-bio="{{ bio_prof }}"
-                                                                     data-prof-foto="{{ foto_prof_url or '' }}"
-                                                                     data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Empresa') }}"
-                                                                     data-servico-nome="{{ nome_servico }}"
-                                                                     data-servico-desc="{{ desc_servico }}"
-                                                                     data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
-                                                                     data-valor="R$ {{ '%.2f'|format(valor_servico) }}">
-
-                                                                    <div class="d-flex align-items-center justify-content-between mb-1">
-                                                                        <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
-                                                                            {% if foto_prof_url %}
-                                                                            <img src="{{ foto_prof_url }}"
-                                                                                 alt="{{ nome_prof }}"
-                                                                                 class="rounded-circle object-fit-cover border shadow-sm flex-shrink-0"
-                                                                                 style="width: 24px; height: 24px;"
-                                                                                 onerror="this.style.display='none'; this.nextElementSibling.classList.remove('d-none');">
-                                                                            <div class="rounded-circle bg-primary text-white d-none align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
-                                                                                 style="width: 24px; height: 24px; font-size: 0.65rem;">
-                                                                                {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
-                                                                            </div>
-                                                                            {% else %}
-                                                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
-                                                                                 style="width: 24px; height: 24px; font-size: 0.65rem;">
-                                                                                {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
-                                                                            </div>
-                                                                            {% endif %}
-
-                                                                            <span class="fw-bold text-dark small text-truncate" style="font-size: 0.8rem;" title="{{ nome_prof }}">
-                                {{ nome_prof }}
-                            </span>
-                                                                        </div>
-
-                                                                        <span class="fw-semibold text-dark small flex-shrink-0" style="font-size: 0.78rem;">
-                            R$ {{ "%.2f"|format(valor_servico) }}
-                        </span>
-                                                                    </div>
-                                                                    <div class="text-secondary small text-truncate" style="font-size: 0.75rem;">
-                                                                        <i class="bi bi-dot text-primary me-1"></i>{{ nome_servico }}
-                                                                    </div>
-                                                                </div>
-                                                                {% endfor %}
-                                                            </div>
-                                                            {% endif %}
-
-                                                            {# Rodapé do Card #}
-                                                            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
-                                                                <div class="fw-bold text-dark small" style="font-size: 0.82rem;">
-                                                                    Total: R$ {{ "%.2f"|format(item.valor_total if item.valor_total is defined and item.valor_total is not none else (item.preco_cobrado or 0.0)) }}
-                                                                </div>
-
-                                                                <div class="d-flex align-items-center gap-1">
-                                                                    {% if item.id and item.status != 'cancelado' %}
-                                                                    <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}"
-                                                                       class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1"
-                                                                       style="font-size: 0.73rem;">
-                                                                        <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
-                                                                    </a>
-                                                                    {% endif %}
-                                                                </div>
-                                                            </div>
-
-                                                        </div>
-                                                        {% endfor %}
-                                                    </div>
-                                                    {% else %}
-                                                    <div class="bg-white p-3 rounded-4 shadow-sm text-center text-muted small">
-                                                        Nenhum agendamento futuro encontrado.
-                                                    </div>
-                                                    {% endif %}
-                                                </div>
-
-                                                {# 8.5. AGENDAMENTOS NÃO EXECUTADOS / PENDENTES #}
-                                                {% if agendamentos_ausente_pendentes %}
-                                                <div class="accordion mb-4" id="accordionPendencias">
-                                                    <div class="accordion-item border border-warning-subtle rounded-4 overflow-hidden shadow-sm">
-                                                        <h2 class="accordion-header" id="headingPendencias">
-                                                            <button class="accordion-button collapsed bg-warning-subtle text-warning-emphasis fw-bold py-2 px-3"
-                                                                    type="button"
-                                                                    data-bs-toggle="collapse"
-                                                                    data-bs-target="#collapsePendencias"
-                                                                    aria-expanded="false"
-                                                                    aria-controls="collapsePendencias"
-                                                                    style="font-size: 0.85rem;">
-                                                                <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
-                                                                Agendamentos Não Executados
-                                                                <span class="badge bg-warning text-dark rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
-                            {{ agendamentos_ausente_pendentes|length }}
-                        </span>
-                                                            </button>
-                                                        </h2>
-                                                        <div id="collapsePendencias"
-                                                             class="accordion-collapse collapse"
-                                                             aria-labelledby="headingPendencias"
-                                                             data-bs-parent="#accordionPendencias">
-                                                            <div class="accordion-body bg-light-subtle d-flex flex-column gap-2 p-2">
-                                                                {% for item in agendamentos_ausente_pendentes %}
-                                                                {% set primeiro_item = item.itens[0] if item.itens else None %}
-                                                                {% set servico_principal = primeiro_item.servico if primeiro_item else None %}
-                                                                {% set slug_empresa_destinataria = item.empresa.slug if item.empresa is defined and item.empresa and item.empresa.slug else 'geral' %}
-
-                                                                <div class="bg-white p-3 rounded-4 shadow-sm border border-warning-subtle">
-                                                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                                                        <div>
-                                    <span class="badge bg-warning-subtle text-warning-emphasis fw-bold mb-1" style="font-size: 0.7rem;">
-                                        {{ servico_principal.nome if servico_principal else 'Atendimento' }}
+                            {# Cabeçalho do Card #}
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
+                                        {{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Agendamento') }}
+                                    </h6>
+                                    <span class="text-muted d-block" style="font-size: 0.72rem;">
+                                        <i class="bi bi-clock me-1 text-primary"></i>
+                                        {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
                                     </span>
-                                                                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
-                                                                                {% if item.profissional and item.profissional.nome %}
-                                                                                {{ item.profissional.nome }}
-                                                                                {% elif item.empresa is defined and item.empresa %}
-                                                                                {{ item.empresa.nome }}
-                                                                                {% else %}
-                                                                                {{ session.get('empresa_nome', 'Estabelecimento') }}
-                                                                                {% endif %}
-                                                                            </h6>
-                                                                        </div>
+                                </div>
+                            </div>
 
-                                                                        <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1" style="font-size: 0.7rem;">
-                                    <i class="bi bi-clock-history me-1"></i> Não Realizado
-                                </span>
-                                                                    </div>
+                            <hr class="my-2 text-black-50 opacity-10">
 
-                                                                    <div class="alert alert-warning border-0 py-2 px-3 small my-2 rounded-3" style="font-size: 0.75rem;">
-                                                                        <i class="bi bi-info-circle-fill me-1"></i>
-                                                                        Este agendamento não foi concluído no horário previsto ({{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '' }}). Você pode solicitar um novo horário.
-                                                                    </div>
+                            {# 2. LAÇO INTERNO DOS SERVIÇOS #}
+                            {% if itens_lista|length > 0 %}
+                                <div class="d-flex flex-column gap-2 my-2">
+                                    {% for srv_item in itens_lista %}
+                                        {% set prof = srv_item.profissional if srv_item.profissional else None %}
+                                        {% set nome_prof = srv_item.nome_prof_exibicao if (srv_item.nome_prof_exibicao is defined and srv_item.nome_prof_exibicao) else 'Profissional' %}
+                                        {% set foto_prof_url = srv_item.foto_prof_exibicao if (srv_item.foto_prof_exibicao is defined and srv_item.foto_prof_exibicao) else None %}
+                                        {% set nome_servico = srv_item.nome_servico if (srv_item is defined and srv_item.nome_servico) else 'Serviço' %}
+                                        {% set valor_servico = srv_item.preco_unitario if (srv_item is defined and srv_item.preco_unitario is not none) else 0.0 %}
 
-                                                                    <hr class="my-2 text-black-50 opacity-10">
+                                        <!-- CARD DO SERVIÇO COM OS ATRIBUTOS DE DADOS PARA O MODAL -->
+                                        <div class="item-servico-card bg-light p-2 rounded-3 border-start border-3 border-primary mb-1 user-select-none"
+                                             style="cursor: pointer;"
+                                             data-bs-toggle="modal"
+                                             data-bs-target="#modalInfoAtendimento"
+                                             data-prof-nome="{{ nome_prof }}"
+                                             data-prof-foto="{{ foto_prof_url or '' }}"
+                                             data-prof-especialidade="{{ prof.especialidade if (prof and prof.especialidade is defined and prof.especialidade) else 'Especialista' }}"
+                                             data-prof-bio="{{ prof.biografia if (prof and prof.biografia is defined and prof.biografia) else 'Sem biografia cadastrada.' }}"
+                                             data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Empresa') }}"
+                                             data-servico-nome="{{ nome_servico }}"
+                                             data-servico-desc="{{ srv_item.descricao if (srv_item is defined and srv_item.descricao) else 'Serviço agendado via plataforma.' }}"
+                                             data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
+                                             data-valor="R$ {{ '%.2f'|format(valor_servico) }}">
 
-                                                                    <div class="d-flex justify-content-between align-items-center">
-                                                                        {% set valor_exibicao = item.valor_total if item.valor_total is defined and item.valor_total is not none else item.preco_cobrado %}
-                                                                        <div class="fw-bold text-dark small" style="font-size: 0.78rem;">
-                                                                            {% if valor_exibicao %}
-                                                                            R$ {{ "%.2f"|format(valor_exibicao) }}
-                                                                            {% endif %}
-                                                                        </div>
+                                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                                <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
 
-                                                                        {% if item.id %}
-                                                                        <div class="d-flex justify-content-end align-items-center">
-                                                                            <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1" style="font-size: 0.75rem;">
-                                                                                <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
-                                                                            </a>
-                                                                        </div>
-                                                                        {% endif %}
-                                                                    </div>
-                                                                </div>
-                                                                {% endfor %}
-                                                            </div>
+                                                    {# AVATAR DA FOTO / INICIAL #}
+                                                    {% if foto_prof_url %}
+                                                        <img src="{{ foto_prof_url }}"
+                                                             alt="{{ nome_prof }}"
+                                                             class="rounded-circle object-fit-cover border shadow-sm flex-shrink-0"
+                                                             style="width: 28px; height: 28px;"
+                                                             onerror="this.style.display='none'; if(this.nextElementSibling) { this.nextElementSibling.style.display='flex'; }">
+
+                                                        <div class="rounded-circle bg-primary text-white align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                                             style="width: 28px; height: 28px; font-size: 0.7rem; display: none;">
+                                                            {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
                                                         </div>
-                                                    </div>
-                                                </div>
-                                                {% endif %}
-
-                                                <!-- Modal de Cancelamento -->
-                                                <div class="modal fade" id="modalCancelarAgendamento" tabindex="-1" aria-labelledby="modalCancelarLabel" aria-hidden="true">
-                                                    <div class="modal-dialog modal-dialog-centered">
-                                                        <div class="modal-content rounded-4 border-0 shadow">
-                                                            <div class="modal-header border-0 pb-0">
-                                                                <h5 class="modal-title fw-bold text-dark" id="modalCancelarLabel">Cancelar Agendamento</h5>
-                                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                            </div>
-                                                            <div class="modal-body py-3">
-                                                                <input type="hidden" id="cancelarAgendamentoId" value="">
-
-                                                                <p class="text-muted small mb-3">
-                                                                    Lamentamos que precise cancelar. Por favor, nos diga o motivo para podermos melhorar nossos serviços:
-                                                                </p>
-
-                                                                <div class="mb-3">
-                                                                    <label class="form-label small fw-semibold">Motivo principal</label>
-                                                                    <select class="form-select form-select-sm rounded-3" id="selectMotivoCategoria">
-                                                                        <option value="imprevisto_pessoal">Imprevisto pessoal</option>
-                                                                        <option value="mudanca_horario">Necessito outro horário</option>
-                                                                        <option value="desistencia">Não preciso mais do serviço</option>
-                                                                        <option value="outro">Outro motivo</option>
-                                                                    </select>
-                                                                </div>
-
-                                                                <div class="mb-2">
-                                                                    <label class="form-label small fw-semibold">Observações (opcional)</label>
-                                                                    <textarea class="form-control form-control-sm rounded-3" id="textMotivoDetalhado" rows="3" placeholder="Escreva aqui detalhes se desejar..."></textarea>
-                                                                </div>
-                                                            </div>
-                                                            <div class="modal-footer border-0 pt-0">
-                                                                <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Voltar</button>
-                                                                <button type="button" class="btn btn-sm btn-danger rounded-pill px-3" id="btnConfirmarCancelamento">
-                                                                    Confirmar Cancelamento
-                                                                </button>
-                                                            </div>
+                                                    {% else %}
+                                                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                                                             style="width: 28px; height: 28px; font-size: 0.7rem;">
+                                                            {{ (nome_prof[:1] | upper) if nome_prof else 'P' }}
                                                         </div>
-                                                    </div>
+                                                    {% endif %}
+
+                                                    <span class="fw-bold text-dark small text-truncate" style="font-size: 0.8rem;" title="{{ nome_prof }}">
+                                                        {{ nome_prof }}
+                                                    </span>
                                                 </div>
 
-                                                <div class="d-flex align-items-center my-4 text-muted opacity-50">
-                                                    <hr class="flex-grow-1 m-0">
-                                                    <span class="px-2 small fw-semibold" style="font-size: 0.7rem;"><i class="bi bi-arrow-down-up"></i></span>
-                                                    <hr class="flex-grow-1 m-0">
-                                                </div>
+                                                <span class="fw-semibold text-dark small flex-shrink-0" style="font-size: 0.78rem;">
+                                                    R$ {{ "%.2f"|format(valor_servico) }}
+                                                </span>
+                                            </div>
 
-                                                {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA) #}
-                                                {% if publicidade_ativa %}
-                                                {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url) if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
-                                                <div class="mb-4">
-                                                    <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark text-white position-relative">
-                <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5"
-                      style="font-size: 0.65rem; z-index: 2; border-bottom-left-radius: 4px; letter-spacing: 0.5px;">
-                    PATROCINADO
-                </span>
+                                            <div class="text-secondary small text-truncate" style="font-size: 0.75rem;">
+                                                <i class="bi bi-dot text-primary me-1"></i>{{ nome_servico }}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
 
-                                                        <a href="{{ publicidade_ativa.link_destino or 'javascript:void(0);' }}"
-                                                           {% if publicidade_ativa.link_destino %}target="_blank"{% endif %}
-                                                           class="text-decoration-none d-block">
+                            {# 3. RODAPÉ DO CARD #}
+                            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                                <div class="fw-bold text-dark small" style="font-size: 0.82rem;">
+                                    Total: R$ {{ "%.2f"|format(item.valor_total if item.valor_total is defined and item.valor_total is not none else (item.preco_cobrado or 0.0)) }}
+                                </div>
 
-                                                            {% if img_pub %}
-                                                            <img src="{{ img_pub }}"
-                                                                 alt="{{ publicidade_ativa.titulo or 'Publicidade' }}"
-                                                                 class="w-100 d-block object-fit-cover"
-                                                                 style="max-height: 140px; min-height: 100px;">
-                                                            {% else %}
-                                                            <div class="p-3 bg-gradient bg-secondary text-white d-flex align-items-center justify-content-between" style="min-height: 100px;">
-                                                                <div class="pe-3">
-                                <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">
-                                    {{ publicidade_ativa.tag_referencia_nome if publicidade_ativa.tag_referencia_nome else 'Destaque Local' }}
-                                </span>
-                                                                    <h6 class="fw-bold mb-1 text-white" style="font-size: 0.88rem;">
-                                                                        {{ publicidade_ativa.titulo or 'Conheça nossos parceiros em Piracicaba' }}
-                                                                    </h6>
-                                                                    <p class="small text-white-50 mb-0" style="font-size: 0.72rem;">
-                                                                        {{ publicidade_ativa.texto_formatado or 'Valorize o comércio da nossa cidade!' }}
-                                                                    </p>
-                                                                </div>
-                                                                <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
-                                                            </div>
-                                                            {% endif %}
-                                                        </a>
-                                                    </div>
-                                                </div>
+                                <div class="d-flex align-items-center gap-1">
+                                    {% if item.id and item.status != 'cancelado' %}
+                                        <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}"
+                                           class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1" style="font-size: 0.73rem;">
+                                            <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                        </div> {# FECHA CARD DO AGENDAMENTO #}
+
+                    {% endfor %} {# FECHA FOR item in agendamentos #}
+
+                </div>
+            {% else %}
+                <div class="bg-white p-3 rounded-4 shadow-sm text-center text-muted small">
+                    Nenhum agendamento futuro encontrado.
+                </div>
+            {% endif %}
+        </div>
+
+        {# 8.5. AGENDAMENTOS NÃO EXECUTADOS / PENDENTES #}
+        {% if agendamentos_ausente_pendentes %}
+            <div class="accordion mb-4" id="accordionPendencias">
+                <div class="accordion-item border border-warning-subtle rounded-4 overflow-hidden shadow-sm">
+                    <h2 class="accordion-header" id="headingPendencias">
+                        <button class="accordion-button collapsed bg-warning-subtle text-warning-emphasis fw-bold py-2 px-3"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#collapsePendencias"
+                                aria-expanded="false"
+                                aria-controls="collapsePendencias"
+                                style="font-size: 0.85rem;">
+                            <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+                            Agendamentos Não Executados
+                            <span class="badge bg-warning text-dark rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
+                                {{ agendamentos_ausente_pendentes|length }}
+                            </span>
+                        </button>
+                    </h2>
+                    <div id="collapsePendencias"
+                         class="accordion-collapse collapse"
+                         aria-labelledby="headingPendencias"
+                         data-bs-parent="#accordionPendencias">
+                        <div class="accordion-body bg-light-subtle d-flex flex-column gap-2 p-2">
+                            {% for item in agendamentos_ausente_pendentes %}
+                                {% set primeiro_item = item.itens[0] if item.itens else None %}
+                                {% set servico_principal = primeiro_item.servico if primeiro_item else None %}
+                                {% set slug_empresa_destinataria = item.empresa.slug if item.empresa is defined and item.empresa and item.empresa.slug else 'geral' %}
+
+                                <div class="bg-white p-3 rounded-4 shadow-sm border border-warning-subtle">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <span class="badge bg-warning-subtle text-warning-emphasis fw-bold mb-1" style="font-size: 0.7rem;">
+                                                {{ servico_principal.nome if servico_principal else 'Atendimento' }}
+                                            </span>
+                                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 0.9rem;">
+                                                {% if item.profissional and item.profissional.nome %}
+                                                    {{ item.profissional.nome }}
+                                                {% elif item.empresa is defined and item.empresa %}
+                                                    {{ item.empresa.nome }}
+                                                {% else %}
+                                                    {{ session.get('empresa_nome', 'Estabelecimento') }}
                                                 {% endif %}
+                                            </h6>
+                                        </div>
 
-                                                {# 9. HISTÓRICO: ÚLTIMAS VISITAS #}
-                                                <div class="accordion mb-3" id="accordionHistorico">
-                                                    <div class="accordion-item border border-secondary-subtle rounded-4 overflow-hidden shadow-sm">
-                                                        <h2 class="accordion-header" id="headingHistorico">
-                                                            <button class="accordion-button collapsed bg-secondary-subtle text-secondary-emphasis fw-bold py-2 px-3"
-                                                                    type="button"
-                                                                    data-bs-toggle="collapse"
-                                                                    data-bs-target="#collapseHistorico"
-                                                                    aria-expanded="false"
-                                                                    aria-controls="collapseHistorico"
-                                                                    style="font-size: 0.85rem;">
-                                                                <i class="bi bi-clock-history me-2 text-secondary"></i>
-                                                                Últimas Visitas
-                                                                {% if ultimos_agendamentos %}
-                                                                <span class="badge bg-secondary text-white rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
+                                        <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1" style="font-size: 0.7rem;">
+                                            <i class="bi bi-clock-history me-1"></i> Não Realizado
+                                        </span>
+                                    </div>
+
+                                    <div class="alert alert-warning border-0 py-2 px-3 small my-2 rounded-3" style="font-size: 0.75rem;">
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        Este agendamento não foi concluído no horário previsto ({{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '' }}). Você pode solicitar um novo horário.
+                                    </div>
+
+                                    <hr class="my-2 text-black-50 opacity-10">
+
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        {% set valor_exibicao = item.valor_total if item.valor_total is defined and item.valor_total is not none else item.preco_cobrado %}
+                                        <div class="fw-bold text-dark small" style="font-size: 0.78rem;">
+                                            {% if valor_exibicao %}
+                                                R$ {{ "%.2f"|format(valor_exibicao) }}
+                                            {% endif %}
+                                        </div>
+
+                                        {% if item.id %}
+                                            <div class="d-flex justify-content-end align-items-center">
+                                                <a href="{{ url_for('agenda.agendar', slug_empresa=slug_empresa_destinataria, reagendar_id=item.id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i> Reagendar
+                                                </a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Modal de Cancelamento -->
+        <div class="modal fade" id="modalCancelarAgendamento" tabindex="-1" aria-labelledby="modalCancelarLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content rounded-4 border-0 shadow">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold text-dark" id="modalCancelarLabel">Cancelar Agendamento</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body py-3">
+                        <input type="hidden" id="cancelarAgendamentoId" value="">
+
+                        <p class="text-muted small mb-3">
+                            Lamentamos que precise cancelar. Por favor, nos diga o motivo para podermos melhorar nossos serviços:
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Motivo principal</label>
+                            <select class="form-select form-select-sm rounded-3" id="selectMotivoCategoria">
+                                <option value="imprevisto_pessoal">Imprevisto pessoal</option>
+                                <option value="mudanca_horario">Necessito outro horário</option>
+                                <option value="desistencia">Não preciso mais do serviço</option>
+                                <option value="outro">Outro motivo</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Observações (opcional)</label>
+                            <textarea class="form-control form-control-sm rounded-3" id="textMotivoDetalhado" rows="3" placeholder="Escreva aqui detalhes se desejar..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Voltar</button>
+                        <button type="button" class="btn btn-sm btn-danger rounded-pill px-3" id="btnConfirmarCancelamento">
+                            Confirmar Cancelamento
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center my-4 text-muted opacity-50">
+            <hr class="flex-grow-1 m-0">
+            <span class="px-2 small fw-semibold" style="font-size: 0.7rem;"><i class="bi bi-arrow-down-up"></i></span>
+            <hr class="flex-grow-1 m-0">
+        </div>
+
+        {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA) #}
+        {% if publicidade_ativa %}
+            {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url) if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
+            <div class="mb-4">
+                <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark text-white position-relative">
+                    <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5"
+                          style="font-size: 0.65rem; z-index: 2; border-bottom-left-radius: 4px; letter-spacing: 0.5px;">
+                        PATROCINADO
+                    </span>
+
+                    <a href="{{ publicidade_ativa.link_destino or 'javascript:void(0);' }}"
+                       {% if publicidade_ativa.link_destino %}target="_blank"{% endif %}
+                       class="text-decoration-none d-block">
+
+                        {% if img_pub %}
+                            <img src="{{ img_pub }}"
+                                 alt="{{ publicidade_ativa.titulo or 'Publicidade' }}"
+                                 class="w-100 d-block object-fit-cover"
+                                 style="max-height: 140px; min-height: 100px;">
+                        {% else %}
+                            <div class="p-3 bg-gradient bg-secondary text-white d-flex align-items-center justify-content-between" style="min-height: 100px;">
+                                <div class="pe-3">
+                                    <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">
+                                        {{ publicidade_ativa.tag_referencia_nome if publicidade_ativa.tag_referencia_nome else 'Destaque Local' }}
+                                    </span>
+                                    <h6 class="fw-bold mb-1 text-white" style="font-size: 0.88rem;">
+                                        {{ publicidade_ativa.titulo or 'Conheça nossos parceiros em Piracicaba' }}
+                                    </h6>
+                                    <p class="small text-white-50 mb-0" style="font-size: 0.72rem;">
+                                        {{ publicidade_ativa.texto_formatado or 'Valorize o comércio da nossa cidade!' }}
+                                    </p>
+                                </div>
+                                <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
+                            </div>
+                        {% endif %}
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+
+        {# 9. HISTÓRICO: ÚLTIMAS VISITAS #}
+        <div class="accordion mb-3" id="accordionHistorico">
+            <div class="accordion-item border border-secondary-subtle rounded-4 overflow-hidden shadow-sm">
+                <h2 class="accordion-header" id="headingHistorico">
+                    <button class="accordion-button collapsed bg-secondary-subtle text-secondary-emphasis fw-bold py-2 px-3"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseHistorico"
+                            aria-expanded="false"
+                            aria-controls="collapseHistorico"
+                            style="font-size: 0.85rem;">
+                        <i class="bi bi-clock-history me-2 text-secondary"></i>
+                        Últimas Visitas
+                        {% if ultimos_agendamentos %}
+                            <span class="badge bg-secondary text-white rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
                                 {{ ultimos_agendamentos|length }}
                             </span>
-                                                                {% endif %}
-                                                            </button>
-                                                        </h2>
-                                                        <div id="collapseHistorico"
-                                                             class="accordion-collapse collapse"
-                                                             aria-labelledby="headingHistorico"
-                                                             data-bs-parent="#accordionHistorico">
-                                                            <div class="accordion-body bg-light-subtle d-flex flex-column gap-2 p-2" style="max-height: 380px; overflow-y: auto;">
-                                                                {% if ultimos_agendamentos %}
-                                                                {% for agendamento in ultimos_agendamentos %}
-                                                                <div class="bg-white p-2 rounded-3 border d-flex align-items-center justify-content-between">
-                                                                    <div class="d-flex align-items-center gap-2">
-                                                                        <i class="bi bi-check-circle-fill text-success fs-6"></i>
-                                                                        <div>
-                                                                            <strong class="d-block text-dark small">{{ agendamento.empresa.nome if agendamento.empresa else 'Estabelecimento' }}</strong>
-                                                                            <small class="text-muted" style="font-size: 0.7rem;">{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') if agendamento.data_hora_inicio else '' }}</small>
-                                                                        </div>
-                                    <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">{{ agendamento.status }}</span>
+                        {% endif %}
+                    </button>
+                </h2>
+                <div id="collapseHistorico"
+                     class="accordion-collapse collapse"
+                     aria-labelledby="headingHistorico"
+                     data-bs-parent="#accordionHistorico">
+                    <div class="accordion-body bg-light-subtle d-flex flex-column gap-2 p-2" style="max-height: 380px; overflow-y: auto;">
+                        {% if ultimos_agendamentos %}
+                            {% for agendamento in ultimos_agendamentos %}
+                                <div class="bg-white p-2 rounded-3 border d-flex align-items-center justify-content-between">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-check-circle-fill text-success fs-6"></i>
+                                        <div>
+                                            <strong class="d-block text-dark small">{{ agendamento.empresa.nome if agendamento.empresa else 'Estabelecimento' }}</strong>
+                                            <small class="text-muted" style="font-size: 0.7rem;">{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') if agendamento.data_hora_inicio else '' }}</small>
+                                        </div>
+                                        <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">{{ agendamento.status }}</span>
+                                    </div>
                                 </div>
                             {% endfor %}
                         {% else %}
@@ -1156,22 +1110,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 2. MODAL INFO ATENDIMENTO
+    // 2. MODAL DE INFORMAÇÕES DO ATENDIMENTO
     const modalInfo = document.getElementById('modalInfoAtendimento');
     if (modalInfo) {
         modalInfo.addEventListener('show.bs.modal', function (event) {
             const card = event.relatedTarget;
             if (!card) return;
 
-            document.getElementById('infoProfNome').textContent = card.getAttribute('data-prof-nome') || 'Profissional';
-            document.getElementById('infoProfEspecialidade').textContent = card.getAttribute('data-prof-especialidade') || 'Especialista';
-            document.getElementById('infoProfBio').textContent = card.getAttribute('data-prof-bio') || 'Sem biografia disponível.';
-            document.getElementById('infoEmpresaNome').textContent = card.getAttribute('data-empresa-nome') || 'Empresa';
-            document.getElementById('infoServicoNome').textContent = card.getAttribute('data-servico-nome') || 'Atendimento';
-            document.getElementById('infoServicoDesc').textContent = card.getAttribute('data-servico-desc') || 'Serviço agendado.';
-            document.getElementById('infoDataHora').textContent = card.getAttribute('data-data-hora') || '--/--/----';
-            document.getElementById('infoValor').textContent = card.getAttribute('data-valor') || 'R$ 0,00';
+            // Preenche as informações de texto
+            const elNome = document.getElementById('infoProfNome');
+            const elEsp = document.getElementById('infoProfEspecialidade');
+            const elBio = document.getElementById('infoProfBio');
+            const elEmpresa = document.getElementById('infoEmpresaNome');
+            const elServico = document.getElementById('infoServicoNome');
+            const elDesc = document.getElementById('infoServicoDesc');
+            const elDataHora = document.getElementById('infoDataHora');
+            const elValor = document.getElementById('infoValor');
 
+            if (elNome) elNome.textContent = card.getAttribute('data-prof-nome') || 'Profissional';
+            if (elEsp) elEsp.textContent = card.getAttribute('data-prof-especialidade') || 'Especialista';
+            if (elBio) elBio.textContent = card.getAttribute('data-prof-bio') || 'Sem biografia disponível.';
+            if (elEmpresa) elEmpresa.textContent = card.getAttribute('data-empresa-nome') || 'Empresa';
+            if (elServico) elServico.textContent = card.getAttribute('data-servico-nome') || 'Atendimento';
+            if (elDesc) elDesc.textContent = card.getAttribute('data-servico-desc') || 'Serviço agendado.';
+            if (elDataHora) elDataHora.textContent = card.getAttribute('data-data-hora') || '--/--/----';
+            if (elValor) elValor.textContent = card.getAttribute('data-valor') || 'R$ 0,00';
+
+            // Lógica da Foto e Fallback
             const profFoto = card.getAttribute('data-prof-foto') || '';
             const imgFoto = document.getElementById('infoProfFoto');
             const divFallback = document.getElementById('infoProfFallback');
@@ -1193,9 +1158,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+
+        // Controle de Foco para Acessibilidade (Evita erro de aria-hidden)
+        modalInfo.addEventListener('shown.bs.modal', function () {
+            const btnClose = modalInfo.querySelector('.btn-close');
+            if (btnClose) btnClose.focus();
+        });
+
+        modalInfo.addEventListener('hidden.bs.modal', function () {
+            if (document.activeElement && modalInfo.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+        });
     }
 
-    // 3. MODAL CANCELAR AGENDAMENTO
+    // 3. ACIONAMENTO DO MODAL VIA DUPLO CLIQUE
+    document.addEventListener('dblclick', function(e) {
+        const elementoAlvo = e.target.closest('.item-servico-card, .card-atendimento-item');
+        if (elementoAlvo) {
+            e.preventDefault();
+
+            // Desfoca o elemento atual antes de abrir para não travar o aria-hidden
+            if (document.activeElement) {
+                document.activeElement.blur();
+            }
+
+            const modalEl = document.getElementById('modalInfoAtendimento');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                bsModal.show(elementoAlvo);
+            }
+        }
+    });
+
+    // 4. MODAL CANCELAR AGENDAMENTO
     const modalCancelarEl = document.getElementById('modalCancelarAgendamento');
     let botaoDisparadorModal = null;
 
@@ -1274,19 +1270,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
-
-    // 🟢 4. ACIONAMENTO POR DUPLO CLIQUE NO CARD DO SERVIÇO/COLABORADOR
-    document.addEventListener('dblclick', function(e) {
-        const elementoAlvo = e.target.closest('.item-servico-card, .card-atendimento-item');
-        if (elementoAlvo) {
-            e.preventDefault();
-            const modalEl = document.getElementById('modalInfoAtendimento');
-            if (modalEl && typeof bootstrap !== 'undefined') {
-                const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                bsModal.show(elementoAlvo);
-            }
-        }
-    });
 
 });
 </script>
