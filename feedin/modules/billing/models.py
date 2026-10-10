@@ -6,6 +6,11 @@ Prefixo das Tabelas: fin_
 import uuid
 from datetime import datetime
 from feedin import database as db
+from sqlalchemy import func
+
+from feedin.modules.pdv.models import (PdvComandaItem)
+
+from feedin.modules.agenda.models import (AghAgendamento)
 
 
 class Cobranca(db.Model):
@@ -14,8 +19,9 @@ class Cobranca(db.Model):
     Representa a comanda/documento de cobrança de qualquer módulo de origem.
     """
     __tablename__ = 'fin_cobrancas'
+    __table_args__ = {'extend_existing': True}
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, comment="Chave primária")
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment="Chave primária")
     uuid_cobranca = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), comment="UUID universal")
     codigo_transacao = db.Column(db.String(30), unique=True, nullable=False, comment="Código legível (Ex: COB-20260929-102)")
 
@@ -61,6 +67,33 @@ class Cobranca(db.Model):
 
         return self.status
 
+    def atualizar_valor_bruto(self, valor_servicos=None):
+        """
+        Recalcula e persiste o valor_bruto e valor_liquido com base nos
+        itens de PDV e nos serviços associados.
+        """
+        # Soma produtos do PDV
+        total_produtos = db.session.query(
+            func.coalesce(func.sum(PdvComandaItem.valor_total), 0.0)
+        ).filter(PdvComandaItem.cobranca_id == self.id).scalar()
+
+        # Se valor_servicos não for informado, mantemos a diferença ou buscamos do agendamento
+        if valor_servicos is None and self.origem_tipo == 'AGENDAMENTO' and self.origem_id:
+            agendamento = AghAgendamento.query.get(self.origem_id)
+            if agendamento:
+                itens = getattr(agendamento, 'itens', []) or getattr(agendamento, 'servicos', []) or []
+                valor_servicos = sum(
+                    float(getattr(i, 'preco_unitario', 0) or getattr(i, 'valor', 0) or 0)
+                    for i in itens if str(getattr(i, 'status_item', '')).lower() not in ['cancelado', 'cancelada']
+                )
+
+        total_servicos = float(valor_servicos or 0.0)
+        self.valor_bruto = total_servicos + float(total_produtos)
+        self.valor_liquido = float(self.valor_bruto) - float(self.valor_desconto or 0) + float(
+            self.valor_acrescimo or 0)
+
+        return self.valor_bruto
+
 
 class CobrancaPagamento(db.Model):
     """
@@ -68,8 +101,9 @@ class CobrancaPagamento(db.Model):
     Registra cada lançamento de pagamento associado à cobrança.
     """
     __tablename__ = 'fin_cobranca_pagamentos'
+    __table_args__ = {'extend_existing': True}
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     cobranca_id = db.Column(db.BigInteger, db.ForeignKey('fin_cobrancas.id'), nullable=False, index=True)
 
     forma_pagamento = db.Column(db.String(30), nullable=False, comment="DINHEIRO, PIX, DEBITO, CREDITO, VOUCHER")
@@ -94,8 +128,11 @@ class LancamentoFinanceiro(db.Model):
     a uma cobrança/comanda ou diretamente a uma origem (ex: AghAgendamento).
     """
     __tablename__ = 'fin_lancamentos_financeiros'
+    __table_args__ = {'extend_existing': True}
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, comment="Chave primária")
+    # db.Integer faz o SQLite criar o id como AUTOINCREMENT automaticamente
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+
     uuid_lancamento = db.Column(
         db.String(36),
         unique=True,

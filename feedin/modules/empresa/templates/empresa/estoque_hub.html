@@ -1,0 +1,88 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Gestão de Estoque{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 600px;">
+
+        {# 🔙 VOLTAR AO HUB DE ATIVAÇÃO #}
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Hub">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="fw-bold text-dark fs-6">Gestão de Estoque</span>
+        </div>
+
+        {# 📊 RESUMO DE PRODUTOS #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle mb-3 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted small d-block" style="font-size: 0.7rem;">Produtos Cadastrados</span>
+                <h5 class="fw-bold text-dark m-0">{{ total_produtos }}</h5>
+            </div>
+            <div class="p-2 bg-primary-subtle text-primary rounded-3">
+                <i class="bi bi-boxes fs-4"></i>
+            </div>
+        </div>
+
+        {# 🧭 MENU DE NAVEGAÇÃO / OPÇÕES #}
+        <div class="row g-3">
+            {# OPÇÃO 1: CADASTRO E CATÁLOGO DE PRODUTOS #}
+            <div class="col-12">
+                <a href="{{ url_for('empresa.produto_catalogo_tela', empresa_id=ese_empresa.id) }}"
+                   class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-success">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-3 bg-success-subtle text-success rounded-3">
+                                <i class="bi bi-tag-fill fs-4 d-block"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.9rem;">Cadastrar & Listar Produtos</h6>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.72rem;">Adicione novos produtos ou consulte o catálogo cadastrado.</p>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted fs-5"></i>
+                    </div>
+                </a>
+            </div>
+
+            {# OPÇÃO 2: MOVIMENTAÇÃO DE ESTOQUE E COMPRAS #}
+            <div class="col-12">
+                <a href="{{ url_for('empresa.movimento_estoque_tela', empresa_id=ese_empresa.id) }}"
+                   class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="p-3 bg-primary-subtle text-primary rounded-3">
+                                <i class="bi bi-arrow-down-up fs-4 d-block"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.9rem;">Entradas, Compras & Baixas</h6>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.72rem;">Registre novas compras de estoque e uso na bancada.</p>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted fs-5"></i>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

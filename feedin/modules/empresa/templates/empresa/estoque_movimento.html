@@ -1,0 +1,347 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Movimentação de Estoque{% endblock %}
+
+{% block content %}
+<!-- Biblioteca para leitura de código de barras via câmera (iOS e Android) -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 600px;">
+
+        {# 🔙 VOLTAR AO HUB DE ESTOQUE INTERMEDIÁRIO #}
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('empresa.estoque_hub_tela', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Sub-Hub">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="fw-bold text-dark fs-6">Movimentação de Estoque</span>
+        </div>
+
+        {# 📦 PAINEL DE AÇÃO RÁPIDA (ENTRADA / BAIXA) #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle mb-3">
+            <ul class="nav nav-pills nav-fill bg-light p-1 rounded-pill mb-3" id="pills-tab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active rounded-pill fw-bold py-2" id="tab-entrada" data-bs-toggle="pill" data-bs-target="#pills-entrada" type="button" style="font-size: 0.75rem;">
+                        <i class="bi bi-plus-circle me-1"></i> Nova Compra
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link rounded-pill fw-bold py-2" id="tab-saida" data-bs-toggle="pill" data-bs-target="#pills-saida" type="button" style="font-size: 0.75rem;">
+                        <i class="bi bi-dash-circle me-1"></i> Uso Interno
+                    </button>
+                </li>
+            </ul>
+
+            {# DATALIST REUTILIZÁVEL DE AUTOCOMPLETE (ACEITA NOME OU CÓDIGO DE BARRAS) #}
+            <datalist id="lista-produtos-autocomplete">
+                {% for p in produtos %}
+                    <option value="{{ p.nome }}" data-id="{{ p.id }}" data-barcode="{{ p.codigo_barras or '' }}">
+                        {% if p.codigo_barras %}[{{ p.codigo_barras }}] {% endif %}Saldo Atual: {{ p.estoque_atual }} un.
+                    </option>
+                    {% if p.codigo_barras %}
+                        <option value="{{ p.codigo_barras }}" data-id="{{ p.id }}" data-barcode="{{ p.codigo_barras }}">
+                            {{ p.nome }} (Saldo: {{ p.estoque_atual }} un.)
+                        </option>
+                    {% endif %}
+                {% endfor %}
+            </datalist>
+
+            <div class="tab-content" id="pills-tabContent">
+                {# ABA 1: ENTRADA DE COMPRA #}
+                <div class="tab-pane fade show active" id="pills-entrada" role="tabpanel">
+                    <form action="{{ url_for('empresa.movimento_estoque_tela', empresa_id=ese_empresa.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="tipo_acao" value="entrada">
+                        <input type="hidden" name="produto_id" id="produto_id_entrada">
+                        <input type="hidden" name="codigo_barras" id="codigo_barras_entrada">
+
+                        <div class="mb-2">
+                            <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Buscar Produto ou Bipar Código de Barras *</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted border-end-0 rounded-start-3">
+                                    <i class="bi bi-barcode"></i>
+                                </span>
+                                <input type="text"
+                                       id="input_produto_entrada"
+                                       list="lista-produtos-autocomplete"
+                                       class="form-control form-control-sm border-start-0 border-end-0"
+                                       placeholder="Digite o nome ou escaneie o código..."
+                                       autocomplete="off"
+                                       required
+                                       oninput="sincronizarProdutoId('input_produto_entrada', 'produto_id_entrada', 'codigo_barras_entrada')">
+                                <button type="button"
+                                        class="btn btn-outline-secondary rounded-end-3"
+                                        onclick="abrirLeitorCamera('input_produto_entrada')"
+                                        title="Escanear com a câmera">
+                                    <i class="bi bi-camera-fill text-primary"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Qtd Comprada *</label>
+                                <input type="number" name="quantidade" min="1" class="form-control form-control-sm rounded-3" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Custo Un. Pago (R$) *</label>
+                                <input type="number" step="0.01" name="preco_custo_unitario" class="form-control form-control-sm rounded-3" placeholder="0,00" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Fornecedor / Observação (Opcional)</label>
+                            <input type="text" name="fornecedor_nome" class="form-control form-control-sm rounded-3" placeholder="Ex: Atacadão / Lote Promo">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-sm w-100 rounded-pill fw-bold py-2 shadow-sm transition-all">
+                            <i class="bi bi-check-circle me-1"></i> Confirmar Entrada (+ Saldo)
+                        </button>
+                    </form>
+                </div>
+
+                {# ABA 2: USO INTERNO #}
+                <div class="tab-pane fade" id="pills-saida" role="tabpanel">
+                    <form action="{{ url_for('empresa.movimento_estoque_tela', empresa_id=ese_empresa.id) }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <input type="hidden" name="tipo_acao" value="baixa">
+                        <input type="hidden" name="produto_id" id="produto_id_saida">
+                        <input type="hidden" name="codigo_barras" id="codigo_barras_saida">
+
+                        <div class="mb-2">
+                            <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Buscar Produto ou Bipar Código de Barras *</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted border-end-0 rounded-start-3">
+                                    <i class="bi bi-barcode"></i>
+                                </span>
+                                <input type="text"
+                                       id="input_produto_saida"
+                                       list="lista-produtos-autocomplete"
+                                       class="form-control form-control-sm border-start-0 border-end-0"
+                                       placeholder="Digite o nome ou escaneie o código..."
+                                       autocomplete="off"
+                                       required
+                                       oninput="sincronizarProdutoId('input_produto_saida', 'produto_id_saida', 'codigo_barras_saida')">
+                                <button type="button"
+                                        class="btn btn-outline-secondary rounded-end-3"
+                                        onclick="abrirLeitorCamera('input_produto_saida')"
+                                        title="Escanear com a câmera">
+                                    <i class="bi bi-camera-fill text-primary"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Qtd Usada *</label>
+                                <input type="number" name="quantidade" min="1" value="1" class="form-control form-control-sm rounded-3" required>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Motivo</label>
+                                <select name="motivo" class="form-select form-select-sm rounded-3">
+                                    <option value="uso_interno">Uso na Bancada</option>
+                                    <option value="avaria">Avaria / Quebra</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-danger btn-sm w-100 rounded-pill fw-bold py-2 shadow-sm transition-all">
+                            <i class="bi bi-dash-circle me-1"></i> Registrar Baixa (- Saldo)
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {# 📜 ÚLTIMAS ENTRADAS DE COMPRAS #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle">
+            <h6 class="fw-bold text-dark m-0 mb-2" style="font-size: 0.8rem;">Últimas Compras do Estabelecimento</h6>
+            {% if ultimas_entradas %}
+                <div class="d-flex flex-column gap-2">
+                    {% for item in ultimas_entradas %}
+                        <div class="p-2 border border-secondary-subtle rounded-3 bg-light d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="d-block text-dark" style="font-size: 0.75rem;">{{ item.produto.nome }}</strong>
+                                <span class="text-muted" style="font-size: 0.65rem;">
+                                    {{ item.quantidade }} un. x R$ {{ "%.2f"|format(item.preco_custo_unitario) }} {% if item.fornecedor_nome %}— {{ item.fornecedor_nome }}{% endif %}
+                                </span>
+                            </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.65rem;">
+                                R$ {{ "%.2f"|format(item.valor_total_compra) }}
+                            </span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted text-center my-3" style="font-size: 0.72rem;">Nenhuma compra registrada recentemente.</p>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+{# 📷 MODAL DO LEITOR DE CÂMERA #}
+<div class="modal fade" id="modalLeitorCamera" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-camera me-1"></i> Ler Código de Barras
+                </h6>
+                <button type="button" class="btn-close" onclick="fecharLeitorCamera()"></button>
+            </div>
+            <div class="modal-body text-center p-3">
+                <div id="reader" style="width: 100%; min-height: 250px; background: #000;" class="rounded-3 overflow-hidden"></div>
+                <p class="text-muted small mt-2 mb-0" style="font-size: 0.72rem;">
+                    Aproxime o código de barras da câmera do celular
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" onclick="fecharLeitorCamera()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * Sincroniza a busca de texto/bipagem com os inputs ocultos (produto_id e codigo_barras)
+     */
+    function sincronizarProdutoId(inputId, hiddenId, barcodeHiddenId) {
+        const input = document.getElementById(inputId);
+        const hidden = document.getElementById(hiddenId);
+        const barcodeHidden = document.getElementById(barcodeHiddenId);
+        const list = document.getElementById('lista-produtos-autocomplete');
+        const options = list.getElementsByTagName('option');
+
+        const valorDigitado = input.value.trim();
+
+        hidden.value = '';
+        if (barcodeHidden) barcodeHidden.value = '';
+
+        for (let i = 0; i < options.length; i++) {
+            const optValue = options[i].value;
+            const optId = options[i].getAttribute('data-id');
+            const optBarcode = options[i].getAttribute('data-barcode');
+
+            if (optValue === valorDigitado) {
+                hidden.value = optId;
+                if (barcodeHidden) barcodeHidden.value = optBarcode || valorDigitado;
+                break;
+            }
+        }
+
+        // Caso tenha bipado um código de barras direto que não está no autocomplete
+        if (!hidden.value && barcodeHidden) {
+            barcodeHidden.value = valorDigitado;
+        }
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /* LÓGICA DO LEITOR DE CÂMERA (PWA / SMARTPHONE)                             */
+    /* -------------------------------------------------------------------------- */
+    let html5QrCode = null;
+    let targetInputIdGlobal = null;
+
+    function abrirLeitorCamera(targetInputId) {
+        targetInputIdGlobal = targetInputId;
+        const modalEl = document.getElementById('modalLeitorCamera');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        html5QrCode = new Html5Qrcode("reader");
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 150 },
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E
+            ]
+        };
+
+        // Força o uso da câmera traseira do smartphone ('environment')
+        html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            onScanSuccess
+        ).catch(err => {
+            alert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+            fecharLeitorCamera();
+        });
+    }
+
+    function onScanSuccess(decodedText) {
+        tocarBip();
+
+        if (targetInputIdGlobal) {
+            const inputTarget = document.getElementById(targetInputIdGlobal);
+            if (inputTarget) {
+                inputTarget.value = decodedText;
+
+                // Dispara os eventos para acionar o autocomplete e a sincronização
+                inputTarget.dispatchEvent(new Event('input'));
+                inputTarget.dispatchEvent(new Event('change'));
+            }
+        }
+
+        fecharLeitorCamera();
+    }
+
+    function fecharLeitorCamera() {
+        if (html5QrCode && html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                ocultarModal();
+            }).catch(err => {
+                console.error(err);
+                ocultarModal();
+            });
+        } else {
+            ocultarModal();
+        }
+    }
+
+    function ocultarModal() {
+        const modalEl = document.getElementById('modalLeitorCamera');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
+
+    function tocarBip() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = 1200;
+            gain.gain.value = 0.1;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        } catch (e) {
+            // Ignora falhas de áudio
+        }
+    }
+</script>
+{% endblock %}

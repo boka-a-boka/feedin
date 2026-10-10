@@ -1,0 +1,130 @@
+{#
+  📌 PARTIAL DE AVALIAÇÃO UNIVERSAL (ESTILO UBER)
+  Parâmetros esperados no contexto ou chamadas:
+  - agendamento_pendente: objeto com ID, data_hora_inicio
+  - colaborador_alvo: objeto ColaboradorContrato (nome, foto, cargo, id)
+  - empresa_id: ID da empresa ativa
+  - cargo_id: ID do cargo do colaborador
+#}
+
+<div class="modal fade show" id="modalAvaliacaoPendente" tabindex="-1" style="display: block; background: rgba(0,0,0,0.6);" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="fw-bold text-dark m-0">Como foi sua experiência?</h5>
+                <button type="button" class="btn-close" onclick="adiarAvaliacao()"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+
+                {% if colaborador_alvo %}
+                    <img src="{{ colaborador_alvo.url_foto_profissional }}"
+                         class="rounded-circle mb-3 border shadow-sm"
+                         width="80" height="80"
+                         style="object-fit: cover;"
+                         alt="{{ colaborador_alvo.nome }}">
+                    <h6 class="fw-bold text-primary mb-1">{{ colaborador_alvo.nome }}</h6>
+                    <p class="text-muted small mb-3">{{ colaborador_alvo.nome_cargo_formatado }}</p>
+                {% else %}
+                    <div class="mb-3">
+                        <i class="bi bi-star-fill text-warning fs-1"></i>
+                    </div>
+                {% endif %}
+
+                <p class="text-secondary small mb-4">
+                    Como você avalia esse atendimento/serviço?
+                    {% if agendamento_pendente and agendamento_pendente.data_hora_inicio %}
+                        <br><span class="fst-italic text-muted">Realizado em {{ agendamento_pendente.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') }}</span>
+                    {% endif %}
+                </p>
+
+                    <form id="formAvaliacaoUniversal" onsubmit="enviarAvaliacaoUniversal(event)">
+                        <!-- CAMPOS OCULTOS ESSENCIAIS PARA CAPTURAR A ORIGEM E O PROFISSIONAL -->
+                        <input type="hidden" id="eval_origem_id" value="{{ agendamento_id | default('') }}">
+                        <input type="hidden" id="eval_colaborador_id" value="{{ colaborador_contrato_id | default('') }}">
+                        <input type="hidden" id="eval_empresa_id" value="{{ empresa_id | default(session.get('empresa_id', '')) }}">
+                        <input type="hidden" id="eval_cargo_id" value="{{ cargo_id | default('') }}">
+
+                        <!-- Input da Nota e Comentário -->
+                        <input type="hidden" id="inputNotaUniversal" value="5">
+
+                        <div class="mb-3">
+                            <label for="eval_comentario" class="form-label">Deixe um comentário (opcional):</label>
+                            <textarea class="form-control" id="eval_comentario" rows="3" placeholder="O que você achou do atendimento?"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Enviar Avaliação</button>
+                    </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function initRatingComponent() {
+        const container = document.querySelector('.rating-container');
+        if (!container) return;
+
+        const stars = container.querySelectorAll('.star-item');
+        const inputNota = document.getElementById('inputNotaUniversal');
+
+        function atualizarEstrelas(nota) {
+            stars.forEach((star, idx) => {
+                star.style.color = idx < nota ? '#f59e0b' : '#cbd5e1';
+            });
+        }
+
+        atualizarEstrelas(5);
+
+        stars.forEach((star, index) => {
+            star.addEventListener('mouseover', () => atualizarEstrelas(index + 1));
+            star.addEventListener('click', () => {
+                const val = index + 1;
+                inputNota.value = val;
+                atualizarEstrelas(val);
+            });
+        });
+
+        container.addEventListener('mouseleave', () => {
+            atualizarEstrelas(parseInt(inputNota.value) || 5);
+        });
+    })();
+
+    function adiarAvaliacao() {
+        const modal = document.getElementById('modalAvaliacaoPendente');
+        if (modal) modal.remove();
+    }
+
+    function enviarAvaliacaoUniversal(event) {
+        event.preventDefault();
+
+        const payload = {
+            modulo_origem: 'agenda',
+            origem_id: document.getElementById('eval_origem_id').value || null,
+            colaborador_id: document.getElementById('eval_colaborador_id').value || null,
+            empresa_id: document.getElementById('eval_empresa_id').value || null,
+            cargo_id: document.getElementById('eval_cargo_id').value || null,
+            nota: document.getElementById('inputNotaUniversal').value,
+            comentario: document.getElementById('eval_comentario').value
+        };
+
+        fetch('/rating/api/salvar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                adiarAvaliacao();
+                if (typeof window.onAvaliacaoConcluida === 'function') {
+                    window.onAvaliacaoConcluida(data);
+                } else {
+                    location.reload();
+                }
+            } else {
+                alert('Erro ao salvar avaliação: ' + (data.erro || 'Tente novamente.'));
+            }
+        })
+        .catch(err => console.error('Erro no envio da avaliação:', err));
+    }
+</script>

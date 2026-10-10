@@ -135,27 +135,33 @@ def create_app():
             filename_limpo = filename.replace('\\', '/').strip('/')
 
             # Limpa prefixos redundantes
-            for prefixo in ['media/', 'uploads/', 'empresa/uploads/', 'agenda/uploads/']:
+            for prefixo in ['media/', 'uploads/', 'empresa/uploads/', 'agenda/uploads/', 'estoque/uploads/']:
                 if filename_limpo.lower().startswith(prefixo):
                     filename_limpo = filename_limpo[len(prefixo):]
 
             base_dir = current_app.root_path  # Aponta para .../ProjetoFeedIn/feedin
 
-            # 1. Pastas exatas do seu projeto
+            # Pastas exatas do seu projeto
             pasta_agenda_uploads = os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads')
             pasta_empresa_uploads = os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads')
+            pasta_estoque_uploads = os.path.join(base_dir, 'modules', 'estoque', 'static', 'uploads')  # <--- NOVO
 
-            # Teste 1: Busca direta a partir de modules/empresa/static/uploads
+            # Teste 1: Busca direta na Empresa
             caminho_empresa = os.path.join(pasta_empresa_uploads, filename_limpo)
             if os.path.isfile(caminho_empresa):
                 return send_from_directory(os.path.dirname(caminho_empresa), os.path.basename(caminho_empresa))
 
-            # Teste 2: Busca direta a partir de modules/agenda/static/uploads
+            # Teste 2: Busca direta na Agenda
             caminho_agenda = os.path.join(pasta_agenda_uploads, filename_limpo)
             if os.path.isfile(caminho_agenda):
                 return send_from_directory(os.path.dirname(caminho_agenda), os.path.basename(caminho_agenda))
 
-            # Teste 3: Busca recursiva dentro da estrutura /empresas/<ID>/colaboradores
+            # Teste 3: Busca direta no Estoque <--- NOVO
+            caminho_estoque = os.path.join(pasta_estoque_uploads, filename_limpo)
+            if os.path.isfile(caminho_estoque):
+                return send_from_directory(os.path.dirname(caminho_estoque), os.path.basename(caminho_estoque))
+
+            # Teste 4: Busca recursiva dentro da estrutura /empresas/<ID>/colaboradores
             nome_arquivo = os.path.basename(filename_limpo)
             if nome_arquivo and os.path.exists(pasta_empresa_uploads):
                 for root, _, files in os.walk(pasta_empresa_uploads):
@@ -194,17 +200,19 @@ def create_app():
         from feedin.modules.empresa import empresa_bp
         from feedin.modules.auth import auth_bp
         from feedin.modules.billing import billing_bp
+        from feedin.modules.estoque import estoque_bp
         from feedin.utils import media_bp
+        from feedin.modules.pdv import pdv_bp
+        from feedin.modules.rating import rating_bp  # <--- Novo Módulo de Rating/Avaliações
 
         # Registrar definindo o prefixo de cada URL:
         app.register_blueprint(agenda_bp, url_prefix='/agenda')
         app.register_blueprint(empresa_bp, url_prefix='/empresa')
         app.register_blueprint(auth_bp, url_prefix='/auth')
-
-
-        # 🚀 REGISTRO DO BLUEPRINT DE MÍDIA GLOBAL
-        from feedin.utils import media_bp
-        app.register_blueprint(media_bp)
+        app.register_blueprint(billing_bp, url_prefix='/billing')
+        app.register_blueprint(estoque_bp, url_prefix='/estoque')
+        app.register_blueprint(pdv_bp, url_prefix='/pdv')
+        app.register_blueprint(rating_bp, url_prefix='/rating')  # <--- Registrando o rating
 
     # 5. 🔐 PROVEDOR UNIFICADO DE CARREGAMENTO DE USUÁRIO (DESACOPLADO)
     @login_manager.user_loader

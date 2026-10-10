@@ -1,6 +1,7 @@
 # main.py
 from feedin import create_app, database
 
+
 # Solicita a construção de uma instância limpa do aplicativo
 app = create_app()
 

@@ -1,14 +1,25 @@
 # feedin/modules/agenda/models.py
 import random
 import uuid
+import threading
+import smtplib
 import logging
 from sqlalchemy import func
 from sqlalchemy.orm import synonym
 from feedin import database as db
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from sqlalchemy.exc import IntegrityError
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from flask import current_app
+
+from feedin.modules.empresa.models import (ClienteBeneficiario, ClienteContato,)
 
 logger = logging.getLogger(__name__)
+
+# Fuso horário padrão do sistema
+TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
 
 # =====================================================================
 # 🔗 TABELAS INTERMEDIÁRIAS / RELACIONAIS
@@ -293,8 +304,9 @@ class AghAgendamentoItem(db.Model):
 
             # 3. Atualiza o status global do Agendamento PAI (se ainda for 'agendado'/'pendente')
             agendamento_pai = item.agendamento
-            if agendamento_pai and getattr(agendamento_pai, 'status_slug', None) not in ['em_atendimento', 'concluido', 'finalizado']:
-                agendamento_pai.status_slug = 'em_atendimento'
+            if agendamento_pai and getattr(agendamento_pai, 'status', None) not in ['em_atendimento', 'concluido',
+                                                                                    'finalizado']:
+                agendamento_pai.status = 'em_atendimento'
 
             # 4. Resgate do ID (CHAR 36) do colaborador associado
             colaborador_uuid = str(item.colaborador_id_contrato).strip() if item.colaborador_id_contrato else None
@@ -322,6 +334,39 @@ class AghAgendamentoItem(db.Model):
         except Exception as e:
             db.session.rollback()
             return {"status": "error", "mensagem": f"Erro interno ao processar início: {str(e)}"}, 500
+
+    def processar_inicio_item_servico(agendamento_id, item_id, colaborador_contrato_id=None):
+        agendamento = AghAgendamento.query.get(agendamento_id)
+        if not agendamento:
+            return {"sucesso": False, "mensagem": "Agendamento não encontrado."}, 404
+
+        item = AghAgendamentoItem.query.filter_by(id=item_id, agendamento_id=agendamento_id).first()
+        if not item:
+            return {"sucesso": False, "mensagem": "Item não encontrado no agendamento."}, 404
+
+        status_item_atual = str(getattr(item, 'status_item', '')).lower()
+
+        # 1. Trava apenas se O ITEM ESPECÍFICO já foi encerrado/cancelado
+        if status_item_atual in ['finalizado', 'concluido', 'concluído', 'cancelado']:
+            return {
+                "sucesso": False,
+                "mensagem": f"O item/serviço #{item.id} já consta como '{status_item_atual}'."
+            }, 400
+
+        agora = datetime.now()
+
+        # 2. Transição do ITEM: inicia o serviço selecionado
+        item.status_item = 'em_andamento'
+        if hasattr(item, 'data_hora_inicio_real') and not item.data_hora_inicio_real:
+            item.data_hora_inicio_real = agora
+
+        # 3. Transição do AGENDAMENTO PAI: Reabre a comanda/atendimento
+        # Se o pai estava 'finalizado' (por causa de outro profissional), ele volta a 'em_andamento'
+        if agendamento.status in ['finalizado', 'agendado', 'confirmado']:
+            agendamento.status = 'em_andamento'
+
+        db.session.commit()
+        return {"sucesso": True, "mensagem": "Serviço iniciado com sucesso!"}, 200
 
     profissional_id = synonym('colaborador_id_contrato')
 
@@ -446,27 +491,6 @@ class AghAgendamentoRascunhoItem(db.Model):
         return f'<AghAgendamentoRascunhoItem Rascunho #{self.rascunho_id} -> Servico #{self.servico_id}>'
 
 
-class AghAvaliacaoServico(db.Model):
-  __tablename__ = 'agh_avaliacao_servico'
-  __table_args__ = {'extend_existing': True}
-
-  id = db.Column(db.Integer, primary_key=True)
-  agendamento_id = db.Column(
-      db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False
-  )
-
-  # 1. Adicione a ForeignKey apontando para a tabela do item de agendamento:
-  agendamento_item_id = db.Column(
-      db.Integer, db.ForeignKey('agh_agendamento_item.id'), nullable=True
-  )
-
-  nota = db.Column(db.Integer, nullable=False)
-  comentario = db.Column(db.Text, nullable=True)
-
-  # 2. Mantém o relacionamento com a ForeignKey mapeada
-  item = db.relationship('AghAgendamentoItem', backref='avaliacoes')
-
-
 class AghServico(db.Model):
     """Cardápio de Serviços Disponíveis para Agendamento"""
     __tablename__ = 'agh_servico'
@@ -587,30 +611,6 @@ class AghHistoricoPresenca(db.Model):
 
   def __repr__(self):
     return f'<AghHistoricoPresenca Cliente ID {self.cliente_id} - Evento: {self.tipo_evento} (Desvio: {self.desvio_minutos}m)>'
-
-
-class CoreAvaliacaoProfissional(db.Model):
-    """Reputação Unificada do Profissional"""
-    __tablename__ = 'core_avaliacao_profissional'
-    __table_args__ = {'extend_existing': True}
-
-    id = db.Column(db.Integer, primary_key=True)
-    estabelecimento_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False)
-
-    avaliador_cliente_id = db.Column(db.Integer, db.ForeignKey('mod_cadastro_cliente.id'), nullable=False)
-    profissional_usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
-
-    # Referência à tabela 'taxonomia'
-    funcao_taxonomia_id = db.Column(db.Integer, db.ForeignKey('taxonomia.id'), nullable=False)
-
-    agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=True)
-    nota_atendimento = db.Column(db.Integer, nullable=False)
-    nota_tecnica = db.Column(db.Integer, nullable=False)
-    comentario = db.Column(db.Text, nullable=True)
-    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    def __repr__(self):
-        return f"<AvaliacaoProfissional Destinatario ID {self.profissional_usuario_id} - Funcao Termo {self.funcao_taxonomia_id}>"
 
 
 class AghProntuarioCliente(db.Model):
@@ -1412,3 +1412,223 @@ class AghReordenacaoSolicitada(db.Model):
     # Relacionamentos
     agendamento = db.relationship('AghAgendamento')
     solicitante = db.relationship('ColaboradorContrato')
+
+
+
+# =========================================================================
+# 📅 SERVIÇO DE NOTIFICAÇÕES DO MÓDULO AGENDA (AGH)
+# =========================================================================
+class AghNotificacaoService:
+
+    @staticmethod
+    def criar_notificacao(
+            empresa_id: int,
+            destinatario_id: str,
+            papel_destinatario: str,
+            titulo: str,
+            mensagem: str,
+            tipo_evento: str,
+            remetente_id: str = None,
+            agendamento_id: int = None,
+            beneficiario_id: int = None,
+            nivel: str = "info",
+            payload_extra: dict = None
+    ) -> AghNotificacao:
+        from feedin.modules.agenda.services.notificacao_service import _resolver_usuario_uuid
+        """
+        Registra notificações internas exclusivas do Módulo de Agenda (tabela `agh_notificacoes`).
+        Garante que destinatario_id e remetente_id sejam UUIDs em formato string.
+        """
+        try:
+            uuid_destinatario = _resolver_usuario_uuid(destinatario_id)
+            uuid_remetente = _resolver_usuario_uuid(remetente_id) if remetente_id else None
+
+            notificacao = AghNotificacao(
+                id=str(uuid.uuid4()),
+                empresa_id=empresa_id,
+                destinatario_id=uuid_destinatario,
+                papel_destinatario=papel_destinatario,
+                remetente_id=uuid_remetente,
+                agendamento_id=agendamento_id,
+                beneficiario_id=beneficiario_id,
+                titulo=titulo,
+                mensagem=mensagem,
+                tipo_evento=tipo_evento,
+                nivel=nivel,
+                payload_extra=payload_extra or {},
+                lida=False,
+                criado_em=datetime.now(TZ_BRASIL)
+            )
+            db.session.add(notificacao)
+            db.session.commit()
+            return notificacao
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[ERRO AghNotificacaoService]: Falha ao registrar notificação da Agenda - {str(e)}")
+            return None
+
+    @classmethod
+    def disparar(cls, *args, **kwargs):
+        return cls.criar_notificacao(*args, **kwargs)
+
+    @staticmethod
+    def notificar_falta_cliente(agendamento_id: int, colaborador_usuario_id: str = None, colaborador_nome: str = None,
+                                motivo: str = "ausencia_cliente"):
+        """
+        Processa e registra o não-comparecimento do cliente na agenda.
+        """
+        from feedin.modules.agenda.services.notificacao_service import _resolver_usuario_uuid
+        agendamento = AghAgendamento.query.get(agendamento_id)
+        if not agendamento:
+            return None
+
+        agora_local = datetime.now(TZ_BRASIL)
+
+        agendamento.status = 'FALTA'
+        if hasattr(agendamento, 'atualizado_em'):
+            agendamento.atualizado_em = agora_local
+        db.session.commit()
+
+        # Identificação de Beneficiários (Pet, Veículo, Dependente)
+        beneficiario_info = ""
+        beneficiario_id = getattr(agendamento, 'beneficiario_id', None)
+        if beneficiario_id:
+            beneficiario = ClienteBeneficiario.query.get(beneficiario_id)
+            if beneficiario:
+                tipo_p = getattr(beneficiario, 'tipo_persona', None)
+                if tipo_p == 'pet':
+                    beneficiario_info = f" (Pet: {beneficiario.nome})"
+                elif tipo_p == 'veiculo':
+                    beneficiario_info = f" (Veículo: {beneficiario.nome})"
+                else:
+                    beneficiario_info = f" ({beneficiario.nome})"
+
+        data_agendamento_fmt = (
+            agendamento.data_hora_inicio.strftime("%d/%m/%Y às %H:%M")
+            if getattr(agendamento, 'data_hora_inicio', None) else ""
+        )
+        agora_apontamento_fmt = agora_local.strftime("%d/%m/%Y às %H:%M")
+        nome_operador = colaborador_nome or "Colaborador"
+
+        # Resolução estrita do UUID do destinatário
+        uuid_cliente = _resolver_usuario_uuid(
+            agendamento.cliente if hasattr(agendamento, 'cliente') else agendamento.cliente_id)
+
+        # 1. NOTIFICAÇÃO IN-APP DA AGENDA
+        mensagem_notif = (
+            f"Foi registrada uma falta referente ao seu agendamento de {data_agendamento_fmt}{beneficiario_info}.\n"
+            f"Apontamento realizado por: {nome_operador} em {agora_apontamento_fmt}."
+        )
+
+        notificacao_interna = AghNotificacaoService.criar_notificacao(
+            empresa_id=agendamento.empresa_id,
+            destinatario_id=uuid_cliente,
+            papel_destinatario='cliente',
+            remetente_id=_resolver_usuario_uuid(colaborador_usuario_id) or (
+                str(agendamento.profissional_id) if agendamento.profissional_id else None),
+            agendamento_id=agendamento.id,
+            beneficiario_id=beneficiario_id,
+            titulo="⚠️ Apontamento de Ausência",
+            mensagem=mensagem_notif,
+            tipo_evento="falta_cliente",
+            nivel="warning",
+            payload_extra={
+                'colaborador_nome': nome_operador,
+                'data_apontamento': agora_apontamento_fmt
+            }
+        )
+
+        # 2. DISPARO EXTERNO (OPCIONAL/BACKGROUND)
+        contato_preferencial = ClienteContato.query.filter_by(
+            cliente_id=agendamento.cliente_id,
+            aceita_notificacao=True
+        ).order_by(ClienteContato.is_padrao.desc()).first()
+
+        if not contato_preferencial:
+            logger.info(
+                f"[AGH NOTIFICAÇÃO] Notificação in-app gerada para Cliente UUID '{uuid_cliente}'. Sem canais externos ativos.")
+            return True
+
+        tipo_canal = contato_preferencial.tipo.lower()
+        destino = contato_preferencial.valor
+        nome_cliente = agendamento.cliente.nome.split()[0] if hasattr(agendamento,
+                                                                      'cliente') and agendamento.cliente and agendamento.cliente.nome else 'Cliente'
+
+        assunto = "Aviso de Agendamento - Não Comparecimento"
+        mensagem_txt = (
+            f"Olá, {nome_cliente}!\n\n"
+            f"Identificamos que você não pôde comparecer ao seu agendamento em {data_agendamento_fmt}{beneficiario_info}.\n"
+            f"O apontamento foi feito por {nome_operador} em {agora_apontamento_fmt}.\n\n"
+            f"Seu horário foi liberado. Para agendar um novo horário, acesse nosso aplicativo."
+        )
+
+        app_instance = current_app._get_current_object()
+        thread = threading.Thread(
+            target=AghNotificacaoService._disparar_canal_externo_bg,
+            args=(app_instance, tipo_canal, destino, assunto, mensagem_txt)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return True
+
+    @staticmethod
+    def _disparar_canal_externo_bg(app, tipo_canal: str, destino: str, assunto: str, mensagem: str):
+        with app.app_context():
+            try:
+                if tipo_canal == 'email':
+                    AghNotificacaoService._enviar_email_smtp(app, destino, assunto, mensagem)
+                elif tipo_canal in ['whatsapp', 'sms']:
+                    AghNotificacaoService._enviar_mensageria_api(app, tipo_canal, destino, mensagem)
+            except Exception as e:
+                logger.error(f"[ERRO DISPARO BACKGROUND AGH] Falha ao enviar por {tipo_canal} para {destino}: {str(e)}")
+
+    @staticmethod
+    def _enviar_email_smtp(app, email_destino: str, assunto: str, mensagem: str):
+        smtp_server = app.config.get('MAIL_SERVER', 'smtp.gmail.com')
+        smtp_port = app.config.get('MAIL_PORT', 587)
+        smtp_user = app.config.get('MAIL_USERNAME')
+        smtp_pass = app.config.get('MAIL_PASSWORD')
+        sender_email = app.config.get('MAIL_DEFAULT_SENDER', smtp_user)
+
+        if not smtp_user or not smtp_pass:
+            logger.warning("⚠️ [EMAIL OMITIDO] Credenciais de SMTP não configuradas.")
+            return
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = email_destino
+        msg['Subject'] = assunto
+        msg.attach(MIMEText(mensagem, 'plain', 'utf-8'))
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(sender_email, email_destino, msg.as_string())
+
+        logger.info(f"📧 [E-MAIL ENVIADO] Sucesso para {email_destino}")
+
+    @staticmethod
+    def _enviar_mensageria_api(app, tipo: str, numero: str, mensagem: str):
+        api_url = app.config.get('WHATSAPP_API_URL')
+        api_token = app.config.get('WHATSAPP_API_TOKEN')
+
+        if api_url and api_token:
+            import requests
+            headers = {'Client-Token': api_token, 'Content-Type': 'application/json'}
+            payload = {'phone': numero, 'message': mensagem}
+            response = requests.post(api_url, json=payload, headers=headers, timeout=10)
+            logger.info(f"📱 [{tipo.upper()} API] Status Gateway: {response.status_code}")
+        else:
+            logger.info(f"📱 [{tipo.upper()} SIMULADO] Destino: {numero} | Conteúdo: {mensagem}")
+
+    @staticmethod
+    def contar_nao_lidas(empresa_id: int, usuario_id: str, papel: str) -> int:
+        from feedin.modules.agenda.services.notificacao_service import _resolver_usuario_uuid
+        uuid_val = _resolver_usuario_uuid(usuario_id)
+        return AghNotificacao.query.filter_by(
+            empresa_id=empresa_id,
+            destinatario_id=uuid_val,
+            papel_destinatario=papel,
+            lida=False
+        ).count()

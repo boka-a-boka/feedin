@@ -1,5 +1,7 @@
 {% extends "agenda/base_agenda.html" %}
 {% block content %}
+<!-- Biblioteca para leitura de código de barras via câmera (iOS e Android) -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
 {# TRATATIVA DE SEGURANÇA PARA A COR DA EMPRESA #}
 {% set cor_empresa = (empresa.cor_primaria if empresa and empresa.cor_primaria else '#0d6efd') %}
@@ -346,14 +348,17 @@
                             <i class="bi bi-person-badge"></i>
                         </span>
                         {% if pode_gerenciar %}
+                            {% set prof_id_str = (prof_id_param | string | trim) if prof_id_param is defined and prof_id_param else '' %}
+
                             <select id="filtro-profissional" class="form-select border-0 shadow-sm rounded-3 fw-semibold" onchange="alternarProfissionalOuData()">
-                                <option value="">Todos os Profissionais</option>
+                                <option value="" {% if not prof_id_str %}selected{% endif %}>Todos os Profissionais</option>
                                 {% for prof in profissionais_ativos %}
                                     {% set prof_nome = (resolver_nome_profissional(prof) if (resolver_nome_profissional is defined and resolver_nome_profissional) else None)
                                                        or (prof.nome if prof.nome is defined and prof.nome else None)
                                                        or (prof.usuario.nome if (prof.usuario is defined and prof.usuario and prof.usuario.nome) else None)
                                                        or 'Profissional' %}
-                                    <option value="{{ prof.id }}" {% if prof_id_param == prof.id %}selected{% endif %}>
+                                    {% set p_id_atual = (prof.id | string | trim) %}
+                                    <option value="{{ prof.id }}" {% if prof_id_str == p_id_atual %}selected{% endif %}>
                                         {{ prof_nome }}
                                     </option>
                                 {% endfor %}
@@ -477,10 +482,6 @@
                         {% set agend_id_val = slot.agendamento_id if slot.agendamento_id is defined and slot.agendamento_id else (slot.get('agendamento_id') if slot.get is defined and slot.get('agendamento_id') else (slot.agendamento.id if slot.agendamento and slot.agendamento.id else slot.id)) %}
                         {% set item_id_val = slot.item_id if slot.item_id is defined and slot.item_id else (slot.get('item_id') if slot.get is defined and slot.get('item_id') else slot.id) %}
 
-                        {# Status Normalizado #}
-                        {% set raw_status = slot.status if slot.status is defined else (slot.get('status') if slot.get is defined else (status_slug if status_slug is defined else 'agendado')) %}
-                        {% set status_slug_norm = (raw_status | string | lower | trim | replace(' ', '_')) %}
-
                         {# Filtro de itens da lista #}
                         {% set itens_lista = (slot.itens if slot.itens is defined else slot.get('itens', [])) or (slot.agendamento.itens if slot.agendamento and slot.agendamento.itens else []) %}
                         {% if not itens_lista %}
@@ -497,7 +498,8 @@
                             {% endif %}
                         {% endfor %}
 
-                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug_norm }} {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento border-primary border-2{% elif status_slug_norm in ['concluido', 'finalizado'] %}item-agendamento-concluido bg-light bg-opacity-75 text-muted border-light-subtle opacity-75{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
+                        {# SLOT OCUPADO #}
+                        <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug_norm }} {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento border-primary border-2{% elif status_slug_norm == 'concluido' %}item-agendamento-concluido border-success border-2 bg-success bg-opacity-10{% elif status_slug_norm == 'finalizado' %}item-agendamento-finalizado border-warning border-2 bg-light bg-opacity-75 text-muted opacity-90{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
                              data-id="{{ agend_id_val }}"
                              data-tipo="ocupado"
                              data-status="{{ status_slug_norm }}"
@@ -513,7 +515,7 @@
                              data-profissional-id="{{ prof_id_slot }}"
                              data-profissional-nome="{{ nome_prof_slot | e }}"
                              data-profissional-foto="{{ foto_prof_slot }}"
-                             style="cursor: pointer; {% if status_slug_norm in ['concluido', 'finalizado'] %}background-color: #f8f9fa;{% elif e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
+                             style="cursor: pointer; {% if status_slug_norm == 'finalizado' %}background-color: #fff8f0;{% elif status_slug_norm == 'concluido' %}background-color: #f0fff4;{% elif e_atrasado %}background-color: rgba(220, 53, 69, 0.05);{% else %}background-color: #ffffff;{% endif %}">
 
                             <!-- CABEÇALHO DO STATUS -->
                             <div class="d-flex align-items-center justify-content-between pb-2 mb-2 border-bottom">
@@ -526,9 +528,15 @@
                                             </span>
                                         </span>
                                     </div>
-                                {% elif status_slug_norm in ['concluido', 'finalizado'] %}
-                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem;">
-                                        <i class="bi bi-check-circle-fill me-1 text-secondary"></i>Concluído
+                                {% elif status_slug_norm == 'concluido' %}
+                                    <!-- STATUS CONCLUÍDO (VERDE) -->
+                                    <span class="badge bg-success text-white px-2.5 py-1 text-uppercase tracking-wide fw-bold" style="font-size: 0.68rem;">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Atendimento Concluído
+                                    </span>
+                                {% elif status_slug_norm == 'finalizado' %}
+                                    <!-- STATUS FINALIZADO CAIXA (LARANJA) -->
+                                    <span class="badge bg-warning text-dark border border-warning-subtle px-2.5 py-1 text-uppercase tracking-wide fw-bold" style="font-size: 0.68rem;">
+                                        <i class="bi bi-receipt me-1"></i>Finalizado (Caixa)
                                     </span>
                                 {% else %}
                                     <span class="badge bg-primary text-white px-2.5 py-1 text-uppercase tracking-wide" style="font-size: 0.68rem;">
@@ -550,10 +558,10 @@
                                 </div>
                             </div>
 
-                            <!-- ESTRUTURA PRINCIPAL -->
+                            <!-- ESTRUTURA PRINCIPAL DO OCUPADO -->
                             <div class="d-flex align-items-start gap-3 w-100">
                                 <!-- BOX HORÁRIO -->
-                                <div class="box-horario text-center px-2.5 py-2 rounded-3 {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}box-horario-atendimento{% elif status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary bg-opacity-10 text-secondary border-secondary-subtle{% else %}bg-light text-dark{% endif %} border flex-shrink-0 shadow-sm" style="min-width: 85px;">
+                                <div class="box-horario text-center px-2.5 py-2 rounded-3 {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}box-horario-atendimento{% elif status_slug_norm == 'concluido' %}bg-success bg-opacity-10 text-success border-success-subtle{% elif status_slug_norm == 'finalizado' %}bg-warning bg-opacity-10 text-dark border-warning-subtle{% else %}bg-light text-dark{% endif %} border flex-shrink-0 shadow-sm" style="min-width: 85px;">
                                     <span class="d-block fw-bold fs-5 leading-none">{{ hora_inicio_txt }}</span>
                                     <small class="d-block mb-1.5 opacity-75" style="font-size: 0.65rem;">até {{ hora_fim_txt }}</small>
 
@@ -561,8 +569,12 @@
                                         <div class="rounded py-1 px-1 fw-bold w-100 shadow-sm" style="font-size: 0.75rem; background-color: rgba(255, 255, 255, 0.2); color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.3);">
                                             {{ valor_total_fmt }}
                                         </div>
-                                    {% elif status_slug_norm in ['concluido', 'finalizado'] %}
-                                        <div class="badge bg-secondary-subtle text-secondary border border-secondary-subtle fw-semibold w-100 py-1" style="font-size: 0.75rem;">
+                                    {% elif status_slug_norm == 'concluido' %}
+                                        <div class="badge bg-success-subtle text-success border border-success-subtle fw-bold w-100 py-1" style="font-size: 0.75rem;">
+                                            {{ valor_total_fmt }}
+                                        </div>
+                                    {% elif status_slug_norm == 'finalizado' %}
+                                        <div class="badge bg-warning-subtle text-dark border border-warning-subtle fw-bold w-100 py-1" style="font-size: 0.75rem;">
                                             {{ valor_total_fmt }}
                                         </div>
                                     {% else %}
@@ -572,29 +584,28 @@
                                     {% endif %}
                                 </div>
 
-                                <!-- DETALHES -->
+                                <!-- DETALHES DO PROFISSIONAL, CLIENTE E SERVIÇO -->
                                 <div class="flex-grow-1 overflow-hidden">
-
                                     <!-- PROFISSIONAL -->
                                     <div class="mb-2 d-flex align-items-center gap-2 pb-1 border-bottom">
                                         <div class="position-relative flex-shrink-0" style="width: 30px; height: 30px;">
                                             {% if foto_prof_slot %}
                                                 <img src="{{ foto_prof_slot }}"
-                                                     class="w-100 h-100 rounded-circle object-fit-cover border shadow-sm {% if status_slug_norm in ['concluido', 'finalizado'] %}grayscale-50{% endif %}"
+                                                     class="w-100 h-100 rounded-circle object-fit-cover border shadow-sm {% if status_slug_norm == 'finalizado' %}grayscale-50{% endif %}"
                                                      alt="{{ nome_prof_slot }}"
                                                      onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
-                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex align-items-center justify-content-center fw-bold shadow-xs d-none" style="font-size: 0.7rem;">
+                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm == 'concluido' %}bg-success text-white{% elif status_slug_norm == 'finalizado' %}bg-warning text-dark{% else %}bg-primary text-white{% endif %} d-flex align-items-center justify-content-center fw-bold shadow-xs d-none" style="font-size: 0.7rem;">
                                                     {{ (nome_prof_slot[:1] | upper) if nome_prof_slot else 'P' }}
                                                 </div>
                                             {% else %}
-                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm in ['concluido', 'finalizado'] %}bg-secondary{% else %}bg-primary{% endif %} text-white d-flex align-items-center justify-content-center fw-bold shadow-xs" style="font-size: 0.7rem;">
+                                                <div class="w-100 h-100 rounded-circle {% if status_slug_norm == 'concluido' %}bg-success text-white{% elif status_slug_norm == 'finalizado' %}bg-warning text-dark{% else %}bg-primary text-white{% endif %} d-flex align-items-center justify-content-center fw-bold shadow-xs" style="font-size: 0.7rem;">
                                                     {{ (nome_prof_slot[:1] | upper) if nome_prof_slot else 'P' }}
                                                 </div>
                                             {% endif %}
                                         </div>
                                         <div class="overflow-hidden">
                                             <small class="text-muted d-block leading-none" style="font-size: 0.62rem; font-weight: 600; text-transform: uppercase;">Profissional</small>
-                                            <h6 class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-dark{% endif %} m-0 text-truncate" style="font-size: 0.95rem; line-height: 1.1;" title="{{ nome_prof_slot }}">
+                                            <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.95rem; line-height: 1.1;" title="{{ nome_prof_slot }}">
                                                 {{ nome_prof_slot }}
                                             </h6>
                                         </div>
@@ -619,7 +630,7 @@
                                             {% set tipo_persona = slot.tipo_persona if slot.tipo_persona is defined else (slot.get('tipo_persona') if slot.get is defined else 'humano') %}
 
                                             {% if tem_benef %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 {% if status_slug_norm in ['concluido', 'finalizado'] %}border-secondary{% else %}border-primary{% endif %} d-flex align-items-center justify-content-center {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} shadow-sm"
+                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 {% if status_slug_norm == 'concluido' %}border-success{% elif status_slug_norm == 'finalizado' %}border-warning{% else %}border-primary{% endif %} d-flex align-items-center justify-content-center {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-warning-emphasis{% else %}text-primary{% endif %} shadow-sm"
                                                      title="Beneficiário: {{ nome_benef }}">
                                                     {% if url_foto_atendido %}
                                                         <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_benef }}" onerror="this.style.display='none';">
@@ -648,9 +659,9 @@
                                                 <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
                                                     {% if url_foto_atendido %}
                                                         <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
-                                                        <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
+                                                        <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
                                                     {% else %}
-                                                        <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-primary{% endif %} fs-6">
+                                                        <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6">
                                                             {{ inicial_cliente }}
                                                         </span>
                                                     {% endif %}
@@ -660,14 +671,14 @@
 
                                         <div class="text-secondary fw-semibold text-truncate lh-sm" style="font-size: 0.85rem;">
                                             {% if tem_benef %}
-                                                <div class="{% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary text-decoration-line-through opacity-75{% else %}text-dark{% endif %} fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
                                                     {{ nome_benef }}
                                                 </div>
                                                 <div class="text-muted text-truncate" style="font-size: 0.75rem;">
-                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span> | <span class="fw-bold {% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary{% else %}text-dark{% endif %}">{{ nome_servico }}</span>
+                                                    Resp: <span class="fw-semibold">{{ nome_cliente }}</span> | <span class="fw-bold text-dark">{{ nome_servico }}</span>
                                                 </div>
                                             {% else %}
-                                                <div class="{% if status_slug_norm in ['concluido', 'finalizado'] %}text-secondary text-decoration-line-through opacity-75{% else %}text-dark{% endif %} fw-bold text-truncate" style="font-size: 0.9rem;">
+                                                <div class="text-dark fw-bold text-truncate" style="font-size: 0.9rem;">
                                                     {{ nome_cliente }}
                                                 </div>
                                                 <div class="text-muted text-truncate" style="font-size: 0.78rem;">
@@ -676,49 +687,51 @@
                                             {% endif %}
                                         </div>
                                     </div>
-
                                 </div>
                             </div>
 
-                            {# ÁREA INFERIOR DE CONCLUSÃO E INÍCIO REAL #}
+                            {# ÁREA INFERIOR DE ATENDIMENTO EM ANDAMENTO #}
                             {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
                                 <div class="mt-2 pt-2 border-top d-flex flex-column gap-2">
-
                                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                         <small class="text-primary fw-bold">
                                             <i class="bi bi-clock-history me-1"></i>Atendimento em andamento
                                         </small>
 
-                                        {% if itens_pendentes | length > 0 %}
-                                            {% set item_alvo_p = itens_pendentes | first %}
-                                            {% set item_id_target_p = item_alvo_p.item_id if item_alvo_p.item_id is defined and item_alvo_p.item_id else (item_alvo_p.get('item_id') if item_alvo_p.get is defined and item_alvo_p.get('item_id') else (item_alvo_p.id if item_alvo_p.id is defined else item_id_val)) %}
-
-                                            {% set raw_serv_target = item_alvo_p.nome_servico or item_alvo_p.servico_nome or (item_alvo_p.servico.nome if item_alvo_p.servico is defined and item_alvo_p.servico else '') or (item_alvo_p.get('nome_servico') if item_alvo_p.get is defined else '') or nome_servico %}
-                                            {% set servico_nome_target_p = raw_serv_target if (raw_serv_target and raw_serv_target | string not in ['None', 'null', '']) else 'Serviço' %}
-
-                                            {% set raw_init_target = item_alvo_p.inicio_real or (item_alvo_p.get('inicio_real') if item_alvo_p.get is defined else '') or inicio_real_fmt %}
-                                            {% set inicio_item = raw_init_target if (raw_init_target and raw_init_target | string not in ['None', 'null', '']) else '--:--' %}
-
-                                            <button type="button"
-                                                    class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
-                                                    onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item }}')">
-                                                <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
+                                        <div class="d-flex align-items-center gap-2">
+                                            <!-- BOTÃO DE LANÇAR ITEM/PRODUTO PELO COLABORADOR -->
+                                            <button type="button" class="btn btn-sm btn-outline-primary btn-add-item-colaborador stop-propagation">
+                                                <i class="bi bi-plus-circle me-1"></i> + Item / Produto
                                             </button>
-                                        {% else %}
-                                            <button type="button"
-                                                    class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold shadow-sm"
-                                                    onclick="event.stopPropagation(); registrarFimRealEEncerrar('{{ agend_id_val }}', '{{ valor_total_fmt | e }}', '{{ inicio_real_fmt }}')">
-                                                <i class="bi bi-receipt me-1"></i> Liquidar Comanda
-                                            </button>
-                                        {% endif %}
+
+                                            {% if itens_pendentes | length > 0 %}
+                                                {% set item_alvo_p = itens_pendentes | first %}
+                                                {% set item_id_target_p = item_alvo_p.item_id if item_alvo_p.item_id is defined and item_alvo_p.item_id else (item_alvo_p.get('item_id') if item_alvo_p.get is defined and item_alvo_p.get('item_id') else (item_alvo_p.id if item_alvo_p.id is defined else item_id_val)) %}
+                                                {% set raw_serv_target = item_alvo_p.nome_servico or item_alvo_p.servico_nome or (item_alvo_p.servico.nome if item_alvo_p.servico is defined and item_alvo_p.servico else '') or (item_alvo_p.get('nome_servico') if item_alvo_p.get is defined else '') or nome_servico %}
+                                                {% set servico_nome_target_p = raw_serv_target if (raw_serv_target and raw_serv_target | string not in ['None', 'null', '']) else 'Serviço' %}
+                                                {% set raw_init_target = item_alvo_p.inicio_real or (item_alvo_p.get('inicio_real') if item_alvo_p.get is defined else '') or inicio_real_fmt %}
+                                                {% set inicio_item = raw_init_target if (raw_init_target and raw_init_target | string not in ['None', 'null', '']) else '--:--' %}
+
+                                                <button type="button"
+                                                        class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
+                                                        onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item }}')">
+                                                    <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
+                                                </button>
+                                            {% else %}
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle py-1.5 px-2.5">
+                                                    <i class="bi bi-check2-all me-1"></i>Todos os serviços concluídos
+                                                </span>
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
                             {% endif %}
 
-                            {# PAINEL EXPANSÍVEL DE AÇÕES #}
+                            {# PAINEL EXPANSÍVEL DE AÇÕES EXIBIDO AO CLICAR NO CARD #}
                             <div class="painel-acoes-slot d-none mt-2 pt-2 border-top align-items-center justify-content-end gap-2 flex-wrap">
 
-                                {% if status_slug_norm not in ['em_atendimento', 'em_andamento', 'concluido', 'finalizado', 'cancelado'] %}
+                                {# 1. BOTÃO INICIAR (APENAS STATUS INICIAIS/AGENDADO) #}
+                                {% if status_slug_norm not in ['em_atendimento', 'em_andamento', 'finalizado', 'concluido', 'cancelado'] %}
                                     {% set item_inicial = itens_pendentes | first if itens_pendentes else (itens_lista | first if itens_lista else None) %}
                                     {% set item_id_param = item_id_val %}
                                     {% if item_inicial %}
@@ -732,28 +745,37 @@
                                     </button>
                                 {% endif %}
 
-                                {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
-                                    {% if itens_pendentes | length > 0 %}
-                                        {% set item_alvo_p = itens_pendentes | first %}
-                                        {% set item_id_target_p = item_alvo_p.item_id if item_alvo_p.item_id is defined and item_alvo_p.item_id else (item_alvo_p.get('item_id') if item_alvo_p.get is defined and item_alvo_p.get('item_id') else (item_alvo_p.id if item_alvo_p.id is defined else item_id_val)) %}
-                                        {% set raw_serv_target = item_alvo_p.nome_servico or item_alvo_p.servico_nome or (item_alvo_p.servico.nome if item_alvo_p.servico is defined and item_alvo_p.servico else '') or (item_alvo_p.get('nome_servico') if item_alvo_p.get is defined else '') or nome_servico %}
-                                        {% set servico_nome_target_p = raw_serv_target if (raw_serv_target and raw_serv_target | string not in ['None', 'null', '']) else 'Serviço' %}
-
-                                        {% set raw_init_target_panel = item_alvo_p.inicio_real or (item_alvo_p.get('inicio_real') if item_alvo_p.get is defined else '') or inicio_real_fmt %}
-                                        {% set inicio_item_panel = raw_init_target_panel if (raw_init_target_panel and raw_init_target_panel | string not in ['None', 'null', '']) else '--:--' %}
-
-                                        <button type="button"
-                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
-                                                onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item_panel }}')">
-                                            <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
-                                        </button>
-                                    {% else %}
+                                {# 2. EXIBIÇÃO APENAS PARA FINALIZADO (SERVIÇO PRONTO NA CADEIRA / AGUARDANDO CAIXA) #}
+                                {% if status_slug_norm == 'finalizado' %}
+                                    {# BOTAO DE LIQUIDAR COMANDA (ESTRITAMENTE QUANDO O SERVIÇO FOI FINALIZADO NA CADEIRA) #}
+                                    {% if itens_pendentes | length == 0 %}
                                         <button type="button"
                                                 class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-semibold shadow-sm"
-                                                onclick="event.stopPropagation(); registrarFimRealEEncerrar('{{ agend_id_val }}', '{{ valor_total_fmt | e }}')">
+                                                onclick="event.stopPropagation(); prepararEExibirModalComanda('{{ agend_id_val }}')">
                                             <i class="bi bi-receipt me-1"></i> Liquidar Comanda
                                         </button>
+                                    {% else %}
+                                        <span class="text-warning-emphasis small fw-bold me-auto">
+                                            <i class="bi bi-hourglass-split me-1"></i>Aguardando conclusão dos itens pendentes na cadeira.
+                                        </span>
                                     {% endif %}
+
+                                    {# REABRIR ATENDIMENTO (RESTRITO ADMIN) #}
+                                    {% if current_user.perfil in ['admin', 'administrador', 'gerente'] or current_user.is_admin %}
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger rounded-circle p-1 ms-1"
+                                                title="Reabrir Atendimento (Restrito Admin)"
+                                                onclick="event.stopPropagation(); reabrirAtendimentoAdmin('{{ agend_id_val }}')">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+
+                                {# 3. EXIBIÇÃO APENAS PARA CONCLUÍDO (PÓS-CAIXA / PROCESSO ENCERRADO) #}
+                                {% if status_slug_norm == 'concluido' %}
+                                    <span class="text-success small fw-bold me-auto">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Atendimento e comanda totalmente finalizados.
+                                    </span>
                                 {% endif %}
 
                                 <button type="button"
@@ -764,22 +786,16 @@
                                 </button>
                             </div>
                         </div>
-
                     {% else %}
-                        {# CARD DE SLOT LIVRE #}
-                        <div class="p-3 mb-2 rounded-4 border border-dashed bg-light d-flex align-items-center justify-content-between item-agendamento slot-livre user-select-none"
+                        {# CARD DE SLOT LIVRE ORIGINAL #}
+                        <div class="p-2 mb-2 rounded border border-dashed bg-light d-flex align-items-center justify-content-between slot-livre"
                              data-tipo="livre"
                              data-hora="{{ hora_inicio_txt }}"
                              data-profissional-id="{{ prof_id_slot }}">
-                            <div class="d-flex align-items-center gap-3">
-                                <div class="box-horario text-center px-3 py-2 rounded-3 bg-white border flex-shrink-0 shadow-sm">
-                                    <span class="d-block fw-bold fs-5 text-muted">{{ hora_inicio_txt }}</span>
-                                </div>
-                                <span class="text-muted small fw-semibold">Horário Livre</span>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                            <span class="text-muted small fw-bold">{{ hora_inicio_txt }} - Horário Livre</span>
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2 py-0"
                                     onclick="acaoEncaixar('{{ hora_inicio_txt }}', '{{ prof_id_slot }}')">
-                                <i class="bi bi-plus-lg me-1"></i>Agendar
+                                + Agendar
                             </button>
                         </div>
                     {% endif %}
@@ -1014,70 +1030,289 @@
   </div>
 </div>
 
-{# MODAL DE FECHAMENTO FINANCEIRO DE COMANDA #}
-<div class="modal fade" id="modalFinalizarAtendimento" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold text-dark">
-                    <i class="bi bi-receipt text-primary me-2"></i>Fechamento de Comanda / Caixa
-                </h5>
+<!-- MODAL DE FECHAMENTO VISUAL DE COMANDA (TEMA AMARELO CLARO) -->
+<div class="modal fade" id="modalFinalizarAtendimento" tabindex="-1" aria-labelledby="modalFinalizarAtendimentoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 rounded-4 shadow-lg" style="background-color: #fefdf0; border-top: 6px solid #f59e0b !important;">
+
+            <!-- Cabeçalho com visual de Nota/Comanda -->
+            <div class="modal-header border-bottom border-warning border-opacity-25 bg-warning bg-opacity-10 py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="p-2 bg-warning bg-opacity-25 text-warning-emphasis rounded-circle">
+                        <i class="bi bi-receipt-cutoff fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark m-0" id="modalFinalizarAtendimentoLabel">Comanda de Atendimento & Consumo</h5>
+                        <small class="text-muted" id="lblComandaCodigoIdentificador">Comanda unificada por CPF</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body py-3">
-                <input type="hidden" id="modal-finalizar-agendamento-id">
 
-                <div class="alert alert-light border rounded-3 mb-3 p-3 small">
-                    <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">Status dos Serviços:</span>
-                        <span class="badge bg-success-subtle text-success fw-bold">Todos Concluídos</span>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal-finalizar-agendamento-id" name="agendamento_id" value="">
+                <input type="hidden" id="modal-finalizar-cobranca-id" name="cobranca_id" value="">
+                <input type="hidden" id="modal-finalizar-cpfhash" name="cpf_hash" value="">
+
+                <!-- CARD DE IDENTIFICAÇÃO DO CLIENTE -->
+                <div class="p-3 mb-3 bg-white rounded-3 border border-warning border-opacity-25 shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                        <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.68rem;">Cliente</small>
+                        <h6 class="fw-bold text-dark mb-0" id="lblComandaClienteNome">Cliente Presencial</h6>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span class="text-muted">Total Previsto dos Itens:</span>
-                        <strong id="modal-resumo-valor-previsto">R$ 0,00</strong>
+                    <div id="boxStatusUnificacaoCpf" class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill d-none">
+                        <i class="bi bi-link-45deg me-1"></i> Consumo de recepção vinculado via CPF
                     </div>
                 </div>
 
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <label for="modal-finalizar-valor" class="form-label fw-semibold text-dark small">Valor Final Cobrado (R$)</label>
-                        <input type="text" class="form-control rounded-3 fw-bold text-success fs-5" id="modal-finalizar-valor" placeholder="0,00">
+                <!-- SEÇÃO 1: SERVIÇOS PRESTADOS NA CADEIRA -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between pb-1 mb-2 border-bottom border-secondary border-opacity-10">
+                        <span class="fw-bold text-dark small text-uppercase tracking-wide">
+                            <i class="bi bi-scissors me-1 text-primary"></i> 1. Serviços Prestados
+                        </span>
+                        <span class="badge bg-light text-dark border fw-bold" id="lblSubtotalServicos">R$ 0,00</span>
                     </div>
-                    <div class="col-6">
-                        <label for="modal-finalizar-forma-pagamento" class="form-label fw-semibold text-dark small">Forma de Pagamento</label>
-                        <select class="form-select rounded-3" id="modal-finalizar-forma-pagamento">
-                            <option value="PIX" selected>PIX</option>
-                            <option value="Cartão de Crédito">Cartão de Crédito</option>
-                            <option value="Cartão de Débito">Cartão de Débito</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Outro">Outro</option>
-                        </select>
+                    <div class="list-group list-group-flush rounded-3 border bg-white" id="containerListaServicosComanda">
+                        <!-- Itens renderizados dinamicamente via JS -->
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label for="modal-finalizar-observacao" class="form-label fw-semibold text-dark small">
-                        Observações Financeiras / Caixa (Opcional)
-                    </label>
-                    <textarea class="form-control rounded-3" id="modal-finalizar-observacao" rows="2"
-                              placeholder="Descontos aplicados, acréscimos ou detalhes do acerto..."></textarea>
+                <!-- SEÇÃO 2: PRODUTOS E CONSUMÍVEIS (BALCÃO / RECEPÇÃO / CADEIRA) -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between pb-1 mb-2 border-bottom border-secondary border-opacity-10">
+                        <span class="fw-bold text-dark small text-uppercase tracking-wide">
+                            <i class="bi bi-cup-straw me-1 text-warning"></i> 2. Produtos & Consumo Extra
+                        </span>
+                        <span class="badge bg-light text-dark border fw-bold" id="lblSubtotalProdutos">R$ 0,00</span>
+                    </div>
+                    <div class="list-group list-group-flush rounded-3 border bg-white" id="containerListaProdutosComanda">
+                        <!-- Itens renderizados dinamicamente via JS -->
+                    </div>
                 </div>
+
+                <!-- RESUMO FINANCEIRO E FECHAMENTO EXTREMAMENTE COMPLETO -->
+                <div class="p-3 bg-warning bg-opacity-10 rounded-3 border border-warning border-opacity-50 mb-3">
+                   <div class="row g-3 align-items-end">
+
+                        <!-- Subtotal Bruto (Serviços + Produtos) - FIXO -->
+                        <div class="col-12 col-md-4">
+                            <label class="form-label text-muted text-uppercase fw-bold mb-1" style="font-size: 0.7rem;">
+                                <i class="bi bi-cart-check me-1"></i>Subtotal Consumido
+                            </label>
+                            <div class="fw-bold text-dark fs-5" id="lblSubtotalConsumoTotal">R$ 0,00</div>
+                        </div>
+
+                        <!-- Desconto -->
+                        <div class="col-6 col-md-4">
+                            <label for="modal-finalizar-desconto" class="form-label text-danger fw-bold small mb-1">
+                                <i class="bi bi-dash-circle me-1"></i>Desconto (R$)
+                            </label>
+                            <input type="text"
+                                   inputmode="decimal"
+                                   id="modal-finalizar-desconto"
+                                   class="form-control form-control-sm border-danger-subtle text-danger fw-semibold"
+                                   placeholder="0,00"
+                                   oninput="recalcularTotaisComanda()">
+                        </div>
+
+                        <!-- Acréscimo -->
+                        <div class="col-6 col-md-4">
+                            <label for="modal-finalizar-acrescimo" class="form-label text-primary fw-bold small mb-1">
+                                <i class="bi bi-plus-circle me-1"></i>Acréscimo (R$)
+                            </label>
+                            <input type="text"
+                                   inputmode="decimal"
+                                   id="modal-finalizar-acrescimo"
+                                   class="form-control form-control-sm border-primary-subtle text-primary fw-semibold"
+                                   placeholder="0,00"
+                                   oninput="recalcularTotaisComanda()">
+                        </div>
+
+                        <div class="col-12"><hr class="my-1 border-warning opacity-25"></div>
+
+                        <!-- Forma de Pagamento -->
+                        <div class="col-12 col-md-5">
+                            <label for="modal-finalizar-forma-pagamento" class="form-label fw-bold text-dark small mb-1">
+                                <i class="bi bi-credit-card-2-front me-1 text-primary"></i> Forma de Pagamento
+                            </label>
+                            <select class="form-select form-select-sm border-warning rounded-2 fw-semibold" id="modal-finalizar-forma-pagamento">
+                                <option value="PIX" selected>⚡ PIX (QR Code / Copia e Cola)</option>
+                                <option value="Cartão de Crédito">💳 Cartão de Crédito</option>
+                                <option value="Cartão de Débito">💳 Cartão de Débito</option>
+                                <option value="Dinheiro">💵 Dinheiro</option>
+                            </select>
+                        </div>
+
+                        <!-- Valor Pago/Recebido -->
+                        <div class="col-6 col-md-3">
+                            <label for="modal-finalizar-valor-pago" class="form-label fw-bold text-dark small mb-1">
+                                <i class="bi bi-cash-stack me-1 text-success"></i> Valor Recebido
+                            </label>
+                            <input type="number" step="0.01" min="0" class="form-control form-control-sm border-success rounded-2 fw-bold text-success" id="modal-finalizar-valor-pago" value="0.00">
+                        </div>
+
+                        <!-- Total Final Líquido -->
+                        <div class="col-6 col-md-4 text-end">
+                            <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.72rem;">Total da Comanda</small>
+                            <h3 class="fw-extrabold text-success m-0" id="lblValorTotalGeralComanda">R$ 0,00</h3>
+                        </div>
+
+                        <!-- Painel de Troco -->
+                        <div id="boxCalculoTroco" class="col-12 d-flex justify-content-between align-items-center bg-white p-2 rounded-2 border border-info border-opacity-25">
+                            <span class="small fw-bold text-muted"><i class="bi bi-arrow-return-left text-info me-1"></i> Troco a Devolver:</span>
+                            <span class="fw-bold text-info fs-6" id="lblValorTrocoComanda">R$ 0,00</span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm rounded-3" id="modal-finalizar-observacao" placeholder="Anotações de caixa ou observação de pagamento (opcional)...">
+                </div>
+
             </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-light rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Manter Aberto</button>
-                <button type="button" class="btn btn-primary rounded-pill px-4 fw-semibold" onclick="confirmarEGravarEncerramento()">
-                    <i class="bi bi-wallet2 me-1"></i>Liquidar Comanda
+
+            <div class="modal-footer d-flex justify-content-between">
+                <button type="button"
+                        class="btn btn-outline-secondary rounded-pill px-3"
+                        onclick="manterComandaAberta()">
+                    <i class="bi bi-clock-history me-1"></i> Manter Aberta (Liquidar Depois)
+                </button>
+
+                <button type="button"
+                        class="btn btn-success rounded-pill px-4 fw-semibold"
+                        onclick="confirmarEGravarEncerramentoComandaUnificada(event)">
+                    <i class="bi bi-check2-circle me-1"></i> Liquidar & Gerar Comprovante
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE ADIÇÃO DE ITENS/PRODUTOS PELO COLABORADOR -->
+<div class="modal fade" id="modalAdicionarItemColaborador" tabindex="-1" aria-labelledby="modalAdicionarItemLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="modalAdicionarItemLabel">
+                    <i class="bi bi-cart-plus me-2"></i>Lançar Produto / Serviço Extra
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <input type="hidden" id="modal_add_item_agendamento_id" value="">
+
+                <div class="alert alert-light border mb-3">
+                    <small class="text-muted d-block">Cliente do Atendimento:</small>
+                    <strong id="modal_add_item_cliente_nome" class="text-dark fs-6">Cliente ---</strong>
+                </div>
+
+                <!-- Abas: Leitor/Estoque vs Serviço/Avulso -->
+                <ul class="nav nav-pills nav-fill mb-3" id="pills-tab-add-item" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold" id="tab-add-produto" data-bs-toggle="pill" data-bs-target="#pills-add-produto" type="button" role="tab">
+                            <i class="bi bi-barcode me-1"></i> Produto (Estoque)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold" id="tab-add-avulso" data-bs-toggle="pill" data-bs-target="#pills-add-avulso" type="button" role="tab">
+                            <i class="bi bi-scissors me-1"></i> Serviço / Avulso
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="pills-tabContentAddItem">
+                    <!-- ABA 1: PRODUTO VIA CÓDIGO DE BARRAS / ESTOQUE -->
+                    <div class="tab-pane fade show active" id="pills-add-produto" role="tabpanel">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Buscar por Código de Barras ou Nome:</label>
+                                <div class="position-relative mb-3">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light"><i class="bi bi-barcode"></i></span>
+
+                                        <!-- Entrada que busca em tempo real (oninput) ao digitar ou ao ler com leitor de código de barras USB -->
+                                        <input type="text"
+                                               id="inputBarrasEstoque"
+                                               class="form-control"
+                                               placeholder="Digite o nome ou escaneie o código..."
+                                               oninput="consultarProdutoEstoque(this.value)"
+                                               onchange="consultarProdutoEstoque(this.value)"
+                                               autocomplete="off">
+
+                                        <!-- Botão Câmera -->
+                                        <button class="btn btn-outline-secondary" type="button" id="btnIniciarCameraEstoque" onclick="alternarLeitorCamera()" title="Ativar Câmera">
+                                            <i class="bi bi-camera"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Container do Autocomplete (Flutua logo abaixo do input-group) -->
+                                    <div id="resultado_busca_produtos"
+                                         class="dropdown-resultado-produtos position-absolute w-100 mt-1 d-none"
+                                         style="z-index: 1050; max-height: 250px; overflow-y: auto;">
+                                    </div>
+                                </div>
+                        </div>
+
+                        <!-- Área de Renderização do Scanner da Câmera -->
+                        <div id="container-scanner-camera" class="mb-3 d-none border rounded overflow-hidden position-relative" style="max-height: 280px;">
+                            <div id="reader-camera-estoque" style="width: 100%;"></div>
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 z-index-3" onclick="pararLeitorCamera()">
+                                <i class="bi bi-x-lg"></i> Fechar Câmera
+                            </button>
+                        </div>
+
+                        <!-- Resultado do Produto Encontrado -->
+                        <div id="boxResultadoEstoque" class="card bg-light border p-3 mb-3 d-none">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 id="txtEstoqueNomeProd" class="fw-bold mb-0 text-dark">-</h6>
+                                    <small id="txtEstoqueSaldo" class="text-muted">Estoque: 0 un</small>
+                                </div>
+                                <span id="txtEstoquePreco" class="fs-5 fw-bold text-success">R$ 0,00</span>
+                            </div>
+                            <input type="hidden" id="hdnEstoqueProdutoId" value="">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Quantidade:</label>
+                            <input type="number" id="inputEstoqueQtd" class="form-control text-center fw-bold" value="1" min="1">
+                        </div>
+                    </div>
+
+                    <!-- ABA 2: SERVIÇO EXTRA / ITEM AVULSO -->
+                    <div class="tab-pane fade" id="pills-add-avulso" role="tabpanel">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Descrição do Serviço / Item:</label>
+                            <input type="text" id="inputAvulsoDescricao" class="form-control" placeholder="Ex: Hidratação Especial ou Barba Modelada">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">Valor (R$):</label>
+                            <input type="number" step="0.01" id="inputAvulsoValor" class="form-control fw-bold text-success" placeholder="0.00">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" onclick="executarLancamentoItemColaborador()">
+                    <i class="bi bi-check-lg me-1"></i> Confirmar Lançamento
                 </button>
             </div>
         </div>
     </div>
 </div>
-
 <script>
 // =========================================================================
 // 1. UTILITÁRIOS E ESTADO GLOBAL
 // =========================================================================
+
 let filtroStatusAtual = 'todos';
+window.usuarioLogadoId = {{ current_user.id | tojson }};
 
 function getCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
@@ -1089,6 +1324,342 @@ function getCsrfToken() {
 document.addEventListener('hide.bs.modal', function (event) {
     if (document.activeElement && event.target.contains(document.activeElement)) {
         document.activeElement.blur();
+    }
+});
+
+// =========================================================================
+// BLOCO ACRESCENTADO: SUPORTE E CARREGAMENTO DA COMANDA UNIFICADA
+// =========================================================================
+
+// Aliases para redirecionar chamadas antigas/legadas diretamente para a Unificada
+window.abrirModalFechamentoComanda = function(agendamentoId, valorTotal) {
+    window.abrirModalFechamentoComandaUnificada(agendamentoId, valorTotal);
+};
+window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
+    window.abrirModalFechamentoComandaUnificada(agendamentoId, valorTotal);
+};
+window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
+    window.abrirModalFechamentoComandaUnificada(agendamentoId, valorTotal);
+};
+
+// Controladora de cálculos de valores no modal
+if (typeof window.ComandaController === 'undefined') {
+    window.ComandaController = {
+        subtotalServicos: 0,
+        subtotalProdutos: 0,
+        subtotalConsumo: 0,
+        totalLiquido: 0,
+
+        recalcularTotais() {
+            const desc = parseFloat(document.getElementById('modal-finalizar-desconto')?.value) || 0;
+            const acres = parseFloat(document.getElementById('modal-finalizar-acrescimo')?.value) || 0;
+
+            this.totalLiquido = Math.max(0, this.subtotalConsumo + acres - desc);
+
+            const lblSubtotal = document.getElementById('lblSubtotalConsumoTotal');
+            if (lblSubtotal) lblSubtotal.innerText = `R$ ${this.subtotalConsumo.toFixed(2).replace('.', ',')}`;
+
+            const lblTotal = document.getElementById('lblValorTotalGeralComanda');
+            if (lblTotal) lblTotal.innerText = `R$ ${this.totalLiquido.toFixed(2).replace('.', ',')}`;
+
+            const inputValorPago = document.getElementById('modal-finalizar-valor-pago');
+            if (inputValorPago && (parseFloat(inputValorPago.value) === 0 || !inputValorPago.dataset.editado)) {
+                inputValorPago.value = this.totalLiquido.toFixed(2);
+            }
+
+            this.atualizarTroco();
+        },
+
+        atualizarTroco() {
+            const valorPago = parseFloat(document.getElementById('modal-finalizar-valor-pago')?.value) || 0;
+            const troco = Math.max(0, valorPago - this.totalLiquido);
+
+            const lblTroco = document.getElementById('lblValorTrocoComanda');
+            if (lblTroco) lblTroco.innerText = `R$ ${troco.toFixed(2).replace('.', ',')}`;
+        }
+    };
+}
+
+function floatValUnificado(valor) {
+    if (typeof valor === 'number') return valor;
+    if (!valor) return 0.0;
+    return parseFloat(String(valor).replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0.0;
+}
+
+function criarElementoLinhaComanda(nome, profissional, valor, quantidade = 1) {
+    const div = document.createElement('div');
+    div.className = 'list-group-item d-flex justify-content-between align-items-center py-2 px-3';
+    const qtdTxt = quantidade > 1 ? `${quantidade}x ` : '';
+    div.innerHTML = `
+        <div>
+            <strong class="d-block text-dark small">${qtdTxt}${nome}</strong>
+            ${profissional ? `<small class="text-muted" style="font-size: 0.75rem;"><i class="bi bi-person me-1"></i>${profissional}</small>` : ''}
+        </div>
+        <span class="fw-bold text-dark small">R$ ${valor.toFixed(2).replace('.', ',')}</span>
+    `;
+    return div;
+}
+
+// Inicialização segura no escopo global
+window.subtotalConsumoBase = window.subtotalConsumoBase || 0;
+
+function prepararEExibirModalComanda(agendamentoId) {
+    const urlApi = `/agenda/api/agendamento/${agendamentoId}/comanda-detalhes`;
+
+    fetch(urlApi)
+        .then(res => {
+            if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+            return res.json();
+        })
+        .then(data => {
+            if (!data.sucesso) {
+                alert(data.mensagem || 'Erro ao carregar detalhes da comanda.');
+                return;
+            }
+
+            console.log("Dados recebidos da Comanda:", data);
+
+            // 1. Preenche IDs ocultos
+            const elAgendId = document.getElementById('modal-finalizar-agendamento-id');
+            if (elAgendId) elAgendId.value = data.agendamento_id || '';
+
+            const elCobrancaId = document.getElementById('modal-finalizar-cobranca-id');
+            if (elCobrancaId) elCobrancaId.value = data.cobranca_id || '';
+
+            // 2. Preenche Nome do Cliente
+            const elCliente = document.getElementById('lblComandaClienteNome');
+            if (elCliente && data.cliente) {
+                elCliente.innerText = data.cliente.nome || 'Cliente Presencial';
+            }
+
+            // 3. Renderiza Serviços Prestados
+            const containerServicos = document.getElementById('containerListaServicosComanda');
+            if (containerServicos) {
+                let htmlServicos = '';
+                if (data.servicos && data.servicos.length > 0) {
+                    data.servicos.forEach(s => {
+                        const valServico = parseFloat(s.valor || s.preco || 0) || 0;
+                        htmlServicos += `
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+                                <div>
+                                    <span class="fw-semibold text-dark d-block">${s.servico || 'Serviço'}</span>
+                                    <small class="text-muted"><i class="bi bi-person me-1"></i>${s.profissional || '-'}</small>
+                                </div>
+                                <span class="fw-bold text-dark">R$ ${valServico.toFixed(2).replace('.', ',')}</span>
+                            </div>`;
+                    });
+                }
+                containerServicos.innerHTML = htmlServicos || '<p class="text-muted small p-3 m-0">Nenhum serviço registrado.</p>';
+            }
+
+            // 4. Renderiza Produtos
+            const containerProdutos = document.getElementById('containerListaProdutosComanda');
+            if (containerProdutos) {
+                let htmlProdutos = '';
+                if (data.produtos && data.produtos.length > 0) {
+                    data.produtos.forEach(p => {
+                        const valUnit = parseFloat(
+                            p.preco_unitario !== undefined && p.preco_unitario !== null ? p.preco_unitario :
+                            (p.valor_unitario !== undefined && p.valor_unitario !== null ? p.valor_unitario :
+                            (p.preco !== undefined ? p.preco : (p.valor || 0)))
+                        ) || 0;
+
+                        const qtd = parseInt(p.quantidade || 1, 10);
+                        const valTotal = parseFloat(
+                            p.valor_total !== undefined && p.valor_total !== null ? p.valor_total : (qtd * valUnit)
+                        ) || 0;
+
+                        htmlProdutos += `
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+                                <div>
+                                    <span class="fw-semibold text-dark d-block">${p.nome || 'Produto'}</span>
+                                    <small class="text-muted">${qtd}x R$ ${valUnit.toFixed(2).replace('.', ',')}</small>
+                                </div>
+                                <span class="fw-bold text-dark">R$ ${valTotal.toFixed(2).replace('.', ',')}</span>
+                            </div>`;
+                    });
+                }
+                containerProdutos.innerHTML = htmlProdutos || '<p class="text-muted small p-3 m-0">Nenhum produto consumido.</p>';
+            }
+
+            // 5. Atualiza Subtotais
+            const valServicos = (data.totais && data.totais.servicos !== undefined) ? parseFloat(data.totais.servicos) || 0 : 0;
+            const valProdutos = (data.totais && data.totais.produtos !== undefined) ? parseFloat(data.totais.produtos) || 0 : 0;
+
+            // SOMA BRUTA DOS CONSUMOS
+            const consumoBrutoTotal = valServicos + valProdutos;
+
+            // Guarda no Window E TAMBÉM grava no atributo HTML data-subtotal-base
+            window.subtotalConsumoBase = consumoBrutoTotal;
+
+            const elSubtotalConsumo = document.getElementById('lblSubtotalConsumoTotal');
+            if (elSubtotalConsumo) {
+                elSubtotalConsumo.setAttribute('data-subtotal-base', consumoBrutoTotal.toString());
+                elSubtotalConsumo.innerText = `R$ ${consumoBrutoTotal.toFixed(2).replace('.', ',')}`;
+            }
+            // ATRIBUIÇÃO SEGURA: Define o valor base no escopo window
+            window.subtotalConsumoBase = valServicos + valProdutos;
+
+            // Preenche os rótulos de Serviços e Produtos
+            const elSubtotalServicos = document.getElementById('lblSubtotalServicos');
+            if (elSubtotalServicos) elSubtotalServicos.innerText = `R$ ${valServicos.toFixed(2).replace('.', ',')}`;
+
+            const elSubtotalProdutos = document.getElementById('lblSubtotalProdutos');
+            if (elSubtotalProdutos) elSubtotalProdutos.innerText = `R$ ${valProdutos.toFixed(2).replace('.', ',')}`;
+
+            // Preenche inputs de desconto/acréscimo se já existirem na API
+            const inputDesconto = document.getElementById('modal-finalizar-desconto') || document.getElementById('txtDescontoComanda');
+            if (inputDesconto) inputDesconto.value = (parseFloat(data.totais?.valor_desconto) || 0).toFixed(2);
+
+            const inputAcrescimo = document.getElementById('modal-finalizar-acrescimo') || document.getElementById('txtAcrescimoComanda');
+            if (inputAcrescimo) inputAcrescimo.value = (parseFloat(data.totais?.valor_acrescimo) || 0).toFixed(2);
+
+            // Recalcula a comanda imediatamente
+            recalcularTotaisComanda();
+
+            // 6. Exibe a Modal
+            const modalEl = document.getElementById('modalFinalizarAtendimento');
+            if (modalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modalInstance.show();
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao preparar comanda:', err);
+            alert('Não foi possível carregar os detalhes da comanda.');
+        });
+}
+
+// Função Principal de Abertura da Comanda Unificada
+window.abrirModalFechamentoComandaUnificada = async function(agendamentoId, valorTotalFallback = null) {
+    if (!agendamentoId) {
+        alert("ID de agendamento/comanda não informado.");
+        return;
+    }
+
+    const idLimpo = String(agendamentoId).split('_')[0];
+    const elAgendamentoId = document.getElementById('modal-finalizar-agendamento-id');
+    if (elAgendamentoId) elAgendamentoId.value = idLimpo;
+
+    // Redefinição dos campos
+    const inputDesc = document.getElementById('modal-finalizar-desconto');
+    if (inputDesc) inputDesc.value = '0.00';
+
+    const inputAcres = document.getElementById('modal-finalizar-acrescimo');
+    if (inputAcres) inputAcres.value = '0.00';
+
+    const inputObs = document.getElementById('modal-finalizar-observacao');
+    if (inputObs) inputObs.value = '';
+
+    const inputPago = document.getElementById('modal-finalizar-valor-pago');
+    if (inputPago) delete inputPago.dataset.editado;
+
+    const containerServicos = document.getElementById('containerListaServicosComanda');
+    const containerProdutos = document.getElementById('containerListaProdutosComanda');
+
+    if (containerServicos) containerServicos.innerHTML = '<div class="p-3 text-center text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Carregando serviços...</div>';
+    if (containerProdutos) containerProdutos.innerHTML = '<div class="p-3 text-center text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Carregando produtos...</div>';
+
+    const modalEl = document.getElementById('modalFinalizarAtendimento');
+    if (modalEl && typeof bootstrap !== 'undefined') {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    try {
+        const response = await fetch(`/agenda/api/agendamento/${idLimpo}/comanda-detalhes`);
+        if (!response.ok) throw new Error("Não foi possível carregar os detalhes da comanda.");
+
+        const data = await response.json();
+
+        const lblCliente = document.getElementById('lblComandaClienteNome');
+        if (lblCliente) lblCliente.textContent = data.cliente_nome || 'Cliente Presencial';
+
+        const hdnCobranca = document.getElementById('modal-finalizar-cobranca-id');
+        if (hdnCobranca) hdnCobranca.value = data.cobranca_id || '';
+
+        const hdnCpf = document.getElementById('modal-finalizar-cpfhash');
+        if (hdnCpf) hdnCpf.value = data.cpf_hash || '';
+
+        const boxCpf = document.getElementById('boxStatusUnificacaoCpf');
+        if (boxCpf) {
+            if (data.cpf_hash || data.unificado) {
+                boxCpf.classList.remove('d-none');
+            } else {
+                boxCpf.classList.add('d-none');
+            }
+        }
+
+        let totalServicos = 0;
+        if (containerServicos) {
+            containerServicos.innerHTML = '';
+            if (data.servicos && data.servicos.length > 0) {
+                data.servicos.forEach(s => {
+                    const v = floatValUnificado(s.valor_total || s.valor);
+                    totalServicos += v;
+                    containerServicos.appendChild(criarElementoLinhaComanda(s.descricao || s.nome, s.colaborador_nome, v));
+                });
+            } else {
+                containerServicos.innerHTML = '<div class="p-2 text-muted small text-center">Nenhum serviço registrado</div>';
+            }
+        }
+
+        let totalProdutos = 0;
+        if (containerProdutos) {
+            containerProdutos.innerHTML = '';
+            if (data.produtos && data.produtos.length > 0) {
+                data.produtos.forEach(p => {
+                    const v = floatValUnificado(p.valor_total || p.valor);
+                    totalProdutos += v;
+                    containerProdutos.appendChild(criarElementoLinhaComanda(p.descricao || p.nome, p.colaborador_nome || 'Balcão', v, p.quantidade || 1));
+                });
+            } else {
+                containerProdutos.innerHTML = '<div class="p-2 text-muted small text-center">Nenhum produto consumido</div>';
+            }
+        }
+
+        window.ComandaController.subtotalServicos = totalServicos;
+        window.ComandaController.subtotalProdutos = totalProdutos;
+        window.ComandaController.subtotalConsumo = totalServicos + totalProdutos;
+
+        const lblSubServ = document.getElementById('lblSubtotalServicos');
+        if (lblSubServ) lblSubServ.innerText = `R$ ${totalServicos.toFixed(2).replace('.', ',')}`;
+
+        const lblSubProd = document.getElementById('lblSubtotalProdutos');
+        if (lblSubProd) lblSubProd.innerText = `R$ ${totalProdutos.toFixed(2).replace('.', ',')}`;
+
+        window.ComandaController.recalcularTotais();
+
+    } catch (err) {
+        console.warn("Recorrendo ao valor fallback da comanda:", err);
+        let fallbackVal = floatValUnificado(valorTotalFallback);
+
+        if (containerServicos) containerServicos.innerHTML = '<div class="p-2 text-muted small text-center">Lançamento de Atendimento</div>';
+        if (containerProdutos) containerProdutos.innerHTML = '<div class="p-2 text-muted small text-center">Sem produtos registrados</div>';
+
+        window.ComandaController.subtotalServicos = fallbackVal;
+        window.ComandaController.subtotalProdutos = 0;
+        window.ComandaController.subtotalConsumo = fallbackVal;
+
+        window.ComandaController.recalcularTotais();
+    }
+};
+
+// Restaura o estado original dos botões e campos ao fechar o modal (previne o loader infinito)
+document.addEventListener('DOMContentLoaded', function () {
+    const modalFinalizarEl = document.getElementById('modalFinalizarAtendimento');
+    if (modalFinalizarEl) {
+        modalFinalizarEl.addEventListener('hidden.bs.modal', function () {
+            // 1. Restaura o botão de confirmação
+            const btnConfirmar = modalFinalizarEl.querySelector('button[onclick="confirmarEGravarEncerramentoComandaUnificada()"]');
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Liquidar & Gerar Comprovante';
+            }
+
+            // 2. Destrava campos de entrada (desconto, acréscimo, tempos, avaliação)
+            const inputs = modalFinalizarEl.querySelectorAll('input, select');
+            inputs.forEach(input => input.disabled = false);
+        });
     }
 });
 
@@ -1106,7 +1677,7 @@ function obterEmpresaIdContexto() {
 // 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
 // =========================================================================
 
-// Exibe o modal de detalhes do cliente (Leitura padronizada dos atributos dataset)
+// Exibe o modal de detalhes do cliente
 window.abrirModalDetalhesCliente = function(elemento) {
     if (!elemento) return;
 
@@ -1117,16 +1688,15 @@ window.abrirModalDetalhesCliente = function(elemento) {
     const cardPai = elemento.closest('.item-agendamento') || elemento;
 
     const dadosCliente = {
-            nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
-            telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
-            hora: cardPai.dataset.hora || '--:--',
-            valor: cardPai.dataset.valor || 'R$ 0,00',
-            servico: cardPai.dataset.servico || 'Não informado',
-            obs: cardPai.dataset.obs || 'Nenhuma observação.',
-            // Aceita qualquer uma das variações possíveis do atributo de foto
-            foto: (area && (area.dataset.clienteFoto || area.dataset.fotoAtendido || area.dataset.foto)) ||
-                  (cardPai.dataset.clienteFoto || cardPai.dataset.fotoAtendido || cardPai.dataset.foto) || ''
-        };
+        nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
+        telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
+        hora: cardPai.dataset.hora || '--:--',
+        valor: cardPai.dataset.valor || 'R$ 0,00',
+        servico: cardPai.dataset.servico || 'Não informado',
+        obs: cardPai.dataset.obs || 'Nenhuma observação.',
+        foto: (area && (area.dataset.clienteFoto || area.dataset.fotoAtendido || area.dataset.foto)) ||
+              (cardPai.dataset.clienteFoto || cardPai.dataset.fotoAtendido || cardPai.dataset.foto) || ''
+    };
 
     const elNome = document.getElementById('modalClienteEmpresaNome');
     const elTel = document.getElementById('modalClienteEmpresaTelefone');
@@ -1162,37 +1732,32 @@ window.abrirModalDetalhesCliente = function(elemento) {
     }
 };
 
-/**
- * Alterna a exibição do painel de ações ao clicar no card.
- * Previne acionamentos automáticos e acidentais.
- */
 function togglePainelAcoes(cardElement) {
     const painel = cardElement.querySelector('.painel-acoes-slot');
     if (painel) {
-        // Se desejar fechar os outros painéis abertos ao abrir um novo:
         document.querySelectorAll('.painel-acoes-slot').forEach(el => {
             if (el !== painel) el.classList.add('d-none');
         });
-
         painel.classList.toggle('d-none');
     }
 }
 
-/**
- * Esconde o painel de ações manualmente.
- */
 function fecharPainelAcoes(btnElement) {
     const painel = btnElement.closest('.painel-acoes-slot');
-    if (painel) {
-        painel.classList.add('d-none');
-    }
+    if (painel) painel.classList.add('d-none');
 }
 
-/**
- * Executa a requisição de início do atendimento com validação de parâmetros e CSRF.
- */
+window.gerenciarAcoesSlot = function(elemento) {
+    document.querySelectorAll('.painel-acoes-slot').forEach(p => p.classList.add('d-none'));
+    const painelAtual = elemento.querySelector('.painel-acoes-slot');
+    if (painelAtual) {
+        painelAtual.classList.toggle('d-none');
+    }
+};
+
 window.acaoIniciarAtendimento = function(agendamentoId, empresaId, itemId = null, colaboradorContratoId = null) {
-    const empIdFinal = empresaId || (typeof obterEmpresaIdContexto === 'function' ? obterEmpresaIdContexto() : null);
+    // Busca o ID dinamicamente do input hidden do template caso não venha no parâmetro
+    const empIdFinal = empresaId || document.getElementById('empresa_id_hidden')?.value || (typeof obterEmpresaIdContexto === 'function' ? obterEmpresaIdContexto() : null);
 
     if (!agendamentoId || !empIdFinal) {
         alert("Erro de parâmetros: ID do agendamento ou da empresa ausentes.");
@@ -1201,14 +1766,16 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId, itemId = null
 
     const idLimpo = String(agendamentoId).split('_')[0];
 
-    // Payload estruturado enviando os dados do item e colaborador
     const payload = {
         empresa_id: empIdFinal
     };
     if (itemId) payload.agendamento_item_id = itemId;
     if (colaboradorContratoId) payload.colaborador_contrato_id = colaboradorContratoId;
 
-    fetch(`/agenda/empresa/${empIdFinal}/agendamentos/${idLimpo}/iniciar`, {
+    // Garanta que o caminho respeite o prefixo /agenda do seu app e termine com '/'
+    const url = `/agenda/empresa/${empIdFinal}/agendamentos/${idLimpo}/iniciar/`;
+
+    fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1227,7 +1794,7 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId, itemId = null
         return data;
     })
     .then(data => {
-        if (data && (data.sucesso || data.status === 'success' || data.success)) {
+        if (data && data.sucesso) {
             window.location.reload();
         } else {
             alert(data?.mensagem || 'Não foi possível iniciar o atendimento.');
@@ -1239,95 +1806,56 @@ window.acaoIniciarAtendimento = function(agendamentoId, empresaId, itemId = null
     });
 };
 
-// =========================================================================
-// AJUSTE PONTUAL DA FUNÇÃO ABRIR MODAL / AÇÃO
-// =========================================================================
-
 window.abrirModalAtendimento = function(cardElement) {
     if (!cardElement || !(cardElement instanceof HTMLElement)) return;
 
     const agendamentoId = cardElement.getAttribute('data-id');
     const status = cardElement.getAttribute('data-status') || '';
-    const empresaId = obterEmpresaIdContexto();
 
-    // Se já estiver em atendimento, abre a comanda para finalização
     if (['em_atendimento', 'em_andamento'].includes(status)) {
         const valorTotal = cardElement.getAttribute('data-valor') || '0,00';
-        window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
+        window.abrirModalFechamentoComandaUnificada(agendamentoId, valorTotal);
     } else {
-        // Se ainda não iniciou, apenas abre o painel/modal de ações em vez de disparar a API direto
         window.gerenciarAcoesSlot(cardElement);
     }
 };
 
 function prepararModalFinalizarItem(agendId, itemId, servicoNome, clienteNome, inicioReal) {
     const agora = new Date();
-    const horaFimFormatada = agora.toTimeString().substring(0, 5); // Formato HH:MM
+    const horaFimFormatada = agora.toTimeString().substring(0, 5);
 
-    // Preenche os campos básicos
     document.getElementById('modal_agendamento_id').value = agendId;
     document.getElementById('modal_item_id').value = itemId;
     document.getElementById('modal_servico_nome').innerText = servicoNome || 'Serviço';
     document.getElementById('modal_cliente_nome').innerText = 'Cliente: ' + (clienteNome || '---');
 
-    // Tratamento robusto para o Início Real (evita exibir "None" ou vazio)
     let horaInicioTratada = '--:--';
     if (inicioReal && inicioReal !== 'None' && inicioReal !== 'null' && inicioReal.trim() !== '') {
-        // Se vier no formato completo de data/hora do banco (ex: 2026-06-07 14:30:00 ou ISO), extrai apenas a hora
         if (inicioReal.includes('T') || inicioReal.includes(' ')) {
             const partes = inicioReal.split(/T| /);
-            const horaPart = partes[1]; // Pega a parte da hora
-            if (horaPart) {
-                horaInicioTratada = horaPart.substring(0, 5); // HH:MM
-            }
+            const horaPart = partes[1];
+            if (horaPart) horaInicioTratada = horaPart.substring(0, 5);
         } else {
-            horaInicioTratada = inicioReal.substring(0, 5); // Caso já venha como "14:30"
+            horaInicioTratada = inicioReal.substring(0, 5);
         }
     }
 
     document.getElementById('hora_inicio_real').value = horaInicioTratada;
     document.getElementById('hora_fim_real').value = horaFimFormatada;
-
-    // Limpa campos opcionais
     document.getElementById('modal_item_observacao').value = '';
     document.getElementById('comentario_avaliacao_cliente').value = '';
 
-    // Salva o ISO completo para envio posterior
     window.currentFimRealIso = agora.toISOString();
 
-    // Abre o modal
     const modalElement = document.getElementById('modalFinalizarItem');
     if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
+        bootstrap.Modal.getOrCreateInstance(modalElement).show();
     }
 }
 
-window.abrirModalFinalizarItem = window.prepararModalFinalizarItem;
+window.prepararModalFinalizarItem = prepararModalFinalizarItem;
+window.abrirModalFinalizarItem = prepararModalFinalizarItem;
 
-window.acaoFinalizarAtendimento = function(agendamentoId, valorTotal) {
-    if (!valorTotal || valorTotal === 'None') {
-        const cardEl = document.querySelector(`.item-agendamento[data-id="${agendamentoId}"]`);
-        valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0,00';
-    }
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
-};
-
-window.prepararEAbrirModalCaixa = function(agendamentoId, cardEl) {
-    const valorTotal = cardEl ? cardEl.getAttribute('data-valor') : '0.00';
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
-};
-
-window.abrirModalEncerramentoComanda = function(agendamentoId, valorTotal) {
-    window.abrirModalFechamentoComanda(agendamentoId, valorTotal);
-};
-
-/**
- * Acionado ao submeter o formulário do modal ("Confirmar Conclusão")
- */
-/**
- * Acionado ao submeter o formulário do modal ("Confirmar Conclusão")
- */
 function confirmarEGravarEncerramentoItem() {
     const agendamentoId = document.getElementById('modal_agendamento_id').value;
     const itemId = document.getElementById('modal_item_id').value;
@@ -1336,7 +1864,6 @@ function confirmarEGravarEncerramentoItem() {
     const comentarioAvaliacao = document.getElementById('comentario_avaliacao_cliente').value;
     const fimReal = window.currentFimRealIso;
 
-    // Monta o payload ajustado para os nomes que a Python @agenda_bp espera
     const dadosEnvio = {
         agendamento_id: parseInt(agendamentoId),
         item_id: parseInt(itemId),
@@ -1346,42 +1873,33 @@ function confirmarEGravarEncerramentoItem() {
         fim_real: fimReal
     };
 
-    // Desativa o botão de submit para evitar duplo clique
     const btnSubmit = document.querySelector('#formFinalizarItem button[type="submit"]');
     if (btnSubmit) {
         btnSubmit.disabled = true;
-        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Salvando...`;
+        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Salvando...`;
     }
 
-    // 🟢 ROTA CORRETA DO BACKEND FLASK
     fetch('/agenda/api/agendamento/concluir-item', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
+            'X-CSRFToken': getCsrfToken()
         },
         body: JSON.stringify(dadosEnvio)
     })
     .then(async response => {
         const data = await response.json();
-        if (!response.ok || !data.sucesso) {
-            throw new Error(data.mensagem || 'Erro ao salvar o encerramento do item no servidor.');
-        }
+        if (!response.ok || !data.sucesso) throw new Error(data.mensagem || 'Erro ao salvar o encerramento.');
         return data;
     })
     .then(data => {
-        // Fecha o modal
         const modalElement = document.getElementById('modalFinalizarItem');
         const modalInstance = bootstrap.Modal.getInstance(modalElement);
-        if (modalInstance) {
-            modalInstance.hide();
-        }
+        if (modalInstance) modalInstance.hide();
 
-        // Se a comanda inteira foi concluída, redireciona para a modal de caixa/fechamento
         if (data.comanda_pronta || data.exibir_comanda) {
-            window.abrirModalFechamentoComanda(
+            window.abrirModalFechamentoComandaUnificada(
                 data.agendamento_id || agendamentoId,
                 data.valor_total_fmt || data.valor_total
             );
@@ -1391,9 +1909,7 @@ function confirmarEGravarEncerramentoItem() {
     })
     .catch(error => {
         console.error('Erro:', error);
-        alert(error.message || 'Não foi possível concluir o item. Por favor, tente novamente.');
-
-        // Restaura o botão caso ocorra erro
+        alert(error.message || 'Não foi possível concluir o item.');
         if (btnSubmit) {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = `<i class="bi bi-check-lg me-1"></i>Confirmar Conclusão`;
@@ -1401,157 +1917,139 @@ function confirmarEGravarEncerramentoItem() {
     });
 }
 
-window.acaoConcluirTarefaDireta = function(agendamentoId, itemId) {
-    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
-        alert("Erro: Parâmetros do agendamento ou do item ausentes.");
-        return;
-    }
-
-    fetch('/agenda/api/agendamento/concluir-item', {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            item_id: parseInt(itemId)
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso || data.success) {
-            if (data.comanda_pronta || data.exibir_comanda) {
-                window.abrirModalFechamentoComanda(data.agendamento_id || agendamentoId, data.valor_total);
-            } else {
-                window.location.reload();
-            }
-        } else {
-            alert(data.mensagem || 'Erro ao concluir tarefa.');
-        }
-    })
-    .catch(error => {
-        console.error('Erro na requisição:', error);
-        alert('Ocorreu um erro ao processar a solicitação.');
-    });
-};
-
-window.abrirModalFechamentoComanda = function(agendamentoId, valorSugerido = '0,00', avaliacao = 5, observacao = '') {
-    const inputId = document.getElementById('modal-finalizar-agendamento-id');
-    const inputValor = document.getElementById('modal-finalizar-valor');
-    const elResumo = document.getElementById('modal-resumo-valor-previsto');
-    const inputAvaliacao = document.getElementById('modal-finalizar-avaliacao');
-    const inputObs = document.getElementById('modal-finalizar-observacao');
-
-    if (inputId) inputId.value = agendamentoId;
-    if (inputAvaliacao) inputAvaliacao.value = avaliacao;
-    if (inputObs && observacao && !inputObs.value) inputObs.value = observacao;
-
-    let valorNum = 0.0;
-
-    if (typeof valorSugerido === 'number') {
-        valorNum = valorSugerido;
-    } else if (valorSugerido) {
-        let strLimpa = String(valorSugerido).replace("R$", "").replace(/\s/g, "").trim();
-        if (strLimpa.includes(',')) {
-            strLimpa = strLimpa.replace(/\./g, "").replace(",", ".");
-        }
-        valorNum = parseFloat(strLimpa);
-    }
-
-    if (isNaN(valorNum)) valorNum = 0.0;
-
-    const valorFormatado = valorNum.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-
-    if (inputValor) inputValor.value = valorFormatado;
-    if (elResumo) elResumo.innerText = `R$ ${valorFormatado}`;
-
-    const modalCaixaEl = document.getElementById('modalFinalizarAtendimento');
-    if (modalCaixaEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalCaixaEl).show();
-    }
-};
-
-window.confirmarEGravarEncerramento = function() {
+window.confirmarEGravarEncerramento = async function() {
     const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
-    const valorInput = document.getElementById('modal-finalizar-valor')?.value || "0,00";
     const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value || 'PIX';
     const observacao = document.getElementById('modal-finalizar-observacao')?.value || '';
     const avaliacao = document.getElementById('modal-finalizar-avaliacao')?.value || 5;
+
+    // 1. Tenta pegar o valor final cobrado (do campo editável se existir, ou do total unificado)
+    const elValorCobrado = document.getElementById('modal-finalizar-valor');
+    const elTotalGeral = document.getElementById('lblValorTotalGeralComanda');
+
+    let valorTexto = '0,00';
+    if (elValorCobrado && elValorCobrado.value) {
+        valorTexto = elValorCobrado.value;
+    } else if (elTotalGeral && elTotalGeral.innerText) {
+        valorTexto = elTotalGeral.innerText;
+    }
 
     if (!agendamentoId) {
         alert("ID do agendamento não informado.");
         return;
     }
 
-    let valorTratado = valorInput.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+    // Tratamento e limpeza do valor monetário
+    let valorTratado = valorTexto.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
     let valorFinal = parseFloat(valorTratado);
     if (isNaN(valorFinal)) valorFinal = 0.0;
 
-    fetch('/agenda/api/agendamento/encerrar-clique', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRFToken': getCsrfToken()
-        },
-        body: JSON.stringify({
-            agendamento_id: parseInt(agendamentoId),
-            valor_final: valorFinal,
-            forma_pagamento: formaPagamento,
-            observacao: observacao,
-            avaliacao: parseInt(avaliacao)
-        })
-    })
-    .then(async (res) => {
-        const contentType = res.headers.get("content-type");
+    // Desativa o botão para evitar duplo envio no caixa
+    const btnLiquidar = document.querySelector('#modalFinalizarAtendimento .btn-success');
+    if (btnLiquidar) {
+        btnLiquidar.disabled = true;
+        btnLiquidar.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Processando Caixa...`;
+    }
+
+    try {
+        const response = await fetch('/agenda/api/agendamento/encerrar-clique', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                agendamento_id: parseInt(agendamentoId),
+                valor_final: valorFinal,
+                forma_pagamento: formaPagamento,
+                observacao: observacao,
+                avaliacao: parseInt(avaliacao)
+            })
+        });
+
+        const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
-            const textHTML = await res.text();
-            throw new Error(`Servidor respondeu com status ${res.status} (${res.statusText}).`);
+            throw new Error(`Servidor respondeu com status ${response.status}.`);
         }
-        return res.json();
-    })
-    .then(data => {
+
+        const data = await response.json();
+
         if (data.sucesso || data.success || data.status === 'success') {
+            // Fecha o modal
+            const modalEl = document.getElementById('modalFinalizarAtendimento');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const instance = bootstrap.Modal.getInstance(modalEl);
+                if (instance) instance.hide();
+            }
+
+            // Exibe notificação de sucesso e recarrega a grade
+            alert("Comanda liquidada com sucesso! O consumo foi encerrado e a baixa de estoque processada.");
             window.location.reload();
         } else {
             alert(data.mensagem || "Erro ao encerrar comanda.");
+            if (btnLiquidar) {
+                btnLiquidar.disabled = false;
+                btnLiquidar.innerHTML = `<i class="bi bi-wallet2 me-1"></i> Liquidar Comanda`;
+            }
         }
-    })
-    .catch(err => {
+
+    } catch (err) {
         console.error("Erro no encerramento:", err);
         alert(err.message || "Falha na comunicação com o servidor.");
-    });
-};
-
-window.reabrirItemServico = function(agendamentoId, itemId) {
-    if (!confirm("Deseja reabrir este serviço para alteração?")) return;
-
-    const empresaId = obterEmpresaIdContexto();
-
-    fetch(`/agenda/empresa/${empresaId}/agendamentos/${agendamentoId}/itens/${itemId}/reabrir`, {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCsrfToken()
+        if (btnLiquidar) {
+            btnLiquidar.disabled = false;
+            btnLiquidar.innerHTML = `<i class="bi bi-wallet2 me-1"></i> Liquidar Comanda`;
         }
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso || data.success) location.reload();
-        else alert(data.mensagem || 'Erro ao reabrir item.');
-    })
-    .catch(err => console.error('Erro na reabertura do item:', err));
+    }
 };
 
-window.gerenciarAcoesSlot = function(elemento) {
-    document.querySelectorAll('.painel-acoes-slot').forEach(p => p.classList.add('d-none'));
-    const painelAtual = elemento.querySelector('.painel-acoes-slot');
-    if (painelAtual) {
-        painelAtual.classList.toggle('d-none');
+// Adicione esta linha logo após a declaração da função async confirmarEGravarEncerramento
+window.confirmarEGravarEncerramentoComandaUnificada = window.confirmarEGravarEncerramento;
+
+function registrarFimRealEEncerrar(agendId, valorTotalFmt) {
+    if (typeof abrirModalEncerramentoComanda === 'function') {
+        abrirModalEncerramentoComanda(agendId, valorTotalFmt);
+    }
+}
+window.registrarFimRealEEncerrar = registrarFimRealEEncerrar;
+
+// =========================================================================
+// 3. NAVEGAÇÃO E FILTRAGEM DE GRADE (SISTEMA DE FILTROS UNIFICADO)
+// =========================================================================
+
+/**
+ * Alterna o filtro visual para exibir apenas agendamentos.
+ * Pode ser invocada via onclick="toggleFiltroApenasAgendados(this)" ou sem parâmetros.
+ */
+window.toggleFiltroApenasAgendados = function(elemento) {
+    // 1. Obtém o elemento do botão (via parâmetro ou ID de fallback)
+    const btn = elemento || document.getElementById('btnFiltrarAgendados');
+    if (!btn) {
+        console.warn('Botão de filtro de agendados não encontrado no DOM.');
+        return;
+    }
+
+    // 2. Alterna o estado do atributo data-filtrado
+    const estaFiltrado = btn.getAttribute('data-filtrado') === 'true';
+    const novoEstado = !estaFiltrado;
+
+    btn.setAttribute('data-filtrado', novoEstado ? 'true' : 'false');
+
+    // 3. Atualiza as classes visuais do Bootstrap
+    if (novoEstado) {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-secondary');
+    } else {
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-outline-secondary');
+    }
+
+    // 4. Dispara a aplicação global dos filtros na tela
+    if (typeof window.aplicarFiltrosGlobais === 'function') {
+        window.aplicarFiltrosGlobais();
+    } else if (typeof aplicarFiltrosGlobais === 'function') {
+        aplicarFiltrosGlobais();
     }
 };
 
@@ -1566,48 +2064,69 @@ window.alternarData = function(element) {
 
 window.alternarProfissionalOuData = function() {
     const dataSelecionada = document.getElementById('filtro-data')?.value;
-    const profId = document.getElementById('filtro-profissional')?.value;
+    const selectProf = document.getElementById('filtro-profissional');
+    const profId = selectProf ? selectProf.value : '';
 
     const urlParams = new URLSearchParams(window.location.search);
 
     if (dataSelecionada) urlParams.set('data', dataSelecionada);
-    if (profId) urlParams.set('profissional_id', profId);
-    else urlParams.delete('profissional_id');
+
+    if (profId && profId !== '' && profId !== 'todos') {
+        urlParams.set('profissional_id', profId);
+    } else {
+        urlParams.delete('profissional_id');
+    }
 
     window.location.search = urlParams.toString();
 };
 
 window.aplicarFiltrosGlobais = function() {
     const selectProf = document.getElementById('filtro-profissional');
-    const chkGradeAberta = document.getElementById('chkExibirGradeAberta');
+    const urlParams = new URLSearchParams(window.location.search);
 
-    const profIdSelecionado = selectProf ? selectProf.value.toString().toLowerCase().trim() : '';
-    const exibirGradeAberta = chkGradeAberta ? chkGradeAberta.checked : true;
+    const profIdParam = urlParams.get('profissional_id');
+    const profIdSelect = selectProf ? selectProf.value : '';
+    const profIdFiltrar = (profIdParam !== null ? profIdParam : profIdSelect).toString().trim().toLowerCase();
+
+    const btnFiltrarAgendados = document.getElementById('btnFiltrarAgendados');
+    const apenasAgendados = btnFiltrarAgendados ? (btnFiltrarAgendados.getAttribute('data-filtrado') === 'true') : false;
 
     const todosItens = document.querySelectorAll('.item-agendamento');
     let itensVisiveisCount = 0;
 
     todosItens.forEach(item => {
         const tipoSlot = item.getAttribute('data-tipo');
-        const profIdItem = (item.getAttribute('data-profissional-id') || '').toString().toLowerCase().trim();
-        const statusItem = (item.getAttribute('data-status') || '').toLowerCase().trim();
+        const profIdItem = (item.getAttribute('data-profissional-id') || item.getAttribute('data-colaborador-id') || '').toString().trim().toLowerCase();
+        const statusItem = (item.getAttribute('data-status') || '').toString().trim().toLowerCase();
 
         let visivel = true;
 
-        if (profIdSelecionado !== '' && profIdItem !== profIdSelecionado) {
+        // 1. FILTRO POR PROFISSIONAL
+        if (profIdFiltrar !== '' && profIdFiltrar !== 'todos' && profIdFiltrar !== 'null') {
+            if (profIdItem !== profIdFiltrar) {
+                visivel = false;
+            }
+        }
+
+        // 2. FILTRO POR SLOTS LIVRES (APENAS AGENDADOS)
+        if (tipoSlot === 'livre' && apenasAgendados) {
             visivel = false;
         }
 
-        if (tipoSlot === 'livre' && !exibirGradeAberta) {
-            visivel = false;
-        }
-
+        // 3. FILTRO POR CARDS DE MÉTRICAS (MANDATÓRIO)
         if (typeof filtroStatusAtual !== 'undefined' && filtroStatusAtual !== 'todos') {
-            if (filtroStatusAtual === 'atrasos' && statusItem !== 'atrasado') visivel = false;
-            if (filtroStatusAtual === 'concluidos' && !['concluido', 'finalizado'].includes(statusItem)) visivel = false;
-            if (filtroStatusAtual === 'cancelados' && !['cancelado', 'falta', 'ausente_pendente'].includes(statusItem)) visivel = false;
+            if (filtroStatusAtual === 'atrasos' && statusItem !== 'atrasado') {
+                visivel = false;
+            }
+            if (filtroStatusAtual === 'concluidos' && !['concluido', 'finalizado'].includes(statusItem)) {
+                visivel = false;
+            }
+            if (filtroStatusAtual === 'cancelados' && !['cancelado', 'falta', 'ausente_pendente'].includes(statusItem)) {
+                visivel = false;
+            }
         }
 
+        // APLICAÇÃO DA VISIBILIDADE NO DOM
         if (visivel) {
             item.classList.remove('d-none');
             itensVisiveisCount++;
@@ -1616,18 +2135,16 @@ window.aplicarFiltrosGlobais = function() {
         }
     });
 
+    // REAVALIAÇÃO DE MENSAGENS DE FEEDBACK VISUAL
     const msgSemAgendamentos = document.getElementById('msg-sem-agendamentos');
-    if (msgSemAgendamentos && itensVisiveisCount > 0) {
-        msgSemAgendamentos.classList.add('d-none');
+    const msgFiltroVazio = document.getElementById('msg-filtro-vazio');
+
+    if (msgSemAgendamentos) {
+        msgSemAgendamentos.classList.toggle('d-none', todosItens.length > 0);
     }
 
-    const msgFiltroVazio = document.getElementById('msg-filtro-vazio');
     if (msgFiltroVazio) {
-        if (itensVisiveisCount === 0 && todosItens.length > 0) {
-            msgFiltroVazio.classList.remove('d-none');
-        } else {
-            msgFiltroVazio.classList.add('d-none');
-        }
+        msgFiltroVazio.classList.toggle('d-none', !(itensVisiveisCount === 0 && todosItens.length > 0));
     }
 };
 
@@ -1645,35 +2162,356 @@ window.filtrarGrade = function(status) {
     window.aplicarFiltrosGlobais();
 };
 
-window.abrirModalReorganizarComanda = function(agendamentoId) {
-    const modalEl = document.getElementById('modalReorganizarComanda');
+// =========================================================================
+// 4. LANÇAMENTO DE ITENS E PRODUTOS DO COLABORADOR
+// =========================================================================
+
+window.prepararModalAdicionarItemColaborador = function(agendamentoId, clienteNome) {
+    document.getElementById('modal_add_item_agendamento_id').value = agendamentoId || '';
+
+    const elCliente = document.getElementById('modal_add_item_cliente_nome');
+    if (elCliente) {
+        elCliente.textContent = clienteNome || 'Cliente Não Identificado';
+    }
+
+    // Limpa os campos para o novo uso
+    const inputBarras = document.getElementById('inputBarrasEstoque');
+    if (inputBarras) inputBarras.value = '';
+
+    document.getElementById('inputAvulsoDescricao').value = '';
+    document.getElementById('inputAvulsoValor').value = '';
+    document.getElementById('boxResultadoEstoque').classList.add('d-none');
+    document.getElementById('hdnEstoqueProdutoId').value = '';
+
+    const modalEl = document.getElementById('modalAdicionarItemColaborador');
     if (modalEl) {
-        if (agendamentoId) {
-            const inputId = document.getElementById('reord-agendamento-id');
-            if (inputId) inputId.value = agendamentoId;
-        }
-        if (typeof bootstrap !== 'undefined') {
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
-        }
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
     }
 };
 
-window.abrirModalAtrasoPresenca = function(agendamentoId, nomeCliente) {
-    const inputId = document.getElementById('modal-atraso-agendamento-id');
-    const elNome = document.getElementById('nome-cliente-atraso');
-    if (inputId) inputId.value = agendamentoId;
-    if (elNome) elNome.textContent = nomeCliente || 'Cliente';
+// Delegador de evento ajustado para capturar o NOME do cliente (e ignorar o horário)
+document.body.addEventListener('click', function(e) {
+    const btnAddItem = e.target.closest('.btn-add-item-colaborador');
+    if (!btnAddItem) return;
 
-    const modalEl = document.getElementById('modalConfirmarPresenca');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    e.preventDefault();
+    e.stopPropagation();
+
+    const card = btnAddItem.closest('.item-agendamento');
+    if (card) {
+        const agendamentoId = card.dataset.id || card.dataset.agendamentoId;
+
+        // 1. Busca primeiro no data-attribute do card
+        let clienteNome = card.dataset.clienteNome;
+
+        // 2. Procura pela classe específica do nome do cliente
+        if (!clienteNome) {
+            const elNome = card.querySelector('.nome-cliente') || card.querySelector('.cliente-nome');
+            if (elNome) clienteNome = elNome.textContent.trim();
+        }
+
+        // 3. Fallback: Procura elementos com texto descartando formato de hora "00:00"
+        if (!clienteNome || /^\d{1,2}:\d{2}/.test(clienteNome)) {
+            const elCandidatos = card.querySelectorAll('.fw-bold, strong, h5, h6, span');
+            for (let el of elCandidatos) {
+                const txt = el.textContent.trim();
+                if (txt && !/^\d{1,2}:\d{2}/.test(txt) && !txt.includes('R$')) {
+                    clienteNome = txt;
+                    break;
+                }
+            }
+        }
+
+        window.prepararModalAdicionarItemColaborador(agendamentoId, clienteNome || 'Cliente');
     }
+});
+
+// Função para esconder/limpar a lista de autocomplete
+function fecharAutocompleteProdutos() {
+    const container = document.getElementById('resultado_busca_produtos') || document.querySelector('.dropdown-resultado-produtos');
+    if (container) {
+        container.innerHTML = '';
+        container.classList.add('d-none');
+    }
+}
+
+// Função para exibir aviso de "nenhum produto encontrado"
+function renderizarSemResultados() {
+    const container = document.getElementById('resultado_busca_produtos') || document.querySelector('.dropdown-resultado-produtos');
+    if (container) {
+        container.innerHTML = '<div class="p-2 text-muted small">Nenhum produto encontrado</div>';
+        container.classList.remove('d-none');
+    }
+}
+
+// Função para renderizar os produtos encontrados na lista
+function renderizarAutocompleteProdutos(produtos) {
+    const container = document.getElementById('resultado_busca_produtos') || document.querySelector('.dropdown-resultado-produtos');
+    const inputBusca = document.getElementById('busca_produto_input') || document.querySelector('.input-busca-produto');
+
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    produtos.forEach(prod => {
+        const itemDiv = document.createElement('a');
+        itemDiv.href = '#';
+        itemDiv.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2';
+        itemDiv.innerHTML = `
+            <div>
+                <strong class="d-block text-dark small">${prod.nome || prod.descricao}</strong>
+                <small class="text-muted">${prod.codigo || 'Sem código'}</small>
+            </div>
+            <span class="badge bg-primary rounded-pill">R$ ${parseFloat(prod.preco || prod.valor || 0).toFixed(2)}</span>
+        `;
+
+        itemDiv.addEventListener('click', function(evt) {
+            evt.preventDefault();
+            if (typeof window.selecionarProdutoAutocomplete === 'function') {
+                window.selecionarProdutoAutocomplete(prod);
+            }
+            if (inputBusca) inputBusca.value = prod.nome || prod.descricao;
+            fecharAutocompleteProdutos();
+        });
+
+        container.appendChild(itemDiv);
+    });
+
+    container.classList.remove('d-none');
+}
+
+// Função principal de busca ajustada
+window.consultarProdutoEstoque = function(termo) {
+    termo = termo ? termo.trim() : '';
+
+    const inputBusca = document.getElementById('inputBarrasEstoque');
+    const containerResultados = document.getElementById('resultado_busca_produtos');
+
+    if (!containerResultados) return;
+
+    if (termo.length < 2) {
+        containerResultados.innerHTML = '';
+        containerResultados.classList.add('d-none');
+        return;
+    }
+
+    fetch(`/agenda/estoque/api/produto/buscar-barras/${encodeURIComponent(termo)}`)
+        .then(response => {
+            if (!response.ok) throw new Error('Erro na requisição');
+            return response.json();
+        })
+        .then(produtos => {
+            containerResultados.innerHTML = '';
+
+            if (!Array.isArray(produtos) || produtos.length === 0) {
+                containerResultados.innerHTML = '<div class="p-2 text-muted small bg-white border rounded shadow-sm">Nenhum produto encontrado</div>';
+                containerResultados.classList.remove('d-none');
+                return;
+            }
+
+            const listGroup = document.createElement('div');
+            listGroup.className = 'list-group shadow-sm border rounded bg-white';
+
+            produtos.forEach(prod => {
+                const item = document.createElement('a');
+                item.href = '#';
+                item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2';
+
+                const precoFmt = parseFloat(prod.preco || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                item.innerHTML = `
+                    <div>
+                        <strong class="d-block text-dark small">${prod.nome}</strong>
+                        <small class="text-muted" style="font-size: 0.75rem;">Cód: ${prod.codigo || 'N/A'}</small>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">${precoFmt}</span>
+                `;
+
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+
+                    // 1. Preenche o input visual de busca com o nome do produto
+                    if (inputBusca) {
+                        inputBusca.value = prod.nome; // ou prod.descricao / prod.codigo_barras
+                    }
+
+                    // 2. PREENCHE O CAMPO OCULTO EXIGIDO PELO SEU SISTEMA:
+                    const hdnEstoque = document.getElementById('hdnEstoqueProdutoId');
+                    if (hdnEstoque) {
+                        hdnEstoque.value = prod.id; // Ou a chave ID que o objeto prod carrega do seu backend
+                    }
+
+                    // 3. Se houver um input de preço, quantidade ou código de barras, atualize também se necessário
+                    const inputCodigo = document.getElementById('inputBarrasEstoque');
+                    if (inputCodigo && prod.codigo_barras) {
+                        inputCodigo.value = prod.codigo_barras;
+                    }
+
+                    // 4. Se o seu sistema tiver um evento 'change' ou 'blur' para disparar a validação, dispara aqui:
+                    if (hdnEstoque) {
+                        hdnEstoque.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+
+                    // 5. Esconde o dropdown
+                    containerResultados.innerHTML = '';
+                    containerResultados.classList.add('d-none');
+                });
+
+                listGroup.appendChild(item);
+            });
+
+            containerResultados.appendChild(listGroup);
+            containerResultados.classList.remove('d-none');
+        })
+        .catch(err => {
+            console.error('Erro ao processar autocomplete:', err);
+            containerResultados.classList.add('d-none');
+        });
 };
 
+// Esconde a lista ao clicar fora
+document.addEventListener('click', function(e) {
+    const inputBusca = document.getElementById('inputBarrasEstoque');
+    const containerResultados = document.getElementById('resultado_busca_produtos');
+
+    if (containerResultados && inputBusca && !inputBusca.contains(e.target) && !containerResultados.contains(e.target)) {
+        containerResultados.classList.add('d-none');
+    }
+});
+
+async function executarLancamentoItemColaborador() {
+    const agendamentoId = document.getElementById('modal_add_item_agendamento_id')?.value;
+
+    // Identificação flexível da aba ativa (verifica ID, href e target do tab Bootstrap)
+    const abaElemento = document.querySelector('#pills-tab-add-item .nav-link.active') || document.querySelector('#pills-tab-add-item .active');
+    const abaId = abaElemento?.id || '';
+    const abaTarget = abaElemento?.getAttribute('data-bs-target') || abaElemento?.getAttribute('href') || '';
+
+    // Verifica se a aba ativa é a de Produto (aceitando diferentes convenções de nomenclatura)
+    const isAbaProduto = abaId.includes('produto') || abaTarget.includes('produto') || abaId === 'tab-add-produto';
+
+    // Resolução do colaborador_id
+    const colaboradorIdEl = document.getElementById('select_colaborador_id') || document.getElementById('modal_colaborador_id');
+    const rawColaboradorId = colaboradorIdEl?.value
+        || window.usuarioLogadoId
+        || document.querySelector('meta[name="user-id"]')?.content
+        || null;
+
+    let payload = {
+        agendamento_id: agendamentoId ? parseInt(agendamentoId, 10) : null,
+        colaborador_id: rawColaboradorId ? parseInt(rawColaboradorId, 10) : null,
+        cpf_hash: document.getElementById('modal-finalizar-cpfhash')?.value || null,
+        origem_lancamento: 'COLABORADOR'
+    };
+
+    if (isAbaProduto) {
+        // Lógica de Produto
+        const produtoId = document.getElementById('hdnEstoqueProdutoId')?.value;
+        const qtd = parseInt(document.getElementById('inputEstoqueQtd')?.value, 10) || 1;
+
+        if (!produtoId || produtoId === '0' || produtoId === '') {
+            alert('Por favor, faça a leitura ou busca de um produto válido no estoque.');
+            return;
+        }
+
+        payload.hdnEstoqueProdutoId = parseInt(produtoId, 10);
+        payload.quantidade = qtd;
+    } else {
+        // Lógica de Serviço / Item Avulso
+        const descricao = document.getElementById('inputAvulsoDescricao')?.value?.trim();
+        const valorInput = document.getElementById('inputAvulsoValor')?.value;
+        const valor = parseFloat(String(valorInput).replace(',', '.'));
+
+        if (!descricao || isNaN(valor) || valor <= 0) {
+            alert('Informe a descrição e um valor válido para o item avulso.');
+            return;
+        }
+
+        payload.tipo_item = 'SERVICO';
+        payload.descricao = descricao;
+        payload.valor_unitario = valor;
+        payload.quantidade = 1;
+    }
+
+    try {
+        const response = await fetch('/pdv/api/item/adicionar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && (data.sucesso || data.status === 'sucesso' || data.success)) {
+            // Limpa campos após sucesso
+            const inputProduto = document.getElementById('hdnEstoqueProdutoId');
+            if (inputProduto) inputProduto.value = '';
+
+            const inputBusca = document.getElementById('inputEstoqueBusca') || document.getElementById('inputBarrasEstoque');
+            if (inputBusca) inputBusca.value = '';
+
+            const inputDesc = document.getElementById('inputAvulsoDescricao');
+            if (inputDesc) inputDesc.value = '';
+
+            const inputValor = document.getElementById('inputAvulsoValor');
+            if (inputValor) inputValor.value = '';
+
+            // Oculta o modal
+            const modalEl = document.getElementById('modalAdicionarItemColaborador');
+            if (modalEl && typeof bootstrap !== 'undefined') {
+                const instance = bootstrap.Modal.getInstance(modalEl);
+                if (instance) instance.hide();
+            }
+
+            // Atualiza tabela ou recarrega a página
+            if (typeof atualizarTabelaItensComanda === 'function') {
+                atualizarTabelaItensComanda(data.comanda || data);
+            } else {
+                window.location.reload();
+            }
+        } else {
+            alert(data.error || data.mensagem || 'Erro ao lançar item na comanda.');
+        }
+    } catch (err) {
+        console.error('Erro ao enviar lançamento:', err);
+        alert('Erro ao processar requisição no servidor.');
+    }
+}
+
+window.executarLancamentoItemColaborador = executarLancamentoItemColaborador;
+
 // =========================================================================
-// 3. REGISTRO DE EVENTOS DOM (CLIQUE SIMPLES, DUPLO CLIQUE E CLIQUE LONGO)
+// 5. EVENTO DE CARREGAMENTO INICIAL UNIFICADO (DOM READY)
 // =========================================================================
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Sincroniza a seleção do dropdown do profissional via URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const profParam = urlParams.get('profissional_id');
+    const selectProf = document.getElementById('filtro-profissional');
+// Recálculo dinâmico e troco do Modal de Fechamento Unificado
+    const inputDesc = document.getElementById('modal-finalizar-desconto');
+    const inputAcres = document.getElementById('modal-finalizar-acrescimo');
+    const inputPago = document.getElementById('modal-finalizar-valor-pago');
+
+    if (inputDesc) inputDesc.addEventListener('input', () => window.ComandaController && window.ComandaController.recalcularTotais());
+    if (inputAcres) inputAcres.addEventListener('input', () => window.ComandaController && window.ComandaController.recalcularTotais());
+    if (inputPago) {
+        inputPago.addEventListener('input', () => {
+            inputPago.dataset.editado = 'true';
+            if (window.ComandaController) window.ComandaController.atualizarTroco();
+        });
+    }
+
+    if (selectProf && profParam !== null) {
+        selectProf.value = profParam;
+    }
+
+    // Aplica os filtros na renderização inicial
     if (typeof window.aplicarFiltrosGlobais === 'function') {
         window.aplicarFiltrosGlobais();
     }
@@ -1682,7 +2520,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let longPressTimer = null;
     let isLongPress = false;
 
-    // A. DELEGAÇÃO PARA BOTÃO EXPLÍCITO DE INICIAR ATENDIMENTO
+    // A. Delegação para botão de abrir modal "+ Item / Produto" (Colaborador)
+    document.body.addEventListener('click', function(e) {
+        const btnAddItem = e.target.closest('.btn-add-item-colaborador');
+        if (!btnAddItem) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Extrai as informações direto dos atributos data-* do card pai
+        const card = btnAddItem.closest('.item-agendamento');
+        if (card) {
+            const agendamentoId = card.dataset.id;
+            const clienteNome = card.dataset.clienteNome || card.dataset.cliente || 'Cliente';
+
+            if (typeof window.prepararModalAdicionarItemColaborador === 'function') {
+                window.prepararModalAdicionarItemColaborador(agendamentoId, clienteNome);
+            }
+        }
+    });
+
+    // B. Delegação para botão de iniciar atendimento
     document.body.addEventListener('click', function(e) {
         const btnIniciar = e.target.closest('.btn-iniciar-atendimento');
         if (!btnIniciar) return;
@@ -1692,21 +2550,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const card = btnIniciar.closest('.item-agendamento');
         const agendamentoId = btnIniciar.dataset.agendamentoId || (card ? card.dataset.id : null);
-        const empresaId = btnIniciar.dataset.empresaId || obterEmpresaIdContexto();
+        const empresaId = btnIniciar.dataset.empresaId || (typeof obterEmpresaIdContexto === 'function' ? obterEmpresaIdContexto() : null);
         const itemId = btnIniciar.dataset.itemId || (card ? card.dataset.itemId : null);
         const colaboradorId = btnIniciar.dataset.colaboradorId || (card ? card.dataset.colaboradorId : null);
 
-        if (agendamentoId) {
+        if (agendamentoId && typeof window.acaoIniciarAtendimento === 'function') {
             window.acaoIniciarAtendimento(agendamentoId, empresaId, itemId, colaboradorId);
         }
     });
 
-    // B. DELEGAÇÃO PARA DUPLO CLIQUE (Abre ficha do cliente / Detalhes)
+    // C. Delegação para duplo clique (Detalhes do cliente)
     document.body.addEventListener('dblclick', function(e) {
         const card = e.target.closest('.item-agendamento');
         if (!card) return;
 
-        // Cancela o clique simples pendente
         if (clickTimer) {
             clearTimeout(clickTimer);
             clickTimer = null;
@@ -1716,40 +2573,42 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
 
         const areaCliente = e.target.closest('.area-cliente-detalhes') || card;
-        if (window.abrirModalDetalhesCliente) {
+        if (typeof window.abrirModalDetalhesCliente === 'function') {
             window.abrirModalDetalhesCliente(areaCliente);
         }
     });
 
-    // C. DELEGAÇÃO PARA CLIQUE SIMPLES NO CARD (Abre painel/modal de ações)
+    // D. Delegação para clique simples no card (Abre Modal do Atendimento)
     document.body.addEventListener('click', function(e) {
         if (isLongPress) {
             isLongPress = false;
             return;
         }
 
-        const card = e.target.closest('.item-agendamento');
-        if (!card) return;
-
-        // Ignora botões, inputs e links internos
-        if (e.target.closest('button, a, input, select, .btn')) {
+        // Ignora elementos clicáveis internos para não disparar a abertura do card
+        if (e.target.closest('button, a, input, select, .btn, .stop-propagation')) {
             return;
         }
+
+        const card = e.target.closest('.item-agendamento');
+        if (!card) return;
 
         e.preventDefault();
 
         if (clickTimer) clearTimeout(clickTimer);
 
         clickTimer = setTimeout(() => {
-            window.abrirModalAtendimento(card);
+            if (typeof window.abrirModalAtendimento === 'function') {
+                window.abrirModalAtendimento(card);
+            }
             clickTimer = null;
         }, 250);
     });
 
-    // D. SUPORTE A CLIQUE LONGO / TOUCH-PRESS
+    // E. Suporte a clique longo / touch
     document.body.addEventListener('touchstart', function(e) {
         const card = e.target.closest('.item-agendamento');
-        if (!card || e.target.closest('button, a, input, select, .btn')) return;
+        if (!card || e.target.closest('button, a, input, select, .btn, .stop-propagation')) return;
 
         isLongPress = false;
         longPressTimer = setTimeout(() => {
@@ -1759,7 +2618,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 navigator.vibrate(50);
             }
 
-            window.gerenciarAcoesSlot(card);
+            if (typeof window.gerenciarAcoesSlot === 'function') {
+                window.gerenciarAcoesSlot(card);
+            }
         }, 600);
     }, { passive: true });
 
@@ -1778,169 +2639,574 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-/**
- * Exemplo de handler após a conclusão de um item/serviço no modal.
- */
-function callbackPosConclusaoItem(respostaServidor) {
-    // Se a resposta indicar sucesso e informar que a comanda está pronta para liquidação
-    if (respostaServidor.sucesso) {
-        if (respostaServidor.comanda_pronta || respostaServidor.itens_pendentes_qtd === 0) {
-            // Fecha a modal atual de conclusão do item (se estiver aberta)
-            if (typeof fecharModalConclusaoItem === 'function') {
-                fecharModalConclusaoItem();
-            }
+/* -------------------------------------------------------------------------- */
+/* LÓGICA DO LEITOR DE CÂMERA INLINE (NO CONTAINER DA TELA)                   */
+/* -------------------------------------------------------------------------- */
+let html5QrCodeEstoque = null;
 
-            // Abre automaticamente a modal de encerramento da comanda
-            abrirModalEncerramentoComanda(
-                respostaServidor.agendamento_id,
-                respostaServidor.valor_total_fmt
-            );
-        } else {
-            // Caso ainda existam outros itens pendentes no agendamento, apenas recarrega/atualiza
-            window.location.reload();
-        }
-    } else {
-        alert(respostaServidor.mensagem || "Erro ao concluir o item.");
-    }
-}
+window.alternarLeitorCamera = function() {
+    const container = document.getElementById('container-scanner-camera');
+    if (!container) return;
 
-/**
- * Alterna a visibilidade dos slots sem agendamento na grade
- */
-function toggleFiltroApenasAgendados() {
-    const btn = document.getElementById('btnFiltrarAgendados');
-    if (!btn) return;
-
-    const estaFiltrado = btn.getAttribute('data-filtrado') === 'true';
-    const novoEstado = !estaFiltrado;
-
-    // Atualiza o atributo e o estilo visual do botão
-    btn.setAttribute('data-filtrado', novoEstado);
-    if (novoEstado) {
-        btn.classList.remove('btn-outline-secondary');
-        btn.classList.add('btn-secondary');
-    } else {
-        btn.classList.remove('btn-secondary');
-        btn.classList.add('btn-outline-secondary');
-    }
-
-    // Seleciona os slots livres cobrindo classes e o atributo data-tipo="livre" do seu HTML
-    const slotsVagos = document.querySelectorAll('.slot-vago, .slot-livre, [data-tipo="livre"], [data-agendado="false"]');
-
-    slotsVagos.forEach(el => {
-        if (novoEstado) {
-            el.classList.add('d-none');
-        } else {
-            el.classList.remove('d-none');
-        }
-    });
-
-    // ATENÇÃO: Se a função abaixo recalcular os filtros globais baseada em inputs/pesquisa,
-    // ela pode estar desfazendo o 'd-none'. Comente-a temporariamente se persistir o erro.
-    if (typeof window.aplicarFiltrosGlobais === 'function') {
-        // window.aplicarFiltrosGlobais();
-    }
-}
-
-function registrarFimRealItemEAbrirModal(agendId, itemId, servicoNome, clienteNome, inicioItem) {
-        const fimRealTimestamp = new Date().toISOString();
-        console.log("Fim real do item gravado na AghAgendamentoItem:", fimRealTimestamp);
-
-        // Exemplo: se houver uma função JS que abre o modal injetando os dados da AghAgendamentoItem:
-        if (typeof prepararModalFinalizarItem === 'function') {
-            prepararModalFinalizarItem(agendId, itemId, servicoNome, clienteNome, inicioItem, fimRealTimestamp);
-        } else {
-            console.error("Função prepararModalFinalizarItem não encontrada.");
-        }
-    }
-
-function registrarFimRealEEncerrar(agendId, valorTotalFmt) {
-        // Gera o timestamp atual do cliente (ou envia o gatilho automático)
-        const fimRealTimestamp = new Date().toISOString();
-
-        // Se houver uma função global que salva o fim real via API antes de abrir o modal, chame-a aqui.
-        // Exemplo: fetch('/api/agendamentos/' + agendId + '/registrar-fim', { method: 'POST', ... })
-
-        console.log("Fim real registrado automaticamente no clique:", fimRealTimestamp);
-
-        // Chama a função original de abertura do modal de encerramento
-        if (typeof abrirModalEncerramentoComanda === 'function') {
-            abrirModalEncerramentoComanda(agendId, valorTotalFmt);
-        } else {
-            console.error("Função abrirModalEncerramentoComanda não encontrada.");
-        }
-    }
-
-/**
- * Conclui um item/serviço individual do agendamento.
- *
- * @param {number|string} agendamentoId - ID do agendamento pai.
- * @param {number|string} itemId - ID do item/serviço a ser concluído.
- * @param {Object} [opcoes={}] - Dados adicionais como observacoes, nota, comentario e fimReal.
- */
-window.concluirItemAgendamento = function(agendamentoId, itemId, opcoes = {}) {
-    if (!agendamentoId || !itemId || itemId === 'None' || itemId === '') {
-        alert("Erro de parâmetros: ID do agendamento ou do item ausentes.");
+    if (!container.classList.contains('d-none')) {
+        window.pararLeitorCamera();
         return;
     }
 
-    const idAgendamentoLimpo = parseInt(String(agendamentoId).split('_')[0], 10);
-    const idItemLimpo = parseInt(String(itemId), 10);
+    if (typeof Html5Qrcode === 'undefined') {
+        alert("A biblioteca leitora de código de barras não está carregada.");
+        return;
+    }
+
+    container.classList.remove('d-none');
+
+    try {
+        html5QrCodeEstoque = new Html5Qrcode("reader-camera-estoque");
+
+        // Configuração ajustada para melhor foco de código de barras retangulares
+        const config = {
+            fps: 15,
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                // Área de leitura retangular perfeita para código de barras EAN-13
+                const minEdgePercentage = 0.75;
+                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
+                const qrboxSize = Math.floor(minDimension * minEdgePercentage);
+                return {
+                    width: Math.max(qrboxSize, 220),
+                    height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
+                };
+            },
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
+        };
+
+        html5QrCodeEstoque.start(
+            { facingMode: "environment" },
+            config,
+            onScanSuccessEstoque
+        ).catch(err => {
+            console.error("Erro ao iniciar câmera:", err);
+            window.pararLeitorCamera();
+        });
+
+    } catch (e) {
+        console.error("Exceção na inicialização da câmera:", e);
+        window.pararLeitorCamera();
+    }
+};
+
+function onScanSuccessEstoque(decodedText) {
+    tocarBip();
+
+    const inputBarras = document.getElementById('inputBarrasEstoque');
+    if (inputBarras) {
+        inputBarras.value = decodedText;
+        window.consultarProdutoEstoque(decodedText);
+    }
+
+    window.pararLeitorCamera();
+}
+
+window.pararLeitorCamera = function() {
+    const container = document.getElementById('container-scanner-camera');
+
+    if (html5QrCodeEstoque) {
+        html5QrCodeEstoque.stop().then(() => {
+            html5QrCodeEstoque.clear();
+            html5QrCodeEstoque = null;
+            if (container) container.classList.add('d-none');
+        }).catch(() => {
+            html5QrCodeEstoque = null;
+            if (container) container.classList.add('d-none');
+        });
+    } else {
+        if (container) container.classList.add('d-none');
+    }
+};
+
+function tocarBip() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 1200;
+        gain.gain.value = 0.1;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.12);
+    } catch (e) {
+        // Áudio opcional
+    }
+}
+
+// Ajuste Pontual: Autocomplete e Busca de Produtos Integrada
+function inicializarBuscaProdutos() {
+    const inputBusca = document.getElementById('busca_produto_input') || document.querySelector('.input-busca-produto');
+    const containerResultados = document.getElementById('resultado_busca_produtos') || document.querySelector('.dropdown-resultado-produtos');
+
+    if (!inputBusca || !containerResultados) return;
+
+    let timeoutDebounce = null;
+
+    inputBusca.addEventListener('input', function(e) {
+        const termo = e.target.value.trim();
+
+        clearTimeout(timeoutDebounce);
+
+        if (termo.length < 2) {
+            containerResultados.innerHTML = '';
+            containerResultados.classList.add('d-none');
+            return;
+        }
+
+        // Aguarda 300ms após a digitação para não sobrecarregar o servidor
+        timeoutDebounce = setTimeout(() => {
+            const empresaId = document.getElementById('empresa_id_hidden')?.value || obterEmpresaIdContexto();
+
+            fetch(`/api/produtos/buscar?q=${encodeURIComponent(termo)}&empresa_id=${empresaId}`)
+                .then(res => res.json())
+                .then(data => {
+                    const produtos = data.produtos || data.itens || data;
+                    containerResultados.innerHTML = '';
+
+                    if (!Array.isArray(produtos) || produtos.length === 0) {
+                        containerResultados.innerHTML = '<div class="p-2 text-muted small">Nenhum produto encontrado</div>';
+                        containerResultados.classList.remove('d-none');
+                        return;
+                    }
+
+                    produtos.forEach(prod => {
+                        const itemDiv = document.createElement('a');
+                        itemDiv.href = '#';
+                        itemDiv.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2';
+                        itemDiv.innerHTML = `
+                            <div>
+                                <strong class="d-block text-dark small">${prod.nome || prod.descricao}</strong>
+                                <small class="text-muted">${prod.codigo || 'Sem código'}</small>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">R$ ${parseFloat(prod.preco || prod.valor || 0).toFixed(2)}</span>
+                        `;
+
+                        itemDiv.addEventListener('click', function(evt) {
+                            evt.preventDefault();
+                            if (typeof window.selecionarProdutoAutocomplete === 'function') {
+                                window.selecionarProdutoAutocomplete(prod);
+                            }
+                            containerResultados.classList.add('d-none');
+                            inputBusca.value = prod.nome || prod.descricao;
+                        });
+
+                        containerResultados.appendChild(itemDiv);
+                    });
+
+                    containerResultados.classList.remove('d-none');
+                })
+                .catch(err => {
+                    console.error('Erro na busca de produtos:', err);
+                });
+        }, 300);
+    });
+
+    // Esconde a lista de resultados ao clicar fora
+    document.addEventListener('click', function(e) {
+        if (!inputBusca.contains(e.target) && !containerResultados.contains(e.target)) {
+            containerResultados.classList.add('d-none');
+        }
+    });
+}
+
+// Inicializa assim que o documento estiver pronto ou o modal for aberto
+document.addEventListener('DOMContentLoaded', inicializarBuscaProdutos);
+
+/**
+ * Event Listeners para recalcular em tempo real
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    const inputDesc = document.getElementById('modal-finalizar-desconto');
+    const inputAcres = document.getElementById('modal-finalizar-acrescimo');
+    const inputPago = document.getElementById('modal-finalizar-valor-pago');
+
+    if (inputDesc) inputDesc.addEventListener('input', () => ComandaController.recalcularTotais());
+    if (inputAcres) inputAcres.addEventListener('input', () => ComandaController.recalcularTotais());
+    if (inputPago) inputPago.addEventListener('input', () => ComandaController.atualizarTroco());
+});
+
+/**
+ * Função principal chamada pelo botão "Liquidar & Gerar Comprovante"
+ */
+function confirmarEGravarEncerramentoComandaUnificada(e) {
+    if (e && e.preventDefault) e.preventDefault();
+
+    const btn = (e && e.currentTarget) || document.querySelector('#modalFinalizarAtendimento button[onclick*="confirmarEGravarEncerramento"]');
+
+    // Estado visual de carregamento
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processando...';
+    }
+
+    const agendamentoId = document.getElementById('modal-finalizar-agendamento-id')?.value;
+    const cobrancaId = document.getElementById('modal-finalizar-cobranca-id')?.value;
+    const formaPagamento = document.getElementById('modal-finalizar-forma-pagamento')?.value || 'PIX';
+    const valorDesconto = document.getElementById('modal-finalizar-desconto')?.value || 0;
+    const valorAcrescimo = document.getElementById('modal-finalizar-acrescimo')?.value || 0;
+    const valorPago = document.getElementById('modal-finalizar-valor-pago')?.value || null;
+    const observacao = document.getElementById('modal-finalizar-observacao')?.value || '';
+
+    if (!agendamentoId) {
+        alert('Erro: NENHUM agendamento selecionado para encerramento.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Liquidar & Gerar Comprovante';
+        }
+        return;
+    }
 
     const payload = {
-        agendamento_id: idAgendamentoLimpo,
-        item_id: idItemLimpo,
-        fim_real: opcoes.fimReal || new Date().toISOString(),
-        observacoes_tecnicas: opcoes.observacoes || opcoes.observacoes_tecnicas || '',
-        nota_avaliacao_cliente: opcoes.nota || opcoes.nota_avaliacao_cliente || 5,
-        comentario_avaliacao_cliente: opcoes.comentario || opcoes.comentario_avaliacao_cliente || ''
+        agendamento_id: parseInt(agendamentoId),
+        cobranca_id: cobrancaId ? parseInt(cobrancaId) : null,
+        forma_pagamento: formaPagamento,
+        valor_desconto: parseFloat(valorDesconto),
+        valor_acrescimo: parseFloat(valorAcrescimo),
+        valor_pago: valorPago ? parseFloat(valorPago) : null,
+        observacao: observacao
     };
 
-    // Tenta primeiro a rota unificada de API de itens
-    fetch(`/api/agendamentos/${idAgendamentoLimpo}/itens/${idItemLimpo}/concluir`, {
+    fetch('/api/agendamento/encerrar-clique', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRFToken': typeof getCsrfToken === 'function' ? getCsrfToken() : ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(async (response) => {
-        const isJson = response.headers.get('content-type')?.includes('application/json');
-        const data = isJson ? await response.json() : null;
-
-        if (!response.ok) {
-            throw new Error(data?.mensagem || `Erro no servidor (${response.status})`);
-        }
-        return data;
-    })
+    .then(response => response.json())
     .then(data => {
-        if (data && (data.sucesso || data.success || data.status === 'success')) {
-            // Se o callback padrão já existir no seu escopo, podemos reaproveitá-lo:
-            if (typeof callbackPosConclusaoItem === 'function') {
-                callbackPosConclusaoItem(data);
+        if (data.sucesso) {
+            const modalEl = document.getElementById('modalFinalizarAtendimento');
+            if (modalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                if (modalInstance) modalInstance.hide();
+            }
+
+            // Atualiza a interface
+            if (typeof recarregarAgendamentos === 'function') {
+                recarregarAgendamentos();
+            } else if (typeof recarregarGradeAgendamentos === 'function') {
+                recarregarGradeAgendamentos();
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Atenção: ' + (data.mensagem || 'Erro ao liquida comanda.'));
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Liquidar & Gerar Comprovante';
+            }
+        }
+    })
+    .catch(err => {
+        console.error('Erro na requisição:', err);
+        alert('Ocorreu uma falha ao conectar com o servidor. Tente novamente.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Liquidar & Gerar Comprovante';
+        }
+    });
+}
+
+// Aliases para manter compatibilidade com chamadas legadas
+window.confirmarEGravarEncerramento = window.confirmarEGravarEncerramentoComandaUnificada;
+window.registrarFimRealEEncerrar = window.prepararEExibirModalComanda;
+
+// Ação do Botão "Manter Aberto" no Modal
+function manterComandaAberta() {
+    const modalEl = document.getElementById('modalFinalizarAtendimento');
+    if (modalEl) {
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+    }
+
+    // Atualiza os cards da grade para refletir o status 'finalizado'
+    if (typeof recarregarAgendamentos === 'function') {
+        recarregarAgendamentos();
+    }
+}
+
+function reabrirAtendimentoAdmin(agendamentoId) {
+    if (!confirm('Atenção: Deseja realmente reabrir este atendimento e retornar o status para "Em Andamento"?')) {
+        return;
+    }
+
+    fetch('/api/agendamento/reabrir-atendimento', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ agendamento_id: agendamentoId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            if (typeof recarregarAgendamentos === 'function') {
+                recarregarAgendamentos();
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Aviso: ' + data.mensagem);
+        }
+    })
+    .catch(err => {
+        console.error('Erro ao reabrir atendimento:', err);
+        alert('Erro de comunicação com o servidor.');
+    });
+}
+
+// Handler chamado pelo botão "Confirmar Conclusão do Serviço" no #modalFinalizarItem
+function submeterConclusaoItemCadeira() {
+    const itemId = document.getElementById('modal-item-id')?.value;
+    const agendamentoId = document.getElementById('modal-item-agendamento-id')?.value;
+    const observacao = document.getElementById('modal-item-observacao')?.value || '';
+
+    if (!itemId || !agendamentoId) {
+        alert('Identificador do item ou agendamento ausente.');
+        return;
+    }
+
+    const payload = {
+        item_id: parseInt(itemId),
+        agendamento_id: parseInt(agendamentoId),
+        observacao: observacao
+    };
+
+    // Dispara a função de conclusão
+    concluirItemNaCadeira(payload);
+}
+
+// Handler chamado pelo botão "Confirmar Conclusão do Serviço" no #modalFinalizarItem
+function submeterConclusaoItemCadeira() {
+    const itemId = document.getElementById('modal-item-id')?.value;
+    const agendamentoId = document.getElementById('modal-item-agendamento-id')?.value;
+    const observacao = document.getElementById('modal-item-observacao')?.value || '';
+
+    if (!itemId || !agendamentoId) {
+        alert('Identificador do item ou agendamento ausente.');
+        return;
+    }
+
+    const payload = {
+        item_id: parseInt(itemId),
+        agendamento_id: parseInt(agendamentoId),
+        observacao: observacao
+    };
+
+    // Dispara a função de conclusão
+    concluirItemNaCadeira(payload);
+}
+
+function prepararEExibirModalComanda(agendamentoId) {
+    const urlApi = `/agenda/api/agendamento/${agendamentoId}/comanda-detalhes`;
+
+    fetch(urlApi)
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`Erro HTTP ${res.status} ao consultar a API.`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (!data.sucesso) {
+                alert(data.mensagem || 'Erro ao carregar detalhes da comanda.');
                 return;
             }
 
-            // Fluxo padrão de encerramento do item
-            if (data.comanda_pronta || data.exibir_comanda || data.itens_pendentes_qtd === 0) {
-                const valorTotal = data.valor_total_fmt || data.valor_total || '0,00';
-                window.abrirModalFechamentoComanda(idAgendamentoLimpo, valorTotal);
-            } else if (data.redirect_url) {
-                window.location.href = data.redirect_url;
-            } else {
-                window.location.reload();
+            console.log("Dados recebidos da Comanda:", data);
+
+            // 1. Preenche IDs ocultos
+            const elAgendId = document.getElementById('modal-finalizar-agendamento-id');
+            if (elAgendId) elAgendId.value = data.agendamento_id || '';
+
+            const elCobrancaId = document.getElementById('modal-finalizar-cobranca-id');
+            if (elCobrancaId) elCobrancaId.value = data.cobranca_id || '';
+
+            // 2. Preenche Nome do Cliente (ID do seu HTML: lblComandaClienteNome)
+            const elCliente = document.getElementById('lblComandaClienteNome');
+            if (elCliente && data.cliente) {
+                elCliente.innerText = data.cliente.nome || 'Cliente Presencial';
             }
-        } else {
-            alert(data?.mensagem || 'Não foi possível concluir o item do agendamento.');
-        }
-    })
-    .catch(error => {
-        console.error('Erro ao concluir item do agendamento:', error);
-        alert(`Erro ao concluir item: ${error.message}`);
-    });
-};
+
+            // 3. Renderiza Serviços Prestados (ID do seu HTML: containerListaServicosComanda)
+            const containerServicos = document.getElementById('containerListaServicosComanda');
+            if (containerServicos) {
+                let htmlServicos = '';
+                if (data.servicos && data.servicos.length > 0) {
+                    data.servicos.forEach(s => {
+                        const valServico = parseFloat(s.valor || s.preco || 0) || 0;
+                        htmlServicos += `
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+                                <div>
+                                    <span class="fw-semibold text-dark d-block">${s.servico || 'Serviço'}</span>
+                                    <small class="text-muted"><i class="bi bi-person me-1"></i>${s.profissional || '-'}</small>
+                                </div>
+                                <span class="fw-bold text-dark">R$ ${valServico.toFixed(2).replace('.', ',')}</span>
+                            </div>`;
+                    });
+                }
+                containerServicos.innerHTML = htmlServicos || '<p class="text-muted small p-3 m-0">Nenhum serviço registrado.</p>';
+            }
+
+            // 4. Renderiza Produtos (ID do seu HTML: containerListaProdutosComanda)
+            const containerProdutos = document.getElementById('containerListaProdutosComanda');
+            if (containerProdutos) {
+                let htmlProdutos = '';
+                if (data.produtos && data.produtos.length > 0) {
+                    data.produtos.forEach(p => {
+                        // CORREÇÃO: Busca por preco_unitario (padrão da API), com fallbacks para valor_unitario, preco e valor
+                        const valUnit = parseFloat(
+                            p.preco_unitario !== undefined && p.preco_unitario !== null ? p.preco_unitario :
+                            (p.valor_unitario !== undefined && p.valor_unitario !== null ? p.valor_unitario :
+                            (p.preco !== undefined ? p.preco : (p.valor || 0)))
+                        ) || 0;
+
+                        const qtd = parseInt(p.quantidade || 1, 10);
+                        const valTotal = parseFloat(
+                            p.valor_total !== undefined && p.valor_total !== null ? p.valor_total : (qtd * valUnit)
+                        ) || 0;
+
+                        htmlProdutos += `
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 border-bottom">
+                                <div>
+                                    <span class="fw-semibold text-dark d-block">${p.nome || 'Produto'}</span>
+                                    <small class="text-muted">${qtd}x R$ ${valUnit.toFixed(2).replace('.', ',')}</small>
+                                </div>
+                                <span class="fw-bold text-dark">R$ ${valTotal.toFixed(2).replace('.', ',')}</span>
+                            </div>`;
+                    });
+                }
+                containerProdutos.innerHTML = htmlProdutos || '<p class="text-muted small p-3 m-0">Nenhum produto consumido.</p>';
+            }
+
+            // 5. Atualiza Subtotais e Totais do HTML
+            const totalServicos = (data.totais && data.totais.servicos !== undefined) ? parseFloat(data.totais.servicos) || 0 : 0;
+            const totalProdutos = (data.totais && data.totais.produtos !== undefined) ? parseFloat(data.totais.produtos) || 0 : 0;
+            const totalGeral = (data.totais && data.totais.geral !== undefined) ? parseFloat(data.totais.geral) || 0 : (totalServicos + totalProdutos);
+
+            // Subtotal Serviços (ID: lblSubtotalServicos)
+            const elSubtotalServicos = document.getElementById('lblSubtotalServicos');
+            if (elSubtotalServicos) elSubtotalServicos.innerText = `R$ ${totalServicos.toFixed(2).replace('.', ',')}`;
+
+            // Subtotal Produtos (ID: lblSubtotalProdutos)
+            const elSubtotalProdutos = document.getElementById('lblSubtotalProdutos');
+            if (elSubtotalProdutos) elSubtotalProdutos.innerText = `R$ ${totalProdutos.toFixed(2).replace('.', ',')}`;
+
+            // Subtotal Consumido Total (ID: lblSubtotalConsumoTotal)
+            const elSubtotalConsumo = document.getElementById('lblSubtotalConsumoTotal');
+            if (elSubtotalConsumo) elSubtotalConsumo.innerText = `R$ ${totalGeral.toFixed(2).replace('.', ',')}`;
+
+            // Total da Comanda (ID: lblValorTotalGeralComanda)
+            const elTotalGeral = document.getElementById('lblValorTotalGeralComanda');
+            if (elTotalGeral) elTotalGeral.innerText = `R$ ${totalGeral.toFixed(2).replace('.', ',')}`;
+
+            // Input Valor Recebido (ID: modal-finalizar-valor-pago)
+            const inputValorPago = document.getElementById('modal-finalizar-valor-pago');
+            if (inputValorPago) {
+                inputValorPago.value = totalGeral.toFixed(2);
+            }
+
+            // 6. Exibe a Modal
+            const modalEl = document.getElementById('modalFinalizarAtendimento');
+            if (modalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modalInstance.show();
+            }
+        })
+        .catch(err => {
+            console.error('Erro ao preparar comanda:', err);
+            alert('Não foi possível carregar os detalhes da comanda.');
+        });
+}
+
+window.subtotalConsumoBase = window.subtotalConsumoBase || 0;
+
+function recalcularTotaisComanda() {
+    const elSubtotalConsumo = document.getElementById('lblSubtotalConsumoTotal');
+    const inputDesconto = document.getElementById('modal-finalizar-desconto');
+    const inputAcrescimo = document.getElementById('modal-finalizar-acrescimo');
+    const inputValorPago = document.getElementById('modal-finalizar-valor-pago');
+
+    // 1. Recupera o Consumo Base (tenta do atributo HTML, com fallback para window)
+    let consumoBase = 0;
+    if (elSubtotalConsumo && elSubtotalConsumo.hasAttribute('data-subtotal-base')) {
+        consumoBase = parseFloat(elSubtotalConsumo.getAttribute('data-subtotal-base')) || 0;
+    } else {
+        consumoBase = window.subtotalConsumoBase || 0;
+    }
+
+    // Mantém o Subtotal Consumido visualmente intacto
+    if (elSubtotalConsumo) {
+        elSubtotalConsumo.innerText = `R$ ${consumoBase.toFixed(2).replace('.', ',')}`;
+    }
+
+    // 2. Leitura defensiva do Desconto (aceita ponto ou vírgula)
+    let valDesconto = 0;
+    if (inputDesconto && inputDesconto.value !== '') {
+        const rawDesc = inputDesconto.value.toString().replace(',', '.');
+        valDesconto = parseFloat(rawDesc) || 0;
+    }
+
+    if (valDesconto < 0) valDesconto = 0;
+
+    // Trava para o desconto não ultrapassar o consumo total
+    if (valDesconto > consumoBase && consumoBase > 0) {
+        valDesconto = consumoBase;
+        if (inputDesconto) inputDesconto.value = consumoBase.toFixed(2);
+    }
+
+    // 3. Leitura defensiva do Acréscimo
+    let valAcrescimo = 0;
+    if (inputAcrescimo && inputAcrescimo.value !== '') {
+        const rawAcres = inputAcrescimo.value.toString().replace(',', '.');
+        valAcrescimo = parseFloat(rawAcres) || 0;
+    }
+
+    if (valAcrescimo < 0) valAcrescimo = 0;
+
+    // 4. Cálculo do Total Líquido
+    let totalLiquido = consumoBase - valDesconto + valAcrescimo;
+    if (totalLiquido < 0) totalLiquido = 0;
+
+    // 5. Atualiza o Total da Comanda
+    const elTotalGeral = document.getElementById('lblValorTotalGeralComanda');
+    if (elTotalGeral) {
+        elTotalGeral.innerText = `R$ ${totalLiquido.toFixed(2).replace('.', ',')}`;
+    }
+
+    // 6. Atualiza o Valor Recebido
+    if (inputValorPago) {
+        inputValorPago.value = totalLiquido.toFixed(2);
+    }
+}
+
+// Vincula os eventos 'input' e 'change' imediatamente
+document.addEventListener('DOMContentLoaded', function() {
+    const inputDesc = document.getElementById('modal-finalizar-desconto');
+    const inputAcres = document.getElementById('modal-finalizar-acrescimo');
+
+    if (inputDesc) {
+        inputDesc.addEventListener('input', recalcularTotaisComanda);
+        inputDesc.addEventListener('change', recalcularTotaisComanda);
+    }
+    if (inputAcres) {
+        inputAcres.addEventListener('input', recalcularTotaisComanda);
+        inputAcres.addEventListener('change', recalcularTotaisComanda);
+    }
+});
+
 </script>
+
 {% endblock %}
+

@@ -1,14 +1,11 @@
 import logging
 from datetime import datetime, timedelta, timezone
 import click
-from flask import current_app
+from flask import current_app, url_for
 from flask.cli import with_appcontext
 
 from feedin import database as db
 from feedin.modules.agenda.services.notificacao_service import disparar_mensagem_cliente
-
-# Supondo que a model de Agendamento/Pedido no seu ecossistema seja Agendamento
-# Ajuste a importação da classe de Agendamento conforme a estrutura do projeto:
 from feedin.modules.agenda.models import AghAgendamento
 
 logger = logging.getLogger(__name__)
@@ -31,15 +28,11 @@ def buscar_agendamentos_na_janela(horas_antecedencia: int, agora: datetime):
     inicio_janela = alvo - timedelta(minutes=TOLERANCIA_MINUTOS)
     fim_janela = alvo + timedelta(minutes=TOLERANCIA_MINUTOS)
 
-    # -------------------------------------------------------------------------
-    # NOTA DE INTEGRAÇÃO COM MODEL DE AGENDAMENTO:
-    # Substitua 'Agendamento' abaixo pela classe correspondente (ex: ModAgendamento / Pedido)
-    # -------------------------------------------------------------------------
-
+    # AJUSTADO: Utiliza data_hora_inicio (nome oficial no model AghAgendamento)
     query = AghAgendamento.query.filter(
-        AghAgendamento.data_agendamento >= inicio_janela,
-        AghAgendamento.data_agendamento <= fim_janela,
-        AghAgendamento.status.in_(["confirmado", "agendado"])  # Filtra agendamentos válidos
+        AghAgendamento.data_hora_inicio >= inicio_janela,
+        AghAgendamento.data_hora_inicio <= fim_janela,
+        AghAgendamento.status.in_(["confirmado", "agendado"])
     )
 
     return query.all()
@@ -63,21 +56,53 @@ def processar_varredura_lembretes():
             estatisticas["processados"] += 1
 
             try:
-                # Prepara dicionário para interpolação
-                dt_formatada = agendamento.data_agendamento.strftime("%d/%m/%Y às %H:%H")
-                hora_formatada = agendamento.data_agendamento.strftime("%H:%M")
+                # AJUSTADO: data_hora_inicio e sintaxe correta de minutos (%H:%M)
+                dt_formatada = agendamento.data_hora_inicio.strftime("%d/%m/%Y às %H:%M")
+                hora_formatada = agendamento.data_hora_inicio.strftime("%H:%M")
+
+                # Resolve slug da empresa de forma segura
+                slug_empresa = (
+                    agendamento.empresa.slug
+                    if (hasattr(agendamento, 'empresa') and agendamento.empresa and getattr(agendamento.empresa, 'slug', None))
+                    else "geral"
+                )
+
+                # AJUSTADO: URL relativa/absoluta dinâmica usando a rota de reagendamento do Flask
+                try:
+                    link_reagendamento = url_for(
+                        'agenda.agendar',
+                        slug_empresa=slug_empresa,
+                        reagendar_id=agendamento.id,
+                        _external=True
+                    )
+                except Exception:
+                    link_reagendamento = f"/agenda/{slug_empresa}/agendar?reagendar_id={agendamento.id}"
+
+                # Trata a informação do beneficiário (Pet/Veículo/Dependente) caso exista
+                info_beneficiario = ""
+                if getattr(agendamento, "beneficiario", None) and getattr(agendamento.beneficiario, "nome", None):
+                    info_beneficiario = f" (para {agendamento.beneficiario.nome})"
+
+                # Trata nome do cliente
+                nome_cliente = "Cliente"
+                if hasattr(agendamento, "cliente") and agendamento.cliente:
+                    nome_cliente = (
+                        getattr(agendamento.cliente, "nome_completo", None) or
+                        getattr(agendamento.cliente, "nome", "Cliente")
+                    ).split()[0]
 
                 dados_interpolacao = {
-                    "nome_cliente": agendamento.cliente.nome_completo if hasattr(agendamento.cliente, "nome_completo") else agendamento.cliente.nome,
+                    "nome_cliente": nome_cliente,
                     "data_hora": dt_formatada,
                     "apenas_hora": hora_formatada,
-                    "link_reagendamento": f"https://feedin.com.br/agendamentos/{agendamento.id}/reagendar"
+                    "info_beneficiario": info_beneficiario,
+                    "link_reagendamento": link_reagendamento
                 }
 
-                # Recupera beneficiario_id se existir no registro do agendamento
+                # Recupera beneficiario_id se existir no registro
                 beneficiario_id = getattr(agendamento, "beneficiario_id", None)
 
-                # Disparo Híbrido (Notificação PWA + Log de Idempotência + Gateway Externo)
+                # Disparo Híbrido
                 sucesso = disparar_mensagem_cliente(
                     agendamento_id=agendamento.id,
                     cliente_id=agendamento.cliente_id,  # UUID String(36)

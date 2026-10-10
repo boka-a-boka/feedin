@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprovante - {{ c.comprovante_num }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .comprovante-card {
+            max-width: 600px;
+            margin: 30px auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            background: #ffffff;
+            padding: 30px;
+        }
+        .header-line {
+            border-bottom: 2px dashed #dee2e6;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .footer-line {
+            border-top: 2px dashed #dee2e6;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+        .badge-status {
+            background-color: #28a745;
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        @media print {
+            body { background-color: #fff; }
+            .comprovante-card { box-shadow: none; margin: 0; padding: 0; width: 100%; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="comprovante-card">
+        <!-- Ações no topo (ocultas na impressão) -->
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+            <a href="{{ url_for('agenda.dashboard_cliente') }}"
+               onclick="fecharOuVoltar(event)"
+               class="btn btn-outline-secondary btn-sm">
+                ← Voltar
+            </a>
+            <button onclick="window.print()" class="btn btn-primary btn-sm">Imprimir / Salvar PDF</button>
+        </div>
+
+        <!-- Cabeçalho do Estabelecimento -->
+        <div class="text-center header-line">
+            <h4 class="fw-bold mb-1">{{ c.empresa_nome }}</h4>
+            <small class="text-muted">CNPJ: {{ c.empresa_cnpj }}</small>
+            <div class="mt-2">
+                <span class="badge-status">PAGO / CONCLUÍDO</span>
+            </div>
+        </div>
+
+        <!-- Identificação do Recibo -->
+        <div class="row mb-3">
+            <div class="col-6">
+                <small class="text-muted d-block">Número do Comprovante</small>
+                <strong>{{ c.comprovante_num }}</strong>
+            </div>
+            <div class="col-6 text-end">
+                <small class="text-muted d-block">Data de Emissão</small>
+                <strong>{{ c.data_emissao }}</strong>
+            </div>
+        </div>
+
+        <!-- Dados do Cliente e Profissional -->
+        <div class="bg-light p-3 rounded mb-4">
+            <div class="row g-2">
+                <div class="col-12">
+                    <small class="text-muted d-block">Cliente / Beneficiário</small>
+                    <span><strong>{{ c.cliente_nome }}</strong> (CPF/CNPJ: {{ c.cliente_cpf }})</span>
+                </div>
+                <div class="col-12">
+                    <small class="text-muted d-block">Atendido por</small>
+                    <span>{{ c.profissional }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Discriminativo de Serviços -->
+        <h6 class="fw-bold mb-3">Serviços / Itens Prestados</h6>
+        <table class="table table-sm table-borderless mb-3">
+            <thead>
+                <tr class="border-bottom">
+                    <th>Descrição</th>
+                    <th class="text-end">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in c.servicos %}
+                <tr>
+                    <td>{{ item.nome }}</td>
+                    <td class="text-end">R$ {{ "%.2f"|format(item.valor) }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" class="text-muted italic">Serviços em geral</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Resumo Financeiro -->
+        <div class="footer-line">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-muted">Forma de Pagamento</span>
+                <strong>{{ c.forma_pagamento }}</strong>
+            </div>
+            <div class="d-flex justify-content-between align-items-center fs-5 fw-bold text-success">
+                <span>Valor Total Quitado</span>
+                <span>R$ {{ "%.2f"|format(c.valor_total) }}</span>
+            </div>
+        </div>
+
+        <!-- Rodapé do Documento -->
+        <div class="text-center mt-4">
+            <small class="text-muted">Este documento serve como comprovante de prestação de serviços e quitação financeira.</small>
+        </div>
+    </div>
+</div>
+
+<script>
+function fecharOuVoltar(event) {
+    // Se a página foi aberta em uma aba/janela nova (como ocorre via target="_blank" da notificação)
+    if (window.opener || window.history.length <= 1) {
+        event.preventDefault();
+        window.close();
+    }
+    // Caso a aba não possa ser fechada pelo navegador, segue o redirecionamento seguro para a dashboard do cliente
+}
+</script>
+
+</body>
+</html>

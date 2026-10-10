@@ -1,0 +1,237 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Catálogo de Produtos{% endblock %}
+
+{% block content %}
+<!-- Biblioteca para leitura de código de barras via câmera (iOS e Android) -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+<style>
+    .fundo-acetinado-pwa {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%) !important;
+        min-height: 100vh;
+    }
+    .transition-all {
+        transition: all 0.15s ease-in-out;
+    }
+    .transition-all:active {
+        transform: scale(0.97);
+        opacity: 0.9;
+    }
+</style>
+
+<div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
+    <div class="container py-3" style="max-width: 600px;">
+
+        {# 🔙 VOLTAR AO SUB-HUB #}
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('empresa.estoque_hub_tela', empresa_id=ese_empresa.id) }}"
+               class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
+               style="width: 40px; height: 40px;"
+               title="Voltar ao Hub de Estoque">
+                <i class="bi bi-chevron-left fs-6"></i>
+            </a>
+            <span class="fw-bold text-dark fs-6">Catálogo de Produtos</span>
+        </div>
+
+        {# ➕ FORMULÁRIO DE NOVO PRODUTO #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle mb-3">
+            <h6 class="fw-bold text-dark m-0 mb-2" style="font-size: 0.85rem;">Novo Produto</h6>
+            <form action="{{ url_for('empresa.produto_catalogo_tela', empresa_id=ese_empresa.id) }}" method="POST">
+                {# 🛡️ TOKEN CSRF #}
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                {# NOME DO PRODUTO #}
+                <div class="mb-2">
+                    <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Nome do Produto / Insumo *</label>
+                    <input type="text" name="nome" class="form-control form-control-sm rounded-3" placeholder="Ex: Shampoo Antiresíduos 1L" required>
+                </div>
+
+                {# CÓDIGO DE BARRAS COM LEITOR DE CÂMERA #}
+                <div class="mb-2">
+                    <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Código de Barras (EAN / Leitor)</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light text-muted border-end-0 rounded-start-3">
+                            <i class="bi bi-barcode"></i>
+                        </span>
+                        <input type="text"
+                               id="input_codigo_barras_cadastro"
+                               name="codigo_barras"
+                               class="form-control form-control-sm border-start-0 border-end-0"
+                               placeholder="Escaneie ou digite o código">
+                        <button type="button"
+                                class="btn btn-outline-secondary rounded-end-3"
+                                onclick="abrirLeitorCamera('input_codigo_barras_cadastro')"
+                                title="Escanear com a câmera">
+                            <i class="bi bi-camera-fill text-primary"></i>
+                        </button>
+                    </div>
+                </div>
+
+                {# PREÇO E ESTOQUE MÍNIMO #}
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Preço Venda R$ (Opcional)</label>
+                        <input type="number" step="0.01" min="0" name="preco_venda" class="form-control form-control-sm rounded-3" placeholder="0,00">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1" style="font-size: 0.7rem;">Estoque Mínimo (Alerta)</label>
+                        <input type="number" min="0" name="estoque_minimo" class="form-control form-control-sm rounded-3" value="5" placeholder="5">
+                        <span class="text-muted d-block mt-1" style="font-size: 0.62rem;">Sugestão: 5 un. (livre para alterar)</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-sm w-100 rounded-pill fw-bold py-2 shadow-sm transition-all">
+                    <i class="bi bi-plus-circle me-1"></i> Salvar Produto no Catálogo
+                </button>
+            </form>
+        </div>
+
+        {# 📋 LISTAGEM DO CATÁLOGO DE PRODUTOS #}
+        <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle">
+            <h6 class="fw-bold text-dark m-0 mb-2" style="font-size: 0.8rem;">Produtos Cadastrados</h6>
+            {% if produtos %}
+                <div class="d-flex flex-column gap-2">
+                    {% for p in produtos %}
+                        <div class="p-2 border border-secondary-subtle rounded-3 bg-light d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="d-block text-dark" style="font-size: 0.8rem;">{{ p.nome }}</strong>
+                                <div class="d-flex gap-2 align-items-center text-muted" style="font-size: 0.68rem;">
+                                    {% if p.codigo_barras %}
+                                        <span><i class="bi bi-barcode me-1"></i>{{ p.codigo_barras }}</span>
+                                        <span>•</span>
+                                    {% endif %}
+                                    <span>Custo Médio: R$ {{ "%.2f"|format(p.custo_medio or 0) }}</span>
+                                    <span>•</span>
+                                    <span>Mín: {{ p.estoque_minimo }} un.</span>
+                                </div>
+                            </div>
+                            <span class="badge {% if p.estoque_atual <= p.estoque_minimo %}bg-warning-subtle text-warning-emphasis border-warning-subtle{% else %}bg-primary-subtle text-primary border-primary-subtle{% endif %} border rounded-pill" style="font-size: 0.7rem;">
+                                Saldo: {{ p.estoque_atual }} un.
+                            </span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted text-center my-3" style="font-size: 0.72rem;">Nenum produto cadastrado até o momento.</p>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+{# 📷 MODAL DO LEITOR DE CÂMERA #}
+<div class="modal fade" id="modalLeitorCamera" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-camera me-1"></i> Ler Código de Barras
+                </h6>
+                <button type="button" class="btn-close" onclick="fecharLeitorCamera()"></button>
+            </div>
+            <div class="modal-body text-center p-3">
+                <div id="reader" style="width: 100%; min-height: 250px; background: #000;" class="rounded-3 overflow-hidden"></div>
+                <p class="text-muted small mt-2 mb-0" style="font-size: 0.72rem;">
+                    Aproxime o código de barras da câmera do celular
+                </p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" onclick="fecharLeitorCamera()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* -------------------------------------------------------------------------- */
+    /* LÓGICA DO LEITOR DE CÂMERA (PWA / SMARTPHONE)                             */
+    /* -------------------------------------------------------------------------- */
+    let html5QrCode = null;
+    let targetInputIdGlobal = null;
+
+    function abrirLeitorCamera(targetInputId) {
+        targetInputIdGlobal = targetInputId;
+        const modalEl = document.getElementById('modalLeitorCamera');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+
+        html5QrCode = new Html5Qrcode("reader");
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 150 },
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E
+            ]
+        };
+
+        // Força o uso da câmera traseira do smartphone ('environment')
+        html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            onScanSuccess
+        ).catch(err => {
+            alert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+            fecharLeitorCamera();
+        });
+    }
+
+    function onScanSuccess(decodedText) {
+        tocarBip();
+
+        if (targetInputIdGlobal) {
+            const inputTarget = document.getElementById(targetInputIdGlobal);
+            if (inputTarget) {
+                inputTarget.value = decodedText;
+
+                // Dispara os eventos de alteração caso haja validações ligadas ao campo
+                inputTarget.dispatchEvent(new Event('input'));
+                inputTarget.dispatchEvent(new Event('change'));
+            }
+        }
+
+        fecharLeitorCamera();
+    }
+
+    function fecharLeitorCamera() {
+        if (html5QrCode && html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                ocultarModal();
+            }).catch(err => {
+                console.error(err);
+                ocultarModal();
+            });
+        } else {
+            ocultarModal();
+        }
+    }
+
+    function ocultarModal() {
+        const modalEl = document.getElementById('modalLeitorCamera');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
+
+    function tocarBip() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = 1200;
+            gain.gain.value = 0.1;
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.12);
+        } catch (e) {
+            // Ignora falhas de áudio caso haja bloqueio do navegador
+        }
+    }
+</script>
+{% endblock %}

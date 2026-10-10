@@ -63,6 +63,12 @@ from feedin.modules.empresa.models import (
     ModEmpresaModulo,
 )
 
+from feedin.modules.estoque.models import ProdutoCatalogo, EntradaEstoqueItem
+from feedin.modules.estoque.services.estoque_service import (
+    validar_acesso_empresa,
+    registrar_entrada_estoque,
+    registrar_baixa_operacional
+)
 
 from feedin.utils import preparar_entrada_modulo, limpar_string, limpar_mascara, validar_unicidade_documento, salvar_imagem_modulo
 from feedin.modules.empresa.services.ese_calendario_service import obter_escala_padrao, subtrair_intervalo_horario
@@ -6764,3 +6770,135 @@ def disparar_email_admissao_concluida(contrato, email_destino, nome_colaborador)
 
     # Executa a chamada do seu serviço de e-mail (SendGrid, SMTP, etc.)
     # enviar_email_smtp(destino=email_destino, assunto="Admissão Concluída - FeedIn", html=html_corpo)
+
+@empresa_bp.route('/empresa/<int:empresa_id>/estoque/movimentos', methods=['GET', 'POST'])
+@login_required
+def movimento_estoque_tela(empresa_id):
+    # 1. Consulta a entidade real no banco
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    # 2. Validação de acesso do usuário à empresa
+    if not validar_acesso_empresa(current_user, ese_empresa):
+        flash("Acesso não autorizado ao módulo da empresa.", "danger")
+        return redirect(url_for('empresa.dashboard_empresa', empresa_id=empresa_id))
+
+    # 3. Trava de Segurança PRO (Utilizando a regra de negócio da EseEmpresa)
+    if not ese_empresa.possui_recurso_pro():
+        flash("O controle de estoque é um recurso do plano PRO.", "warning")
+        return redirect(url_for('empresa.hub_ativacao', empresa_id=empresa_id))
+
+    # 4. Processamento de Formulários via POST
+    if request.method == 'POST':
+        tipo_acao = request.form.get('tipo_acao')  # 'entrada' ou 'baixa'
+
+        if tipo_acao == 'entrada':
+            sucesso, msg = registrar_entrada_estoque(ese_empresa.id, current_user.id, request.form)
+        elif tipo_acao == 'baixa':
+            sucesso, msg = registrar_baixa_operacional(ese_empresa.id, current_user.id, request.form)
+        else:
+            sucesso, msg = False, "Operação de estoque inválida."
+
+        flash(msg, "success" if sucesso else "danger")
+        return redirect(url_for('empresa.movimento_estoque_tela', empresa_id=empresa_id))
+
+    # 5. Prepara os dados de leitura para a View
+    produtos = ProdutoCatalogo.query.filter_by(empresa_id=ese_empresa.id)\
+                                    .order_by(ProdutoCatalogo.nome.asc())\
+                                    .all()
+
+    ultimas_entradas = EntradaEstoqueItem.query.filter_by(empresa_id=ese_empresa.id)\
+                                               .order_by(EntradaEstoqueItem.data_compra.desc())\
+                                               .limit(10)\
+                                               .all()
+
+    return render_template('empresa/estoque_movimento.html',
+                           ese_empresa=ese_empresa,
+                           produtos=produtos,
+                           ultimas_entradas=ultimas_entradas)
+
+
+# -----------------------------------------------------------------------------
+# 📦 HUB INTERMEDIÁRIO DE ESTOQUE
+# -----------------------------------------------------------------------------
+@empresa_bp.route('/empresa/<int:empresa_id>/estoque/hub', methods=['GET'])
+@login_required
+def estoque_hub_tela(empresa_id):
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    if not validar_acesso_empresa(current_user, ese_empresa):
+        flash("Acesso não autorizado ao módulo da empresa.", "danger")
+        return redirect(url_for('empresa.dashboard_empresa', empresa_id=empresa_id))
+
+    if not ese_empresa.possui_recurso_pro():
+        flash("O controle de estoque é um recurso do plano PRO.", "warning")
+        return redirect(url_for('empresa.hub_ativacao', empresa_id=empresa_id))
+
+    total_produtos = ProdutoCatalogo.query.filter_by(empresa_id=ese_empresa.id).count()
+
+    return render_template('empresa/estoque_hub.html',
+                           ese_empresa=ese_empresa,
+                           total_produtos=total_produtos)
+
+# -----------------------------------------------------------------------------
+# 🏷️ CATÁLOGO DE PRODUTOS (CADASTRO E LISTAGEM)
+# -----------------------------------------------------------------------------
+@empresa_bp.route('/empresa/<int:empresa_id>/estoque/produtos', methods=['GET', 'POST'])
+@login_required
+def produto_catalogo_tela(empresa_id):
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    if not validar_acesso_empresa(current_user, ese_empresa):
+        flash("Acesso não autorizado ao módulo da empresa.", "danger")
+        return redirect(url_for('empresa.dashboard_empresa', empresa_id=empresa_id))
+
+    if not ese_empresa.possui_recurso_pro():
+        flash("O controle de estoque é um recurso do plano PRO.", "warning")
+        return redirect(url_for('empresa.hub_ativacao', empresa_id=empresa_id))
+
+    if request.method == 'POST':
+        nome = request.form.get('nome', '').strip()
+        codigo_barras = request.form.get('codigo_barras', '').strip() or None
+        preco_venda_raw = request.form.get('preco_venda', '0').strip().replace(',', '.')
+        estoque_minimo_raw = request.form.get('estoque_minimo', '5').strip()
+
+        if not nome:
+            flash("O nome do produto é obrigatório.", "danger")
+        else:
+            try:
+                preco_venda = Decimal(preco_venda_raw) if preco_venda_raw else Decimal('0.00')
+                estoque_minimo = int(estoque_minimo_raw) if estoque_minimo_raw else 5
+
+                novo_produto = ProdutoCatalogo(
+                    empresa_id=ese_empresa.id,
+                    nome=nome,
+                    codigo_barras=codigo_barras,
+                    preco_venda=preco_venda,
+                    preco_custo=Decimal('0.00'),
+                    estoque_atual=0,
+                    estoque_minimo=estoque_minimo,
+                    custo_medio=Decimal('0.00')
+                )
+                db.session.add(novo_produto)
+                db.session.commit()
+                flash(f"Produto '{nome}' cadastrado com sucesso!", "success")
+            except (InvalidOperation, ValueError):
+                db.session.rollback()
+                flash("Preço de venda ou estoque mínimo com formato inválido.", "danger")
+            except Exception as e:
+                db.session.rollback()
+                flash(f"Erro ao cadastrar produto: {str(e)}", "danger")
+
+        return redirect(url_for('empresa.produto_catalogo_tela', empresa_id=empresa_id))
+
+    # ------------------------------------------------------------------
+    # RETORNO DO GET (Carregamento da Página com a Lista de Produtos)
+    # ------------------------------------------------------------------
+    produtos = ProdutoCatalogo.query.filter_by(empresa_id=ese_empresa.id)\
+                                    .order_by(ProdutoCatalogo.nome.asc())\
+                                    .all()
+
+    return render_template(
+        'empresa/produto_catalogo.html',
+        ese_empresa=ese_empresa,
+        produtos=produtos
+    )

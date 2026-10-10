@@ -141,9 +141,31 @@
 
 <div class="fundo-acetinado-pwa w-100 py-4 position-relative">
     <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+        <!-- 🚪 ÁREA SUPERIOR DIREITA: SININHO DE NOTIFICAÇÕES + BOTÃO SAIR -->
+        <div class="position-absolute top-0 end-0 me-3 mt-3 d-flex align-items-center gap-2" style="z-index: 10;">
 
-        {# 🚪 BOTÃO DE SAIR REAPROVEITANDO A SUA ROTA EXISTENTE #}
-        <div class="position-absolute top-0 end-0 me-3 mt-3">
+            <!-- 🔔 BOTÃO DO SININHO -->
+            <button type="button"
+                    class="btn btn-sm btn-light border shadow-sm rounded-circle position-relative p-0 d-flex align-items-center justify-content-center"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#offcanvasNotificacoes"
+                    title="Notificações"
+                    style="width: 36px; height: 36px;">
+
+                <!-- Ícone do sininho fica amarelo/destacado se houver não lida -->
+                <i class="bi bi-bell-fill {% if total_nao_lidas and total_nao_lidas > 0 %}text-warning{% else %}text-secondary{% endif %}" style="font-size: 1rem;"></i>
+
+                <!-- Badge do contador -->
+                {% if total_nao_lidas and total_nao_lidas > 0 %}
+                    <span id="badgeNotificacoesSininho"
+                          class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                          style="font-size: 0.65rem;">
+                        {{ total_nao_lidas if total_nao_lidas <= 99 else '99+' }}
+                    </span>
+                {% endif %}
+            </button>
+
+            <!-- 🚪 BOTÃO DE SAIR -->
             <a href="{{ url_for('agenda.logout') }}"
                class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1 shadow-sm rounded-pill px-2 py-1"
                title="Sair do módulo Agenda"
@@ -428,6 +450,120 @@
             </div>
         {% endif %}
 
+        {# 7.5. VERIFICAÇÃO AVALIAÇÕES PENDENTES #}
+        {% if agendamento_pendente_avaliacao %}
+        <div class="modal fade show" id="modalAvaliacaoPendente" tabindex="-1" style="display: block; background: rgba(0,0,0,0.6);" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 rounded-4 shadow-lg p-3">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="fw-bold text-dark m-0">Como foi sua experiência?</h5>
+                        <!-- Botão para adiar / fechar (se o usuário optar por não responder agora) -->
+                        <button type="button" class="btn-close" onclick="adiarAvaliacao()"></button>
+                    </div>
+                    <div class="modal-body text-center py-4">
+                        {% if colaborador_alvo_avaliacao %}
+                            <img src="{{ colaborador_alvo_avaliacao.url_foto_profissional }}" class="rounded-circle mb-3 border shadow-sm" width="80" height="80" style="object-fit: cover;">
+                            <h6 class="fw-bold text-primary mb-1">{{ colaborador_alvo_avaliacao.nome }}</h6>
+                            <p class="text-muted small mb-3">{{ colaborador_alvo_avaliacao.nome_cargo_formatado }}</p>
+                        {% else %}
+                            <div class="mb-3">
+                                <i class="bi bi-star-fill text-warning fs-1"></i>
+                            </div>
+                        {% endif %}
+
+                        <p class="text-secondary small mb-4">Por favor, avalie o atendimento realizado em {{ agendamento_pendente_avaliacao.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') }}.</p>
+
+                        <form id="formAvaliacaoUniversal" onsubmit="enviarAvaliacaoUniversal(event, {{ agendamento_pendente_avaliacao.id }}, {{ colaborador_alvo_avaliacao.id if colaborador_alvo_avaliacao else 'null' }}, {{ empresa_ativa.id if empresa_ativa else 'null' }}, {{ colaborador_alvo_avaliacao.cargo.id if colaborador_alvo_avaliacao and colaborador_alvo_avaliacao.cargo else 'null' }})">
+
+                            <!-- Estrelas Interativas Fluidas (Toque / Arraste) -->
+                            <div class="rating-container mb-4 d-flex justify-content-center gap-2" style="font-size: 2.2rem; cursor: pointer; color: #cbd5e1;">
+                                <i class="bi bi-star-fill star-item" data-value="1"></i>
+                                <i class="bi bi-star-fill star-item" data-value="2"></i>
+                                <i class="bi bi-star-fill star-item" data-value="3"></i>
+                                <i class="bi bi-star-fill star-item" data-value="4"></i>
+                                <i class="bi bi-star-fill star-item" data-value="5"></i>
+                                <input type="hidden" name="nota" id="inputNotaUniversal" value="5">
+                            </div>
+
+                            <div class="mb-3 text-start">
+                                <textarea class="form-control rounded-3" name="comentario" rows="3" placeholder="Deixe um comentário opcional sobre o atendimento..."></textarea>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="py-2 btn btn-primary rounded-pill fw-bold shadow-sm">
+                                    Enviar Avaliação
+                                </button>
+                                <button type="button" class="btn btn-link text-muted text-decoration-none small" onclick="adiarAvaliacao()">
+                                    Avaliar depois
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# 7.8. COMPRAS NO LOCAL / CONSUMAÇÃO EM ANDAMENTO (AGRUPADO) #}
+        {% if consumacao_agrupada and (consumacao_agrupada.pedidos_cliente|length > 0 or consumacao_agrupada.pedidos_equipe|length > 0) %}
+        <div class="card border-0 shadow-sm rounded-4 bg-white border-start border-4 border-warning p-3 mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-receipt-cutoff fs-5 text-warning"></i>
+                    <h6 class="fw-bold text-dark m-0 small">Consumação / Extrato do Local</h6>
+                </div>
+                <span class="badge bg-warning text-dark rounded-pill">
+                    {{ consumacao_agrupada.pedidos_cliente|length + consumacao_agrupada.pedidos_equipe|length }} item(ns)
+                </span>
+            </div>
+
+            {# BLOCO 1: ITENS PEDIDOS PELO PRÓPRIO CLIENTE (AUTO-COMPRA) #}
+            {% if consumacao_agrupada.pedidos_cliente %}
+                <div class="mb-3">
+                    <small class="text-uppercase fw-bold text-info d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-qr-code-scan me-1"></i> Solicitado por Você (Auto-Atendimento)
+                    </small>
+                    <div class="d-flex flex-column gap-2">
+                        {% for prod in consumacao_agrupada.pedidos_cliente %}
+                            <div class="d-flex align-items-center justify-content-between bg-light p-2 rounded-3">
+                                <div>
+                                    <span class="d-block text-dark fw-semibold small">{{ prod.nome }}</span>
+                                    <small class="text-muted">{{ prod.quantidade }}x R$ {{ "%.2f"|format(prod.valor_unitario)|replace('.', ',') }}</small>
+                                </div>
+                                <span class="fw-bold text-dark small">R$ {{ "%.2f"|format(prod.valor_total)|replace('.', ',') }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# BLOCO 2: ITENS LANÇADOS PELA EQUIPE / BALCÃO #}
+            {% if consumacao_agrupada.pedidos_equipe %}
+                <div class="mb-2">
+                    <small class="text-uppercase fw-bold text-secondary d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-person-badge me-1"></i> Incluído pela Equipe
+                    </small>
+                    <div class="d-flex flex-column gap-2">
+                        {% for prod in consumacao_agrupada.pedidos_equipe %}
+                            <div class="d-flex align-items-center justify-content-between bg-light p-2 rounded-3">
+                                <div>
+                                    <span class="d-block text-dark fw-semibold small">{{ prod.nome }}</span>
+                                    <small class="text-muted">{{ prod.quantidade }}x R$ {{ "%.2f"|format(prod.valor_unitario)|replace('.', ',') }}</small>
+                                </div>
+                                <span class="fw-bold text-dark small">R$ {{ "%.2f"|format(prod.valor_total)|replace('.', ',') }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# TOTALIZADOR ÚNICO DA COMANDA #}
+            <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                <span class="text-muted small fw-semibold">Total Consumido:</span>
+                <strong class="text-success fs-6">R$ {{ "%.2f"|format(consumacao_agrupada.total_geral or 0.0)|replace('.', ',') }}</strong>
+            </div>
+        </div>
+        {% endif %}
+
         {# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
         <div class="mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
@@ -572,7 +708,7 @@
                                 aria-expanded="false"
                                 aria-controls="collapsePendencias"
                                 style="font-size: 0.85rem;">
-                            <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+                            <i class="bi bi-exclama''tion-triangle-fill me-2 text-warning"></i>
                             Agendamentos Não Executados
                             <span class="badge bg-warning text-dark rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
                                 {{ agendamentos_ausente_pendentes|length }}
@@ -702,26 +838,27 @@
                        {% if publicidade_ativa.link_destino %}target="_blank"{% endif %}
                        class="text-decoration-none d-block">
 
-                        {% if img_pub %}
-                            <img src="{{ img_pub }}"
-                                 alt="{{ publicidade_ativa.titulo or 'Publicidade' }}"
-                                 class="w-100 d-block object-fit-cover"
-                                 style="max-height: 140px; min-height: 100px;">
-                        {% else %}
-                            <div class="p-3 bg-gradient bg-secondary text-white d-flex align-items-center justify-content-between" style="min-height: 100px;">
-                                <div class="pe-3">
-                                    <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">
-                                        {{ publicidade_ativa.tag_referencia_nome if publicidade_ativa.tag_referencia_nome else 'Destaque Local' }}
-                                    </span>
-                                    <h6 class="fw-bold mb-1 text-white" style="font-size: 0.88rem;">
-                                        {{ publicidade_ativa.titulo or 'Conheça nossos parceiros em Piracicaba' }}
-                                    </h6>
-                                    <p class="small text-white-50 mb-0" style="font-size: 0.72rem;">
-                                        {{ publicidade_ativa.texto_formatado or 'Valorize o comércio da nossa cidade!' }}
-                                    </p>
+                            {% if img_pub %}
+                                <img src="{{ img_pub }}"
+                                     alt="{{ publicidade_ativa.titulo or 'Publicidade' }}"
+                                     class="w-100 d-block object-fit-cover"
+                                     style="max-height: 140px; min-height: 100px;">
+                            {% else %}
+                                <div class="p-3 bg-gradient bg-secondary text-white d-flex align-items-center justify-content-between" style="min-height: 100px;">
+                                    <div class="pe-3">
+                                        <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">
+                                            {{ publicidade_ativa.tag_referencia_nome if publicidade_ativa.tag_referencia_nome else 'Destaque Local' }}
+                                        </span>
+                                        <h6 class="fw-bold mb-1 text-white" style="font-size: 0.88rem;">
+                                            {{ publicidade_ativa.titulo or 'Conheça nossos parceiros em Piracicaba' }}
+                                        </h6>
+                                        <p class="small text-white-50 mb-0" style="font-size: 0.72rem;">
+                                            {{ publicidade_ativa.texto_formatado or 'Valorize o comércio da nossa cidade!' }}
+                                        </p>
+                                    </div>
+                                    <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
                                 </div>
-                                <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
-                            </div>
+                            {% endif %}
                         {% endif %}
                     </a>
                 </div>
@@ -862,6 +999,83 @@
             </div>
 
         </div>
+    </div>
+</div>
+
+<!-- 🔔 OFFCANVAS DE NOTIFICAÇÕES COMPLETO -->
+<div class="offcanvas offcanvas-end rounded-start-4" tabindex="-1" id="offcanvasNotificacoes" aria-labelledby="offcanvasNotificacoesLabel">
+    <div class="offcanvas-header border-bottom bg-light">
+        <h5 class="offcanvas-title fw-bold fs-6 d-flex align-items-center gap-2" id="offcanvasNotificacoesLabel">
+            <i class="bi bi-bell-fill text-primary"></i> Minhas Notificações
+            <span id="badgeOffcanvasCount" class="badge bg-primary rounded-pill" style="font-size: 0.7rem; {% if not total_nao_lidas %}display: none;{% endif %}">
+                {{ total_nao_lidas }}
+            </span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-3">
+        {% if notificacoes %}
+            <div class="d-flex justify-content-end mb-2">
+                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 text-muted small" onclick="marcarTodasComoLidas()">
+                    <i class="bi bi-check2-all me-1"></i>Marcar todas como lidas
+                </button>
+            </div>
+
+            <div class="list-group list-group-flush gap-2">
+                {% for notif in notificacoes %}
+                    <div id="notif-item-{{ notif.id }}"
+                         class="list-group-item list-group-item-action border rounded-3 p-3 position-relative {% if not notif.lida %}bg-light border-primary-subtle{% else %}opacity-75{% endif %}">
+
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <strong class="text-dark small me-2">{{ notif.titulo or 'Notificação' }}</strong>
+                            <small class="text-muted flex-shrink-0" style="font-size: 0.68rem;">
+                                {{ notif.criado_em.strftime('%d/%m %H:%M') if notif.criado_em else '' }}
+                            </small>
+                        </div>
+
+                        <p class="mb-2 text-secondary small" style="font-size: 0.78rem; white-space: pre-line;">
+                            {{ notif.mensagem or notif.conteudo or '' }}
+                        </p>
+
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-2">
+                            {# Tenta obter o link do payload_extra de forma segura #}
+                            {% set link = None %}
+                            {% if notif.payload_extra %}
+                                {% if notif.payload_extra is mapping %}
+                                    {% set link = notif.payload_extra.get('link_comprovante') %}
+                                {% endif %}
+                            {% endif %}
+
+                            {% if link %}
+                                <a href="{{ link }}" target="_blank" class="btn btn-sm btn-primary py-1 px-2 d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;">
+                                    <i class="bi bi-file-earmark-text"></i>
+                                    <span>Ver Comprovante</span>
+                                </a>
+                            {% else %}
+                                <span></span>
+                            {% endif %}
+
+                            {% if not notif.lida %}
+                                <button type="button"
+                                        class="btn btn-sm btn-light border rounded-pill py-0 px-2 text-muted btn-marcar-uma-lida"
+                                        data-notificacao-id="{{ notif.id }}"
+                                        style="font-size: 0.7rem;">
+                                    <i class="bi bi-check me-1"></i>Marcar como lida
+                                </button>
+                            {% else %}
+                                <span class="text-muted small" title="Lida"><i class="bi bi-check2-all text-primary fs-5"></i></span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-bell-slash fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                <p class="small mb-0">Você não possui notificações no momento.</p>
+            </div>
+        {% endif %}
     </div>
 </div>
 
@@ -1272,5 +1486,110 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 });
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.querySelector('.rating-container');
+    if (!container) return;
+
+    const stars = container.querySelectorAll('.star-item');
+    const inputNota = document.getElementById('inputNotaUniversal');
+
+    function atualizarEstrelas(nota) {
+        stars.forEach((star, idx) => {
+            if (idx < nota) {
+                star.classList.remove('bi-star');
+                star.classList.add('bi-star-fill');
+                star.style.color = '#f59e0b'; // Amarelo
+            } else {
+                star.classList.remove('bi-star-fill');
+                star.classList.add('bi-star');
+                star.style.color = '#cbd5e1'; // Cinza claro
+            }
+        });
+    }
+
+    // Inicializa com 5 estrelas
+    atualizarEstrelas(5);
+    if (inputNota) inputNota.value = 5;
+
+    stars.forEach((star, index) => {
+        star.style.cursor = 'pointer';
+        star.addEventListener('mouseover', () => atualizarEstrelas(index + 1));
+        star.addEventListener('click', () => {
+            const val = index + 1;
+            if (inputNota) inputNota.value = val;
+            atualizarEstrelas(val);
+        });
+    });
+
+    container.addEventListener('mouseleave', () => {
+        const notaAtual = inputNota ? parseInt(inputNota.value) || 5 : 5;
+        atualizarEstrelas(notaAtual);
+    });
+});
+
+// Função global para adiar ou fechar a avaliação e destravar a tela
+function adiarAvaliacao() {
+    const modal = document.getElementById('modalAvaliacaoPendente');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+        modal.remove();
+    }
+
+    // Remove o backdrop cinza do Bootstrap se houver
+    const backdrop = document.querySelector('.modal-backdrop');
+    if (backdrop) backdrop.remove();
+
+    localStorage.setItem('avaliacao_pendente_adiada', 'true');
+    location.reload();
+}
+
+// Função global de envio da avaliação via fetch
+function enviarAvaliacaoUniversal(event, origemId, colaboradorId, empresaId, cargoId) {
+    event.preventDefault();
+    const form = event.target;
+
+    const notaEl = form.querySelector('#inputNotaUniversal') || form.querySelector('input[name="nota"]');
+    const comentarioEl = form.querySelector('textarea[name="comentario"]') || form.querySelector('#eval_comentario');
+
+    const payload = {
+        modulo_origem: 'agenda',
+        origem_id: origemId || null,
+        colaborador_id: colaboradorId || null,
+        empresa_id: empresaId || null,
+        cargo_id: cargoId || null,
+        nota: notaEl ? parseInt(notaEl.value) || 5 : 5,
+        comentario: comentarioEl ? comentarioEl.value.trim() : ''
+    };
+
+    console.log("📦 PAYLOAD ENVIADO:", payload);
+
+    fetch('/rating/api/salvar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async res => {
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.erro || `Erro HTTP ${res.status}`);
+        }
+        return data;
+    })
+    .then(data => {
+        if (data && data.sucesso) {
+            adiarAvaliacao();
+        } else {
+            alert('Erro ao salvar: ' + (data.erro || 'Tente novamente.'));
+        }
+    })
+    .catch(err => {
+        console.error('Erro na requisição:', err);
+        alert("DIAGNÓSTICO DO SERVIDOR: " + err.message);
+    });
+}
 </script>
 {% endblock %}

@@ -3,13 +3,17 @@ import re
 import hashlib
 import uuid
 import enum
+import logging
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import validates
 from feedin import database as db
 from datetime import datetime, timezone
-from flask import url_for
-from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 from feedin.utils import resolver_url_midia
+
+# Fuso horário padrão do sistema
+TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
+logger = logging.getLogger(__name__)
 
 # =====================================================================
 # 🏛️ ENTIDADES CORE E PERIFÉRICAS DO MÓDULO
@@ -1673,3 +1677,51 @@ class ModClientePontos(db.Model):
   cliente = db.relationship('ModCadastroCliente', backref='extrato_pontos')
   servico = db.relationship('EseServicoOferecido')
   regra = db.relationship('EseRegraPontuacao')
+
+
+# =========================================================================
+# 🏢 2. SERVIÇO DE NOTIFICAÇÕES DO MÓDULO EMPRESA (ESE)
+# =========================================================================
+class EseNotificacaoService:
+
+    @staticmethod
+    def criar_notificacao(
+            modulo_id: int,
+            modulo_slug: str,
+            empresa_id: int,
+            destinatario_id: str,
+            tipo: str,
+            categoria: str,
+            titulo: str,
+            mensagem: str,
+            url_acao: str = None,
+            data_referencia: datetime = None
+    ) -> EseNotificacao:
+        from feedin.modules.agenda.services.notificacao_service import _resolver_usuario_uuid
+        """
+        Registra notificações institucionais/operacionais do Módulo Empresa (tabela `ese_notificacoes`).
+        """
+        try:
+            uuid_destinatario = _resolver_usuario_uuid(destinatario_id) if destinatario_id else None
+
+            notificacao = EseNotificacao(
+                modulo_id=modulo_id,
+                modulo_slug=modulo_slug,
+                empresa_id=empresa_id,
+                destinatario_id=uuid_destinatario,
+                tipo=tipo,
+                categoria=categoria,
+                titulo=titulo,
+                mensagem=mensagem,
+                url_acao=url_acao,
+                data_referencia=data_referencia or datetime.now(TZ_BRASIL).date(),
+                lida=False,
+                created_at=datetime.now(TZ_BRASIL)
+            )
+            db.session.add(notificacao)
+            db.session.commit()
+            return notificacao
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[ERRO EseNotificacaoService]: Falha ao registrar notificação da Empresa - {str(e)}")
+            return None

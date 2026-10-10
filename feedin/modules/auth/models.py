@@ -209,6 +209,15 @@ class ModVinculoModulo(db.Model):
         return f"<ModVinculoModulo CPF_Hash: {self.cpf_hash[:8]} -> Módulo: {self.modulo_slug}>"
 
 
+# TABELA DE VÍNCULO DE INTERESSES DOS MÓDULOS (BALCÃO / PWA)
+mod_cliente_interesses = db.Table('mod_cliente_interesses',
+    db.Column('mod_cliente_id', db.String(36), db.ForeignKey('mod_cadastro_cliente.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('taxonomia_id', db.Integer, db.ForeignKey('taxonomia.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('origem_consumo', db.String(30), default='balcao'), # 'balcao', 'pwa', 'agendamento'
+    db.Column('criado_em', db.DateTime, default=lambda: datetime.now(timezone.utc)),
+    extend_existing=True
+)
+
 
 class AthAtribContexto(db.Model):
     """
