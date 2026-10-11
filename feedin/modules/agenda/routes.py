@@ -2883,10 +2883,17 @@ def dashboard_cliente():
     if not adiou_avaliacao:
         # Se NÃO adiou, faz a consulta normal no banco de dados para buscar a avaliação pendente
         # (Substitua pela sua lógica atual de busca da pendência)
-        agendamento_pendente_avaliacao = AghAgendamento.query.filter_by(
-            cliente_id=current_user.id,
-            status='concluido',
-            avaliado=False
+        # Consulta corrigida buscando agendamentos finalizados que possuem registro de encerramento sem avaliação
+        agendamento_pendente_avaliacao = AghAgendamento.query.join(
+            AghAgendamentoEncerramento, AghAgendamento.id == AghAgendamentoEncerramento.agendamento_id
+        ).filter(
+            AghAgendamento.cliente_id == current_user.id,
+            AghAgendamento.status == 'concluido',
+            AghAgendamentoEncerramento.data_hora_encerramento.isnot(None),
+            db.or_(
+                AghAgendamentoEncerramento.nota_avaliacao_cliente.is_(None),
+                AghAgendamentoEncerramento.nota_avaliacao_cliente == 0
+            )
         ).first()
 
         # Se encontrou o agendamento, busca o colaborador alvo correspondente
