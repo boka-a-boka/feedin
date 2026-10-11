@@ -107,11 +107,19 @@
                             {% endif %}
                         {% endif %}
 
-                        {# LOGO DA EMPRESA #}
-                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0"
-                             style="width: 58px; height: 58px; background-size: cover; background-position: center; {% if url_logo %}background-image: url('{{ url_logo }}');{% endif %}">
-                            {% if not url_logo %}
-                                <i class="bi bi-building fs-3 text-secondary"></i>
+                        {# CONTAINER DA LOGO DA EMPRESA #}
+                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 position-relative overflow-hidden"
+                             style="width: 58px; height: 58px;">
+
+                            {# Ícone de fallback (aparece se não houver url_logo ou se a imagem falhar) #}
+                            <i id="logoLetraEmpresaCard_{{ emp.id }}" class="bi bi-building fs-3 text-secondary position-absolute {% if url_logo %}d-none{% endif %}"></i>
+
+                            {% if url_logo %}
+                            <img id="imgLogoEmpresaCard_{{ emp.id }}"
+                                 src="{{ url_logo }}"
+                                 alt="Logo {{ emp.nome }}"
+                                 class="w-100 h-100 object-fit-contain p-1 position-relative bg-white"
+                                 onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresaCard_{{ emp.id }}').classList.remove('d-none');">
                             {% endif %}
                         </div>
 
