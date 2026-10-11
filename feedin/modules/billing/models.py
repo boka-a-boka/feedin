@@ -21,7 +21,14 @@ class Cobranca(db.Model):
     __tablename__ = 'fin_cobrancas'
     __table_args__ = {'extend_existing': True}
 
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment="Chave primária")
+    id = db.Column(
+        db.Integer,
+        primary_key=True,
+        autoincrement=False,
+        default=lambda: (db.session.query(db.func.max(Cobranca.id)).scalar() or 0) + 1,
+        comment="Chave primária"
+    )
+
     uuid_cobranca = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), comment="UUID universal")
     codigo_transacao = db.Column(db.String(30), unique=True, nullable=False, comment="Código legível (Ex: COB-20260929-102)")
 
