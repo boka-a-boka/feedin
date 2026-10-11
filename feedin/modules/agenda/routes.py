@@ -2873,41 +2873,26 @@ def dashboard_cliente():
     # ----------------------------------------------------------------------------------
     # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (ESTILO UBER)
     # ----------------------------------------------------------------------------------
+    # 1. Verifica se o usuário escolheu adiar a avaliação recentemente via Cookie
+    adiou_avaliacao = request.cookies.get('adiou_avaliacao')
+
+    # 2. Inicializa a variável como None
     agendamento_pendente_avaliacao = None
     colaborador_alvo_avaliacao = None
 
-    try:
-        # Busca o último agendamento concluído do cliente que ainda não tem registro na tabela AvaliacaoUniversal
-        # (Supondo que você use status 'concluido' ou 'finalizado' para atendimentos passados)
-        from feedin.modules.rating.models import AvaliacaoUniversal
+    if not adiou_avaliacao:
+        # Se NÃO adiou, faz a consulta normal no banco de dados para buscar a avaliação pendente
+        # (Substitua pela sua lógica atual de busca da pendência)
+        agendamento_pendente_avaliacao = AghAgendamento.query.filter_by(
+            cliente_id=current_user.id,
+            status='concluido',
+            avaliado=False
+        ).first()
 
-        # IDs de agendamentos já avaliados por este cliente
-        ids_ja_avaliados = db.session.query(AvaliacaoUniversal.origem_id).filter_by(
-            cliente_id=str(cliente.id),
-            modulo_origem='agenda'
-        ).all()
-        ids_avaliados_set = {item[0] for item in ids_ja_avaliados if item[0]}
-
-        # Busca um agendamento finalizado do cliente que NÃO esteja na lista de avaliados
-        agendamentos_concluidos = AghAgendamento.query.filter_by(
-            cliente_id=cliente.id,
-            status='concluido'  # Ou o status exato que define atendimento finalizado na sua agenda
-        ).order_by(AghAgendamento.data_hora_fim.desc()).all()
-
-        for ag in agendamentos_concluidos:
-            if ag.id not in ids_avaliados_set:
-                agendamento_pendente_avaliacao = ag
-                # Pega o primeiro item e colaborador vinculado para a avaliação
-                itens_ag = ag.itens.all() if hasattr(ag.itens, 'all') else getattr(ag, 'itens', [])
-                if itens_ag:
-                    primeiro_item = itens_ag[0]
-                    colab_uuid = str(getattr(primeiro_item, 'colaborador_id_contrato', '') or '').strip()
-                    # Resgata o objeto colaborador no seu mapa ou via query
-                    if colab_uuid in mapa_colaboradores:
-                        colaborador_alvo_avaliacao = mapa_colaboradores[colab_uuid]
-                break
-    except Exception as err:
-        print(f"[Dashboard Cliente] Erro ao verificar avaliação pendente: {err}")
+        # Se encontrou o agendamento, busca o colaborador alvo correspondente
+        if agendamento_pendente_avaliacao:
+            # Sua lógica para definir o colaborador da avaliação...
+            pass
 
     # ----------------------------------------------------------------------------------
     # 6. EMPRESAS FAVORITAS

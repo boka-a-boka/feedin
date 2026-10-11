@@ -222,6 +222,37 @@ class EseEmpresa(db.Model):
             return self.local_fisico.razao_social
         return self.nome
 
+    @property
+    def logradouro(self):
+        return self.local_fisico.logradouro if self.local_fisico else None
+
+    @property
+    def numero(self):
+        return self.local_fisico.numero if self.local_fisico else None
+
+    @property
+    def bairro(self):
+        return self.local_fisico.bairro if self.local_fisico else None
+
+    @property
+    def cidade(self):
+        return self.local_fisico.cidade if self.local_fisico else 'Piracicaba'
+
+    @property
+    def estado(self):
+        return self.local_fisico.estado if self.local_fisico else 'SP'
+
+    @property
+    def telefone(self):
+        return self.local_fisico.telefone if self.local_fisico else None
+
+    @property
+    def is_whatsapp(self):
+        return self.local_fisico.is_whatsapp if self.local_fisico else True
+
+    @property
+    def email(self):
+        return self.local_fisico.email if self.local_fisico else None
 
 class EseTipoExcecaoEnum(enum.Enum):
     """

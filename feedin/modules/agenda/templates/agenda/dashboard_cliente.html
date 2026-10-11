@@ -457,25 +457,33 @@
                 <div class="modal-content border-0 rounded-4 shadow-lg p-3">
                     <div class="modal-header border-0 pb-0">
                         <h5 class="fw-bold text-dark m-0">Como foi sua experiência?</h5>
-                        <!-- Botão para adiar / fechar (se o usuário optar por não responder agora) -->
                         <button type="button" class="btn-close" onclick="adiarAvaliacao()"></button>
                     </div>
                     <div class="modal-body text-center py-4">
                         {% if colaborador_alvo_avaliacao %}
-                            <img src="{{ colaborador_alvo_avaliacao.url_foto_profissional }}" class="rounded-circle mb-3 border shadow-sm" width="80" height="80" style="object-fit: cover;">
-                            <h6 class="fw-bold text-primary mb-1">{{ colaborador_alvo_avaliacao.nome }}</h6>
-                            <p class="text-muted small mb-3">{{ colaborador_alvo_avaliacao.nome_cargo_formatado }}</p>
+                            {% if colaborador_alvo_avaliacao.url_foto_profissional %}
+                                <img src="{{ colaborador_alvo_avaliacao.url_foto_profissional }}" class="rounded-circle mb-3 border shadow-sm" width="80" height="80" style="object-fit: cover;">
+                            {% endif %}
+                            <h6 class="fw-bold text-primary mb-1">{{ colaborador_alvo_avaliacao.nome|default('Profissional') }}</h6>
+                            <p class="text-muted small mb-3">{{ colaborador_alvo_avaliacao.nome_cargo_formatado|default('') }}</p>
                         {% else %}
                             <div class="mb-3">
                                 <i class="bi bi-star-fill text-warning fs-1"></i>
                             </div>
                         {% endif %}
 
-                        <p class="text-secondary small mb-4">Por favor, avalie o atendimento realizado em {{ agendamento_pendente_avaliacao.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') }}.</p>
+                        <p class="text-secondary small mb-4">
+                            Por favor, avalie o atendimento realizado em
+                            {{ agendamento_pendente_avaliacao.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if agendamento_pendente_avaliacao.data_hora_inicio else '--/--/----' }}.
+                        </p>
 
-                        <form id="formAvaliacaoUniversal" onsubmit="enviarAvaliacaoUniversal(event, {{ agendamento_pendente_avaliacao.id }}, {{ colaborador_alvo_avaliacao.id if colaborador_alvo_avaliacao else 'null' }}, {{ empresa_ativa.id if empresa_ativa else 'null' }}, {{ colaborador_alvo_avaliacao.cargo.id if colaborador_alvo_avaliacao and colaborador_alvo_avaliacao.cargo else 'null' }})">
+                        {% set prof_id = colaborador_alvo_avaliacao.id if colaborador_alvo_avaliacao else 'null' %}
+                        {% set emp_id = empresa_ativa.id if empresa_ativa else 'null' %}
+                        {% set cargo_id = (colaborador_alvo_avaliacao.cargo.id if (colaborador_alvo_avaliacao and colaborador_alvo_avaliacao.cargo) else 'null') %}
 
-                            <!-- Estrelas Interativas Fluidas (Toque / Arraste) -->
+                        <form id="formAvaliacaoUniversal" onsubmit="enviarAvaliacaoUniversal(event, {{ agendamento_pendente_avaliacao.id }}, {{ prof_id }}, {{ emp_id }}, {{ cargo_id }})">
+
+                            <!-- Estrelas Interativas Fluidas -->
                             <div class="rating-container mb-4 d-flex justify-content-center gap-2" style="font-size: 2.2rem; cursor: pointer; color: #cbd5e1;">
                                 <i class="bi bi-star-fill star-item" data-value="1"></i>
                                 <i class="bi bi-star-fill star-item" data-value="2"></i>
@@ -502,6 +510,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         {# 7.8. COMPRAS NO LOCAL / CONSUMAÇÃO EM ANDAMENTO (AGRUPADO) #}
         {% if consumacao_agrupada and (consumacao_agrupada.pedidos_cliente|length > 0 or consumacao_agrupada.pedidos_equipe|length > 0) %}
@@ -708,7 +717,7 @@
                                 aria-expanded="false"
                                 aria-controls="collapsePendencias"
                                 style="font-size: 0.85rem;">
-                            <i class="bi bi-exclama''tion-triangle-fill me-2 text-warning"></i>
+                            <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
                             Agendamentos Não Executados
                             <span class="badge bg-warning text-dark rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
                                 {{ agendamentos_ausente_pendentes|length }}
@@ -859,7 +868,6 @@
                                     <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
                                 </div>
                             {% endif %}
-                        {% endif %}
                     </a>
                 </div>
             </div>
@@ -1529,6 +1537,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Função global para adiar ou fechar a avaliação e destravar a tela
 function adiarAvaliacao() {
+    // 1. Oculta e remove o modal imediatamente da tela
     const modal = document.getElementById('modalAvaliacaoPendente');
     if (modal) {
         modal.style.display = 'none';
@@ -1536,12 +1545,16 @@ function adiarAvaliacao() {
         modal.remove();
     }
 
-    // Remove o backdrop cinza do Bootstrap se houver
+    // 2. Remove o backdrop cinza do Bootstrap
     const backdrop = document.querySelector('.modal-backdrop');
     if (backdrop) backdrop.remove();
 
-    localStorage.setItem('avaliacao_pendente_adiada', 'true');
-    location.reload();
+    // 3. Define um cookie indicando que o usuário adiou a avaliação (válido por 24 horas, por exemplo)
+    const d = new Date();
+    d.setTime(d.getTime() + (24 * 60 * 60 * 1000)); // 24 horas
+    document.cookie = "adiou_avaliacao=true; expires=" + d.toUTCString() + "; path=/";
+
+    // Nota: Removido o location.reload() para evitar qualquer comportamento inesperado ou loop.
 }
 
 // Função global de envio da avaliação via fetch
