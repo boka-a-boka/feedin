@@ -3751,53 +3751,40 @@ def catalogo_servicos():
     if categoria_id:
         query = query.filter(EseEmpresa.categoria == categoria_id)
 
-    # ----------------------------------------------------------------------------------
-    # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO
-    # ----------------------------------------------------------------------------------
-    empresas_resultado = (
-        query.options(
-            joinedload(EseEmpresa.categoria_rel),
-            joinedload(EseEmpresa.local_fisico)
+        # ----------------------------------------------------------------------------------
+        # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO
+        # ----------------------------------------------------------------------------------
+        empresas_resultado = (
+            query.options(
+                joinedload(EseEmpresa.categoria_rel),
+                joinedload(EseEmpresa.local_fisico)
+            )
+            .distinct()
+            .order_by(EseEmpresa.nome.asc())
+            .all()
         )
-        .distinct()
-        .order_by(EseEmpresa.nome.asc())
-        .all()
-    )
 
-    logo_caminho = empresas_resultado.logomarca
-    if logo_caminho:
-        logo_caminho = logo_caminho.replace('\\', '/').strip()
-        # Remove qualquer prefixo absoluto ou duplicado até chegar em 'uploads' ou 'empresas'
-        if 'static/' in logo_caminho:
-            logo_caminho = logo_caminho.split('static/')[-1]
+        lista_empresas = []
+        for emp in empresas_resultado:
+            lista_empresas.append({
+                'id': emp.id,
+                'nome': emp.nome,
+                'slug': emp.slug,
+                'logomarca_url': emp.url_logomarca,  # Usa diretamente a property da model
+                'fachada': emp.fachada,
+                'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
+                'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
+                'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
+                'cor_primaria': emp.cor_primaria or "#111827"
+            })
 
-        # Se começar com uploads/, remove para o url_for encaixar perfeitamente no static folder do blueprint
-        if logo_caminho.startswith('uploads/'):
-            logo_caminho = logo_caminho.replace('uploads/', '', 1)
-
-        logo_caminho = logo_caminho.lstrip('/')
-
-    lista_empresas = []
-    for emp in empresas_resultado:
-        lista_empresas.append({
-            'id': emp.id,
-            'nome': emp.nome,
-            'slug': emp.slug,
-            'logomarca_url': emp.url_logomarca,  # <--- Usando a property nativa da model!
-            'fachada': emp.fachada,
-            'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
-            'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
-            'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
-            'cor_primaria': emp.cor_primaria or "#111827"
-        })
-
-    return render_template(
-        'agenda/catalogo.html',
-        categorias=categorias,
-        empresas=lista_empresas,
-        termo_busca=termo_busca,
-        categoria_selecionada=categoria_id
-    )
+        return render_template(
+            'agenda/catalogo.html',
+            categorias=categorias,
+            empresas=lista_empresas,
+            termo_busca=termo_busca,
+            categoria_selecionada=categoria_id
+        )
 
 
 @agenda_bp.route('/meus-agendamentos', methods=['GET'])
