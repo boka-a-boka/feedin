@@ -3676,13 +3676,13 @@ def catalogo_servicos():
     Objetivo:
         Exibir o diretório de empresas/estabelecimentos ativos no FeedIn.
         A busca localiza a empresa por:
-          1. Nome da Empresa (EseEmpresa.nome)
-          2. Categoria Principal da Empresa (EseEmpresa.categoria -> Taxonomia)
-          3. Serviços oferecidos no catálogo (EseServicoOferecido -> Taxonomia)
+        1. Nome da Empresa (EseEmpresa.nome)
+        2. Categoria Principal da Empresa (EseEmpresa.categoria -> Taxonomia)
+        3. Serviços oferecidos no catálogo (EseServicoOferecido -> Taxonomia)
     """
     termo_busca = request.args.get('q', '').strip()
     categoria_id = request.args.get('categoria', type=int)
-    lista_empresas=[]
+    lista_empresas = []
 
     # ----------------------------------------------------------------------------------
     # 1. CATEGORIAS DE EMPRESAS PARA FILTRAGEM (PÍLULAS)
@@ -3751,9 +3751,10 @@ def catalogo_servicos():
     if categoria_id:
         query = query.filter(EseEmpresa.categoria == categoria_id)
 
-        # ----------------------------------------------------------------------------------
-        # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO
-        # ----------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------
+    # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO (Corrigido para fora do if categoria_id)
+    # ----------------------------------------------------------------------------------
+    try:
         empresas_resultado = (
             query.options(
                 joinedload(EseEmpresa.categoria_rel),
@@ -3764,7 +3765,6 @@ def catalogo_servicos():
             .all()
         )
 
-        lista_empresas = []
         for emp in empresas_resultado:
             lista_empresas.append({
                 'id': emp.id,
@@ -3777,14 +3777,16 @@ def catalogo_servicos():
                 'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
                 'cor_primaria': emp.cor_primaria or "#111827"
             })
+    except Exception as e:
+        print(f"DEBUG CATALOGO: Erro ao carregar empresas -> {e}")
 
-        return render_template(
-            'agenda/catalogo.html',
-            categorias=categorias,
-            empresas=lista_empresas,
-            termo_busca=termo_busca,
-            categoria_selecionada=categoria_id
-        )
+    return render_template(
+        'agenda/catalogo.html',
+        categorias=categorias,
+        empresas=lista_empresas,
+        termo_busca=termo_busca,
+        categoria_selecionada=categoria_id
+    )
 
 
 @agenda_bp.route('/meus-agendamentos', methods=['GET'])
