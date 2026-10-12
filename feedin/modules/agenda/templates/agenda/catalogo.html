@@ -107,7 +107,7 @@
                             {% endif %}
                         {% endif %}
 
-                        {# LOGO DA EMPRESA #}
+{# LOGO DA EMPRESA #}
                         <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden position-relative"
                              style="width: 58px; height: 58px;">
 
@@ -116,8 +116,7 @@
                                 {% if emp.logomarca.startswith('http') %}
                                     {% set url_logo = emp.logomarca %}
                                 {% else %}
-                                    {# Garante que aponta para o static do blueprint correto ou global #}
-                                    {% set url_logo = url_for('empresa.static', filename=emp.logomarca.replace('uploads/', '')) %}
+                                    {% set url_logo = url_for('empresa.static', filename=emp.logomarca) %}
                                 {% endif %}
                             {% endif %}
 
