@@ -3682,6 +3682,7 @@ def catalogo_servicos():
     """
     termo_busca = request.args.get('q', '').strip()
     categoria_id = request.args.get('categoria', type=int)
+    lista_empresas=[]
 
     # ----------------------------------------------------------------------------------
     # 1. CATEGORIAS DE EMPRESAS PARA FILTRAGEM (PÍLULAS)
@@ -3763,7 +3764,7 @@ def catalogo_servicos():
         .all()
     )
 
-    logo_caminho = emp.logomarca
+    logo_caminho = empresas_resultado.logomarca
     if logo_caminho:
         logo_caminho = logo_caminho.replace('\\', '/').strip()
         # Remove qualquer prefixo absoluto ou duplicado até chegar em 'uploads' ou 'empresas'
@@ -3777,16 +3778,16 @@ def catalogo_servicos():
         logo_caminho = logo_caminho.lstrip('/')
 
     lista_empresas.append({
-        'id': emp.id,
-        'nome': emp.nome,
-        'slug': emp.slug,
+        'id': empresas_resultado.id,
+        'nome': empresas_resultado.nome,
+        'slug': empresas_resultado.slug,
         'logomarca': logo_caminho,  # Exemplo resultante: empresas/2/empresa_logo_2_c1f01e77.webp
-        'fachada': emp.fachada,
-        'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
-        'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
-        'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
-        'cor_primaria': emp.cor_primaria or "#111827"
-    }))
+        'fachada': empresas_resultado.fachada,
+        'categoria_nome': empresas_resultado.categoria_rel.nome if empresas_resultado.categoria_rel else 'Estabelecimento',
+        'endereco': f"{empresas_resultado.local_fisico.logradouro}, {empresas_resultado.local_fisico.numero}" if empresas_resultado.local_fisico else "Atendimento Digital/Local",
+        'bairro': empresas_resultado.local_fisico.bairro if empresas_resultado.local_fisico else "",
+        'cor_primaria': empresas_resultado.cor_primaria or "#111827"
+    })
 
     return render_template(
         'agenda/catalogo.html',
