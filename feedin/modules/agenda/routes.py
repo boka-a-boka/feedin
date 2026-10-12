@@ -3777,17 +3777,19 @@ def catalogo_servicos():
 
         logo_caminho = logo_caminho.lstrip('/')
 
-    lista_empresas.append({
-        'id': empresas_resultado.id,
-        'nome': empresas_resultado.nome,
-        'slug': empresas_resultado.slug,
-        'logomarca': logo_caminho,  # Exemplo resultante: empresas/2/empresa_logo_2_c1f01e77.webp
-        'fachada': empresas_resultado.fachada,
-        'categoria_nome': empresas_resultado.categoria_rel.nome if empresas_resultado.categoria_rel else 'Estabelecimento',
-        'endereco': f"{empresas_resultado.local_fisico.logradouro}, {empresas_resultado.local_fisico.numero}" if empresas_resultado.local_fisico else "Atendimento Digital/Local",
-        'bairro': empresas_resultado.local_fisico.bairro if empresas_resultado.local_fisico else "",
-        'cor_primaria': empresas_resultado.cor_primaria or "#111827"
-    })
+    lista_empresas = []
+    for emp in empresas_resultado:
+        lista_empresas.append({
+            'id': emp.id,
+            'nome': emp.nome,
+            'slug': emp.slug,
+            'logomarca_url': emp.url_logomarca,  # <--- Usando a property nativa da model!
+            'fachada': emp.fachada,
+            'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
+            'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
+            'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
+            'cor_primaria': emp.cor_primaria or "#111827"
+        })
 
     return render_template(
         'agenda/catalogo.html',

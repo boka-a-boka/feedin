@@ -107,21 +107,12 @@
                             {% endif %}
                         {% endif %}
 
-{# LOGO DA EMPRESA #}
+                        {# LOGO DA EMPRESA #}
                         <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden position-relative"
                              style="width: 58px; height: 58px;">
 
-                            {% set url_logo = '' %}
-                            {% if emp.logomarca %}
-                                {% if emp.logomarca.startswith('http') %}
-                                    {% set url_logo = emp.logomarca %}
-                                {% else %}
-                                    {% set url_logo = url_for('empresa.static', filename=emp.logomarca) %}
-                                {% endif %}
-                            {% endif %}
-
-                            {% if url_logo %}
-                                <img src="{{ url_logo }}" alt="{{ emp.nome }}"
+                            {% if emp.logomarca_url %}
+                                <img src="{{ emp.logomarca_url }}" alt="{{ emp.nome }}"
                                      class="w-100 h-100 object-fit-cover"
                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                 <div class="w-100 h-100 align-items-center justify-content-center bg-light position-absolute top-0 start-0" style="display: none;">
