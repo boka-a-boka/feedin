@@ -3765,11 +3765,20 @@ def catalogo_servicos():
 
     lista_empresas = []
     for emp in empresas_resultado:
+        logo_limpa = emp.logomarca
+        if logo_limpa:
+            logo_limpa = logo_limpa.replace('\\', '/').strip()
+            # Remove eventuais prefixos absolutos do servidor se existirem
+            if 'static/' in logo_limpa:
+                logo_limpa = logo_limpa.split('static/')[-1]
+            if logo_limpa.startswith('/'):
+                logo_limpa = logo_limpa.lstrip('/')
+
         lista_empresas.append({
             'id': emp.id,
             'nome': emp.nome,
             'slug': emp.slug,
-            'logomarca': emp.logomarca,
+            'logomarca': logo_limpa,
             'fachada': emp.fachada,
             'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
             'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",

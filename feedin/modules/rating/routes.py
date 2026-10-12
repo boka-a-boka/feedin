@@ -1,4 +1,3 @@
-print("🔥 ATENÇÃO: O ARQUIVO ROUTES.PY DO RATING FOI CARREGADO PELO PYTHON! 🔥")
 from flask import request, jsonify
 from flask_login import login_required, current_user
 from feedin import database as db, csrf

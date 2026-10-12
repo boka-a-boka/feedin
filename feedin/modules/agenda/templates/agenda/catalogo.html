@@ -107,19 +107,31 @@
                             {% endif %}
                         {% endif %}
 
-                        {# CONTAINER DA LOGO DA EMPRESA #}
-                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 position-relative overflow-hidden"
+                        {# LOGO DA EMPRESA #}
+                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden position-relative"
                              style="width: 58px; height: 58px;">
 
-                            {# Ícone de fallback (aparece se não houver url_logo ou se a imagem falhar) #}
-                            <i id="logoLetraEmpresaCard_{{ emp.id }}" class="bi bi-building fs-3 text-secondary position-absolute {% if url_logo %}d-none{% endif %}"></i>
+                            {% set url_logo = '' %}
+                            {% if emp.logomarca %}
+                                {% if emp.logomarca.startswith('http') %}
+                                    {% set url_logo = emp.logomarca %}
+                                {% else %}
+                                    {# Garante que aponta para o static do blueprint correto ou global #}
+                                    {% set url_logo = url_for('empresa.static', filename=emp.logomarca.replace('uploads/', '')) %}
+                                {% endif %}
+                            {% endif %}
 
                             {% if url_logo %}
-                            <img id="imgLogoEmpresaCard_{{ emp.id }}"
-                                 src="{{ url_logo }}"
-                                 alt="Logo {{ emp.nome }}"
-                                 class="w-100 h-100 object-fit-contain p-1 position-relative bg-white"
-                                 onerror="this.classList.add('d-none'); document.getElementById('logoLetraEmpresaCard_{{ emp.id }}').classList.remove('d-none');">
+                                <img src="{{ url_logo }}" alt="{{ emp.nome }}"
+                                     class="w-100 h-100 object-fit-cover"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="w-100 h-100 align-items-center justify-content-center bg-light position-absolute top-0 start-0" style="display: none;">
+                                    <i class="bi bi-building fs-3 text-secondary"></i>
+                                </div>
+                            {% else %}
+                                <div class="w-100 h-100 d-flex align-items-center justify-content-center bg-light">
+                                    <i class="bi bi-building fs-3 text-secondary"></i>
+                                </div>
                             {% endif %}
                         </div>
 
