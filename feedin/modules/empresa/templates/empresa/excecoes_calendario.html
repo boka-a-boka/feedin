@@ -1,10 +1,12 @@
 {% extends "empresa/base_empresa.html" %}
 
 {% block content %}
+{% set empresa_obj = ese_empresa if ese_empresa else empresa %}
+
 <div class="container-fluid py-4">
     <!-- Botão Voltar Padrão do Módulo -->
     <div class="mb-3">
-        <a href="{{ url_for('empresa.dashboard_empresa', empresa_id=ese_empresa.id if ese_empresa else empresa.id) }}"
+        <a href="{{ url_for('empresa.dashboard_empresa', empresa_id=empresa_obj.id) }}"
            class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white"
            style="width: 40px; height: 40px;"
            title="Voltar ao Painel Geral">
@@ -20,7 +22,7 @@
             {% if contrato %}
                 {{ contrato.detalhes_pessoais.nome_exibicao_pwa if (contrato.detalhes_pessoais and contrato.detalhes_pessoais.nome_exibicao_pwa) else (contrato.detalhes_pessoais.nome_completo if contrato.detalhes_pessoais else 'Colaborador #' ~ contrato.id) }}
             {% else %}
-                {{ empresa.nome_fantasia }}
+                {{ empresa_obj.nome_fantasia or empresa_obj.nome }}
             {% endif %}
         </div>
 
@@ -34,47 +36,35 @@
         </button>
     </div>
 
-    <!-- SEÇÃO DE CARDS (Substituindo a Tabela Antiga) -->
+    <!-- SEÇÃO DE CARDS (Listagem Unificada com EseExcecaoCalendario) -->
     <div class="row g-3">
         {% for item in lista_excecoes %}
-            {% set hoje = datetime.now().date() if datetime else None %}
-
-            <!-- Lógica Visual do Estado Temporal -->
-            {% set eh_futuro = item.data_inicio > hoje if hoje else false %}
-            {% set eh_passado = item.data_fim < hoje if hoje else false %}
-            {% set eh_hoje = not eh_futuro and not eh_passado %}
+            {% set tipo_val = item.tipo.value if item.tipo.value is defined else item.tipo %}
 
             <div class="col-12 col-md-6 col-lg-4">
-                <div class="card h-100 shadow-sm border-2 {% if eh_hoje %}border-success bg-success-subtle bg-opacity-10{% elif eh_passado %}border-light-subtle opacity-75 bg-light{% else %}border-primary-subtle{% endif %}">
+                <div class="card h-100 shadow-sm border-2 border-primary-subtle position-relative">
                     <div class="card-body d-flex flex-column justify-content-between">
 
                         <div>
-                            <!-- Cabeçalho do Card: Status Temporal e Tipo -->
+                            <!-- Cabeçalho do Card: Tipificação e Ações -->
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
-                                    {% if item.tipo.value == 'recesso' %}
+                                    {% if tipo_val == 'recesso' %}
                                         <span class="badge bg-danger text-white me-1">Recesso / Ausência</span>
                                     {% else %}
                                         <span class="badge bg-info text-dark me-1">Horário Especial</span>
                                     {% endif %}
-
-                                    {% if eh_hoje %}
-                                        <span class="badge bg-success text-white animate__animated animate__pulse animate__infinite">
-                                            <i class="bi bi-play-circle me-1"></i>Em Andamento
-                                        </span>
-                                    {% elif eh_passado %}
-                                        <span class="badge bg-secondary text-white">Cumprido</span>
-                                    {% else %}
-                                        <span class="badge bg-primary text-white">Agendado</span>
-                                    {% endif %}
                                 </div>
 
-                                <!-- Ação de Exclusão -->
-                                <form action="{{ url_for('empresa.excluir_excecao', excecao_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Deseja realmente remover esta exceção?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Remover registro">
-                                        <i class="bi bi-trash fs-6"></i>
-                                    </button>
-                                </form>
+                                <div class="d-flex align-items-center gap-1">
+                                    <!-- Ação de Exclusão -->
+                                    <form action="{{ url_for('empresa.excluir_excecao', empresa_id=empresa_obj.id, excecao_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Deseja realmente remover esta exceção?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Remover registro">
+                                            <i class="bi bi-trash fs-6"></i>
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
 
                             <!-- Título do Motivo -->
@@ -139,7 +129,7 @@
 </div>
 
 <!-- ================================================================================= -->
-<!-- MODAL DE CADASTRO UNIFICADO (MANTIDO CONFORME SUA ESTRUTURA ORIGINAL) -->
+<!-- MODAL DE CADASTRO UNIFICADO -->
 <!-- ================================================================================= -->
 <div class="modal fade" id="modalExcecao" tabindex="-1" aria-labelledby="modalExcecaoLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -149,10 +139,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
-            <form id="formExcecaoCalendario" method="POST" action="{{ url_for('empresa.salvar_excecao', empresa_id=empresa.id) }}">
+            <form id="formExcecaoCalendario" method="POST" action="{{ url_for('empresa.salvar_excecao', empresa_id=empresa_obj.id) }}" onsubmit="document.getElementById('data_fim').readOnly = false;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" id="excecao_id" name="excecao_id">
                 <input type="hidden" id="contrato_id" name="contrato_id" value="{{ contrato.id if contrato else '' }}">
-                <input type="hidden" id="empresa_id" name="empresa_id" value="{{ empresa.id }}">
+                <input type="hidden" id="empresa_id" name="empresa_id" value="{{ empresa_obj.id }}">
                 <input type="hidden" id="considera_horario" name="considera_horario" value="false">
 
                 <div class="modal-body">
@@ -355,6 +346,7 @@
         document.getElementById('formExcecaoCalendario').reset();
         document.getElementById('feedback_inteligente_data').classList.add('d-none');
         document.getElementById('data_fim').readOnly = false;
+        document.getElementById('escopo_dia_todo').checked = true;
         gerenciarApresentacaoCampos();
     }
 </script>

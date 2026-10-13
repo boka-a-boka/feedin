@@ -3443,7 +3443,6 @@ def gerenciar_calendario(empresa_id):
     for semana in semanas_cruas:
         semana_formatada = []
         for dia_numero in semana:
-            # Caso o número seja 0, trata-se de um alinhador visual vazio no grid
             if dia_numero == 0:
                 semana_formatada.append({
                     'numero': '',
@@ -3453,12 +3452,11 @@ def gerenciar_calendario(empresa_id):
                 })
                 continue
 
-            # Monta o objeto real de data para o dia corrente do laço
             dia_corrente = date(ano, mes, dia_numero)
             status = 'normal'
             motivo = ''
 
-            # 1ª PRIORIDADE: Verificar se o dia cai em algum Recesso (Faixa de datas)
+            # 1ª PRIORIDADE: Verificar se o dia cai em algum Recesso
             recesso = EmpresaRecesso.query.filter(
                 EmpresaRecesso.empresa_id == empresa_id,
                 EmpresaRecesso.data_inicio <= dia_corrente,
@@ -3476,15 +3474,23 @@ def gerenciar_calendario(empresa_id):
                 ).first()
 
                 if excecao:
-                    if excecao.trabalha_no_dia:
+                    # Compatibilidade segura com atributos de horário do model
+                    trabalha_dia = getattr(excecao, 'trabalha_no_dia', None) or getattr(excecao, 'trabalha', False)
+                    if trabalha_dia:
                         status = 'aberto_especial'
-                        if excecao.horario_abertura_excecao and excecao.horario_fechamento_excecao:
-                            motivo = f"Especial: {excecao.horario_abertura_excecao.strftime('%H:%M')} às {excecao.horario_fechamento_excecao.strftime('%H:%M')}"
+                        h_inicio = getattr(excecao, 'horario_abertura_excecao', None) or getattr(excecao,
+                                                                                                 'inicio_expediente',
+                                                                                                 None)
+                        h_fim = getattr(excecao, 'horario_fechamento_excecao', None) or getattr(excecao,
+                                                                                                'fim_expediente', None)
+
+                        if h_inicio and h_fim:
+                            motivo = f"Especial: {h_inicio.strftime('%H:%M')} às {h_fim.strftime('%H:%M')}"
                         else:
                             motivo = "Horário Especial"
                     else:
                         status = 'fechado'
-                        motivo = "Fechado (Exceção)"
+                        motivo = getattr(excecao, 'motivo_titulo', None) or "Fechado (Exceção)"
 
             # 3ª PRIORIDADE: Busca se há Efeméride Cultural
             efemeride = CadastroEfemeride.query.filter_by(
@@ -3501,13 +3507,11 @@ def gerenciar_calendario(empresa_id):
 
         semanas_processadas.append(semana_formatada)
 
-    # Dicionário de meses amigáveis
     meses_nomes = {
         1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
         7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
     }
 
-    # Navegação de meses
     mes_anterior = mes - 1
     ano_anterior = ano
     if mes_anterior < 1:
@@ -3520,18 +3524,17 @@ def gerenciar_calendario(empresa_id):
         proximo_mes = 1
         proximo_ano += 1
 
-    # Carrega a lista completa de recessos agendados desta empresa
     recessos_listados = EmpresaRecesso.query.filter_by(empresa_id=empresa_id).order_by(
         EmpresaRecesso.data_inicio.asc()).all()
 
-    # Como as efemérides são globais/culturais (ou associadas), buscamos todas para exibição
     efemerides_listadas = CadastroEfemeride.query.order_by(CadastroEfemeride.mes.asc(),
                                                            CadastroEfemeride.dia.asc()).all()
 
     return render_template(
         'empresa/calendario.html',
         ese_empresa=ese_empresa,
-        semanas=semanas_processadas,  # 🔄 Enviando as semanas com dicionários ricos estruturados
+        empresa=ese_empresa,  # 👈 INJETANDO AMBAS AS VARIÁVEIS PARA EVITAR FALHAS NO LAYOUT
+        semanas=semanas_processadas,
         feriados_do_mes=feriados_do_mes,
         fluxo_financeiro=fluxo_financeiro,
         ano_atual=ano,
@@ -3585,68 +3588,6 @@ def calcular_datas_fluxo_financeiro(ano: int, mes: int, feriados_nacionais_set: 
         "dia_1": dia_1_data.day,
         "ultimo_dia": ultimo_dia_data.day
     }
-
-
-@empresa_bp.route('/<int:empresa_id>/calendario/salvar-excecao', methods=['POST'])
-def salvar_excecao(empresa_id):
-    """
-    Cadastra ou atualiza uma exceção de funcionamento para uma empresa específica.
-    """
-    # 📥 Captura e higienização dos inputs do formulário
-    excecao_id = request.form.get('excecao_id')
-    data_str = request.form.get('data')
-    trabalha = request.form.get('trabalha') == 'true'
-
-    # Se a empresa estiver aberta, guarda os horários informados; caso contrário, define como None
-    # Também convertemos a string do input do HTML ("HH:MM") para objeto time do Python se necessário
-    hora_inicio_str = request.form.get('hora_inicio') if trabalha else None
-    hora_fim_str = request.form.get('hora_fim') if trabalha else None
-
-    hora_inicio = None
-    hora_fim = None
-
-    try:
-        # Conversão de string de data do HTML5 para objeto date do Python
-        data_convertida = datetime.strptime(data_str, '%Y-%m-%d').date()
-
-        # Conversão das strings de horários para objetos time do Python
-        if hora_inicio_str:
-            hora_inicio = datetime.strptime(hora_inicio_str, '%H:%M').time()
-        if hora_fim_str:
-            hora_fim = datetime.strptime(hora_fim_str, '%H:%M').time()
-
-    except (ValueError, TypeError):
-        flash('Data ou horários inválidos fornecidos para a exceção.', 'danger')
-        return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
-
-    if excecao_id:
-        # 🔄 MODO EDIÇÃO: Atualiza um registro já existente com os nomes corretos do modelo
-        excecao = EmpresaCalendarioExcecao.query.filter_by(id=excecao_id, empresa_id=empresa_id).first()
-        if excecao:
-            excecao.data_excecao = data_convertida
-            excecao.trabalha_no_dia = trabalha
-            excecao.horario_abertura_excecao = hora_inicio
-            excecao.horario_fechamento_excecao = hora_fim
-            # Nota: 'recorrente' não consta na estrutura atual do modelo fornecido, deixado de fora para evitar novo TypeError.
-            flash('Exceção de funcionamento atualizada com sucesso!', 'success')
-        else:
-            flash('Erro: Exceção não encontrada para atualização.', 'danger')
-    else:
-        # 🆕 MODO CRIAÇÃO: Adiciona a nova regra com a nomenclatura correta das colunas
-        nova_exc = EmpresaCalendarioExcecao(
-            empresa_id=empresa_id,
-            data_excecao=data_convertida,
-            trabalha_no_dia=trabalha,
-            horario_abertura_excecao=hora_inicio,
-            horario_fechamento_excecao=hora_fim
-            # Nota: 'recorrente' removido daqui também por não fazer parte da tabela no banco
-        )
-        db.session.add(nova_exc)
-        flash('Nova exceção de funcionamento salva com sucesso!', 'success')
-
-    # Commit das alterações no banco de dados
-    db.session.commit()
-    return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
 
 
 @empresa_bp.route('/<int:empresa_id>/calendario/salvar-feriado', methods=['POST'])
@@ -3852,48 +3793,108 @@ def excluir_recesso(empresa_id, recesso_id):
         flash('Erro ao remover o recesso.', 'danger')
     return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
 
-def salvar_contexto_cliente_estabelecimento(dados):
+@empresa_bp.route('/<int:empresa_id>/calendario/salvar-excecao', methods=['POST'])
+def salvar_excecao(empresa_id):
     """
-    Persiste os dados de identificação social e o ano de início de relacionamento
-    do cliente com o estabelecimento no banco de dados compartilhado.
-
-    Parâmetros:
-        dados (dict): Dicionário contendo cliente_id, local_id, apelido, foto_path e ano_inicio.
+    Cadastra ou atualiza uma exceção de funcionamento para uma empresa específica.
     """
+    excecao_id = request.form.get('excecao_id')
 
-    cliente = ModCadastroCliente.query.get(dados['cliente_id'])
-    if not cliente:
-        raise ValueError("Cliente não encontrado.")
+    # 📥 Captura o período completo (Início e Fim)
+    data_inicio_str = request.form.get('data_inicio') or request.form.get('data')
+    data_fim_str = request.form.get('data_fim') or data_inicio_str
 
-    # 1. Atualiza dados de Identidade Social no cadastro principal do cliente
-    if dados.get('apelido'):
-        cliente.apelido = dados['apelido']
-    if dados.get('foto_path'):
-        cliente.foto_path = dados['foto_path']
+    motivo_titulo = request.form.get('motivo_titulo') or request.form.get('motivo') or 'Exceção / Recesso'
+    justificativa = request.form.get('justificativa')
 
-    # 2. Atualiza ou insere o relacionamento histórico (ano de início)
-    ano_inicio = dados.get('ano_inicio_relacionamento')
-    local_id = dados.get('local_id')
+    trabalha_raw = request.form.get('trabalha')
+    trabalha = trabalha_raw in ['1', 'true', 'True', 'on', True]
 
-    if ano_inicio and local_id:
-        atrib = AthAtribContexto.query.filter_by(
-            cadastro_cliente_id=cliente.id,
-            local_id=local_id,
-            chave='ano_inicio_relacionamento'
-        ).first()
+    hora_inicio_str = request.form.get('hora_inicio_excecao') or request.form.get(
+        'inicio_expediente') or request.form.get('hora_inicio')
+    hora_fim_str = request.form.get('hora_fim_excecao') or request.form.get('fim_expediente') or request.form.get(
+        'hora_fim')
 
-        if not atrib:
-            atrib = AthAtribContexto(
-                cadastro_cliente_id=cliente.id,
-                local_id=local_id,
-                chave='ano_inicio_relacionamento',
-                valor=str(ano_inicio)
-            )
-            db.session.add(atrib)
+    try:
+        if not data_inicio_str:
+            raise ValueError("Data inicial obrigatória ausente.")
+
+        data_inicio_conv = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim_conv = datetime.strptime(data_fim_str, '%Y-%m-%d').date() if data_fim_str else data_inicio_conv
+
+        if data_fim_conv < data_inicio_conv:
+            data_fim_conv = data_inicio_conv
+
+        hora_inicio = datetime.strptime(hora_inicio_str.strip(), '%H:%M').time() if hora_inicio_str else None
+        hora_fim = datetime.strptime(hora_fim_str.strip(), '%H:%M').time() if hora_fim_str else None
+
+    except (ValueError, TypeError) as e:
+        print(f"⚠️ [SALVAR EXCEÇÃO] Erro de conversão: {e}")
+        flash('Data ou horários inválidos fornecidos para a exceção.', 'danger')
+        return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
+
+    if excecao_id:
+        # 🔄 MODO EDIÇÃO (Atualiza o registro pontual)
+        excecao = EmpresaCalendarioExcecao.query.filter_by(id=excecao_id, empresa_id=empresa_id).first()
+        if excecao:
+            excecao.data_excecao = data_inicio_conv
+            excecao.trabalha_no_dia = trabalha
+            excecao.horario_abertura_excecao = hora_inicio
+            excecao.horario_fechamento_excecao = hora_fim
+            if hasattr(excecao, 'motivo_titulo'):
+                excecao.motivo_titulo = motivo_titulo
+            if hasattr(excecao, 'justificativa'):
+                excecao.justificativa = justificativa
+
+            flash('Exceção de funcionamento atualizada com sucesso!', 'success')
         else:
-            atrib.valor = str(ano_inicio)
+            flash('Erro: Exceção não encontrada para atualização.', 'danger')
+    else:
+        # 🆕 MODO CRIAÇÃO (Percorre e salva cada dia do intervalo no banco)
+        delta_dias = (data_fim_conv - data_inicio_conv).days
+        total_salvo = 0
 
+        for i in range(delta_dias + 1):
+            dia_corrente = data_inicio_conv + timedelta(days=i)
+
+            # Evita duplicatas exatas para o mesmo dia na mesma empresa
+            existente = EmpresaCalendarioExcecao.query.filter_by(
+                empresa_id=empresa_id,
+                data_excecao=dia_corrente
+            ).first()
+
+            if existente:
+                # Atualiza se já existir para o dia
+                existente.trabalha_no_dia = trabalha
+                existente.horario_abertura_excecao = hora_inicio
+                existente.horario_fechamento_excecao = hora_fim
+                if hasattr(existente, 'motivo_titulo'):
+                    existente.motivo_titulo = motivo_titulo
+                if hasattr(existente, 'justificativa'):
+                    existente.justificativa = justificativa
+            else:
+                # Cria novo registro para o dia
+                nova_exc = EmpresaCalendarioExcecao(
+                    empresa_id=empresa_id,
+                    data_excecao=dia_corrente,
+                    trabalha_no_dia=trabalha,
+                    horario_abertura_excecao=hora_inicio,
+                    horario_fechamento_excecao=hora_fim
+                )
+                if hasattr(nova_exc, 'motivo_titulo'):
+                    nova_exc.motivo_titulo = motivo_titulo
+                if hasattr(nova_exc, 'justificativa'):
+                    nova_exc.justificativa = justificativa
+
+                db.session.add(nova_exc)
+
+            total_salvo += 1
+
+        flash(f'Exceção de funcionamento salva com sucesso ({total_salvo} dia(s) processado(s))!', 'success')
+
+    # 💾 Confirmação real no banco de dados
     db.session.commit()
+    return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
 
 
 # ==========================================
@@ -5887,10 +5888,10 @@ def excecoes_empresa(empresa_id):
             flash(f'Erro ao gravar: {str(e)}', 'danger')
 
     lista_excecoes = EseExcecaoCalendario.query.filter_by(
-        empresa_id=empresa.id,
+        empresa_id=str(empresa_id),
         contrato_id=None,
         ativo=True
-    ).order_by(EseExcecaoCalendario.data_inicio.desc()).all()
+    ).order_by(EseExcecaoCalendario.data_inicio.asc()).all()
 
     # Aponta para o template único e compartilhado!
     return render_template(

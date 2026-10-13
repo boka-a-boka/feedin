@@ -1408,7 +1408,9 @@ function prepararEExibirModalComanda(agendamentoId) {
 
     fetch(urlApi)
         .then(res => {
-            if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+            if (!res.ok) {
+                throw new Error(`Erro HTTP ${res.status} ao consultar a API.`);
+            }
             return res.json();
         })
         .then(data => {
@@ -1482,40 +1484,32 @@ function prepararEExibirModalComanda(agendamentoId) {
                 containerProdutos.innerHTML = htmlProdutos || '<p class="text-muted small p-3 m-0">Nenhum produto consumido.</p>';
             }
 
-            // 5. Atualiza Subtotais
-            const valServicos = (data.totais && data.totais.servicos !== undefined) ? parseFloat(data.totais.servicos) || 0 : 0;
-            const valProdutos = (data.totais && data.totais.produtos !== undefined) ? parseFloat(data.totais.produtos) || 0 : 0;
+            // 5. Atualiza Subtotais e Totais
+            const totalServicos = (data.totais && data.totais.servicos !== undefined) ? parseFloat(data.totais.servicos) || 0 : 0;
+            const totalProdutos = (data.totais && data.totais.produtos !== undefined) ? parseFloat(data.totais.produtos) || 0 : 0;
+            const totalGeral = (data.totais && data.totais.geral !== undefined) ? parseFloat(data.totais.geral) || 0 : (totalServicos + totalProdutos);
 
-            // SOMA BRUTA DOS CONSUMOS
-            const consumoBrutoTotal = valServicos + valProdutos;
+            const elSubtotalServicos = document.getElementById('lblSubtotalServicos');
+            if (elSubtotalServicos) elSubtotalServicos.innerText = `R$ ${totalServicos.toFixed(2).replace('.', ',')}`;
 
-            // Guarda no Window E TAMBÉM grava no atributo HTML data-subtotal-base
-            window.subtotalConsumoBase = consumoBrutoTotal;
+            const elSubtotalProdutos = document.getElementById('lblSubtotalProdutos');
+            if (elSubtotalProdutos) elSubtotalProdutos.innerText = `R$ ${totalProdutos.toFixed(2).replace('.', ',')}`;
 
             const elSubtotalConsumo = document.getElementById('lblSubtotalConsumoTotal');
             if (elSubtotalConsumo) {
-                elSubtotalConsumo.setAttribute('data-subtotal-base', consumoBrutoTotal.toString());
-                elSubtotalConsumo.innerText = `R$ ${consumoBrutoTotal.toFixed(2).replace('.', ',')}`;
+                elSubtotalConsumo.setAttribute('data-subtotal-base', totalGeral.toString());
+                elSubtotalConsumo.innerText = `R$ ${totalGeral.toFixed(2).replace('.', ',')}`;
             }
-            // ATRIBUIÇÃO SEGURA: Define o valor base no escopo window
-            window.subtotalConsumoBase = valServicos + valProdutos;
 
-            // Preenche os rótulos de Serviços e Produtos
-            const elSubtotalServicos = document.getElementById('lblSubtotalServicos');
-            if (elSubtotalServicos) elSubtotalServicos.innerText = `R$ ${valServicos.toFixed(2).replace('.', ',')}`;
+            window.subtotalConsumoBase = totalGeral;
 
-            const elSubtotalProdutos = document.getElementById('lblSubtotalProdutos');
-            if (elSubtotalProdutos) elSubtotalProdutos.innerText = `R$ ${valProdutos.toFixed(2).replace('.', ',')}`;
+            const elTotalGeral = document.getElementById('lblValorTotalGeralComanda');
+            if (elTotalGeral) elTotalGeral.innerText = `R$ ${totalGeral.toFixed(2).replace('.', ',')}`;
 
-            // Preenche inputs de desconto/acréscimo se já existirem na API
-            const inputDesconto = document.getElementById('modal-finalizar-desconto') || document.getElementById('txtDescontoComanda');
-            if (inputDesconto) inputDesconto.value = (parseFloat(data.totais?.valor_desconto) || 0).toFixed(2);
-
-            const inputAcrescimo = document.getElementById('modal-finalizar-acrescimo') || document.getElementById('txtAcrescimoComanda');
-            if (inputAcrescimo) inputAcrescimo.value = (parseFloat(data.totais?.valor_acrescimo) || 0).toFixed(2);
-
-            // Recalcula a comanda imediatamente
-            recalcularTotaisComanda();
+            const inputValorPago = document.getElementById('modal-finalizar-valor-pago');
+            if (inputValorPago) {
+                inputValorPago.value = totalGeral.toFixed(2);
+            }
 
             // 6. Exibe a Modal
             const modalEl = document.getElementById('modalFinalizarAtendimento');
@@ -1529,120 +1523,6 @@ function prepararEExibirModalComanda(agendamentoId) {
             alert('Não foi possível carregar os detalhes da comanda.');
         });
 }
-
-// Função Principal de Abertura da Comanda Unificada
-window.abrirModalFechamentoComandaUnificada = async function(agendamentoId, valorTotalFallback = null) {
-    if (!agendamentoId) {
-        alert("ID de agendamento/comanda não informado.");
-        return;
-    }
-
-    const idLimpo = String(agendamentoId).split('_')[0];
-    const elAgendamentoId = document.getElementById('modal-finalizar-agendamento-id');
-    if (elAgendamentoId) elAgendamentoId.value = idLimpo;
-
-    // Redefinição dos campos
-    const inputDesc = document.getElementById('modal-finalizar-desconto');
-    if (inputDesc) inputDesc.value = '0.00';
-
-    const inputAcres = document.getElementById('modal-finalizar-acrescimo');
-    if (inputAcres) inputAcres.value = '0.00';
-
-    const inputObs = document.getElementById('modal-finalizar-observacao');
-    if (inputObs) inputObs.value = '';
-
-    const inputPago = document.getElementById('modal-finalizar-valor-pago');
-    if (inputPago) delete inputPago.dataset.editado;
-
-    const containerServicos = document.getElementById('containerListaServicosComanda');
-    const containerProdutos = document.getElementById('containerListaProdutosComanda');
-
-    if (containerServicos) containerServicos.innerHTML = '<div class="p-3 text-center text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Carregando serviços...</div>';
-    if (containerProdutos) containerProdutos.innerHTML = '<div class="p-3 text-center text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Carregando produtos...</div>';
-
-    const modalEl = document.getElementById('modalFinalizarAtendimento');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
-    }
-
-    try {
-        const response = await fetch(`/agenda/api/agendamento/${idLimpo}/comanda-detalhes`);
-        if (!response.ok) throw new Error("Não foi possível carregar os detalhes da comanda.");
-
-        const data = await response.json();
-
-        const lblCliente = document.getElementById('lblComandaClienteNome');
-        if (lblCliente) lblCliente.textContent = data.cliente_nome || 'Cliente Presencial';
-
-        const hdnCobranca = document.getElementById('modal-finalizar-cobranca-id');
-        if (hdnCobranca) hdnCobranca.value = data.cobranca_id || '';
-
-        const hdnCpf = document.getElementById('modal-finalizar-cpfhash');
-        if (hdnCpf) hdnCpf.value = data.cpf_hash || '';
-
-        const boxCpf = document.getElementById('boxStatusUnificacaoCpf');
-        if (boxCpf) {
-            if (data.cpf_hash || data.unificado) {
-                boxCpf.classList.remove('d-none');
-            } else {
-                boxCpf.classList.add('d-none');
-            }
-        }
-
-        let totalServicos = 0;
-        if (containerServicos) {
-            containerServicos.innerHTML = '';
-            if (data.servicos && data.servicos.length > 0) {
-                data.servicos.forEach(s => {
-                    const v = floatValUnificado(s.valor_total || s.valor);
-                    totalServicos += v;
-                    containerServicos.appendChild(criarElementoLinhaComanda(s.descricao || s.nome, s.colaborador_nome, v));
-                });
-            } else {
-                containerServicos.innerHTML = '<div class="p-2 text-muted small text-center">Nenhum serviço registrado</div>';
-            }
-        }
-
-        let totalProdutos = 0;
-        if (containerProdutos) {
-            containerProdutos.innerHTML = '';
-            if (data.produtos && data.produtos.length > 0) {
-                data.produtos.forEach(p => {
-                    const v = floatValUnificado(p.valor_total || p.valor);
-                    totalProdutos += v;
-                    containerProdutos.appendChild(criarElementoLinhaComanda(p.descricao || p.nome, p.colaborador_nome || 'Balcão', v, p.quantidade || 1));
-                });
-            } else {
-                containerProdutos.innerHTML = '<div class="p-2 text-muted small text-center">Nenhum produto consumido</div>';
-            }
-        }
-
-        window.ComandaController.subtotalServicos = totalServicos;
-        window.ComandaController.subtotalProdutos = totalProdutos;
-        window.ComandaController.subtotalConsumo = totalServicos + totalProdutos;
-
-        const lblSubServ = document.getElementById('lblSubtotalServicos');
-        if (lblSubServ) lblSubServ.innerText = `R$ ${totalServicos.toFixed(2).replace('.', ',')}`;
-
-        const lblSubProd = document.getElementById('lblSubtotalProdutos');
-        if (lblSubProd) lblSubProd.innerText = `R$ ${totalProdutos.toFixed(2).replace('.', ',')}`;
-
-        window.ComandaController.recalcularTotais();
-
-    } catch (err) {
-        console.warn("Recorrendo ao valor fallback da comanda:", err);
-        let fallbackVal = floatValUnificado(valorTotalFallback);
-
-        if (containerServicos) containerServicos.innerHTML = '<div class="p-2 text-muted small text-center">Lançamento de Atendimento</div>';
-        if (containerProdutos) containerProdutos.innerHTML = '<div class="p-2 text-muted small text-center">Sem produtos registrados</div>';
-
-        window.ComandaController.subtotalServicos = fallbackVal;
-        window.ComandaController.subtotalProdutos = 0;
-        window.ComandaController.subtotalConsumo = fallbackVal;
-
-        window.ComandaController.recalcularTotais();
-    }
-};
 
 // Restaura o estado original dos botões e campos ao fechar o modal (previne o loader infinito)
 document.addEventListener('DOMContentLoaded', function () {
@@ -2091,11 +1971,13 @@ window.aplicarFiltrosGlobais = function() {
     const btnFiltrarAgendados = document.getElementById('btnFiltrarAgendados');
     const apenasAgendados = btnFiltrarAgendados ? (btnFiltrarAgendados.getAttribute('data-filtrado') === 'true') : false;
 
-    const todosItens = document.querySelectorAll('.item-agendamento');
+    // Seleciona tanto os cards de agendamento quanto os slots livres
+    const todosItens = document.querySelectorAll('.item-agendamento, .slot-livre');
     let itensVisiveisCount = 0;
 
     todosItens.forEach(item => {
-        const tipoSlot = item.getAttribute('data-tipo');
+        // Identifica se é um slot livre ou ocupado de forma robusta
+        const tipoSlot = item.classList.contains('slot-livre') || item.getAttribute('data-tipo') === 'livre' ? 'livre' : 'ocupado';
         const profIdItem = (item.getAttribute('data-profissional-id') || item.getAttribute('data-colaborador-id') || '').toString().trim().toLowerCase();
         const statusItem = (item.getAttribute('data-status') || '').toString().trim().toLowerCase();
 
@@ -2103,18 +1985,18 @@ window.aplicarFiltrosGlobais = function() {
 
         // 1. FILTRO POR PROFISSIONAL
         if (profIdFiltrar !== '' && profIdFiltrar !== 'todos' && profIdFiltrar !== 'null') {
-            if (profIdItem !== profIdFiltrar) {
+            if (profIdItem !== '' && profIdItem !== profIdFiltrar) {
                 visivel = false;
             }
         }
 
-        // 2. FILTRO POR SLOTS LIVRES (APENAS AGENDADOS)
+        // 2. FILTRO "APENAS AGENDADOS" (Oculta os slots livres se true)
         if (tipoSlot === 'livre' && apenasAgendados) {
             visivel = false;
         }
 
         // 3. FILTRO POR CARDS DE MÉTRICAS (MANDATÓRIO)
-        if (typeof filtroStatusAtual !== 'undefined' && filtroStatusAtual !== 'todos') {
+        if (typeof filtroStatusAtual !== 'undefined' && filtroStatusAtual !== 'todos' && tipoSlot === 'ocupado') {
             if (filtroStatusAtual === 'atrasos' && statusItem !== 'atrasado') {
                 visivel = false;
             }
@@ -2124,6 +2006,9 @@ window.aplicarFiltrosGlobais = function() {
             if (filtroStatusAtual === 'cancelados' && !['cancelado', 'falta', 'ausente_pendente'].includes(statusItem)) {
                 visivel = false;
             }
+        } else if (typeof filtroStatusAtual !== 'undefined' && filtroStatusAtual !== 'todos' && tipoSlot === 'livre') {
+            // Se houver um filtro de métrica ativo, esconde os horários livres
+            visivel = false;
         }
 
         // APLICAÇÃO DA VISIBILIDADE NO DOM

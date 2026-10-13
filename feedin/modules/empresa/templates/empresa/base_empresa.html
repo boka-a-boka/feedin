@@ -64,20 +64,26 @@
     <div class="wrapper-principal">
         <div class="conteudo-responsivo">
 
-            {# HEADER DINÂMICO DO MÓDULO (Alimentado pela tabela ModulosSistema ou pela Logo da Empresa se já selecionada) #}
+            {# HEADER DINÂMICO DO MÓDULO #}
             <div class="text-center mb-4">
-                <div class="d-inline-flex p-3 bg-white text-biz-primary rounded-4 shadow-sm border mb-2">
-                    {% if empresa and empresa.logomarca %}
-                        <img src="/media/empresas/{{ ese_empresa.id }}/branding/{{ ese_empresa.logo }}" alt="Logo" style="max-height: 40px;">
-                             alt="Logo {{ empresa.nome }}"
-                             class="rounded-3"
-                             style="width: 50px; height: 50px; object-fit: contain;">
+                <div class="d-inline-flex p-3 bg-white text-biz-primary rounded-4 shadow-sm border mb-2 align-items-center justify-content-center" style="width: 74px; height: 74px;">
+                    {% if ese_empresa and ese_empresa.logomarca %}
+                        <img src="/media/empresas/{{ ese_empresa.id }}/branding/{{ ese_empresa.logomarca }}"
+                             alt="{{ ese_empresa.nome_fantasia or 'Logo da Empresa' }}"
+                             class="rounded-3 w-100 h-100"
+                             style="object-fit: contain;"
+                             onerror="this.style.display='none'; document.getElementById('fallbackLogoIcon').style.display='flex';">
+                        <div id="fallbackLogoIcon" class="align-items-center justify-content-center w-100 h-100 text-primary fs-3" style="display: none;">
+                            <i class="bi bi-shop"></i>
+                        </div>
                     {% else %}
-                        <i class="{{ modulos_sistema.icone if modulos_sistema else 'bi-building' }}" style="font-size: 2.5rem;"></i>
+                        <div class="d-flex align-items-center justify-content-center w-100 h-100 text-primary fs-3">
+                            <i class="bi bi-shop"></i>
+                        </div>
                     {% endif %}
                 </div>
-                <h5 class="fw-bold m-0 text-dark">{{ empresa.nome if empresa else (modulos_sistema.nome if modulos_sistema else 'Módulo Empresas & Negócios') }}</h5>
-                <p class="text-muted small px-3 m-0">{{ 'Gerenciamento ativo do seu estabelecimento.' if empresa else (modulos_sistema.descricao if modulos_sistema else 'Gerencie seu estabelecimento comercial.') }}</p>
+                <h5 class="fw-bold m-0 text-dark">{{ empresa.nome if empresa else (ese_empresa.nome_fantasia if ese_empresa else (modulos_sistema.nome if modulos_sistema else 'Módulo Empresas & Negócios')) }}</h5>
+                <p class="text-muted small px-3 m-0">{{ 'Gerenciamento ativo do seu estabelecimento.' if empresa or ese_empresa else (modulos_sistema.descricao if modulos_sistema else 'Gerencie seu estabelecimento comercial.') }}</p>
             </div>
 
             {% with messages = get_flashed_messages(with_categories=true) %}
