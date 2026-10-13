@@ -515,22 +515,56 @@ def dashboard_empresa(empresa_id):
 
         nome_exibicao = nome_beneficiario if (tem_beneficiario and nome_beneficiario) else nome_cliente
 
-        raw_foto_atendido = None
-        if beneficiario_obj:
-            raw_foto_atendido = (
-                    getattr(beneficiario_obj, 'foto_url', None) or
-                    getattr(beneficiario_obj, 'foto', None) or
-                    getattr(beneficiario_obj, 'avatar', None)
-            )
+        # =========================================================================
+        # 🎯 AJUSTE PONTUAL: RESOLUÇÃO DA FOTO VIA MOD VINCULO MÓDULO (SLUG 'agenda')
+        # =========================================================================
+        foto_atendido_url = None
 
-        if not raw_foto_atendido and cliente_obj:
-            raw_foto_atendido = (
-                    getattr(cliente_obj, 'foto_url', None) or
-                    getattr(cliente_obj, 'foto', None) or
-                    getattr(cliente_obj, 'avatar', None)
-            )
+        if cliente_obj:
+            try:
+                cliente_id_str = str(getattr(cliente_obj, 'id', '')).strip()
+                if cliente_id_str:
+                    cliente_cadastro = ModCadastroCliente.query.filter_by(id=cliente_id_str).first()
+                    if cliente_cadastro and cliente_cadastro.status_conta == 'ativo' and cliente_cadastro.cpf_hash:
+                        # 1. Busca estrita pelo método oficial com módulo + cpf_hash + email
+                        vinculo_agenda = ModVinculoModulo.obter_vinculo_cliente(
+                            modulo_slug='agenda',
+                            cpf_hash=cliente_cadastro.cpf_hash,
+                            email=cliente_cadastro.email
+                        )
+                        if vinculo_agenda and vinculo_agenda.url_foto_perfil:
+                            foto_atendido_url = vinculo_agenda.url_foto_perfil
+                        else:
+                            # Fallback por CPF caso o e-mail divirja no vínculo
+                            v_por_cpf = ModVinculoModulo.query.filter_by(
+                                modulo_slug='agenda',
+                                cpf_hash=cliente_cadastro.cpf_hash,
+                                ativo=True
+                            ).first()
+                            if v_por_cpf and v_por_cpf.url_foto_perfil:
+                                foto_atendido_url = v_por_cpf.url_foto_perfil
+            except Exception as e:
+                print(f"⚠️ [DASHBOARD FOTO] Erro ao resolver foto via ModVinculoModulo: {e}")
 
-        foto_atendido_url = get_avatar_url(raw_foto_atendido) if raw_foto_atendido else None
+        # Fallback legado tradicional se não encontrou o vínculo por módulo
+        if not foto_atendido_url:
+            raw_foto_atendido = None
+            if beneficiario_obj:
+                raw_foto_atendido = (
+                        getattr(beneficiario_obj, 'foto_url', None) or
+                        getattr(beneficiario_obj, 'foto', None) or
+                        getattr(beneficiario_obj, 'avatar', None)
+                )
+
+            if not raw_foto_atendido and cliente_obj:
+                raw_foto_atendido = (
+                        getattr(cliente_obj, 'foto_url', None) or
+                        getattr(cliente_obj, 'foto', None) or
+                        getattr(cliente_obj, 'avatar', None)
+                )
+
+            foto_atendido_url = get_avatar_url(raw_foto_atendido) if raw_foto_atendido else None
+
         inicial_atendido = nome_exibicao[0].upper() if nome_exibicao else 'C'
 
         whatsapp_cliente = None
@@ -2645,35 +2679,37 @@ def dashboard_cliente():
         print(f"[Dashboard Cliente] Erro na consulta de agendamentos: {err}")
 
     # ----------------------------------------------------------------------------------
-    # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (ESTILO UBER)
+    # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (COMPORTAMENTO ORIGINAL)
     # ----------------------------------------------------------------------------------
-    # 1. Verifica se o usuário escolheu adiar a avaliação recentemente via Cookie
     adiou_avaliacao = request.cookies.get('adiou_avaliacao')
 
-    # 2. Inicializa a variável como None
     agendamento_pendente_avaliacao = None
     colaborador_alvo_avaliacao = None
 
-    if not adiou_avaliacao:
-        # Se NÃO adiou, faz a consulta normal no banco de dados para buscar a avaliação pendente
-        # (Substitua pela sua lógica atual de busca da pendência)
-        # Consulta corrigida buscando agendamentos finalizados que possuem registro de encerramento sem avaliação
+    if not adiou_avaliacao and current_user.is_authenticated:
+        # Busca o agendamento concluído mais recente do cliente que possui encerramento
         agendamento_pendente_avaliacao = AghAgendamento.query.join(
             AghAgendamentoEncerramento, AghAgendamento.id == AghAgendamentoEncerramento.agendamento_id
         ).filter(
             AghAgendamento.cliente_id == current_user.id,
             AghAgendamento.status == 'concluido',
-            AghAgendamentoEncerramento.data_hora_encerramento.isnot(None),
-            db.or_(
-                AghAgendamentoEncerramento.nota_avaliacao_cliente.is_(None),
-                AghAgendamentoEncerramento.nota_avaliacao_cliente == 0
-            )
-        ).first()
+            AghAgendamentoEncerramento.data_hora_encerramento.isnot(None)
+        ).order_by(AghAgendamento.data_hora_fim.desc()).first()
 
-        # Se encontrou o agendamento, busca o colaborador alvo correspondente
+        # Se encontrou o agendamento, busca o colaborador correspondente
         if agendamento_pendente_avaliacao:
-            # Sua lógica para definir o colaborador da avaliação...
-            pass
+            encerramento = AghAgendamentoEncerramento.query.filter_by(
+                agendamento_id=agendamento_pendente_avaliacao.id
+            ).filter(
+                AghAgendamentoEncerramento.colaborador_contrato_id.isnot(None)
+            ).first()
+
+            if encerramento and encerramento.colaborador_contrato:
+                colaborador_alvo_avaliacao = getattr(
+                    encerramento.colaborador_contrato,
+                    'colaborador',
+                    encerramento.colaborador_contrato
+                )
 
     # ----------------------------------------------------------------------------------
     # 6. EMPRESAS FAVORITAS
@@ -7015,29 +7051,61 @@ from flask import jsonify, url_for
 from . import agenda_bp  # Ou o nome do seu Blueprint
 
 
-@agenda_bp.route('/empresa/atendido/<string:atendido_id>/foto', methods=['GET'])
-def obter_foto_atendido(atendido_id):
+@agenda_bp.route('/empresa/atendido/<int:agendamento_id>/foto', methods=['GET'])
+def obter_foto_atendido(agendamento_id):
     """
-    Rota leve para buscar a URL da foto do atendido/cliente.
+    Rota leve para buscar a URL da foto do cliente a partir do agendamento,
+    cruzando ModCadastroCliente e ModVinculoModulo com rigidez no slug do módulo.
     """
-    # 1. Busque o atendido no banco de dados
-    # (Ajuste a query abaixo para o seu Model de Cliente/Beneficiário)
-    atendido = AghAgendamento.query.get(atendido_id)
+    # 1. Ponto de partida: Busca o agendamento pai
+    agendamento = AghAgendamento.query.get(agendamento_id)
+    if not agendamento or not agendamento.cliente_id:
+        return jsonify({'sucesso': False, 'mensagem': 'Agendamento ou cliente não encontrado.'}), 404
 
-    if not atendido:
-        return jsonify({'sucesso': False, 'mensagem': 'Atendido não encontrado.'}), 404
-
-    # 2. Monte a URL da foto de perfil
     url_foto = None
-    if atendido.foto_perfil:
-        # Se você armazena o caminho relativo do arquivo no banco
-        url_foto = url_for('static', filename=f'uploads/clientes/{atendido.foto_perfil}')
-        # Ou se for via rota /media/:
-        # url_foto = f"/media/{atendido.foto_perfil}"
+    nome_cliente = "Cliente"
+
+    try:
+        # 2. Busca a verdade absoluta em ModCadastroCliente usando o cliente_id do agendamento
+        cliente_cadastro = ModCadastroCliente.query.filter_by(id=str(agendamento.cliente_id)).first()
+
+        if cliente_cadastro:
+            nome_cliente = getattr(cliente_cadastro, 'nome', 'Cliente')
+
+            # Valida se a conta está ativa antes de buscar vínculo
+            if cliente_cadastro.status_conta == 'ativo' and cliente_cadastro.cpf_hash:
+
+                # 3. Define explicitamente o slug do módulo atual da agenda
+                modulo_atual_slug = 'agenda'
+
+                # 4. Busca o vínculo estrito usando o método oficial do model que exige: módulo + cpf_hash + email
+                vinculo_modulo = ModVinculoModulo.obter_vinculo_cliente(
+                    modulo_slug=modulo_atual_slug,
+                    cpf_hash=cliente_cadastro.cpf_hash,
+                    email=cliente_cadastro.email
+                )
+
+                # Se encontrou o vínculo específico deste módulo, extrai a foto correta
+                if vinculo_modulo:
+                    url_foto = vinculo_modulo.url_foto_perfil
+                else:
+                    # Fallback opcional caso o e-mail customizado seja diferente, mas o CPF e o módulo batam
+                    vinculo_por_cpf = ModVinculoModulo.query.filter_by(
+                        modulo_slug=modulo_atual_slug,
+                        cpf_hash=cliente_cadastro.cpf_hash,
+                        ativo=True
+                    ).first()
+
+                    if vinculo_por_cpf:
+                        url_foto = vinculo_por_cpf.url_foto_perfil
+
+    except Exception as e:
+        print(f"⚠️ [FOTO ATENDIDO] Erro ao resolver foto via ModVinculoModulo para o agendamento {agendamento_id}: {e}")
 
     return jsonify({
         'sucesso': True,
-        'atendido_id': atendido_id,
+        'agendamento_id': agendamento_id,
+        'cliente_nome': nome_cliente,
         'url_foto_perfil': url_foto
     }), 200
 
@@ -8340,3 +8408,66 @@ def _serializar_item_comanda(item):
         'valor_total': float(item.valor_total or 0.0),
         'origem': getattr(item, 'origem_item', None) or getattr(item, 'origem_lancamento', 'PDV')
     }
+
+
+@agenda_bp.route('/empresa/atendido/<int:agendamento_id>/foto', methods=['GET'])
+def obter_detalhes_e_foto_atendido(agendamento_id):
+    """
+    Rota completa para buscar a URL da foto (via ModVinculoModulo)
+    e os dados cadastrais/do agendamento para o modal da empresa.
+    """
+    agendamento = AghAgendamento.query.get(agendamento_id)
+    if not agendamento or not agendamento.cliente_id:
+        return jsonify({'sucesso': False, 'mensagem': 'Agendamento ou cliente não encontrado.'}), 404
+
+    url_foto = None
+    nome_cliente = "Cliente"
+    telefone_cliente = "--"
+
+    try:
+        cliente_cadastro = ModCadastroCliente.query.filter_by(id=str(agendamento.cliente_id)).first()
+
+        if cliente_cadastro:
+            nome_cliente = getattr(cliente_cadastro, 'nome', 'Cliente')
+            telefone_cliente = getattr(cliente_cadastro, 'whatsapp', None) or getattr(cliente_cadastro, 'telefone',
+                                                                                      '--')
+
+            if cliente_cadastro.status_conta == 'ativo' and cliente_cadastro.cpf_hash:
+                vinculo_modulo = ModVinculoModulo.obter_vinculo_cliente(
+                    modulo_slug='agenda',
+                    cpf_hash=cliente_cadastro.cpf_hash,
+                    email=cliente_cadastro.email
+                )
+
+                if vinculo_modulo:
+                    url_foto = vinculo_modulo.url_foto_perfil
+                else:
+                    vinculo_por_cpf = ModVinculoModulo.query.filter_by(
+                        modulo_slug='agenda',
+                        cpf_hash=cliente_cadastro.cpf_hash,
+                        ativo=True
+                    ).first()
+                    if vinculo_por_cpf:
+                        url_foto = vinculo_por_cpf.url_foto_perfil
+
+    except Exception as e:
+        print(f"⚠️ [DETALHES ATENDIDO] Erro ao resolver dados para o agendamento {agendamento_id}: {e}")
+
+    # Extrai dados do primeiro item do agendamento ou do próprio agendamento
+    primeiro_item = agendamento.itens[0] if hasattr(agendamento, 'itens') and agendamento.itens else None
+    nome_servico = getattr(primeiro_item, 'nome_servico', 'Atendimento') if primeiro_item else 'Atendimento'
+    valor_total = float(getattr(agendamento, 'valor_total', 0) or 0)
+    hora_formatada = agendamento.data_hora_inicio.strftime('%H:%M') if agendamento.data_hora_inicio else '--:--'
+    observacoes = getattr(agendamento, 'observacoes', None) or 'Nenhuma observação registrada.'
+
+    return jsonify({
+        'sucesso': True,
+        'agendamento_id': agendamento_id,
+        'cliente_nome': nome_cliente,
+        'cliente_telefone': telefone_cliente,
+        'url_foto_perfil': url_foto,
+        'hora': hora_formatada,
+        'valor': f"R$ {valor_total:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+        'servico': nome_servico,
+        'observacoes': observacoes
+    }), 200

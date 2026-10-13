@@ -501,6 +501,7 @@
                         {# SLOT OCUPADO #}
                         <div class="p-3 mb-2 rounded-4 border shadow-sm d-flex flex-column justify-content-center item-agendamento status-{{ status_slug_norm }} {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}item-agendamento-atendimento border-primary border-2{% elif status_slug_norm == 'concluido' %}item-agendamento-concluido border-success border-2 bg-success bg-opacity-10{% elif status_slug_norm == 'finalizado' %}item-agendamento-finalizado border-warning border-2 bg-light bg-opacity-75 text-muted opacity-90{% elif e_atrasado %}border-danger border-2 shadow{% endif %}"
                              data-id="{{ agend_id_val }}"
+                             data-agendamento-id="{{ agend_id_val }}"
                              data-tipo="ocupado"
                              data-status="{{ status_slug_norm }}"
                              data-hora="{{ hora_inicio_txt }}"
@@ -1557,58 +1558,67 @@ function obterEmpresaIdContexto() {
 // 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
 // =========================================================================
 
-// Exibe o modal de detalhes do cliente
-window.abrirModalDetalhesCliente = function(elemento) {
-    if (!elemento) return;
+// Função global acionada pelo seu duplo clique existente
+window.abrirModalDetalhesCliente = function(areaCliente) {
+    if (!areaCliente) return;
 
-    const area = elemento.classList.contains('area-cliente-detalhes')
-        ? elemento
-        : elemento.querySelector('.area-cliente-detalhes');
+    // Resgata a div do card pai caso o clique venha de um elemento filho
+    const cardElemento = areaCliente.classList.contains('area-cliente-detalhes')
+        ? areaCliente
+        : (areaCliente.closest('.area-cliente-detalhes') || areaCliente.closest('.item-agendamento'));
 
-    const cardPai = elemento.closest('.item-agendamento') || elemento;
+    if (!cardElemento) {
+        console.warn("⚠️ [MODAL DETALHES] Elemento do card não localizado.");
+        return;
+    }
 
-    const dadosCliente = {
-        nome: (area && area.dataset.clienteNome) || cardPai.dataset.cliente || 'Não informado',
-        telefone: (area && area.dataset.clienteTelefone) || cardPai.dataset.clienteTelefone || 'Contato via Plataforma',
-        hora: cardPai.dataset.hora || '--:--',
-        valor: cardPai.dataset.valor || 'R$ 0,00',
-        servico: cardPai.dataset.servico || 'Não informado',
-        obs: cardPai.dataset.obs || 'Nenhuma observação.',
-        foto: (area && (area.dataset.clienteFoto || area.dataset.fotoAtendido || area.dataset.foto)) ||
-              (cardPai.dataset.clienteFoto || cardPai.dataset.fotoAtendido || cardPai.dataset.foto) || ''
-    };
+    // Extrai os dados gravados diretamente no HTML do slot
+    const nome = cardElemento.getAttribute('data-cliente-nome') || cardElemento.getAttribute('data-cliente') || 'Cliente';
+    const telefone = cardElemento.getAttribute('data-cliente-telefone') || '--';
+    const fotoUrl = cardElemento.getAttribute('data-cliente-foto');
+    const servico = cardElemento.getAttribute('data-servico') || '--';
+    const valor = cardElemento.getAttribute('data-valor') || 'R$ 0,00';
+    const obs = cardElemento.getAttribute('data-obs') || 'Nenhuma observação.';
+    const hora = cardElemento.getAttribute('data-hora') || '--:--';
 
+    // Preenche os campos do formulário/modal (#modalDetalhesClienteEmpresa)
     const elNome = document.getElementById('modalClienteEmpresaNome');
     const elTel = document.getElementById('modalClienteEmpresaTelefone');
     const elHora = document.getElementById('modalClienteEmpresaHora');
     const elValor = document.getElementById('modalClienteEmpresaValor');
     const elServico = document.getElementById('modalClienteEmpresaServico');
     const elObs = document.getElementById('modalClienteEmpresaObs');
-    const elFoto = document.getElementById('modalClienteEmpresaFoto');
-    const elInicial = document.getElementById('modalClienteEmpresaInicial');
 
-    if (elNome) elNome.textContent = dadosCliente.nome;
-    if (elTel) elTel.innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${dadosCliente.telefone}`;
-    if (elHora) elHora.textContent = dadosCliente.hora;
-    if (elValor) elValor.textContent = dadosCliente.valor;
-    if (elServico) elServico.textContent = dadosCliente.servico;
-    if (elObs) elObs.textContent = dadosCliente.obs;
+    if (elNome) elNome.textContent = nome;
+    if (elTel) elTel.innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${telefone !== 'None' ? telefone : 'Contato via Plataforma'}`;
+    if (elHora) elHora.textContent = hora;
+    if (elValor) elValor.textContent = valor;
+    if (elServico) elServico.textContent = servico;
+    if (elObs) elObs.textContent = obs;
 
-    if (elFoto && elInicial) {
-        if (dadosCliente.foto && dadosCliente.foto !== 'None' && dadosCliente.foto !== '') {
-            elFoto.src = dadosCliente.foto;
-            elFoto.style.display = 'block';
-            elInicial.style.display = 'none';
-        } else {
-            elFoto.style.display = 'none';
-            elInicial.style.display = 'flex';
-            elInicial.textContent = (dadosCliente.nome[0] || 'C').toUpperCase();
+    // Trata a foto do cliente ou o avatar com a inicial
+    const imgEl = document.getElementById('modalClienteEmpresaFoto');
+    const inicialEl = document.getElementById('modalClienteEmpresaInicial');
+
+    if (fotoUrl && fotoUrl !== 'None' && fotoUrl.trim() !== '') {
+        if (imgEl) {
+            imgEl.src = fotoUrl;
+            imgEl.style.display = 'block';
+        }
+        if (inicialEl) inicialEl.style.display = 'none';
+    } else {
+        if (imgEl) imgEl.style.display = 'none';
+        if (inicialEl) {
+            inicialEl.style.display = 'flex';
+            inicialEl.textContent = (nome || 'C').charAt(0).toUpperCase();
         }
     }
 
+    // Exibe o modal via Bootstrap
     const modalEl = document.getElementById('modalDetalhesClienteEmpresa');
     if (modalEl && typeof bootstrap !== 'undefined') {
-        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
     }
 };
 

@@ -47,8 +47,6 @@ Tabelas Gerenciadas:
 
 from datetime import datetime, timezone
 
-# models.py
-
 class AghAgendamento(db.Model):
     __tablename__ = 'agh_agendamento'
     __table_args__ = {'extend_existing': True}
@@ -1200,7 +1198,7 @@ class AghAgendamentoEncerramento(db.Model):
                     agendamento_item_id=agendamento_item_id,
                     empresa_id=empresa_id,
                     colaborador_contrato_id=colaborador_contrato_id,
-                    usuario_id=usuario_id,
+                    usuario_id=usuario_id or agendamento.cliente_id,
                     data_hora_inicio_real=agora_sp,
                     # Mantém data_hora_encerramento e data_hora_fim_real estritamente como None
                 )
@@ -1260,6 +1258,10 @@ class AghAgendamentoEncerramento(db.Model):
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
+        # Busca o agendamento pai para garantir que temos o cliente_id à mão
+        agendamento = AghAgendamento.query.get(agendamento_id)
+        cliente_do_agendamento = agendamento.cliente_id if agendamento else None
+
         try:
             # 1. Atualização da fonte da verdade do Item
             item.status_item = 'concluido'
@@ -1275,7 +1277,9 @@ class AghAgendamentoEncerramento(db.Model):
 
             if encerramento:
                 encerramento.data_hora_fim_real = agora_sp
-                encerramento.data_hora_encerramento = agora_sp  # 👈 Atributo fundamental para validar conclusão
+                encerramento.data_hora_encerramento = agora_sp
+                if not encerramento.usuario_id and cliente_do_agendamento:
+                    encerramento.usuario_id = cliente_do_agendamento  # 👈 Preenche se estiver vazio
                 if not encerramento.valor_total or encerramento.valor_total == 0:
                     encerramento.valor_total = valor_item
                     encerramento.valor_final_cobrado = valor_item
@@ -1285,6 +1289,7 @@ class AghAgendamentoEncerramento(db.Model):
                     agendamento_item_id=agendamento_item_id,
                     empresa_id=empresa_id,
                     colaborador_contrato_id=getattr(item, 'profissional_id', None),
+                    usuario_id=cliente_do_agendamento,  # 👈 Já nasce preenchido corretamente
                     data_hora_inicio_real=item.data_hora_inicio_real or agora_sp,
                     data_hora_fim_real=agora_sp,
                     data_hora_encerramento=agora_sp,
