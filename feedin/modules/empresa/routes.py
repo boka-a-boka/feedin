@@ -4481,8 +4481,12 @@ def calcular_hash_contrato(contrato):
 def pode_gerenciar_empresa(empresa_id):
     """
     Verifica se o usuário atual (via current_user ou session) possui papel de gestão
-    (papel_nivel >= 666) no local/empresa especificado.
+    (papel_nivel >= 666) e contrato ativo no local/empresa especificado.
     """
+    # Se o usuário for super admin global do sistema, libera direto
+    if bool(getattr(current_user, 'is_admin', False)):
+        return True
+
     # Identifica o UUID ou ID do usuário logado
     cliente_uuid = getattr(current_user, 'id', None) or session.get('id_cliente')
     usuario_id = getattr(current_user, 'id_usuario', None) or session.get('id_usuario')
@@ -4490,7 +4494,7 @@ def pode_gerenciar_empresa(empresa_id):
     if not cliente_uuid and not usuario_id:
         return False
 
-    # Busca o contrato ativo ou pendente do usuário na empresa solicitada
+    # Busca o contrato na empresa solicitada
     query = ColaboradorContrato.query.filter(
         ColaboradorContrato.id_local == empresa_id
     )
@@ -4504,13 +4508,19 @@ def pode_gerenciar_empresa(empresa_id):
     else:
         query = query.filter(ColaboradorContrato.id_usuario == usuario_id)
 
-    contrato = query.first()
+    # 🔒 ORDENAÇÃO DE SEGURANÇA: Prioriza contratos com maior papel_nivel e que estejam ativos
+    contrato = query.order_by(ColaboradorContrato.papel_nivel.desc()).first()
 
     if not contrato:
         return False
 
-    # Valida se o papel_nivel do contrato é maior ou igual a 666 (Nível Gestor/Admin)
-    return contrato.papel_nivel >= 666
+    # Verifica se o status profissional está ativo (evita que ex-gestores mantenham acesso)
+    if hasattr(contrato, 'status_profissional') and contrato.status_profissional != 'ativo':
+        return False
+
+    # Valida rigorosamente se o papel_nivel do contrato é maior ou igual a 666
+    nivel = contrato.papel_nivel if contrato.papel_nivel is not None else 0
+    return nivel >= 666
 
 
 @empresa_bp.route('/colaborador/admissao-concluida/<int:contrato_id>')

@@ -17,6 +17,18 @@ self.addEventListener('fetch', (event) => {
     // 2. Não intercepta requisições POST, PUT, DELETE (apenas GET)
     if (event.request.method !== 'GET') return;
 
+    const url = new URL(event.request.url);
+
+    // 3. ✨ Ajuste pontual: Ignora rotas dinâmicas, painéis, dashboards e requisições do sistema operacional/desenvolvimento
+    if (
+        url.pathname.includes('/painel/') ||
+        url.pathname.includes('/dashboard') ||
+        url.pathname.includes('/detalhe_empresa') ||
+        url.pathname.includes('__debugger__')
+    ) {
+        return; // Deixa o navegador lidar diretamente com a rede sem interceptação do SW
+    }
+
     event.respondWith(
         fetch(event.request)
             .then((response) => response)
@@ -37,8 +49,6 @@ self.addEventListener('fetch', (event) => {
                     // é melhor deixar o navegador tratar do que injetar um 503 de texto puro
                     if (event.request.mode === 'navigate') {
                         console.warn('Falha na navegação para:', event.request.url);
-                        // Lança a falha para que o navegador exiba a tela nativa de offline
-                        // ou você pode retornar uma página offline.html customizada aqui
                         return Promise.reject(err);
                     }
 

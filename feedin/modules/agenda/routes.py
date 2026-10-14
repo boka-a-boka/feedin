@@ -89,6 +89,8 @@ from feedin.modules.empresa.models import (
     EseRegraPontuacao, ModClientePontos, EseLogMensagemAutomatica, ModEmpresaModulo
 )
 
+from feedin.modules.empresa.routes import pode_gerenciar_empresa
+
 from weasyprint import HTML
 from feedin.modules.agenda.services.agendamento_service import (_encontrar_colaborador_apto, registrar_falta_cliente_service, )
 
@@ -831,6 +833,7 @@ def dashboard_empresa(empresa_id):
     return render_template(
         'agenda/dashboard_empresa.html',
         empresa=empresa,
+        empresa_id=empresa_id,
         empresa_logo_url=empresa_logo_url,
         data_filtro=data_filtro,
         prof_id_param=prof_id_param,
@@ -2679,29 +2682,33 @@ def dashboard_cliente():
         print(f"[Dashboard Cliente] Erro na consulta de agendamentos: {err}")
 
     # ----------------------------------------------------------------------------------
-    # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (COMPORTAMENTO ORIGINAL)
+    # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (BASEADA NO BANCO DE GESTÃO)
     # ----------------------------------------------------------------------------------
-    adiou_avaliacao = request.cookies.get('adiou_avaliacao')
+    from sqlalchemy import not_, select
 
     agendamento_pendente_avaliacao = None
     colaborador_alvo_avaliacao = None
 
-    if not adiou_avaliacao and current_user.is_authenticated:
-        # Busca o agendamento concluído mais recente do cliente que possui encerramento
+    if current_user.is_authenticated:
+        # 1. Subquery moderna para evitar o aviso do SQLAlchemy
+        agendamentos_ja_avaliados_subq = select(AvaliacaoUniversal.origem_id).filter(
+            AvaliacaoUniversal.modulo_origem == 'agenda',
+            AvaliacaoUniversal.cliente_id == str(current_user.id)
+        ).scalar_subquery()
+
+        # 2. Busca o agendamento concluído mais recente que AINDA NÃO FOI AVALIADO
         agendamento_pendente_avaliacao = AghAgendamento.query.join(
             AghAgendamentoEncerramento, AghAgendamento.id == AghAgendamentoEncerramento.agendamento_id
         ).filter(
             AghAgendamento.cliente_id == current_user.id,
             AghAgendamento.status == 'concluido',
-            AghAgendamentoEncerramento.data_hora_encerramento.isnot(None)
+            AghAgendamentoEncerramento.data_hora_encerramento.isnot(None),
+            not_(AghAgendamento.id.in_(agendamentos_ja_avaliados_subq))
         ).order_by(AghAgendamento.data_hora_fim.desc()).first()
 
-        # Se encontrou o agendamento, busca o colaborador correspondente
         if agendamento_pendente_avaliacao:
             encerramento = AghAgendamentoEncerramento.query.filter_by(
                 agendamento_id=agendamento_pendente_avaliacao.id
-            ).filter(
-                AghAgendamentoEncerramento.colaborador_contrato_id.isnot(None)
             ).first()
 
             if encerramento and encerramento.colaborador_contrato:
@@ -3986,11 +3993,6 @@ def _obter_rascunho_ativo(empresa_id: int, cliente_id: str | None, session_token
         q_rascunho = q_rascunho.filter_by(session_token=session_token)
 
     return q_rascunho.order_by(AghAgendamentoRascunho.atualizado_em.desc()).first()
-
-
-# =============================================================================
-# 🧮 HELPERS DE REGRAS DE NEGÓCIO (PRAZOS E CONFLITOS)
-# =============================================================================
 
 # =============================================================================
 # 🧮 HELPERS DE REGRAS DE NEGÓCIO (VERSÃO ENXUTA)
@@ -8471,3 +8473,347 @@ def obter_detalhes_e_foto_atendido(agendamento_id):
         'servico': nome_servico,
         'observacoes': observacoes
     }), 200
+
+
+# ==========================================
+# ROTAS DA API DE AVALIAÇÃO MULTIPROFISSIONAL
+# ==========================================
+
+@agenda_bp.route('/agenda/api/agendamento/<int:agendamento_id>/dados-avaliacao', methods=['GET'])
+@agenda_bp.route('/api/agendamento/<int:agendamento_id>/dados-avaliacao', methods=['GET'])
+@login_required
+def obter_dados_avaliacao_cliente(agendamento_id):
+    print(f"🎯 [SUCESSO GET] Buscando dados de avaliação para o ID: {agendamento_id}")
+
+    agendamento = AghAgendamento.query.get(agendamento_id)
+    if not agendamento:
+        return jsonify({'sucesso': False, 'mensagem': 'Agendamento não encontrado'}), 404
+
+    empresa = getattr(agendamento, 'empresa', None) or EseEmpresa.query.get(agendamento.empresa_id)
+    colaboradores_map = {}
+
+    for item in agendamento.itens:
+        if str(getattr(item, 'status_item', '')).lower() == 'cancelado':
+            continue
+
+        colab_id = getattr(item, 'colaborador_id_contrato', None) or getattr(item, 'profissional_id', None)
+        if not colab_id:
+            continue
+
+        colab_id_str = str(colab_id)
+        prof_obj = getattr(item, 'profissional', None)
+        nome_prof = (
+                getattr(item, 'nome_profissional', None) or
+                getattr(prof_obj, 'nome', None) or
+                'Profissional'
+        )
+
+        foto_prof = None
+        if prof_obj:
+            foto_prof = (
+                    getattr(prof_obj, 'url_foto_profissional', None) or
+                    getattr(prof_obj, 'foto_url', None) or
+                    getattr(prof_obj, 'url_foto', None) or
+                    getattr(prof_obj, 'foto', None)
+            )
+
+        nome_servico = getattr(item, 'nome_servico', None) or getattr(getattr(item, 'servico', None), 'nome', 'Serviço')
+
+        if colab_id_str not in colaboradores_map:
+            colaboradores_map[colab_id_str] = {
+                'colaborador_id': colab_id_str,
+                'nome': nome_prof,
+                'foto': foto_prof,
+                'servicos': []
+            }
+
+        if nome_servico not in colaboradores_map[colab_id_str]['servicos']:
+            colaboradores_map[colab_id_str]['servicos'].append(nome_servico)
+
+    return jsonify({
+        'sucesso': True,
+        'agendamento_id': agendamento_id,
+        'empresa_nome': getattr(empresa, 'nome', 'Estabelecimento') if empresa else 'Estabelecimento',
+        'colaboradores': list(colaboradores_map.values())
+    }), 200
+
+
+@agenda_bp.route('/api/agendamento/<int:agendamento_id>/salvar-avaliacoes-multiplas', methods=['POST'])
+@login_required
+@csrf.exempt
+def salvar_avaliacoes_atendimento_multiplo(agendamento_id):
+    try:
+        data = request.get_json(force=True, silent=True)
+        print(f"📥 [PAYLOAD RECEBIDO] Tipo: {type(data)} | Dados: {data}")
+
+        if not data:
+            return jsonify({'sucesso': False, 'mensagem': 'Payload vazio ou JSON inválido.'}), 400
+
+        avaliacoes = data.get('avaliacoes', [])
+        if not avaliacoes and isinstance(data, list):
+            avaliacoes = data
+
+        if not avaliacoes:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhuma avaliação informada.'}), 400
+
+        agendamento = AghAgendamento.query.get_or_404(agendamento_id)
+        cliente_id = getattr(agendamento, 'cliente_id', None) or str(current_user.id)
+        empresa_id = getattr(agendamento, 'empresa_id', None) or session.get('empresa_id') or 2
+
+        for item_av in avaliacoes:
+            colab_id = item_av.get('colaborador_id')
+            nota = int(item_av.get('nota_profissional') or item_av.get('nota') or 5)
+            comentario = item_av.get('comentario', '')
+
+            # Busca o ID do cargo diretamente do contrato do colaborador
+            cargo_id_val = None
+            if colab_id:
+                try:
+                    colaborador_obj = ColaboradorContrato.query.get(int(colab_id))
+                    if colaborador_obj:
+                        cargo_id_val = colaborador_obj.id_cargo
+                except Exception as err_cargo:
+                    print(f"⚠️ [AVISO] Erro ao buscar id_cargo do colaborador {colab_id}: {err_cargo}")
+
+            nova_avaliacao = AvaliacaoUniversal(
+                modulo_origem='agenda',
+                origem_id=agendamento.id,
+                cliente_id=str(cliente_id),
+                colaborador_contrato_id=int(colab_id) if colab_id else None,
+                empresa_id=int(empresa_id),
+                nota=nota,
+                comentario=comentario,
+                cargo_id=cargo_id_val
+                # Passando o ID puro e simples! (Ajuste para 'cargo_id' se esse for o nome da coluna na model)
+            )
+            db.session.add(nova_avaliacao)
+
+        db.session.commit()
+        print(f"✅ [SUCESSO POST] Avaliações e cargos salvos para o agendamento {agendamento_id}")
+        return jsonify({'sucesso': True, 'mensagem': 'Avaliações registradas com sucesso!'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()  # Imprime o rastro completo no console do Flask
+        return jsonify({'sucesso': False, 'mensagem': f'Erro interno: {str(e)}'}), 500
+
+
+@agenda_bp.route('/empresa/<int:empresa_id>/painel/indicadores-desempenho', methods=['GET'])
+@login_required
+def painel_indicadores_desempenho(empresa_id):
+    usuario_uuid = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
+    is_super_admin = bool(getattr(current_user, 'is_admin', False))
+
+    # Busca o contrato do colaborador logado nesta empresa
+    contrato_colaborador = ColaboradorContrato.query.filter(
+        ColaboradorContrato.id_local == empresa_id,
+        (ColaboradorContrato.id_cadastro_cliente == usuario_uuid) |
+        (ColaboradorContrato.id_cadastro_cliente == str(current_user.id))
+    ).filter_by(status_profissional='ativo').first()
+
+    papel_nivel = contrato_colaborador.papel_nivel if (contrato_colaborador and contrato_colaborador.papel_nivel is not None) else 0
+
+    # 🔒 Regra isolada e estrita para este painel
+    pode_gerenciar = (papel_nivel >= 600) or is_super_admin
+
+    # Se não for gestor nem tiver contrato ativo, bloqueia
+    if not pode_gerenciar and not contrato_colaborador:
+        flash("Você não tem permissão para acessar este painel nesta empresa.", "warning")
+        return redirect(url_for('cliente.dashboard'))
+
+    meu_contrato_id = contrato_colaborador.id if contrato_colaborador else None
+
+    # 📌 Filtros de Período
+    hoje_str = datetime.now().strftime('%Y-%m-%d')
+    data_inicio_str = request.args.get('data_inicio', hoje_str)
+    data_fim_str = request.args.get('data_fim', hoje_str)
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        data_inicio = datetime.now().date()
+        data_fim = datetime.now().date()
+
+    inicio_dt = datetime.combine(data_inicio, time.min)
+    fim_dt = datetime.combine(data_fim, time.max)
+
+    # 📌 Tratativa do Select de Profissionais (Isolada)
+    if pode_gerenciar:
+        lista_colaboradores = ColaboradorContrato.query.filter_by(
+            id_local=empresa_id,
+            status_profissional='ativo'
+        ).all()
+        profissional_id_filtro = request.args.get('profissional_id', type=int)
+    else:
+        # Colaborador comum (ex: nível 500): restrito estritamente a si mesmo
+        lista_colaboradores = [contrato_colaborador] if contrato_colaborador else []
+        profissional_id_filtro = meu_contrato_id
+
+    # Resolução dos nomes de exibição
+    for c in lista_colaboradores:
+        nome_resolvido = None
+        for attr in ['nome', 'nome_completo', 'apelido']:
+            if hasattr(c, attr) and getattr(c, attr):
+                nome_resolvido = getattr(c, attr)
+                break
+        if not nome_resolvido and hasattr(c, 'usuario') and c.usuario and hasattr(c.usuario, 'nome'):
+            nome_resolvido = c.usuario.nome
+        if not nome_resolvido:
+            nome_resolvido = f"Profissional #{c.id}"
+        setattr(c, 'nome_exibicao', nome_resolvido)
+
+    # 📌 Consulta dos Itens de Agendamento
+    query_itens = db.session.query(AghAgendamentoItem).join(
+        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).filter(
+        AghAgendamento.empresa_id == empresa_id,
+        AghAgendamento.status != 'cancelado',
+        AghAgendamentoItem.data_hora_inicio >= inicio_dt,
+        AghAgendamentoItem.data_hora_inicio <= fim_dt
+    )
+
+    # Blindagem do filtro para colaboradores comuns
+    if not pode_gerenciar and meu_contrato_id:
+        query_itens = query_itens.filter(
+            (AghAgendamentoItem.colaborador_id_contrato == str(meu_contrato_id)) |
+            (AghAgendamentoItem.colaborador_id_contrato == meu_contrato_id)
+        )
+    elif profissional_id_filtro:
+        query_itens = query_itens.filter(
+            (AghAgendamentoItem.colaborador_id_contrato == str(profissional_id_filtro)) |
+            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro)
+        )
+
+    itens_brutos = query_itens.all()
+
+    # Busca em lote dos nomes dos serviços
+    servico_ids_unicos = list(set(item.servico_id for item in itens_brutos if item.servico_id))
+    mapa_servicos = {}
+    if servico_ids_unicos:
+        servicos_objs = EseServicoOferecido.query.filter(EseServicoOferecido.id.in_(servico_ids_unicos)).all()
+        for s in servicos_objs:
+            nome_srv = getattr(s, 'nome', None) or getattr(s, 'titulo', None) or f"Serviço #{s.id}"
+            mapa_servicos[s.id] = nome_srv
+
+    total_atendimentos = len(itens_brutos)
+    concluidos = 0
+    saldo_minutos_total = 0
+    itens_processados = []
+
+    for item in itens_brutos:
+        is_concluido = item.status_item in ['finalizado', 'concluido', 'concluído']
+        if is_concluido:
+            concluidos += 1
+
+        desvio_minutos = None
+        if item.data_hora_fim and item.data_hora_fim_real:
+            delta = (item.data_hora_fim_real - item.data_hora_fim).total_seconds() / 60
+            desvio_minutos = int(delta)
+            saldo_minutos_total += (-desvio_minutos)
+
+        nome_srv = mapa_servicos.get(item.servico_id, f"Serviço #{item.servico_id}")
+
+        itens_processados.append({
+            'item': item,
+            'data_hora_inicio': item.data_hora_inicio,
+            'status_item': item.status_item,
+            'data_hora_fim': item.data_hora_fim,
+            'data_hora_fim_real': item.data_hora_fim_real,
+            'nome_servico': nome_srv,
+            'desvio_minutos': desvio_minutos
+        })
+
+    return render_template(
+        'agenda/painel_indicadores_desempenho.html',
+        empresa_id=empresa_id,
+        empresa=EseEmpresa.query.get(empresa_id),
+        pode_gerenciar=pode_gerenciar,
+        meu_contrato_id=meu_contrato_id,
+        lista_colaboradores=lista_colaboradores,
+        profissional_id_filtro=profissional_id_filtro,
+        data_inicio=data_inicio_str,
+        data_fim=data_fim_str,
+        total_atendimentos=total_atendimentos,
+        concluidos=concluidos,
+        saldo_minutos_total=saldo_minutos_total,
+        itens_realizados=itens_processados
+    )
+
+
+@agenda_bp.route('/empresa/<int:empresa_id>/painel/indicadores-desempenho/pdf', methods=['GET'])
+@login_required
+def relatorio_desempenho_pdf(empresa_id):
+    usuario_uuid = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
+    is_super_admin = bool(getattr(current_user, 'is_admin', False))
+
+    # Busca o contrato do colaborador logado
+    contrato_colaborador = ColaboradorContrato.query.filter(
+        ColaboradorContrato.id_local == empresa_id,
+        (ColaboradorContrato.id_cadastro_cliente == usuario_uuid) |
+        (ColaboradorContrato.id_cadastro_cliente == str(current_user.id))
+    ).filter_by(status_profissional='ativo').first()
+
+    papel_nivel = contrato_colaborador.papel_nivel if (
+                contrato_colaborador and contrato_colaborador.papel_nivel is not None) else 0
+    pode_gerenciar = (papel_nivel >= 600) or is_super_admin
+
+    if not pode_gerenciar and not contrato_colaborador:
+        flash("Você não tem permissão para gerar este relatório.", "warning")
+        return redirect(url_for('cliente.dashboard'))
+
+    meu_contrato_id = contrato_colaborador.id if contrato_colaborador else None
+
+    # Parâmetros de data e filtro
+    data_inicio_str = request.args.get('data_inicio', datetime.now().strftime('%Y-%m-%d'))
+    data_fim_str = request.args.get('data_fim', datetime.now().strftime('%Y-%m-%d'))
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        data_inicio = data_fim = datetime.now().date()
+
+    inicio_dt = datetime.combine(data_inicio, time.min)
+    fim_dt = datetime.combine(data_fim, time.max)
+
+    # Definição rigorosa de escopo (Gestor vs Colaborador)
+    profissional_id_filtro = request.args.get('profissional_id', type=int)
+    if not pode_gerenciar:
+        profissional_id_filtro = meu_contrato_id  # Trava estritamente no ID do colaborador
+
+    # Consulta dos dados (mesma lógica do painel)
+    query_itens = db.session.query(AghAgendamentoItem).join(
+        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).filter(
+        AghAgendamento.empresa_id == empresa_id,
+        AghAgendamento.status != 'cancelado',
+        AghAgendamentoItem.data_hora_inicio >= inicio_dt,
+        AghAgendamentoItem.data_hora_inicio <= fim_dt
+    )
+
+    if not pode_gerenciar and meu_contrato_id:
+        query_itens = query_itens.filter(
+            (AghAgendamentoItem.colaborador_id_contrato == str(meu_contrato_id)) |
+            (AghAgendamentoItem.colaborador_id_contrato == meu_contrato_id)
+        )
+    elif profissional_id_filtro:
+        query_itens = query_itens.filter(
+            (AghAgendamentoItem.colaborador_id_contrato == str(profissional_id_filtro)) |
+            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro)
+        )
+
+    itens_brutos = query_itens.all()
+
+    # Processamento de métricas...
+    # (Você pode renderizar um template HTML dedicado para impressão em PDF ou usar WeasyPrint/PdfKit se já tiver configurado no projeto)
+
+    return render_template(
+        'agenda/relatorio_desempenho_print.html',
+        empresa=EseEmpresa.query.get(empresa_id),
+        data_inicio=data_inicio_str,
+        data_fim=data_fim_str,
+        pode_gerenciar=pode_gerenciar,
+        itens=itens_brutos
+    )

@@ -450,62 +450,39 @@
             </div>
         {% endif %}
 
-        {# 7.5. VERIFICAÇÃO AVALIAÇÕES PENDENTES #}
+{# 7.5. VERIFICAÇÃO AVALIAÇÕES PENDENTES #}
         {% if agendamento_pendente_avaliacao %}
         <div class="modal fade show" id="modalAvaliacaoPendente" tabindex="-1" style="display: block; background: rgba(0,0,0,0.6);" data-bs-backdrop="static">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content border-0 rounded-4 shadow-lg p-3">
                     <div class="modal-header border-0 pb-0">
                         <h5 class="fw-bold text-dark m-0">Como foi sua experiência?</h5>
                         <button type="button" class="btn-close" onclick="adiarAvaliacao()"></button>
                     </div>
                     <div class="modal-body text-center py-4">
-                        {% if colaborador_alvo_avaliacao %}
-                            {% if colaborador_alvo_avaliacao.url_foto_profissional %}
-                                <img src="{{ colaborador_alvo_avaliacao.url_foto_profissional }}" class="rounded-circle mb-3 border shadow-sm" width="80" height="80" style="object-fit: cover;">
-                            {% endif %}
-                            <h6 class="fw-bold text-primary mb-1">{{ colaborador_alvo_avaliacao.nome|default('Profissional') }}</h6>
-                            <p class="text-muted small mb-3">{{ colaborador_alvo_avaliacao.nome_cargo_formatado|default('') }}</p>
-                        {% else %}
-                            <div class="mb-3">
-                                <i class="bi bi-star-fill text-warning fs-1"></i>
-                            </div>
-                        {% endif %}
 
-                        <p class="text-secondary small mb-4">
+                        <!-- ID Oculto do Agendamento para o JavaScript consumir -->
+                        <input type="hidden" id="inputAgendamentoPendenteId" value="{{ agendamento_pendente_avaliacao.id }}">
+
+                        <!-- CONTAINER QUE RECEBERÁ OS BLOCOS COM A SUA ESTRUTURA VISUAL ORIGINAL -->
+                        <div id="containerColaboradoresAvaliacao" class="d-flex flex-column gap-4">
+                            <!-- O JS injetará os blocos dinamicamente aqui mantendo o design original -->
+                        </div>
+
+                        <p class="text-secondary small my-3">
                             Por favor, avalie o atendimento realizado em
                             {{ agendamento_pendente_avaliacao.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if agendamento_pendente_avaliacao.data_hora_inicio else '--/--/----' }}.
                         </p>
 
-                        {% set prof_id = colaborador_alvo_avaliacao.id if colaborador_alvo_avaliacao else 'null' %}
-                        {% set emp_id = empresa_ativa.id if empresa_ativa else 'null' %}
-                        {% set cargo_id = (colaborador_alvo_avaliacao.cargo.id if (colaborador_alvo_avaliacao and colaborador_alvo_avaliacao.cargo) else 'null') %}
+                        <div class="d-grid gap-2 mt-3">
+                            <button type="button" class="py-2.5 btn btn-primary rounded-pill fw-bold shadow-sm" onclick="enviarAvaliacoesMultiplasDoModal({{ agendamento_pendente_avaliacao.id }})">
+                                Enviar Avaliações
+                            </button>
+                            <button type="button" class="btn btn-link text-muted text-decoration-none small" onclick="adiarAvaliacao()">
+                                Avaliar depois
+                            </button>
+                        </div>
 
-                        <form id="formAvaliacaoUniversal" onsubmit="enviarAvaliacaoUniversal(event, {{ agendamento_pendente_avaliacao.id }}, {{ prof_id }}, {{ emp_id }}, {{ cargo_id }})">
-
-                            <!-- Estrelas Interativas Fluidas -->
-                            <div class="rating-container mb-4 d-flex justify-content-center gap-2" style="font-size: 2.2rem; cursor: pointer; color: #cbd5e1;">
-                                <i class="bi bi-star-fill star-item" data-value="1"></i>
-                                <i class="bi bi-star-fill star-item" data-value="2"></i>
-                                <i class="bi bi-star-fill star-item" data-value="3"></i>
-                                <i class="bi bi-star-fill star-item" data-value="4"></i>
-                                <i class="bi bi-star-fill star-item" data-value="5"></i>
-                                <input type="hidden" name="nota" id="inputNotaUniversal" value="5">
-                            </div>
-
-                            <div class="mb-3 text-start">
-                                <textarea class="form-control rounded-3" name="comentario" rows="3" placeholder="Deixe um comentário opcional sobre o atendimento..."></textarea>
-                            </div>
-
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="py-2 btn btn-primary rounded-pill fw-bold shadow-sm">
-                                    Enviar Avaliação
-                                </button>
-                                <button type="button" class="btn btn-link text-muted text-decoration-none small" onclick="adiarAvaliacao()">
-                                    Avaliar depois
-                                </button>
-                            </div>
-                        </form>
                     </div>
                 </div>
             </div>
@@ -1089,7 +1066,7 @@
 
 <script>
 /**
- * Upload assíncrono da foto de perfil do cliente
+ * - Upload assíncrono da foto de perfil do cliente
  */
 async function submeterFotoPerfil(input) {
     if (!input || !input.files || !input.files.length) return;
@@ -1171,7 +1148,7 @@ async function submeterFotoPerfil(input) {
 }
 
 /**
- * Helper para obter o token CSRF da página
+ * - Helper para obter o token CSRF da página
  */
 function obterCsrfToken() {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
@@ -1179,7 +1156,7 @@ function obterCsrfToken() {
 }
 
 /**
- * Envio assíncrono para arquivar / marcar notificações como lidas
+ * - Envio assíncrono para arquivar / marcar notificações como lidas
  */
 function enviarMarcarLida(notificacaoId = null, urlRedirecionamento = null) {
     if (!notificacaoId) {
@@ -1290,7 +1267,7 @@ function sincronizarBadgesSininho() {
 }
 
 /**
- * Utilitário global para exibição de Toasts com fallback
+ * - Utilitário global para exibição de Toasts com fallback
  */
 function exibirToast(titulo, mensagem, tipo = 'info') {
     const toastEl = document.getElementById('liveToast');
@@ -1339,7 +1316,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const card = event.relatedTarget;
             if (!card) return;
 
-            // Preenche as informações de texto
             const elNome = document.getElementById('infoProfNome');
             const elEsp = document.getElementById('infoProfEspecialidade');
             const elBio = document.getElementById('infoProfBio');
@@ -1358,7 +1334,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (elDataHora) elDataHora.textContent = card.getAttribute('data-data-hora') || '--/--/----';
             if (elValor) elValor.textContent = card.getAttribute('data-valor') || 'R$ 0,00';
 
-            // Lógica da Foto e Fallback
             const profFoto = card.getAttribute('data-prof-foto') || '';
             const imgFoto = document.getElementById('infoProfFoto');
             const divFallback = document.getElementById('infoProfFallback');
@@ -1381,7 +1356,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Controle de Foco para Acessibilidade (Evita erro de aria-hidden)
         modalInfo.addEventListener('shown.bs.modal', function () {
             const btnClose = modalInfo.querySelector('.btn-close');
             if (btnClose) btnClose.focus();
@@ -1399,8 +1373,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const elementoAlvo = e.target.closest('.item-servico-card, .card-atendimento-item');
         if (elementoAlvo) {
             e.preventDefault();
-
-            // Desfoca o elemento atual antes de abrir para não travar o aria-hidden
             if (document.activeElement) {
                 document.activeElement.blur();
             }
@@ -1494,115 +1466,200 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 });
-document.addEventListener('DOMContentLoaded', () => {
-    const container = document.querySelector('.rating-container');
-    if (!container) return;
 
-    const stars = container.querySelectorAll('.star-item');
-    const inputNota = document.getElementById('inputNotaUniversal');
+// ==========================================
+// 1. FUNÇÕES GLOBAIS DE CONTROLE DO MODAL
+// ==========================================
 
-    function atualizarEstrelas(nota) {
-        stars.forEach((star, idx) => {
-            if (idx < nota) {
-                star.classList.remove('bi-star');
-                star.classList.add('bi-star-fill');
-                star.style.color = '#f59e0b'; // Amarelo
-            } else {
-                star.classList.remove('bi-star-fill');
-                star.classList.add('bi-star');
-                star.style.color = '#cbd5e1'; // Cinza claro
-            }
-        });
-    }
-
-    // Inicializa com 5 estrelas
-    atualizarEstrelas(5);
-    if (inputNota) inputNota.value = 5;
-
-    stars.forEach((star, index) => {
-        star.style.cursor = 'pointer';
-        star.addEventListener('mouseover', () => atualizarEstrelas(index + 1));
-        star.addEventListener('click', () => {
-            const val = index + 1;
-            if (inputNota) inputNota.value = val;
-            atualizarEstrelas(val);
-        });
-    });
-
-    container.addEventListener('mouseleave', () => {
-        const notaAtual = inputNota ? parseInt(inputNota.value) || 5 : 5;
-        atualizarEstrelas(notaAtual);
-    });
-});
-
-// Função global para adiar ou fechar a avaliação e destravar a tela
 function adiarAvaliacao() {
-    // 1. Oculta e remove o modal imediatamente da tela
     const modal = document.getElementById('modalAvaliacaoPendente');
     if (modal) {
         modal.style.display = 'none';
         modal.classList.remove('show');
         modal.remove();
     }
-
-    // 2. Remove o backdrop cinza do Bootstrap
     const backdrop = document.querySelector('.modal-backdrop');
     if (backdrop) backdrop.remove();
-
-    // 3. Define um cookie indicando que o usuário adiou a avaliação (válido por 24 horas, por exemplo)
-    const d = new Date();
-    d.setTime(d.getTime() + (24 * 60 * 60 * 1000)); // 24 horas
-    document.cookie = "adiou_avaliacao=true; expires=" + d.toUTCString() + "; path=/";
-
-    // Nota: Removido o location.reload() para evitar qualquer comportamento inesperado ou loop.
+    document.cookie = "adiou_avaliacao=true; path=/";
 }
 
-// Função global de envio da avaliação via fetch
-function enviarAvaliacaoUniversal(event, origemId, colaboradorId, empresaId, cargoId) {
-    event.preventDefault();
-    const form = event.target;
+// ==========================================
+// 2. INICIALIZAÇÃO AO CARREGAR A PÁGINA
+// ==========================================
 
-    const notaEl = form.querySelector('#inputNotaUniversal') || form.querySelector('input[name="nota"]');
-    const comentarioEl = form.querySelector('textarea[name="comentario"]') || form.querySelector('#eval_comentario');
-
-    const payload = {
-        modulo_origem: 'agenda',
-        origem_id: origemId || null,
-        colaborador_id: colaboradorId || null,
-        empresa_id: empresaId || null,
-        cargo_id: cargoId || null,
-        nota: notaEl ? parseInt(notaEl.value) || 5 : 5,
-        comentario: comentarioEl ? comentarioEl.value.trim() : ''
-    };
-
-    console.log("📦 PAYLOAD ENVIADO:", payload);
-
-    fetch('/rating/api/salvar', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify(payload)
-    })
-    .then(async res => {
-        const data = await res.json();
-        if (!res.ok) {
-            throw new Error(data.erro || `Erro HTTP ${res.status}`);
+document.addEventListener('DOMContentLoaded', function() {
+    const agendamentoPendenteInput = document.getElementById('inputAgendamentoPendenteId');
+    if (agendamentoPendenteInput) {
+        const agendamentoId = agendamentoPendenteInput.value;
+        if (agendamentoId) {
+            carregarDadosAvaliacaoPendente(agendamentoId);
         }
-        return data;
-    })
-    .then(data => {
-        if (data && data.sucesso) {
-            adiarAvaliacao();
-        } else {
-            alert('Erro ao salvar: ' + (data.erro || 'Tente novamente.'));
+    }
+});
+
+// ==========================================
+// 3. CARREGAMENTO DOS DADOS MULTIPROFISSIONAIS
+// ==========================================
+
+async function carregarDadosAvaliacaoPendente(agendamentoId) {
+    try {
+        const response = await fetch(`/agenda/api/agendamento/${agendamentoId}/dados-avaliacao`);
+        const data = await response.json();
+
+        if (!data.sucesso) {
+            console.warn("⚠️ Dados de avaliação não retornados com sucesso.");
+            return;
         }
-    })
-    .catch(err => {
-        console.error('Erro na requisição:', err);
-        alert("DIAGNÓSTICO DO SERVIDOR: " + err.message);
+
+        const nomeEmpresa = data.empresa_nome || 'Estabelecimento';
+        const container = document.getElementById('containerColaboradoresAvaliacao');
+        if (!container) {
+            console.warn("⚠️ Container 'containerColaboradoresAvaliacao' não encontrado no DOM.");
+            return;
+        }
+
+        container.innerHTML = '';
+
+        // Para cada colaborador participante, desenha a estrutura visual original do seu formulário
+        data.colaboradores.forEach(colab => {
+            const servicosFormatados = colab.servicos.join(' + ');
+
+            const blocoHtml = `
+                <div class="item-colaborador-avaliacao pb-3 border-bottom text-center mb-3" data-colaborador-id="${colab.colaborador_id}">
+                    ${colab.foto ?
+                        `<img src="${colab.foto}" class="rounded-circle mb-3 border shadow-sm" width="80" height="80" style="object-fit: cover;">` :
+                        `<div class="rounded-circle mb-3 border shadow-sm bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold fs-3" style="width: 80px; height: 80px;">${colab.nome.charAt(0).toUpperCase()}</div>`
+                    }
+
+                    <h6 class="fw-bold text-primary mb-1">${colab.nome}</h6>
+
+                    <!-- Nome da empresa no lugar do cargo (com os serviços realizados) -->
+                    <p class="text-muted small mb-3 fw-semibold text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-shop me-1"></i>${nomeEmpresa} • <span class="text-dark">${servicosFormatados}</span>
+                    </p>
+
+                    <!-- Estrelas Interativas Fluidas (Exatamente o seu design original) -->
+                    <div class="rating-container mb-4 d-flex justify-content-center gap-2" style="font-size: 2.2rem; cursor: pointer; color: #cbd5e1;">
+                        <i class="bi bi-star-fill star-item" data-value="1"></i>
+                        <i class="bi bi-star-fill star-item" data-value="2"></i>
+                        <i class="bi bi-star-fill star-item" data-value="3"></i>
+                        <i class="bi bi-star-fill star-item" data-value="4"></i>
+                        <i class="bi bi-star-fill star-item" data-value="5"></i>
+                        <input type="hidden" class="input-nota-colab" value="5">
+                    </div>
+
+                    <div class="mb-3 text-start">
+                        <textarea class="form-control rounded-3 form-control-sm input-comentario-colab" rows="3" placeholder="Deixe um comentário opcional sobre o atendimento de ${colab.nome}..."></textarea>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', blocoHtml);
+        });
+
+        // Ativa a interatividade idêntica das estrelas para cada card gerado
+        ativarInteratividadeEstrelasOriginal();
+
+    } catch (e) {
+        console.error("❌ Erro ao carregar dados de avaliação pendente:", e);
+    }
+}
+
+// ==========================================
+// 4. INTERATIVIDADE DAS ESTRELAS
+// ==========================================
+
+function ativarInteratividadeEstrelasOriginal() {
+    document.querySelectorAll('.rating-container').forEach(container => {
+        const stars = container.querySelectorAll('.star-item');
+        const inputNota = container.querySelector('.input-nota-colab');
+
+        function atualizarEstrelas(nota) {
+            stars.forEach((star, idx) => {
+                if (idx < nota) {
+                    star.classList.remove('bi-star');
+                    star.classList.add('bi-star-fill');
+                    star.style.color = '#f59e0b'; // Amarelo/Ouro
+                } else {
+                    star.classList.remove('bi-star-fill');
+                    star.classList.add('bi-star');
+                    star.style.color = '#cbd5e1'; // Cinza claro
+                }
+            });
+        }
+
+        // Inicializa com 5 estrelas ativas
+        atualizarEstrelas(5);
+        inputNota.value = 5;
+
+        stars.forEach((star, index) => {
+            star.style.cursor = 'pointer';
+            star.addEventListener('mouseover', () => atualizarEstrelas(index + 1));
+            star.addEventListener('click', () => {
+                const val = index + 1;
+                inputNota.value = val;
+                atualizarEstrelas(val);
+            });
+        });
+
+        container.addEventListener('mouseleave', () => {
+            const notaAtual = parseInt(inputNota.value) || 5;
+            atualizarEstrelas(notaAtual);
+        });
     });
 }
+
+// ==========================================
+// 5. ENVIO MULTIPROFISSIONAL EM LOTE
+// ==========================================
+
+async function enviarAvaliacoesMultiplasDoModal(agendamentoId) {
+    const cards = document.querySelectorAll('.item-colaborador-avaliacao');
+    const lista = [];
+
+    cards.forEach(card => {
+        const colabId = card.getAttribute('data-colaborador-id');
+        const nota = card.querySelector('.input-nota-colab').value || 5;
+        const comentario = card.querySelector('.input-comentario-colab').value || '';
+
+        lista.push({
+            colaborador_id: colabId,
+            nota_profissional: parseInt(nota),
+            nota_servico: parseInt(nota),
+            comentario: comentario
+        });
+    });
+    try {
+        const response = await fetch(`/agenda/api/agendamento/${agendamentoId}/salvar-avaliacoes-multiplas`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+                // Se o seu Flask usa CSRF_Protect, inclua a linha abaixo:
+                // 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+            },
+            body: JSON.stringify({ avaliacoes: lista })
+        });
+
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const textoHtml = await response.text();
+            console.error("❌ O servidor retornou HTML em vez de JSON:", textoHtml);
+            alert("Erro interno no servidor (verifique o console do navegador e do Flask).");
+            return;
+        }
+
+        const data = await response.json();
+        if (data.sucesso) {
+            adiarAvaliacao();
+            location.reload();
+        } else {
+            alert(data.mensagem || 'Erro ao salvar avaliações.');
+        }
+    } catch (err) {
+        console.error('❌ Erro ao enviar avaliações:', err);
+        alert('Erro ao processar o envio.');
+    }
+}
+
 </script>
 {% endblock %}

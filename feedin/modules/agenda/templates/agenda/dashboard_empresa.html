@@ -230,16 +230,18 @@
             </div>
         </div>
 
-        {% if pode_gerenciar %}
-            <div class="d-flex align-items-center gap-2 mt-2 mt-sm-0">
-                <a href="{{ url_for('agenda.dashboard_empresa', empresa_id=empresa.id) }}"
-                   class="btn btn-dark rounded-pill px-3 py-2 shadow-sm fw-bold d-flex align-items-center gap-2"
-                   style="font-size: 0.88rem;">
-                    <i class="bi bi-sliders fs-6"></i>
-                    <span class="d-none d-sm-inline">Painel de Gestão</span>
-                </a>
-            </div>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2 mt-2 mt-sm-0">
+            <button type="button"
+                    class="btn btn-dark rounded-pill px-3 py-2 shadow-sm fw-bold d-flex align-items-center gap-2"
+                    style="font-size: 0.88rem;"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#painelUnificadoGestao"
+                    aria-controls="painelUnificadoGestao">
+                <i class="bi bi-sliders fs-6"></i>
+                <span class="d-none d-sm-inline">Painel de Desempenho & Gestão</span>
+            </button>
+        </div>
+
     </div>
 </div>
 
@@ -1307,6 +1309,67 @@
         </div>
     </div>
 </div>
+
+<!-- OFFCANVAS: PAINEL DE DESEMPENHO E GESTÃO -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="painelUnificadoGestao" aria-labelledby="painelGestaoLabel">
+    <div class="offcanvas-header bg-dark text-white">
+        <h5 class="offcanvas-title fw-bold fs-6" id="painelGestaoLabel">
+            <i class="bi bi-pie-chart-fill me-2 text-warning"></i> Painel de Indicadores
+        </h5>
+        <button type="button" class="btn-close btn-close-white text-reset" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+    </div>
+
+    <div class="offcanvas-body p-0">
+        <div class="list-group list-group-flush">
+
+            <!-- SEÇÃO DE DESEMPENHO (Visível para Todos: Colaboradores e Gestores) -->
+            <div class="p-3 bg-light border-bottom">
+                <small class="text-uppercase fw-bold text-muted d-block" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                    <i class="bi bi-person-badge me-1"></i> Desempenho Operacional
+                </small>
+            </div>
+
+            <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id) }}"
+               class="list-group-item list-group-item-action py-3 px-3 d-flex align-items-center justify-content-between border-0 border-bottom">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="bi bi-speedometer2 fs-6"></i>
+                    </div>
+                    <div>
+                        <span class="fw-semibold d-block text-dark small">Tempos & Médias de Atendimento</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">Métricas de produtividade, saldo e desvios.</small>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted small"></i>
+            </a>
+
+            {% if pode_gerenciar %}
+            <!-- SEÇÃO EXCLUSIVA ADMINISTRATIVA (Apenas para Gestores) -->
+            <div class="p-3 bg-light border-bottom mt-2">
+                <small class="text-uppercase fw-bold text-muted d-block" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                    <i class="bi bi-shield-lock me-1"></i> Gestão e Configurações
+                </small>
+            </div>
+
+            <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=empresa.id) }}"
+               class="list-group-item list-group-item-action py-3 px-3 d-flex align-items-center justify-content-between border-0 border-bottom">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-dark bg-opacity-10 text-dark rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="bi bi-gear fs-6"></i>
+                    </div>
+                    <div>
+                        <span class="fw-semibold d-block text-dark small">Configurações da Empresa</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">Gerenciar vitrine, equipe e catálogo de serviços.</small>
+                    </div>
+                </div>
+                <i class="bi bi-chevron-right text-muted small"></i>
+            </a>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+
 <script>
 // =========================================================================
 // 1. UTILITÁRIOS E ESTADO GLOBAL
