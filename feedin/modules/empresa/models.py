@@ -1448,6 +1448,13 @@ class ClienteBeneficiario(db.Model):
         comment='Data e hora do cadastro (UTC)'
     )
 
+    # --- MÍDIA / IDENTIDADE VISUAL ---
+    foto_perfil = db.Column(
+        db.String(255),
+        nullable=True,
+        comment='Caminho do arquivo ou imagem de perfil do beneficiario/pet/veiculo'
+    )
+
     # Relacionamento de volta com o Titular
     titular = db.relationship('ModCadastroCliente', backref=db.backref('beneficiarios', lazy='dynamic'))
 
@@ -1468,6 +1475,24 @@ class ClienteBeneficiario(db.Model):
 
     def __repr__(self):
         return f"<ClienteBeneficiario id={self.id} | Tipo={self.tipo_persona} | Nome={self.nome}>"
+
+    @property
+    def url_foto(self) -> str:
+        """Retorna a URL tratada da foto do beneficiário ou fallback por tipo de persona."""
+        if self.foto_perfil:
+            return resolver_url_midia(
+                caminho_arquivo=self.foto_perfil,
+                modulo='agenda',
+                fallback_filename='avatar-placeholder.png'
+            )
+
+        # Fallbacks dinâmicos por tipo de persona
+        if self.tipo_persona == 'pet':
+            return '/static/img/defaults/pet-placeholder.png'
+        elif self.tipo_persona == 'veiculo':
+            return '/static/img/defaults/veiculo-placeholder.png'
+
+        return '/static/img/defaults/avatar-placeholder.png'
 
 
 class ClienteContato(db.Model):

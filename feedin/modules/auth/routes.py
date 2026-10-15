@@ -1153,3 +1153,55 @@ def preencher_ficha_colaborador(convite_id):
         convite=convite,
         detalhes=detalhes
     )
+
+
+from flask import render_template, redirect, url_for, request, flash, current_app
+from flask_login import login_required, current_user
+from feedin import database, bcrypt
+from . import auth_bp
+from .models import ModCadastroCliente
+
+@auth_bp.route('/alterar-senha', methods=['POST'])
+@login_required
+def alterar_senha_auth():
+    """
+    =============================================================================
+    ORQUESTRADOR AUTH: ALTERAÇÃO DE SENHA SEGURA (Módulos Conexos)
+    =============================================================================
+    Centraliza a rotina de alteração de senha para os clientes cadastrados nos
+    módulos conexos. Valida a senha atual via bcrypt no modelo unificado e
+    persiste o novo hash com segurança.
+    =============================================================================
+    """
+    senha_atual = request.form.get('senha_atual')
+    nova_senha = request.form.get('nova_senha')
+    confirmacao = request.form.get('confirma_senha')
+
+    # 1. Valida se a senha atual confere com o registro do cliente logado
+    if not bcrypt.check_password_hash(current_user.senha, senha_atual):
+        flash('A senha atual está incorreta.', 'danger')
+        return redirect(request.referrer or url_for('central_hub'))
+
+    # 2. Valida se as novas senhas coincidem
+    if nova_senha != confirmacao:
+        flash('As novas senhas não coincidem.', 'danger')
+        return redirect(request.referrer or url_for('central_hub'))
+
+    # 3. Validação do tamanho mínimo de segurança
+    if len(nova_senha) < 6:
+        flash('A nova senha deve ter pelo menos 6 caracteres.', 'danger')
+        return redirect(request.referrer or url_for('central_hub'))
+
+    # 4. Processo de salvamento do novo hash no banco de dados
+    try:
+        hashed_password = bcrypt.generate_password_hash(nova_senha).decode('utf-8')
+        current_user.senha = hashed_password
+        database.session.commit()
+        flash('Sua senha foi atualizada com sucesso!', 'success')
+    except Exception as e:
+        database.session.rollback()
+        current_app.logger.error(f"Erro ao atualizar senha no orquestrador auth: {e}")
+        flash('Erro interno ao atualizar a senha.', 'danger')
+
+    # Redireciona de volta para a página de origem ou para o hub como fallback seguro
+    return redirect(request.referrer or url_for('central_hub'))

@@ -1,0 +1,320 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Meus Beneficiários{% endblock %}
+
+{% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="fundo-acetinado-pwa w-100 py-4 position-relative" style="min-height: 100vh;">
+    <div class="container py-2" style="max-width: 520px; font-family: system-ui, -apple-system, sans-serif;">
+        
+        <!-- CABEÇALHO DA PÁGINA -->
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center gap-2">
+                <a href="{{ url_for('agenda.dashboard_cliente') }}" class="btn btn-sm btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                    <i class="bi bi-arrow-left text-dark"></i>
+                </a>
+                <h5 class="fw-bold text-dark m-0">Meus Beneficiários</h5>
+            </div>
+
+            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalFormBeneficiario" onclick="prepararNovoBeneficiario()">
+                <i class="bi bi-plus-lg me-1"></i> Novo Cadastro
+            </button>
+        </div>
+
+        <!-- LISTAGEM DE BENEFICIÁRIOS -->
+        {% if beneficiarios %}
+            <div class="d-flex flex-column gap-3">
+                {% for b in beneficiarios %}
+                    <div class="bg-white p-3 rounded-4 shadow-sm border d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- FOTO / AVATAR -->
+                            <div class="position-relative flex-shrink-0" style="width: 50px; height: 50px;">
+                                <img src="{{ b.url_foto }}" alt="{{ b.nome }}" class="rounded-circle border object-fit-cover w-100 h-100 shadow-sm" style="background-color: #fcfbfa;">
+                            </div>
+
+                            <!-- INFORMAÇÕES -->
+                            <div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <strong class="text-dark small">{{ b.nome }}</strong>
+                                    <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">
+                                        {% if b.tipo_persona == 'pet' %}🐾 Pet{% elif b.tipo_persona == 'veiculo' %}🚗 Veículo{% else %}👤 Humano{% endif %}
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                    {% if b.tipo_persona == 'veiculo' %}
+                                        {{ b.especie_marca or 'Marca' }} {{ b.raca_modelo or 'Modelo' }} • Placa: {{ b.documento_identificador or 'N/I' }}
+                                    {% else %}
+                                        {{ b.idade_formatada }} • Doc: {{ b.documento_identificador or 'N/I' }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- AÇÕES -->
+                        <div class="d-flex align-items-center gap-1">
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-secondary p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick='editarBeneficiario({{ b | tojson | safe }})' title="Editar">
+                                <i class="bi bi-pencil" style="font-size: 0.8rem;"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-danger p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick="excluirBeneficiario({{ b.id }})" title="Excluir">
+                                <i class="bi bi-trash" style="font-size: 0.8rem;"></i>
+                            </button>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-5 bg-white rounded-4 border border-dashed shadow-sm p-4">
+                <i class="bi bi-people text-muted fs-1 d-block mb-2 opacity-50"></i>
+                <h6 class="fw-bold text-dark">Nenhum beneficiário cadastrado</h6>
+                <p class="text-muted small mb-3">Cadastre dependentes, pets ou veículos para agilizar seus agendamentos.</p>
+                <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalFormBeneficiario" onclick="prepararNovoBeneficiario()">
+                    Cadastrar Agora
+                </button>
+            </div>
+        {% endif %}
+
+    </div>
+</div>
+
+<!-- MODAL DE CADASTRO / EDIÇÃO -->
+<div class="modal fade" id="modalFormBeneficiario" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow p-2">
+            <form id="formBeneficiario" method="POST" action="{{ url_for('agenda.salvar_beneficiario') }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" id="beneficiarioId" name="beneficiario_id" value="">
+
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-dark fs-6" id="modalTituloBeneficiario">Novo Beneficiário</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body py-3">
+                    
+                    <!-- SELETOR DE TIPO DE PERSONA -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-muted">Tipo de Beneficiário</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="radio" class="btn-check" name="tipo_persona" id="tipoHumano" value="humano" checked onchange="alternarCamposPersona()">
+                                <label class="btn btn-outline-dark btn-sm w-100 rounded-pill fw-semibold" for="tipoHumano"><i class="bi bi-person me-1"></i> Humano</label>
+                            </div>
+                            <div class="col-4">
+                                <input type="radio" class="btn-check" name="tipo_persona" id="tipoPet" value="pet" onchange="alternarCamposPersona()">
+                                <label class="btn btn-outline-dark btn-sm w-100 rounded-pill fw-semibold" for="tipoPet"><i class="bi bi-heart me-1"></i> Pet</label>
+                            </div>
+                            <div class="col-4">
+                                <input type="radio" class="btn-check" name="tipo_persona" id="tipoVeiculo" value="veiculo" onchange="alternarCamposPersona()">
+                                <label class="btn btn-outline-dark btn-sm w-100 rounded-pill fw-semibold" for="tipoVeiculo"><i class="bi bi-car-front me-1"></i> Veículo</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FOTO DE PERFIL / SILHUETA DINÂMICA -->
+                    <div class="mb-3 text-center">
+                        <div class="position-relative d-inline-block mx-auto" style="width: 80px; height: 80px;">
+
+                            <!-- Container circular para a Imagem ou Ícone Padrão -->
+                            <div id="containerPreviewFoto" class="w-100 h-100 rounded-circle border shadow-sm bg-light d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                                <img id="previewFotoBeneficiario" src="" class="w-100 h-100 object-fit-cover d-none" alt="Foto">
+                                <i id="iconeSilhuetaPlaceholder" class="bi bi-person-fill text-secondary opacity-50" style="font-size: 2.5rem;"></i>
+                            </div>
+
+                            <!-- Badge da Câmera -->
+                            <label for="inputFotoPerfilBeneficiario" class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm cursor-pointer border border-2 border-white" style="width: 28px; height: 28px; z-index: 5;" title="Escolher foto">
+                                <i class="bi bi-camera-fill" style="font-size: 0.75rem;"></i>
+                            </label>
+
+                            <input type="file" id="inputFotoPerfilBeneficiario" name="foto_perfil" accept="image/*" class="d-none" onchange="previewImagemBeneficiario(this)">
+                        </div>
+                    </div>
+
+                    <!-- NOME / IDENTIFICAÇÃO -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" id="labelNome">Nome Completo</label>
+                        <input type="text" class="form-control form-control-sm rounded-3" id="inputNome" name="nome" required placeholder="Ex: João Silva, Mel (Pet) ou Civic Prata">
+                    </div>
+
+                    <!-- DOCUMENTO / IDENTIFICADOR -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" id="labelDocumento">Documento (RG / CPF)</label>
+                        <input type="text" class="form-control form-control-sm rounded-3" id="inputDocumento" name="documento_identificador" placeholder="Opcional">
+                    </div>
+
+                    <!-- CAMPOS ESPECÍFICOS (HUMANO / PET) -->
+                    <div class="row g-2 mb-3" id="blocoDataNasc">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Data de Nascimento</label>
+                            <input type="date" class="form-control form-control-sm rounded-3" id="inputDataNasc" name="data_nascimento_ou_ano">
+                        </div>
+                    </div>
+
+                    <!-- CAMPOS ESPECÍFICOS (PET / VEÍCULO) -->
+                    <div class="row g-2 mb-3" id="blocoPetVeiculo" style="display: none;">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" id="labelEspecieMarca">Espécie / Marca</label>
+                            <input type="text" class="form-control form-control-sm rounded-3" id="inputEspecieMarca" name="especie_marca" placeholder="Ex: Canina ou Honda">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" id="labelRacaModelo">Raça / Modelo</label>
+                            <input type="text" class="form-control form-control-sm rounded-3" id="inputRacaModelo" name="raca_modelo" placeholder="Ex: Poodle ou Civic">
+                        </div>
+                    </div>
+
+                    <!-- CAMPO EXCLUSIVO VEÍCULO (ANO FABRICAÇÃO) -->
+                    <div class="mb-3" id="blocoAnoVeiculo" style="display: none;">
+                        <label class="form-label small fw-semibold">Ano de Fabricação</label>
+                        <input type="number" class="form-control form-control-sm rounded-3" id="inputAnoVeiculo" name="ano_fab_veiculo" placeholder="Ex: 2022">
+                    </div>
+
+                </div>
+
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold">Salvar Beneficiário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function alternarCamposPersona() {
+    const tipo = document.querySelector('input[name="tipo_persona"]:checked').value;
+    const labelNome = document.getElementById('labelNome');
+    const labelDoc = document.getElementById('labelDocumento');
+    const blocoDataNasc = document.getElementById('blocoDataNasc');
+    const blocoPetVeiculo = document.getElementById('blocoPetVeiculo');
+    const blocoAnoVeiculo = document.getElementById('blocoAnoVeiculo');
+    const iconeSilhueta = document.getElementById('iconeSilhuetaPlaceholder');
+
+    // Atualiza a silhueta padrão conforme o tipo caso não haja imagem carregada
+    const imgPreview = document.getElementById('previewFotoBeneficiario');
+    if (imgPreview.classList.contains('d-none')) {
+        if (tipo === 'humano') {
+            iconeSilhueta.className = 'bi bi-person-fill text-secondary opacity-50';
+        } else if (tipo === 'pet') {
+            iconeSilhueta.className = 'bi bi-heart-fill text-secondary opacity-50';
+        } else if (tipo === 'veiculo') {
+            iconeSilhueta.className = 'bi bi-car-front-fill text-secondary opacity-50';
+        }
+    }
+
+    if (tipo === 'humano') {
+        labelNome.textContent = 'Nome Completo';
+        labelDoc.textContent = 'Documento (RG / CPF)';
+        blocoDataNasc.style.display = 'block';
+        blocoPetVeiculo.style.display = 'none';
+        blocoAnoVeiculo.style.display = 'none';
+    } else if (tipo === 'pet') {
+        labelNome.textContent = 'Nome do Pet';
+        labelDoc.textContent = 'Microchip / RGA (Opcional)';
+        blocoDataNasc.style.display = 'block';
+        blocoPetVeiculo.style.display = 'flex';
+        blocoAnoVeiculo.style.display = 'none';
+    } else if (tipo === 'veiculo') {
+        labelNome.textContent = 'Identificação do Veículo';
+        labelDoc.textContent = 'Placa do Veículo';
+        blocoDataNasc.style.display = 'none';
+        blocoPetVeiculo.style.display = 'flex';
+        blocoAnoVeiculo.style.display = 'block';
+    }
+}
+
+function prepararNovoBeneficiario() {
+    document.getElementById('formBeneficiario').reset();
+    document.getElementById('beneficiarioId').value = '';
+    document.getElementById('modalTituloBeneficiario').textContent = 'Novo Beneficiário';
+
+    // Reseta a foto e exibe a silhueta padrão
+    const imgPreview = document.getElementById('previewFotoBeneficiario');
+    const iconeSilhueta = document.getElementById('iconeSilhuetaPlaceholder');
+    imgPreview.src = '';
+    imgPreview.classList.add('d-none');
+    iconeSilhueta.classList.remove('d-none');
+
+    document.getElementById('tipoHumano').checked = true;
+    alternarCamposPersona();
+}
+
+function editarBeneficiario(b) {
+    document.getElementById('formBeneficiario').reset();
+    document.getElementById('beneficiarioId').value = b.id;
+    document.getElementById('modalTituloBeneficiario').textContent = 'Editar Beneficiário';
+    document.getElementById('inputNome').value = b.nome || '';
+    document.getElementById('inputDocumento').value = b.documento_identificador || '';
+    document.getElementById('inputEspecieMarca').value = b.especie_marca || '';
+    document.getElementById('inputRacaModelo').value = b.raca_modelo || '';
+    document.getElementById('inputAnoVeiculo').value = b.ano_fab_veiculo || '';
+
+    if (b.data_nascimento_ou_ano) {
+        document.getElementById('inputDataNasc').value = b.data_nascimento_ou_ano;
+    }
+
+    if (b.tipo_persona === 'pet') {
+        document.getElementById('tipoPet').checked = true;
+    } else if (b.tipo_persona === 'veiculo') {
+        document.getElementById('tipoVeiculo').checked = true;
+    } else {
+        document.getElementById('tipoHumano').checked = true;
+    }
+
+    const imgPreview = document.getElementById('previewFotoBeneficiario');
+    const iconeSilhueta = document.getElementById('iconeSilhuetaPlaceholder');
+
+    if (b.url_foto && !b.url_foto.includes('placeholder')) {
+        imgPreview.src = b.url_foto;
+        imgPreview.classList.remove('d-none');
+        iconeSilhueta.classList.add('d-none');
+    } else {
+        imgPreview.src = '';
+        imgPreview.classList.add('d-none');
+        iconeSilhueta.classList.remove('d-none');
+    }
+
+    alternarCamposPersona();
+
+    const modal = new bootstrap.Modal(document.getElementById('modalFormBeneficiario'));
+    modal.show();
+}
+
+function previewImagemBeneficiario(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const imgPreview = document.getElementById('previewFotoBeneficiario');
+            const iconeSilhueta = document.getElementById('iconeSilhuetaPlaceholder');
+
+            imgPreview.src = e.target.result;
+            imgPreview.classList.remove('d-none');
+            iconeSilhueta.classList.add('d-none');
+        }
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function excluirBeneficiario(id) {
+    if (!confirm('Deseja realmente remover este beneficiário?')) return;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    fetch(`/agenda/beneficiarios/${id}/excluir`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            location.reload();
+        } else {
+            alert(data.mensagem || 'Erro ao excluir.');
+        }
+    })
+    .catch(err => console.error('Erro:', err));
+}
+</script>
+{% endblock %}

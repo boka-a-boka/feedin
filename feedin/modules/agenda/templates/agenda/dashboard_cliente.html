@@ -318,9 +318,22 @@
                     <div class="col-8">
                         <h6 class="fw-bold mb-1">Descubra Novos Espaços</h6>
                         <p class="text-white-50 mb-3" style="font-size: 0.75rem;">Explore estabelecimentos, confira horários e faça seu agendamento.</p>
-                        <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-warning text-dark rounded-pill fw-bold shadow-sm px-3" style="font-size: 0.78rem;">
-                            <i class="bi bi-binoculars-fill me-1"></i> Explorar Catálogo
-                        </a>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-warning text-dark rounded-pill fw-bold shadow-sm px-3 flex-grow-1 text-center text-truncate" style="font-size: 0.78rem;">
+                                <i class="bi bi-binoculars-fill me-1"></i> Explorar Catálogo
+                            </a>
+
+                            <!-- 🧰 BOTÃO CAIXA DE FERRAMENTAS (HARMONIZADO COM O VIZINHO E COM MARGEM) -->
+                            <button type="button"
+                                    class="btn btn-warning text-dark rounded-circle shadow-sm flex-shrink-0 d-flex align-items-center justify-content-center p-0 me-1"
+                                    style="width: 36px; height: 36px;"
+                                    data-bs-toggle="offcanvas"
+                                    data-bs-target="#offcanvasCaixaFerramentas"
+                                    title="Ferramentas e Recursos">
+                                <i class="bi bi-tools" style="font-size: 0.9rem;"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="col-4 text-end">
                         <i class="bi bi-binoculars text-white-50 opacity-25" style="font-size: 3.2rem;"></i>
@@ -392,6 +405,43 @@
             {% endif %}
         </div>
 
+{# 6.5. ACESSO RÁPIDO: MEUS BENEFICIÁRIOS / PERSONAS (EXIBIÇÃO CONDICIONAL/FACTO NOVO) #}
+        {% if beneficiarios_cliente and beneficiarios_cliente | length > 0 %}
+            <div class="mb-4 animate-fade-in">
+                <div class="d-flex align-items-center justify-content-between mb-2 px-1">
+                    <h6 class="fw-bold text-dark m-0" style="font-size: 0.85rem;">
+                        <i class="bi bi-people-fill text-primary me-1"></i> Meus Beneficiários
+                    </h6>
+                    <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="text-decoration-none small fw-semibold text-primary" style="font-size: 0.75rem;">
+                        Gerenciar ({{ beneficiarios_cliente | length }})
+                    </a>
+                </div>
+
+                <div class="d-flex gap-2 overflow-x-auto pb-2 scrollbar-hidden" style="scroll-snap-type: x mandatory;">
+                    {% for b in beneficiarios_cliente %}
+                        <div class="flex-shrink-0" style="width: 190px; scroll-snap-align: start;">
+                            <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="text-decoration-none">
+                                <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="position-relative flex-shrink-0" style="width: 36px; height: 36px; min-width: 36px;">
+                                            <img src="{{ b.url_foto }}" class="rounded-circle border object-fit-cover w-100 h-100" style="background-color: #fcfbfa;" alt="{{ b.nome }}">
+                                        </div>
+                                        <div class="text-truncate min-w-0">
+                                            <span class="d-block text-dark fw-semibold small text-truncate">{{ b.nome }}</span>
+                                            <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">
+                                                {% if b.tipo_persona == 'pet' %}🐾 Pet{% elif b.tipo_persona == 'veiculo' %}🚗 Veículo{% else %}👤 Humano{% endif %}
+                                                {% if b.idade_formatada %} • {{ b.idade_formatada }}{% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
         {# 7. RECADOS E NOTIFICAÇÕES EM DESTAQUE #}
         {% if notificacoes %}
             <div class="mb-3">
@@ -450,7 +500,7 @@
             </div>
         {% endif %}
 
-{# 7.5. VERIFICAÇÃO AVALIAÇÕES PENDENTES #}
+        {# 7.5. VERIFICAÇÃO AVALIAÇÕES PENDENTES #}
         {% if agendamento_pendente_avaliacao %}
         <div class="modal fade show" id="modalAvaliacaoPendente" tabindex="-1" style="display: block; background: rgba(0,0,0,0.6);" data-bs-backdrop="static">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -1061,6 +1111,109 @@
                 <p class="small mb-0">Você não possui notificações no momento.</p>
             </div>
         {% endif %}
+    </div>
+</div>
+
+{# OFFCANVAS DA CAIXA DE FERRAMENTAS & RECURSOS DO CLIENTE #}
+<div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasCaixaFerramentas" aria-labelledby="offcanvasCaixaFerramentasLabel" style="max-height: 85vh;">
+    <div class="offcanvas-header border-bottom py-3">
+        <h5 class="offcanvas-title fw-bold fs-6 d-flex align-items-center gap-2" id="offcanvasCaixaFerramentasLabel">
+            <i class="bi bi-tools text-warning"></i> Caixa de Ferramentas
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-3 overflow-y-auto">
+
+        <!-- ACORDION GRUPAL DE RECURSOS -->
+        <div class="accordion accordion-flush d-flex flex-column gap-2" id="accordionFerramentas">
+
+        <!-- GRUPO 1: CADASTROS -->
+        <div class="accordion-item border rounded-3 overflow-hidden">
+            <h2 class="accordion-header" id="headingCadastros">
+                <button class="accordion-button py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCadastros" aria-expanded="true" aria-controls="collapseCadastros" style="font-size: 0.85rem;">
+                    <i class="bi bi-folder-plus text-primary me-2 fs-6"></i> Cadastros & Personas
+                </button>
+            </h2>
+
+            <div id="collapseCadastros" class="accordion-collapse collapse show" aria-labelledby="headingCadastros" data-bs-parent="#accordionFerramentas">
+                <div class="accordion-body p-2 d-flex flex-column gap-1">
+
+                    <!-- ITEM: GERENCIAR BENEFICIÁRIOS -->
+                    <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                <i class="bi bi-people-fill"></i>
+                            </div>
+                            <div>
+                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meus Beneficiários / Personas</strong>
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">Cadastrar dependentes, pets ou veículos</small>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+
+                    <!-- ITEM: CANAIS DE COMUNICAÇÃO -->
+                    <a href="{{ url_for('agenda.listar_contatos_cliente') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                <i class="bi bi-whatsapp"></i>
+                            </div>
+                            <div>
+                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Canais de Comunicação</strong>
+                                <small class="text-muted d-block" style="font-size: 0.7rem;">Definir WhatsApp, e-mail e canal preferencial</small>
+                            </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+
+                </div>
+            </div>
+        </div>
+
+            <!-- GRUPO 2: PESQUISAS -->
+            <div class="accordion-item border rounded-3 overflow-hidden">
+                <h2 class="accordion-header" id="headingPesquisas">
+                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePesquisas" aria-expanded="false" aria-controls="collapsePesquisas" style="font-size: 0.85rem;">
+                        <i class="bi bi-clipboard-data text-success me-2 fs-6"></i> Pesquisas & Opinião
+                    </button>
+                </h2>
+                <div id="collapsePesquisas" class="accordion-collapse collapse" aria-labelledby="headingPesquisas" data-bs-parent="#accordionFerramentas">
+                    <div class="accordion-body p-2 text-muted small">
+                        Nenhuma pesquisa pendente no momento.
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRUPO 3: RELATÓRIOS -->
+            <div class="accordion-item border rounded-3 overflow-hidden">
+                <h2 class="accordion-header" id="headingRelatorios">
+                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRelatorios" aria-expanded="false" aria-controls="collapseRelatorios" style="font-size: 0.85rem;">
+                        <i class="bi bi-file-earmark-bar-graph text-warning me-2 fs-6"></i> Relatórios & Comprovantes
+                    </button>
+                </h2>
+                <div id="collapseRelatorios" class="accordion-collapse collapse" aria-labelledby="headingRelatorios" data-bs-parent="#accordionFerramentas">
+                    <div class="accordion-body p-2 text-muted small">
+                        Acesse seu histórico consolidado e extratos.
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRUPO 4: OUTROS -->
+            <div class="accordion-item border rounded-3 overflow-hidden">
+                <h2 class="accordion-header" id="headingOutros">
+                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOutros" aria-expanded="false" aria-controls="collapseOutros" style="font-size: 0.85rem;">
+                        <i class="bi bi-gear-wide-connected text-secondary me-2 fs-6"></i> Outros Recursos
+                    </button>
+                </h2>
+                <div id="collapseOutros" class="accordion-collapse collapse" aria-labelledby="headingOutros" data-bs-parent="#accordionFerramentas">
+                    <div class="accordion-body p-2 text-muted small">
+                        Configurações adicionais e integração.
+                    </div>
+                </div>
+            </div>
+
+        </div>
     </div>
 </div>
 

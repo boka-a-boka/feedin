@@ -68,7 +68,7 @@
                 </div>
 
                 {# 🔑 CAMPO SENHA COM ALTERNÂNCIA DE VISIBILIDADE #}
-                <div class="input-group mb-4">
+                <div class="input-group mb-2">
                     <div class="form-floating flex-grow-1">
                         {{ form.senha(class="form-control", placeholder="Senha", style="height: 58px; border-top-left-radius: 0.5rem; border-bottom-left-radius: 0.5rem; border-top-right-radius: 0; border-bottom-right-radius: 0;", id="senha_login") }}
                         {{ form.senha.label }}
@@ -79,6 +79,13 @@
                             <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
                         </svg>
                     </button>
+                </div>
+
+                {# 🔄 LINK DE RECUPERAÇÃO DE SENHA #}
+                <div class="text-end mb-4">
+                    <a href="{{ url_for('auth.esqueci_senha', modulo=modulo_param, next_url=next_url) }}" class="text-decoration-none small text-muted">
+                        Esqueceu sua senha?
+                    </a>
                 </div>
 
                 {# 🚀 BOTAO PRINCIPAL DE AÇÃO #}

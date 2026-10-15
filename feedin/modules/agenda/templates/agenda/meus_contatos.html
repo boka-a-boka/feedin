@@ -1,0 +1,111 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Meus Canais de Contato{% endblock %}
+
+{% block content %}
+{% set cor_empresa = empresa.cor_primaria if (empresa is defined and empresa and empresa.cor_primaria) else '#0d6efd' %}
+
+<div class="container py-3 mb-5" style="max-width: 680px; font-family: system-ui, -apple-system, sans-serif;">
+  
+  <!-- HEADER -->
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3 border-start border-4" style="border-color: {{ cor_empresa }} !important;">
+    <div class="d-flex align-items-center gap-3">
+      <a href="{{ url_for('agenda.dashboard_cliente') }}"
+         class="btn btn-dark bg-dark border-0 rounded-circle p-2 shadow-sm d-flex align-items-center justify-content-center flex-shrink-0"
+         style="width: 40px; height: 40px;" title="Voltar">
+        <i class="bi bi-arrow-left fs-5 text-white"></i>
+      </a>
+      <div>
+        <h6 class="fw-bold text-dark m-0 fs-6">Canais de Comunicação</h6>
+        <small class="text-muted" style="font-size: 0.75rem;">Gerencie onde você deseja receber seus avisos e confirmações.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- LISTA DE CONTATOS CADASTRADOS -->
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+      <span class="fw-bold text-dark small d-flex align-items-center gap-1.5">
+        <i class="bi bi-whatsapp text-success"></i> Seus Canais Cadastrados
+      </span>
+      <span class="badge bg-light text-dark border rounded-pill small">
+        {{ contatos|length }} canal(is)
+      </span>
+    </div>
+
+    {% if contatos %}
+      <div class="list-group list-group-flush mb-3">
+        {% for c in contatos %}
+          <div class="list-group-item px-0 py-3 border-bottom d-flex justify-content-between align-items-center">
+            <div>
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-secondary-subtle text-secondary border rounded-pill" style="font-size: 0.7rem;">
+                  {{ c.tipo | upper }}
+                </span>
+                <strong class="text-dark small">{{ c.valor }}</strong>
+                {% if c.is_padrao %}
+                  <span class="badge bg-success text-white rounded-pill" style="font-size: 0.65rem;">Principal / Padrão</span>
+                {% endif %}
+              </div>
+              <small class="text-muted d-block" style="font-size: 0.75rem;">
+                Rótulo: <strong>{{ c.rotulo or 'Pessoal' }}</strong> 
+                • Notificações: {% if c.aceita_notificacao %}<span class="text-success">Ativadas</span>{% else %}<span class="text-danger">Desativadas</span>{% endif %}
+              </small>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center py-4">
+        <p class="text-muted small mb-2">Nenhum canal de contato configurado ainda.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- FORMULÁRIO DE ADIÇÃO -->
+  <div class="card border-0 bg-white rounded-4 shadow-sm p-3">
+    <h6 class="fw-bold text-dark small mb-3">
+      <i class="bi bi-plus-circle text-primary me-1"></i> Adicionar Novo Canal
+    </h6>
+
+    <form method="POST" action="{{ url_for('agenda.salvar_contato_cliente') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
+      <div class="mb-3">
+        <label class="form-label text-dark small fw-semibold">Tipo de Canal</label>
+        <select name="tipo" class="form-select form-select-sm rounded-3 bg-light" required>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="email">E-mail</option>
+          <option value="sms">SMS</option>
+          <option value="telefone_fixo">Telefone Fixo</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label text-dark small fw-semibold">Número ou E-mail</label>
+        <input type="text" name="valor" class="form-control form-control-sm rounded-3 bg-light" placeholder="Ex: 19998765432 ou seu@email.com" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label text-dark small fw-semibold">Rótulo (Opcional)</label>
+        <input type="text" name="rotulo" class="form-control form-control-sm rounded-3 bg-light" placeholder="Ex: Pessoal, Trabalho">
+      </div>
+
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" name="aceita_notificacao" id="aceita_notificacao" checked>
+        <label class="form-check-label small text-dark" for="aceita_notificacao">Aceitar avisos e notificações (Opt-in LGPD)</label>
+      </div>
+
+      <div class="form-check form-switch mb-3">
+        <input class="form-check-input" type="checkbox" name="is_padrao" id="is_padrao">
+        <label class="form-check-label small text-dark" for="is_padrao">Definir como canal preferencial / principal</label>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-sm rounded-pill w-100 fw-bold py-2 shadow-sm">
+        <i class="bi bi-check-lg me-1"></i> Salvar Canal de Contato
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

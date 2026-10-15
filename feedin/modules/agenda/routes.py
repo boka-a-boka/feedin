@@ -8817,3 +8817,159 @@ def relatorio_desempenho_pdf(empresa_id):
         pode_gerenciar=pode_gerenciar,
         itens=itens_brutos
     )
+
+
+from flask import request, jsonify, flash, redirect, url_for
+from werkzeug.utils import secure_filename
+import os
+
+
+@agenda_bp.route('/beneficiarios', methods=['GET'])
+@login_required
+def listar_beneficiarios():
+    """📌 Tela de Gerenciamento de Beneficiários / Personas"""
+    # Identifica o cliente titular logado (ajuste conforme a sua regra de sessão)
+    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+
+    beneficiarios = []
+    if cliente_atual:
+        beneficiarios = ClienteBeneficiario.query.filter_by(cliente_id=cliente_atual.id, ativo=True).all()
+
+    return render_template(
+        'agenda/beneficiarios.html',
+        beneficiarios=beneficiarios,
+        cliente=cliente_atual
+    )
+
+
+@agenda_bp.route('/beneficiarios/salvar', methods=['POST'])
+@login_required
+def salvar_beneficiario():
+    """📌 Processa o cadastro ou edição de um beneficiário (Humano, Pet ou Veículo)"""
+    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+    if not cliente_atual:
+        flash('Perfil de cliente não encontrado para vincular o beneficiário.', 'danger')
+        return redirect(url_for('agenda.listar_beneficiarios'))
+
+    beneficiario_id = request.form.get('beneficiario_id')
+    tipo_persona = request.form.get('tipo_persona', 'humano')
+    nome = request.form.get('nome')
+    documento = request.form.get('documento_identificador')
+    data_nasc = request.form.get('data_nascimento_ou_ano')
+    ano_fab = request.form.get('ano_fab_veiculo')
+    especie_marca = request.form.get('especie_marca')
+    raca_modelo = request.form.get('raca_modelo')
+
+    if not nome:
+        flash('O nome/identificação do beneficiário é obrigatório.', 'warning')
+        return redirect(url_for('agenda.listar_beneficiarios'))
+
+    # Se for edição, busca o registro existente; senão, cria um novo
+    if beneficiario_id:
+        beneficiario = ClienteBeneficiario.query.get_or_404(beneficiario_id)
+        if beneficiario.cliente_id != cliente_atual.id:
+            flash('Acesso não autorizado.', 'danger')
+            return redirect(url_for('agenda.listar_beneficiarios'))
+    else:
+        beneficiario = ClienteBeneficiario(
+            cliente_id=cliente_atual.id,
+            cpfhash_titular=getattr(cliente_atual, 'cpf_hash', 'hash_padrao')
+        )
+
+    beneficiario.tipo_persona = tipo_persona
+    beneficiario.nome = nome
+    beneficiario.documento_identificador = documento
+    beneficiario.especie_marca = especie_marca
+    beneficiario.raca_modelo = raca_modelo
+
+    if tipo_persona == 'veiculo':
+        beneficiario.ano_fab_veiculo = int(ano_fab) if ano_fab else None
+        beneficiario.data_nascimento_ou_ano = None
+    else:
+        beneficiario.ano_fab_veiculo = None
+        if data_nasc:
+            from datetime import datetime
+            try:
+                beneficiario.data_nascimento_ou_ano = datetime.strptime(data_nasc, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+    # Tratamento de Upload de Foto
+    arquivo_foto = request.files.get('foto_perfil')
+    if arquivo_foto and arquivo_foto.filename:
+        filename = secure_filename(f"beneficiario_{cliente_atual.id}_{uuid.uuid4().hex[:8]}_{arquivo_foto.filename}")
+        upload_folder = os.path.join('feedin', 'static', 'uploads', 'beneficiarios')
+        os.makedirs(upload_folder, exist_ok=True)
+        caminho_completo = os.path.join(upload_folder, filename)
+        arquivo_foto.save(caminho_completo)
+        beneficiario.foto_perfil = f"uploads/beneficiarios/{filename}"
+
+    if not beneficiario_id:
+        db.session.add(beneficiario)
+
+    db.session.commit()
+    flash('Beneficiário salvo com sucesso!', 'success')
+    return redirect(url_for('agenda.listar_beneficiarios'))
+
+
+@agenda_bp.route('/meus-contatos', methods=['GET'])
+@login_required
+def listar_contatos_cliente():
+    """📌 Tela de Gerenciamento de Canais de Contato e Preferências (Padrão UUID CHAR(36))"""
+    # Resgate estrito do ID como string (CHAR(36) do UUID do usuário/cliente)
+    cliente_id = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
+
+    # Se houver um perfil específico vinculado, prioriza o id dele se também for UUID/String
+    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+    if cliente_atual and hasattr(cliente_atual, 'id'):
+        cliente_id = str(cliente_atual.id).strip().lower()
+
+    contatos = ClienteContato.query.filter_by(cliente_id=cliente_id).all()
+
+    return render_template('agenda/meus_contatos.html', contatos=contatos)
+
+
+@agenda_bp.route('/meus-contatos/salvar', methods=['POST'])
+@login_required
+def salvar_contato_cliente():
+    """📌 Processa adição ou edição de um canal de contato (Padrão UUID CHAR(36))"""
+    cliente_id = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
+    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+    if cliente_atual and hasattr(cliente_atual, 'id'):
+        cliente_id = str(cliente_atual.id).strip().lower()
+
+    contato_id = request.form.get('contato_id')
+    tipo = request.form.get('tipo', 'whatsapp')
+    valor = request.form.get('valor')
+    rotulo = request.form.get('rotulo', 'Pessoal')
+    aceita_notif = True if request.form.get('aceita_notificacao') == 'on' else False
+    is_padrao = True if request.form.get('is_padrao') == 'on' else False
+
+    if not valor:
+        flash('O valor do contato (número ou e-mail) é obrigatório.', 'warning')
+        return redirect(url_for('agenda.listar_contatos_cliente'))
+
+    # Se este foi marcado como padrão, desmarca os outros do mesmo cliente (usando string CHAR(36))
+    if is_padrao:
+        ClienteContato.query.filter_by(cliente_id=cliente_id).update({'is_padrao': False})
+
+    if contato_id:
+        contato = ClienteContato.query.get_or_404(contato_id)
+        if str(contato.cliente_id).strip().lower() != cliente_id:
+            flash('Acesso negado.', 'danger')
+            return redirect(url_for('agenda.listar_contatos_cliente'))
+    else:
+        contato = ClienteContato(cliente_id=cliente_id)
+
+    contato.tipo = tipo
+    contato.valor = valor
+    contato.rotulo = rotulo
+    contato.aceita_notificacao = aceita_notif
+    contato.is_padrao = is_padrao
+
+    if not contato_id:
+        db.session.add(contato)
+
+    db.session.commit()
+    flash('Canal de contato salvo com sucesso!', 'success')
+    return redirect(url_for('agenda.listar_contatos_cliente'))
