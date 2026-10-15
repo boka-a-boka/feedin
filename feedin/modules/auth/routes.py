@@ -725,21 +725,28 @@ def validar_token_claim(token):
 @login_required  # 🛑 ALTERADO: Usa @login_required. O @login_required_geral não deve rodar aqui.
 def concluir_vinculo_claim(token):
     from datetime import datetime, timezone, timedelta
-    from feedin.modules.empresa.models import EseProcessoClaim
+    from feedin.modules.empresa.models import EseProcessoClaim, EseEmpresa
     from feedin.models import Local
     from feedin.modules.auth.models import ModCadastroCliente
+
+    print(f"\n🔍 [DEBUG CLAIM] Iniciando conclusão para o token: {token}")
 
     processo = EseProcessoClaim.query.filter_by(token_validacao=token).first()
 
     if not processo:
+        print("❌ [DEBUG CLAIM] Processo NÃO encontrado para este token.")
         flash("🔒 Processo de reivindicação concluído ou expirado. Acesse sua conta para gerenciar seu local.", "info")
         return redirect(url_for('auth.login', next_url=url_for('empresa.dashboard_empresa')))
 
+    print(f"✅ [DEBUG CLAIM] Processo encontrado. ID do Processo: {processo.id}, Local ID: {processo.local_id}")
+
     # 1. VALIDAÇÃO DE PRAZO (5 DIAS)
     data_atual_naive = datetime.utcnow()
-    data_inicio_processo = processo.data_inicio.replace(tzinfo=None) if processo.data_inicio.tzinfo else processo.data_inicio
+    data_inicio_processo = processo.data_inicio.replace(
+        tzinfo=None) if processo.data_inicio.tzinfo else processo.data_inicio
 
     if data_atual_naive > (data_inicio_processo + timedelta(days=5)):
+        print("⏳ [DEBUG CLAIM] Prazo de 5 dias expirado!")
         local = Local.query.get(processo.local_id)
         if local:
             local.status_operacional = 'ativo'
@@ -749,9 +756,10 @@ def concluir_vinculo_claim(token):
         return redirect(url_for('auth.login'))
 
     local = Local.query.get_or_404(processo.local_id)
+    print(f"🏠 [DEBUG CLAIM] Local obtido: {local.nome} (ID: {local.id})")
 
     try:
-        # Resolve o ID do Core (Integer) para garantir integridade da FK
+        # Resolve o ID do Core (Integer) para garantir integridade da FK do local se necessário
         user_core_id = getattr(current_user, 'usuario_id', None)
         if not user_core_id and isinstance(current_user.id, int):
             user_core_id = current_user.id
@@ -760,9 +768,36 @@ def concluir_vinculo_claim(token):
             if cliente:
                 user_core_id = cliente.usuario_id
 
+        # 🎯 CAPTURA CORRETA DO UUID DO PLEITEANTE PARA O PROPRIETARIO_ID
+        uuid_pleiteante = str(getattr(current_user, 'id', ''))
+        print(f"👤 [DEBUG CLAIM] Usuário logado ID: {uuid_pleiteante} | User Core ID: {user_core_id}")
+
         # 2. ATUALIZAÇÃO DOS STATUS OPERACIONAIS DA ESTEIRA
         local.id_empreendedor = user_core_id or current_user.id
         local.status_operacional = 'verificado'
+
+        # =========================================================================
+        # 🏢 GARANTE O NASCIMENTO DA EMPRESA NA TABELA ESE_EMPRESA
+        # =========================================================================
+        empresa_existente = EseEmpresa.query.filter(
+            (EseEmpresa.id == local.id) | (EseEmpresa.local_id == local.id)
+        ).first()
+
+        if not empresa_existente:
+            print(f"🏢 [DEBUG CLAIM] Empresa não encontrada para o ID {local.id}. Criando nova...")
+            nova_ese_empresa = EseEmpresa(
+                id=local.id,  # Mantém o ID alinhado
+                proprietario_id=uuid_pleiteante,  # UUID do pleiteante
+                local_id=local.id,
+                nome=local.nome,
+                status_homologacao='provisorio_beta',
+                termo_responsabilidade_aceito=True
+            )
+            db.session.add(nova_ese_empresa)
+            print(f"✅ [DEBUG CLAIM] Instância da EseEmpresa adicionada à sessão com ID: {local.id}")
+        else:
+            print(f"🏢 [DEBUG CLAIM] Empresa já existe (ID: {empresa_existente.id}). Atualizando proprietário...")
+            empresa_existente.proprietario_id = uuid_pleiteante
 
         # Avança o status do processo
         processo.status_processo = 'preenchimento_dados'
@@ -786,15 +821,19 @@ def concluir_vinculo_claim(token):
         session['next_url'] = destino_final
 
         db.session.commit()
-        print(f"🏁 [CLAIM AVANÇADO] Processo {processo.id} atualizado para 'preenchimento_dados'. Redirecionando.")
+        print(f"🏁 [DEBUG CLAIM] Transação commitada com sucesso! Redirecionando para {destino_final}")
 
         flash("✨ Identidade confirmada e estabelecimento vinculado! Vamos configurar sua empresa.", "success")
         return redirect(destino_final)
 
     except Exception as e:
         db.session.rollback()
-        print(f"❌ ERRO REAL NO FECHAMENTO DO CLAIM: {str(e)}")
-        flash("Erro sistêmico ao processar o vínculo final. Por favor, tente novamente ou contate o suporte.", "danger")
+        # 🛑 CAPTURA DETALHADA DO ERRO NO CONSOLE
+        print(f"❌ [ERRO CRÍTICO NO CLAIM] Falha ao fechar o processo: {repr(e)}")
+        import traceback
+        traceback.print_exc()
+
+        flash(f"Erro sistêmico ao processar o vínculo final: {str(e)}", "danger")
         return redirect(url_for('empresa.dashboard_empresa'))
 
 
@@ -1161,47 +1200,56 @@ from feedin import database, bcrypt
 from . import auth_bp
 from .models import ModCadastroCliente
 
-@auth_bp.route('/alterar-senha', methods=['POST'])
-@login_required
-def alterar_senha_auth():
+
+@auth_bp.route('/esqueci-senha', methods=['GET', 'POST'])  # <-- Ajustado para a rota correta do link do template
+def esqueci_senha():  # <-- O nome da função precisa ser 'esqueci_senha' para bater com o url_for('auth.esqueci_senha')
     """
     =============================================================================
-    ORQUESTRADOR AUTH: ALTERAÇÃO DE SENHA SEGURA (Módulos Conexos)
+    ORQUESTRADOR AUTH: RECUPERAÇÃO / ALTERAÇÃO DE SENHA (Módulos Conexos)
     =============================================================================
-    Centraliza a rotina de alteração de senha para os clientes cadastrados nos
-    módulos conexos. Valida a senha atual via bcrypt no modelo unificado e
+    Centraliza a rotina de alteração/recuperação de senha para os clientes cadastrados
+    nos módulos conexos. Valida a senha atual via bcrypt no modelo unificado e
     persiste o novo hash com segurança.
     =============================================================================
     """
-    senha_atual = request.form.get('senha_atual')
-    nova_senha = request.form.get('nova_senha')
-    confirmacao = request.form.get('confirma_senha')
+    # Se for uma requisição POST (veio do formulário de alteração)
+    if request.method == 'POST':
+        senha_atual = request.form.get('senha_atual')
+        nova_senha = request.form.get('nova_senha')
+        confirmacao = request.form.get('confirma_senha')
 
-    # 1. Valida se a senha atual confere com o registro do cliente logado
-    if not bcrypt.check_password_hash(current_user.senha, senha_atual):
-        flash('A senha atual está incorreta.', 'danger')
+        # Valida se o usuário está autenticado para alterar a senha logado
+        if not current_user.is_authenticated:
+            flash('Você precisa estar conectado para alterar sua senha.', 'warning')
+            return redirect(url_for('auth.login'))
+
+        # 1. Valida se a senha atual confere com o registro do cliente logado
+        if not bcrypt.check_password_hash(current_user.senha, senha_atual):
+            flash('A senha atual está incorreta.', 'danger')
+            return redirect(request.referrer or url_for('central_hub'))
+
+        # 2. Valida se as novas senhas coincidem
+        if nova_senha != confirmacao:
+            flash('As novas senhas não coincidem.', 'danger')
+            return redirect(request.referrer or url_for('central_hub'))
+
+        # 3. Validação do tamanho mínimo de segurança
+        if len(nova_senha) < 6:
+            flash('A nova senha deve ter pelo menos 6 caracteres.', 'danger')
+            return redirect(request.referrer or url_for('central_hub'))
+
+        # 4. Processo de salvamento do novo hash no banco de dados
+        try:
+            hashed_password = bcrypt.generate_password_hash(nova_senha).decode('utf-8')
+            current_user.senha = hashed_password
+            database.session.commit()
+            flash('Sua senha foi atualizada com sucesso!', 'success')
+        except Exception as e:
+            database.session.rollback()
+            current_app.logger.error(f"Erro ao atualizar senha no orquestrador auth: {e}")
+            flash('Erro interno ao atualizar a senha.', 'danger')
+
         return redirect(request.referrer or url_for('central_hub'))
 
-    # 2. Valida se as novas senhas coincidem
-    if nova_senha != confirmacao:
-        flash('As novas senhas não coincidem.', 'danger')
-        return redirect(request.referrer or url_for('central_hub'))
-
-    # 3. Validação do tamanho mínimo de segurança
-    if len(nova_senha) < 6:
-        flash('A nova senha deve ter pelo menos 6 caracteres.', 'danger')
-        return redirect(request.referrer or url_for('central_hub'))
-
-    # 4. Processo de salvamento do novo hash no banco de dados
-    try:
-        hashed_password = bcrypt.generate_password_hash(nova_senha).decode('utf-8')
-        current_user.senha = hashed_password
-        database.session.commit()
-        flash('Sua senha foi atualizada com sucesso!', 'success')
-    except Exception as e:
-        database.session.rollback()
-        current_app.logger.error(f"Erro ao atualizar senha no orquestrador auth: {e}")
-        flash('Erro interno ao atualizar a senha.', 'danger')
-
-    # Redireciona de volta para a página de origem ou para o hub como fallback seguro
-    return redirect(request.referrer or url_for('central_hub'))
+    # Se for GET, renderiza a tela de solicitação/recuperação de senha
+    return render_template('auth/esqueci_senha.html')

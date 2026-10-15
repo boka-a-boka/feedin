@@ -39,7 +39,7 @@
                     <span class="badge bg-light text-dark font-monospace fs-6 mt-1 d-inline-block text-truncate" style="max-width: 100%;">{{ processo.alvo_comunicacao }}</span>
                 </p>
 
-{# SAÍDA DE EMERGÊNCIA OU CONFIRMAÇÃO #}
+                {# SAÍDA DE EMERGÊNCIA OU CONFIRMAÇÃO #}
                 <div class="d-flex flex-column gap-2 mt-2">
                     <form action="{{ url_for('empresa.confirmar_e_disparar_claim', id_processo=processo.id) }}" method="POST" id="formConfirmarAlerta">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

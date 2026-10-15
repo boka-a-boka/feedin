@@ -1212,12 +1212,53 @@ def verificar_prazos_expirados():
 
 @empresa_bp.route('/dashboard')
 @login_required
-@login_required
 def dashboard_empresa():
     """
     Dashboard Central e Unificado do Módulo Empresa (Ponte da Arquitetura).
     Renderiza a central de controle em vez de redirecionar cegamente.
     """
+    # 0. INICIALIZAÇÃO SEGURA
+    user_core_id = getattr(current_user, 'usuario_id', None)
+    if user_core_id is None and isinstance(current_user.id, int):
+        user_core_id = current_user.id
+
+    processo = None
+    if user_core_id:
+        processo = EseProcessoClaim.query.filter(
+            EseProcessoClaim.usuario_solicitante_id == user_core_id
+        ).order_by(EseProcessoClaim.id.desc()).first()
+
+    # 🎯 BLINDAGEM AUTOMÁTICA: Se há um processo ativo/concluído e a EseEmpresa ainda não existe, cria ela agora!
+    if processo and processo.local_id:
+        from feedin.modules.empresa.models import EseEmpresa
+        from feedin.models import Local
+
+        empresa_verificada = EseEmpresa.query.filter(
+            (EseEmpresa.id == processo.local_id) | (EseEmpresa.local_id == processo.local_id)
+        ).first()
+
+        if not empresa_verificada:
+            local_obj = Local.query.get(processo.local_id)
+            if local_obj:
+                uuid_pleiteante = str(getattr(current_user, 'id', ''))
+                nova_ese_empresa = EseEmpresa(
+                    id=local_obj.id,
+                    proprietario_id=uuid_pleiteante,
+                    local_id=local_obj.id,
+                    nome=local_obj.nome,
+                    status_homologacao='provisorio_beta',
+                    termo_responsabilidade_aceito=True
+                )
+                db.session.add(nova_ese_empresa)
+
+                # Atualiza também o local e o processo
+                local_obj.id_empreendedor = user_core_id or current_user.id
+                local_obj.status_operacional = 'verificado'
+                processo.status_processo = 'preenchimento_dados'
+
+                db.session.commit()
+                print(f"🏢 [AUTO-CRIAR DASHBOARD] Empresa ID {local_obj.id} criada automaticamente com sucesso!")
+
     # 🛡️ 1. BARREIRA RÍGIDA DO MÓDULO (Executa antes de qualquer consulta ao banco)
     if not session.get('autenticado_modulo_empresa'):
         session.pop('autenticado_modulo_empresa', None)
@@ -2231,28 +2272,24 @@ def sala_espera_claim(token):
 @empresa_bp.route('/<int:empresa_id>/configurar-layout', methods=['GET', 'POST'])
 @login_required
 def configurar_layout(empresa_id):
-    # 1. Recupera o processo de claim/onboarding pelo ID soberano
-    processo = EseProcessoClaim.query.get_or_404(empresa_id)
+    """
+    Tela de configuração de layout e identidade visual da empresa no Hub.
+    O 'empresa_id' recebido na URL corresponde ao ID do Local / EseEmpresa (ex: 576).
+    """
+    # 1. RESOLUÇÃO SEGURA DOS REGISTROS (Local e Empresa)
+    local = Local.query.get_or_404(empresa_id)
 
-    local_id = getattr(processo, 'local_id', None)
-    local = Local.query.get(local_id) if local_id else None
+    ese_empresa = EseEmpresa.query.filter(
+        (EseEmpresa.id == empresa_id) | (EseEmpresa.local_id == empresa_id)
+    ).first()
 
-    # 2. Localização / Vínculo da EseEmpresa
-    ese_empresa = None
-
-    if hasattr(processo, 'empresa_id') and processo.empresa_id:
-        ese_empresa = EseEmpresa.query.get(processo.empresa_id)
-
-    if not ese_empresa:
-        ese_empresa = EseEmpresa.query.get(empresa_id)
-
-    if not ese_empresa and local_id:
-        ese_empresa = EseEmpresa.query.filter_by(local_id=local_id, proprietario_id=current_user.id).first()
+    # Busca o processo de claim associado a este local de forma segura (sem dar 404 crash)
+    processo = EseProcessoClaim.query.filter_by(local_id=local.id).order_by(EseProcessoClaim.id.desc()).first()
 
     # Função auxiliar interna para garantir a existência do ColaboradorContrato
     def garantir_contrato_proprietario(target_empresa):
         cliente_uuid = str(current_user.id)
-        target_local_id = target_empresa.local_id or local_id or target_empresa.id
+        target_local_id = target_empresa.local_id or local.id
 
         contrato = ColaboradorContrato.query.filter_by(
             id_cadastro_cliente=cliente_uuid,
@@ -2284,19 +2321,22 @@ def configurar_layout(empresa_id):
     # Criar a EseEmpresa caso não exista no primeiro acesso
     if not ese_empresa:
         nome_inicial = request.form.get('nome') or getattr(local, 'nome', None) or f"Empresa {empresa_id}"
+        uuid_pleiteante = str(getattr(current_user, 'id', ''))
 
         ese_empresa = EseEmpresa(
-            proprietario_id=current_user.id,
-            local_id=local_id,
+            id=empresa_id,  # Garante o ID soberano (576)
+            proprietario_id=uuid_pleiteante,
+            local_id=local.id,
             nome=nome_inicial,
             slug=sanitizar_slug(nome_inicial),
-            status_homologacao='aguardando_dados'
+            status_homologacao='aguardando_dados',
+            termo_responsabilidade_aceito=True
         )
         db.session.add(ese_empresa)
         db.session.flush()
 
-        if hasattr(processo, 'empresa_id'):
-            processo.empresa_id = ese_empresa.id
+        if processo:
+            processo.status_processo = 'preenchimento_dados'
             db.session.add(processo)
 
         garantir_contrato_proprietario(ese_empresa)
@@ -2325,7 +2365,8 @@ def configurar_layout(empresa_id):
 
             # D) Tratamento de Exclusão Explícita de Mídia (Long-press)
             if request.form.get('excluir_logo') == 'true' and ese_empresa.logomarca:
-                caminho_logo = os.path.join(current_app.root_path, 'static', 'uploads', 'empresas', 'logos', ese_empresa.logomarca)
+                caminho_logo = os.path.join(current_app.root_path, 'static', 'uploads', 'empresas', 'logos',
+                                            ese_empresa.logomarca)
                 if os.path.exists(caminho_logo):
                     try:
                         os.remove(caminho_logo)
@@ -2334,7 +2375,8 @@ def configurar_layout(empresa_id):
                 ese_empresa.logomarca = None
 
             if request.form.get('excluir_fachada') == 'true' and ese_empresa.fachada:
-                caminho_fachada = os.path.join(current_app.root_path, 'static', 'uploads', 'empresas', 'fachadas', ese_empresa.fachada)
+                caminho_fachada = os.path.join(current_app.root_path, 'static', 'uploads', 'empresas', 'fachadas',
+                                               ese_empresa.fachada)
                 if os.path.exists(caminho_fachada):
                     try:
                         os.remove(caminho_fachada)
@@ -2342,34 +2384,28 @@ def configurar_layout(empresa_id):
                         pass
                 ese_empresa.fachada = None
 
-            # E) Upload e Processamento da Logomarca (Motor Unificado salvar_imagem_modulos)
+            # E) Upload e Processamento da Logomarca
             file_logo = request.files.get('logo')
             if file_logo and getattr(file_logo, 'filename', ''):
-                # Processa e otimiza a logo dentro da estrutura modular da empresa
                 caminho_relativo_logo = salvar_imagem_modulo(
                     arquivo=file_logo,
                     tipo_midia='empresa_logo',
                     identificador=ese_empresa.id,
                     empresa_id=ese_empresa.id
                 )
-
                 if caminho_relativo_logo:
-                    # Atualiza o modelo com o caminho relativo (compatível com a função media_url)
                     ese_empresa.logomarca = caminho_relativo_logo
 
             # F) Upload e Processamento da Fachada
             file_fachada = request.files.get('fachada')
             if file_fachada and getattr(file_fachada, 'filename', ''):
-                # Processa e otimiza a fachada dentro da estrutura de uploads da empresa
                 caminho_relativo_fachada = salvar_imagem_modulo(
                     arquivo=file_fachada,
                     tipo_midia='empresa_fachada',
                     identificador=ese_empresa.id,
                     empresa_id=ese_empresa.id
                 )
-
                 if caminho_relativo_fachada:
-                    # Salva no banco o caminho relativo (ex: 'Uploads/empresas/12/empresa_fachada_12_a1b2c3d4.webp')
                     ese_empresa.fachada = caminho_relativo_fachada
 
             # G) Validação do Domínio Próprio
@@ -2384,24 +2420,29 @@ def configurar_layout(empresa_id):
             # H) Validação Obrigatória de Mídia Mínima
             if not ese_empresa.logomarca and not ese_empresa.fachada:
                 db.session.commit()
-                flash("Atenção: É obrigatório enviar ao menos a logomarca ou a foto da fachada para prosseguir.", "warning")
+                flash("Atenção: É obrigatório enviar ao menos a logomarca ou a foto da fachada para prosseguir.",
+                      "warning")
                 return render_template(
                     'empresa/onboarding.html',
                     ese_empresa=ese_empresa,
                     processo=processo,
                     local=local,
-                    local_id=local.id if local else empresa_id,
+                    local_id=local.id,
                     categoria_nome="Categoria Principal"
                 )
 
             # Transição do Status da Esteira de Onboarding
             ese_empresa.status_homologacao = 'layout_configurado'
+            if processo:
+                processo.status_processo = 'concluido'
 
             # Vínculo e Garantia do Contrato
             garantir_contrato_proprietario(ese_empresa)
 
             # Persistência final das alterações no banco de dados
             db.session.add(ese_empresa)
+            if processo:
+                db.session.add(processo)
             db.session.commit()
 
             flash("Identidade visual e mídias salvas com sucesso!", "success")
@@ -2417,7 +2458,7 @@ def configurar_layout(empresa_id):
         ese_empresa=ese_empresa,
         processo=processo,
         local=local,
-        local_id=local.id if local else empresa_id,
+        local_id=local.id,
         categoria_nome="Categoria Principal"
     )
 

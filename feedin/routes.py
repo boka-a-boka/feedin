@@ -4777,7 +4777,11 @@ def ver_perfil(usuario_id):
         ).order_by(asc(Perfil.nome_completo)).all()
 
         # Afinidades de tags otimizada (Usa conjuntos de IDs rápidos em vez de objetos)
-        minhas_tags_ids = [t.id for t in current_user.interesses]
+        # Garante compatibilidade caso o usuário logado seja do modelo de módulos conexos
+        if hasattr(current_user, 'interesses') and current_user.interesses:
+            minhas_tags_ids = [t.id for t in current_user.interesses]
+        else:
+            minhas_tags_ids = []
         tags_em_comum = [t for t in user_alvo.interesses if t.id in minhas_tags_ids]
 
         # Mapeamento completo dos locais do VISITANTE
