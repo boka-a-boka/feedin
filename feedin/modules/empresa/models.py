@@ -1442,17 +1442,18 @@ class ClienteBeneficiario(db.Model):
         default=True,
         comment='Status do registro no sistema (True = Ativo, False = Inativo/Arquivado)'
     )
-    criado_em = db.Column(
-        db.DateTime,
-        default=datetime.utcnow,
-        comment='Data e hora do cadastro (UTC)'
-    )
 
     # --- MÍDIA / IDENTIDADE VISUAL ---
     foto_perfil = db.Column(
         db.String(255),
         nullable=True,
         comment='Caminho do arquivo ou imagem de perfil do beneficiario/pet/veiculo'
+    )
+
+    criado_em = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        comment='Data e hora do cadastro (UTC)'
     )
 
     # Relacionamento de volta com o Titular
@@ -1478,22 +1479,37 @@ class ClienteBeneficiario(db.Model):
 
     @property
     def url_foto(self) -> str:
-        """Retorna a URL tratada da foto do beneficiário ou fallback por tipo de persona."""
+        """Retorna o caminho HTTP estático do Blueprint agenda por string pura, evitando conflito de contexto."""
         if self.foto_perfil:
-            return resolver_url_midia(
-                caminho_arquivo=self.foto_perfil,
-                modulo='agenda',
-                fallback_filename='avatar-placeholder.png'
-            )
+            caminho_limpo = str(self.foto_perfil).replace('\\', '/')
 
-        # Fallbacks dinâmicos por tipo de persona
-        if self.tipo_persona == 'pet':
-            return '/static/img/defaults/pet-placeholder.png'
-        elif self.tipo_persona == 'veiculo':
-            return '/static/img/defaults/veiculo-placeholder.png'
+            if caminho_limpo.startswith('http://') or caminho_limpo.startswith('https://'):
+                return caminho_limpo
 
-        return '/static/img/defaults/avatar-placeholder.png'
+            if 'uploads/' in caminho_limpo:
+                caminho_relativo = 'uploads/' + caminho_limpo.split('uploads/')[-1]
+            else:
+                caminho_relativo = caminho_limpo.lstrip('/')
 
+            # Retorna a URL padrão do blueprint agenda sem passar por url_for
+            return f"/agenda/static/{caminho_relativo}"
+
+        return ""
+
+    def to_dict(self):
+        """Converte o objeto do beneficiário em dicionário serializável para JSON."""
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'tipo_persona': self.tipo_persona,
+            'documento_identificador': self.documento_identificador,
+            'especie_marca': self.especie_marca,
+            'raca_modelo': self.raca_modelo,
+            'ano_fab_veiculo': self.ano_fab_veiculo,
+            'data_nascimento_ou_ano': self.data_nascimento_ou_ano.strftime(
+                '%Y-%m-%d') if self.data_nascimento_ou_ano else None,
+            'url_foto': self.url_foto
+        }
 
 class ClienteContato(db.Model):
     """

@@ -5,6 +5,7 @@ import hashlib
 import random
 import logging
 import json
+import math
 
 from copy import deepcopy
 import pytz
@@ -379,7 +380,7 @@ def dashboard_empresa(empresa_id):
     pode_gerenciar = e_gestor
 
     # =========================================================================
-    # 🎯 1. LEITURA DOS FILTROS DE DATA E PROFISSIONAL E BLINDAGEM POR PERFIL
+    # 🎯 LEITURA DOS FILTROS DE DATA E PROFISSIONAL E BLINDAGEM POR PERFIL
     # =========================================================================
     data_str = request.args.get('data')
     if data_str:
@@ -390,7 +391,7 @@ def dashboard_empresa(empresa_id):
     else:
         data_filtro = hoje
 
-    prof_id_param = request.args.get('profissional_id', type=str)  # Tratamento como string para UUID/CHAR(36)
+    prof_id_param = request.args.get('profissional_id', type=str)
 
     if not pode_gerenciar:
         ids_filtro_sql = [str(contrato_colaborador.id)]
@@ -411,7 +412,7 @@ def dashboard_empresa(empresa_id):
     tempo_minimo_empresa = min(duracoes_validas) if duracoes_validas else 30
 
     # =========================================================================
-    # 🎯 3. FILA OPERACIONAL EM TEMPO REAL (FILTRADA POR ITEM INDIVIDUAL)
+    # 🎯 3. FILA OPERACIONAL EM TEMPO REAL
     # =========================================================================
     query_em_andamento = AghAgendamento.query.join(AghAgendamento.itens).filter(
         AghAgendamento.empresa_id == empresa_id,
@@ -447,7 +448,7 @@ def dashboard_empresa(empresa_id):
         joinedload(AghAgendamento.cliente),
         joinedload(AghAgendamento.beneficiario),
         joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.servico),
-        joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)  # 🟢 Relação ORM
+        joinedload(AghAgendamento.itens).joinedload(AghAgendamentoItem.profissional)
     ).filter(
         AghAgendamento.empresa_id == empresa_id,
         AghAgendamento.data_hora_inicio >= inicio_dia,
@@ -499,9 +500,21 @@ def dashboard_empresa(empresa_id):
         status_key_orig = raw_status.value if hasattr(raw_status, 'value') else raw_status
         st = str(status_key_orig).lower().strip() if status_key_orig is not None else ''
 
-        # Extração da Foto e Dados do Atendido
         cliente_obj = getattr(item, 'cliente', None)
         beneficiario_obj = getattr(item, 'beneficiario', None)
+
+        # 🟢 RESOLUÇÃO BLINDADA DOS UUIDS CHAR(36) NA FONTE
+        cliente_uuid_real = None
+        if cliente_obj:
+            cliente_uuid_real = getattr(cliente_obj, 'id', None) or getattr(cliente_obj, 'uuid', None)
+            if cliente_uuid_real:
+                cliente_uuid_real = str(cliente_uuid_real).strip()
+
+        beneficiario_uuid_real = None
+        if beneficiario_obj:
+            beneficiario_uuid_real = getattr(beneficiario_obj, 'id', None) or getattr(beneficiario_obj, 'uuid', None)
+            if beneficiario_uuid_real:
+                beneficiario_uuid_real = str(beneficiario_uuid_real).strip()
 
         nome_cliente = "Cliente Avulso"
         if cliente_obj:
@@ -515,20 +528,19 @@ def dashboard_empresa(empresa_id):
         nome_beneficiario = getattr(beneficiario_obj, 'nome', '') if tem_beneficiario else ''
         tipo_persona = getattr(beneficiario_obj, 'tipo_persona', 'humano') if tem_beneficiario else 'humano'
 
+        foto_beneficiario_url = beneficiario_obj.url_foto if (
+                tem_beneficiario and hasattr(beneficiario_obj, 'url_foto')) else ''
+
         nome_exibicao = nome_beneficiario if (tem_beneficiario and nome_beneficiario) else nome_cliente
 
-        # =========================================================================
-        # 🎯 AJUSTE PONTUAL: RESOLUÇÃO DA FOTO VIA MOD VINCULO MÓDULO (SLUG 'agenda')
-        # =========================================================================
+        # Resolução da foto do atendido
         foto_atendido_url = None
-
         if cliente_obj:
             try:
-                cliente_id_str = str(getattr(cliente_obj, 'id', '')).strip()
+                cliente_id_str = cliente_uuid_real
                 if cliente_id_str:
                     cliente_cadastro = ModCadastroCliente.query.filter_by(id=cliente_id_str).first()
                     if cliente_cadastro and cliente_cadastro.status_conta == 'ativo' and cliente_cadastro.cpf_hash:
-                        # 1. Busca estrita pelo método oficial com módulo + cpf_hash + email
                         vinculo_agenda = ModVinculoModulo.obter_vinculo_cliente(
                             modulo_slug='agenda',
                             cpf_hash=cliente_cadastro.cpf_hash,
@@ -537,7 +549,6 @@ def dashboard_empresa(empresa_id):
                         if vinculo_agenda and vinculo_agenda.url_foto_perfil:
                             foto_atendido_url = vinculo_agenda.url_foto_perfil
                         else:
-                            # Fallback por CPF caso o e-mail divirja no vínculo
                             v_por_cpf = ModVinculoModulo.query.filter_by(
                                 modulo_slug='agenda',
                                 cpf_hash=cliente_cadastro.cpf_hash,
@@ -548,7 +559,6 @@ def dashboard_empresa(empresa_id):
             except Exception as e:
                 print(f"⚠️ [DASHBOARD FOTO] Erro ao resolver foto via ModVinculoModulo: {e}")
 
-        # Fallback legado tradicional se não encontrou o vínculo por módulo
         if not foto_atendido_url:
             raw_foto_atendido = None
             if beneficiario_obj:
@@ -577,22 +587,13 @@ def dashboard_empresa(empresa_id):
                     getattr(cliente_obj, 'telefone', None)
             )
 
-        obj_atendido = beneficiario_obj or cliente_obj
-        id_atendido_uuid = (
-                getattr(obj_atendido, 'id', None) or
-                getattr(obj_atendido, 'uuid', None)
-        ) if obj_atendido else None
-
-        # Processamento dos itens do Agendamento
         if getattr(item, 'itens', None) and len(item.itens) > 0:
-
             itens_ordenados = sorted(item.itens, key=lambda x: getattr(x, 'ordem_execucao', 1))
 
             cursor_horario = item.data_hora_inicio
             inicio_item_anterior = item.data_hora_inicio
 
             for sub_index, it in enumerate(itens_ordenados):
-                # 🟢 Resgate estrito da chave em string (UUID / CHAR(36))
                 prof_item_id_raw = it.colaborador_id_contrato or getattr(it, 'profissional_id', None)
                 if not prof_item_id_raw:
                     continue
@@ -609,7 +610,6 @@ def dashboard_empresa(empresa_id):
                         cursor_horario = cursor_horario + timedelta(minutes=duracao_servico)
                     continue
 
-                # 🟢 1. Nome Robusto do Profissional (com múltiplos fallbacks)
                 prof_obj = it.profissional
                 prof_item_nome = (
                         getattr(it, 'nome_profissional', None) or
@@ -618,7 +618,6 @@ def dashboard_empresa(empresa_id):
                         'Profissional'
                 )
 
-                # 🟢 2. Foto Tratada do Profissional (passando por get_avatar_url)
                 raw_foto_prof = None
                 if prof_obj:
                     raw_foto_prof = (
@@ -642,14 +641,12 @@ def dashboard_empresa(empresa_id):
                     inicio_item_anterior = inicio_item_dt
                     cursor_horario = fim_item_dt
 
-                # 🟢 Leitura Estrita do Status do ITEM
                 item_status = getattr(it, 'status_item', getattr(it, 'status', None))
                 raw_item_st = item_status.value if hasattr(item_status, 'value') else item_status
 
                 effective_st = str(raw_item_st).lower().strip() if raw_item_st is not None else (
                     st if st else 'pendente')
 
-                # 🟢 Leitura e Formatação do Início Real do Item
                 raw_dt_inicio_real = getattr(it, 'data_hora_inicio_real', None)
                 inicio_real_fmt = '--:--'
                 if raw_dt_inicio_real:
@@ -659,7 +656,6 @@ def dashboard_empresa(empresa_id):
                         str_dt = str(raw_dt_inicio_real)
                         inicio_real_fmt = str_dt.split(' ')[1][:5] if ' ' in str_dt else str_dt[:5]
 
-                # 🟢 Apuração de Métricas por ITEM individual
                 metricas_hoje['total'] += 1
 
                 if effective_st in ['concluido', 'finalizado']:
@@ -706,7 +702,6 @@ def dashboard_empresa(empresa_id):
                     'item_id': it.id,
                     'status': effective_st,
 
-                    # 🟢 RESTAURAÇÃO DO OBJETO E CHAVES QUE SEU JINJA2 JÁ CONSULTA
                     'prof_obj': prof_obj,
                     'profissional_id': prof_item_id_str,
                     'colaborador_id': prof_item_id_str,
@@ -719,7 +714,6 @@ def dashboard_empresa(empresa_id):
                     'profissional_foto': prof_foto_url,
                     'colaborador_foto': prof_foto_url,
 
-                    # 🟢 DADOS DE HORÁRIO E INÍCIO REAL
                     'inicio_dt': inicio_item_dt,
                     'fim_dt': fim_item_dt,
                     'fim_bloqueio_dt': fim_item_dt,
@@ -728,16 +722,19 @@ def dashboard_empresa(empresa_id):
                     'inicio_real_fmt': inicio_real_fmt,
                     'data_hora_inicio_real': raw_dt_inicio_real,
 
-                    # 🟢 DADOS DO CLIENTE E SERVIÇO
                     'cliente_nome': nome_cliente,
                     'foto_atendido': foto_atendido_url,
                     'inicial_cliente': inicial_atendido,
                     'cliente_telefone': whatsapp_cliente,
-                    'cliente_id': id_atendido_uuid,
+
+                    # 🟢 INJEÇÃO EXPLÍCITA DOS UUIDS CHAR(36) LEGÍTIMOS
+                    'cliente_id': cliente_uuid_real,
+                    'beneficiario_id': beneficiario_uuid_real if tem_beneficiario else '',
 
                     'tem_beneficiario': tem_beneficiario,
                     'nome_beneficiario': nome_beneficiario,
                     'tipo_persona': tipo_persona,
+                    'foto_beneficiario': foto_beneficiario_url,
 
                     'servico_nome': nome_servico,
                     'valor_formatado': valor_fmt,
@@ -1511,8 +1508,23 @@ def detalhe_empresa(empresa_id):
         'total_geral': 0.0
     }
 
+    cliente = None
+    url_foto_titular = None
+
     if current_user.is_authenticated:
         user_uuid = str(current_user.id)
+        cliente = ModCadastroCliente.query.get(user_uuid)
+
+        if cliente:
+            # 🎯 BUSCA O VÍNCULO COMPOSTO NO MÓDULO 'agenda'
+            vinculo = ModVinculoModulo.obter_vinculo_cliente(
+                modulo_slug='agenda',
+                cpf_hash=cliente.cpf_hash,
+                email=cliente.email
+            )
+
+            if vinculo:
+                url_foto_titular = vinculo.url_foto_perfil
 
         # 1. Checa favorito
         eh_favorita = UsuarioFavorito.query.filter_by(
@@ -1708,6 +1720,8 @@ def detalhe_empresa(empresa_id):
     return render_template(
         'agenda/detalhe_empresa.html',
         empresa=empresa,
+        cliente=cliente,
+        url_foto_titular=url_foto_titular,
         servicos=servicos,
         grade_semanal=grade_semanal,
         excecoes_proximas=excecoes_proximas,
@@ -2251,6 +2265,12 @@ def criar_agendamento_balcao():
         duracao_minutos=duracao_minutos
     )
 
+    # Se o campo vier vazio (''), significa que é o próprio titular (None ou ID vazio)
+    beneficiario_id_raw = request.form.get('beneficiario_id')
+
+    # Converte para int/uuid conforme o seu model de agendamento exige, ou deixa None se for o titular
+    beneficiario_id = int(beneficiario_id_raw) if beneficiario_id_raw and beneficiario_id_raw.isdigit() else None
+
     # -------------------------------------------------------------------------
     # DECISÃO DO AGENDAMENTO BASEADO NO DIAGNÓSTICO DO MOTOR
     # -------------------------------------------------------------------------
@@ -2258,6 +2278,7 @@ def criar_agendamento_balcao():
         novo_agendamento = AghAgendamento(
             profissional_id=profissional_id,
             cliente_id=cliente_id,
+            beneficiario_id=beneficiario_id,
             servico_id=servico_id,
             preco_cobrado=preco_real,
             data_hora_inicio=data_inicio,
@@ -2452,10 +2473,13 @@ def acessar_estabelecimento(id_local_alvo):
 
 from datetime import timedelta  # Certifique-se de que timedelta está importado
 
+
 @agenda_bp.route('/dashboard', methods=['GET'])
 @login_required
 def dashboard_cliente():
     """📌 DASHBOARD PRINCIPAL DO MÓDULO AGENDA (PWA CLIENTE)"""
+    from feedin.modules.agenda.models import ClienteBeneficiario  # Importação resiliente
+
     cliente = current_user
     ficha_pendente = None
 
@@ -2473,9 +2497,9 @@ def dashboard_cliente():
         cpf_hash_calculado = EseConviteColaborador.gerar_hash_cpf(cpf_limpo)
 
     email_alvo = (
-        session.get('email_modulo_agenda')
-        or getattr(cliente, 'email', None)
-        or session.get('email')
+            session.get('email_modulo_agenda')
+            or getattr(cliente, 'email', None)
+            or session.get('email')
     )
 
     foto_perfil_url = None
@@ -2513,10 +2537,10 @@ def dashboard_cliente():
     # 2. BRANDING DA EMPRESA (CONTEXTO ATIVO) E BUSCA DE COLABORADORES
     # ----------------------------------------------------------------------------------
     local_id_ativo = (
-        session.get('local_contexto_id')
-        or session.get('local_id_atual')
-        or session.get('empresa_operavel_id')
-        or session.get('empresa_id')
+            session.get('local_contexto_id')
+            or session.get('local_id_atual')
+            or session.get('empresa_operavel_id')
+            or session.get('empresa_id')
     )
     colaboradores_elegiveis = []
     empresa_ativa = None
@@ -2586,7 +2610,8 @@ def dashboard_cliente():
             AghAgendamento.query.options(*opcoes_carregamento)
             .filter_by(cliente_id=cliente.id)
             .filter(
-                AghAgendamento.status.in_(['agendado', 'confirmado', 'aguardando', 'em_atendimento', 'em_andamento', 'soft_lock']))
+                AghAgendamento.status.in_(
+                    ['agendado', 'confirmado', 'aguardando', 'em_atendimento', 'em_andamento', 'soft_lock']))
             .order_by(AghAgendamento.data_hora_inicio.asc())
             .all()
         )
@@ -2625,16 +2650,16 @@ def dashboard_cliente():
 
                 if colab_obj:
                     nome_resolvido = (
-                        getattr(colab_obj, 'nome', None) or
-                        getattr(colab_obj, 'nome_completo', None) or
-                        getattr(getattr(colab_obj, 'usuario', None), 'nome', None) or
-                        'Profissional'
+                            getattr(colab_obj, 'nome', None) or
+                            getattr(colab_obj, 'nome_completo', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'nome', None) or
+                            'Profissional'
                     )
                     foto_resolvida = (
-                        getattr(colab_obj, 'url_foto_profissional', None) or
-                        getattr(colab_obj, 'foto_url', None) or
-                        getattr(colab_obj, 'url_foto_perfil', None) or
-                        getattr(getattr(colab_obj, 'usuario', None), 'url_foto_perfil', None)
+                            getattr(colab_obj, 'url_foto_profissional', None) or
+                            getattr(colab_obj, 'foto_url', None) or
+                            getattr(colab_obj, 'url_foto_perfil', None) or
+                            getattr(getattr(colab_obj, 'usuario', None), 'url_foto_perfil', None)
                     )
 
                     srv_item.nome_prof_exibicao = nome_resolvido
@@ -2680,6 +2705,20 @@ def dashboard_cliente():
     except Exception as err:
         db.session.rollback()
         print(f"[Dashboard Cliente] Erro na consulta de agendamentos: {err}")
+
+    # ----------------------------------------------------------------------------------
+    # 🎯 4.5. BENEFICIÁRIOS / PERSONAS DO CLIENTE (BUSCA PURA VIA UUID CHAR 36)
+    # ----------------------------------------------------------------------------------
+    beneficiarios_cliente = []
+    try:
+        cliente_uuid_str = str(getattr(cliente, 'id', '')).strip()
+        if cliente_uuid_str:
+            beneficiarios_cliente = ClienteBeneficiario.query.filter_by(
+                cliente_id=cliente_uuid_str,
+                ativo=True
+            ).order_by(ClienteBeneficiario.nome.asc()).all()
+    except Exception as err:
+        print(f"[Dashboard Cliente] Erro ao carregar beneficiários: {err}")
 
     # ----------------------------------------------------------------------------------
     # 5. VERIFICAÇÃO DE AVALIAÇÃO PENDENTE (BASEADA NO BANCO DE GESTÃO)
@@ -2808,9 +2847,9 @@ def dashboard_cliente():
             v_tot = float(getattr(item, 'valor_total', 0.0) or (qtd * v_unit))
 
             nome_item = (
-                getattr(item, 'nome_produto', None)
-                or getattr(item, 'descricao_item', None)
-                or getattr(item, 'descricao', None)
+                    getattr(item, 'nome_produto', None)
+                    or getattr(item, 'descricao_item', None)
+                    or getattr(item, 'descricao', None)
             )
             if not nome_item and hasattr(item, 'produto_rel') and item.produto_rel:
                 nome_item = getattr(item.produto_rel, 'nome', getattr(item.produto_rel, 'descricao', None))
@@ -2818,9 +2857,8 @@ def dashboard_cliente():
                 nome_item = getattr(item.produto, 'nome', getattr(item.produto, 'descricao', None))
 
             nome_item = nome_item or 'Produto'
-            origem_item = str(getattr(item, 'origem_lancamento', None) or getattr(item, 'origem_item', 'COLABORADOR')).upper()
-
-            print(f" -> Item ID {item.id}: {nome_item} | Qtd: {qtd} | V.Unit: {v_unit} | Origem: {origem_item}")
+            origem_item = str(
+                getattr(item, 'origem_lancamento', None) or getattr(item, 'origem_item', 'COLABORADOR')).upper()
 
             dados_prod = {
                 'id': item.id,
@@ -2845,6 +2883,7 @@ def dashboard_cliente():
         'pedidos_equipe': pedidos_equipe,
         'total_geral': total_consumacao
     }
+
     return render_template(
         'agenda/dashboard_cliente.html',
         agendamento_ativo=agendamento_ativo,
@@ -2871,6 +2910,7 @@ def dashboard_cliente():
         id_atendido_uuid=id_atendido_uuid,
         inicial_atendido=inicial_atendido,
         whatsapp_cliente=whatsapp_cliente,
+        beneficiarios_cliente=beneficiarios_cliente,  # 🎯 INJETADO COM SUCESSO AQUI!
     )
 
 # Mapeamento de prioridade da EscalaTrabalhoColaborador
@@ -4798,10 +4838,12 @@ def agendar(slug_empresa: str):
     categorias_ids = list({s.taxonomia_id for s in servicos_oferecidos if getattr(s, 'taxonomia_id', None)})
     categorias = Taxonomia.query.filter(Taxonomia.id.in_(categorias_ids)).all() if categorias_ids else []
 
+    # 👥 BUSCA OS BENEFICIÁRIOS DO CLIENTE LOGADO (EXCLUSIVAMENTE VIA UUID - CHAR 36)
     beneficiarios = []
     if current_user.is_authenticated:
+        cliente_id_str = str(getattr(current_user, 'id', ''))
         beneficiarios = ClienteBeneficiario.query.filter_by(
-            cliente_id=str(current_user.id),
+            cliente_id=cliente_id_str,
             ativo=True
         ).order_by(ClienteBeneficiario.nome.asc()).all()
 
@@ -4832,6 +4874,7 @@ def agendar(slug_empresa: str):
         duracao_total_formatada=_formatar_duracao(tempo_total_minutos),
         colaboradores=colaboradores,
         profissionais=colaboradores,
+        beneficiarios=beneficiarios,
         colaboradores_payload=colaboradores_payload,
         profissional_id_selecionado=profissional_id_selecionado,
         permite_escolha_profissional=permite_escolha_profissional,
@@ -4839,7 +4882,6 @@ def agendar(slug_empresa: str):
         data_selecionada=data_selecionada,
         horario_selecionado=horario_selecionado,
         tempo_minimo_empresa=tempo_minimo_empresa,
-        beneficiarios=beneficiarios,
         requer_triagem_beneficiario=requer_triagem_beneficiario,
         servico_id_selecionado=servico_id_principal,
         rascunho=rascunho,
@@ -8824,48 +8866,83 @@ from werkzeug.utils import secure_filename
 import os
 
 
-@agenda_bp.route('/beneficiarios', methods=['GET'])
+@agenda_bp.route('/meus-beneficiarios', methods=['GET'])
 @login_required
 def listar_beneficiarios():
-    """📌 Tela de Gerenciamento de Beneficiários / Personas"""
-    # Identifica o cliente titular logado (ajuste conforme a sua regra de sessão)
-    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+    """📌 Exibe a listagem de beneficiários (humanos, pets e veículos) do titular logado."""
+    cliente_id_str = str(getattr(current_user, 'id', ''))
 
-    beneficiarios = []
-    if cliente_atual:
-        beneficiarios = ClienteBeneficiario.query.filter_by(cliente_id=cliente_atual.id, ativo=True).all()
+    # Busca os beneficiários ativos vinculados a este cliente titular
+    beneficiarios = ClienteBeneficiario.query.filter_by(
+        cliente_id=cliente_id_str,
+        ativo=True
+    ).all()
 
     return render_template(
         'agenda/beneficiarios.html',
         beneficiarios=beneficiarios,
-        cliente=cliente_atual
+        cliente = cliente_id_str
     )
 
 
 @agenda_bp.route('/beneficiarios/salvar', methods=['POST'])
 @login_required
 def salvar_beneficiario():
-    """📌 Processa o cadastro ou edição de um beneficiário (Humano, Pet ou Veículo)"""
-    cliente_atual = getattr(current_user, 'cliente_perfil', None)
+    """📌 Processa o cadastro ou edição de um beneficiário com tratamento robusto de upload, hash e persona."""
+    from feedin.modules.auth.models import ModCadastroCliente
+    import hashlib
+    import os
+    import uuid
+    from flask import current_app
+
+    print("🔍 [DEBUG UPLOAD - INICIO]")
+    print(f"   -> request.files: {request.files}")
+    print(f"   -> request.form: {request.form}")
+
+    cliente_id_str = str(getattr(current_user, 'id', ''))
+    cliente_atual = ModCadastroCliente.query.get(cliente_id_str)
+
     if not cliente_atual:
-        flash('Perfil de cliente não encontrado para vincular o beneficiário.', 'danger')
+        flash('Perfil de cliente não encontrado.', 'danger')
         return redirect(url_for('agenda.listar_beneficiarios'))
 
-    beneficiario_id = request.form.get('beneficiario_id')
+    beneficiario_id_raw = request.form.get('beneficiario_id')
     tipo_persona = request.form.get('tipo_persona', 'humano')
     nome = request.form.get('nome')
-    documento = request.form.get('documento_identificador')
+    documento = request.form.get('documento_identificador', '').strip()
     data_nasc = request.form.get('data_nascimento_ou_ano')
     ano_fab = request.form.get('ano_fab_veiculo')
     especie_marca = request.form.get('especie_marca')
     raca_modelo = request.form.get('raca_modelo')
 
     if not nome:
-        flash('O nome/identificação do beneficiário é obrigatório.', 'warning')
+        flash('O nome do beneficiário é obrigatório.', 'warning')
         return redirect(url_for('agenda.listar_beneficiarios'))
 
-    # Se for edição, busca o registro existente; senão, cria um novo
-    if beneficiario_id:
+    # Validação apenas para veículo (onde a placa é indispensável)
+    if tipo_persona == 'veiculo' and not documento:
+        flash('A placa do veículo é obrigatória.', 'warning')
+        return redirect(url_for('agenda.listar_beneficiarios'))
+
+    # Tratamento e Hash do CPF (caso preenchido para humano)
+    documento_final = documento if documento else None
+    cpfhash_val = getattr(cliente_atual, 'cpf_hash', 'hash_padrao')
+
+    if tipo_persona == 'humano' and documento:
+        cpf_limpo = "".join(filter(str.isdigit, documento))
+        if len(cpf_limpo) == 11:
+            documento_hash = hashlib.sha256(cpf_limpo.encode('utf-8')).hexdigest()
+            documento_final = documento_hash
+            cpfhash_val = documento_hash
+
+    # Tratamento seguro do ID do beneficiário para edição ou novo registro
+    if beneficiario_id_raw and beneficiario_id_raw.strip():
+        try:
+            beneficiario_id = int(beneficiario_id_raw)
+        except ValueError:
+            flash('ID de beneficiário inválido.', 'danger')
+            return redirect(url_for('agenda.listar_beneficiarios'))
+
         beneficiario = ClienteBeneficiario.query.get_or_404(beneficiario_id)
         if beneficiario.cliente_id != cliente_atual.id:
             flash('Acesso não autorizado.', 'danger')
@@ -8873,42 +8950,88 @@ def salvar_beneficiario():
     else:
         beneficiario = ClienteBeneficiario(
             cliente_id=cliente_atual.id,
-            cpfhash_titular=getattr(cliente_atual, 'cpf_hash', 'hash_padrao')
+            cpfhash_titular=cpfhash_val
         )
 
     beneficiario.tipo_persona = tipo_persona
     beneficiario.nome = nome
-    beneficiario.documento_identificador = documento
-    beneficiario.especie_marca = especie_marca
-    beneficiario.raca_modelo = raca_modelo
+    beneficiario.documento_identificador = documento_final
 
+    # Atributos específicos baseados na classe da persona
     if tipo_persona == 'veiculo':
         beneficiario.ano_fab_veiculo = int(ano_fab) if ano_fab else None
         beneficiario.data_nascimento_ou_ano = None
-    else:
+        beneficiario.especie_marca = especie_marca
+        beneficiario.raca_modelo = raca_modelo
+    elif tipo_persona == 'pet':
         beneficiario.ano_fab_veiculo = None
+        beneficiario.especie_marca = especie_marca
+        beneficiario.raca_modelo = raca_modelo
         if data_nasc:
             from datetime import datetime
             try:
                 beneficiario.data_nascimento_ou_ano = datetime.strptime(data_nasc, '%Y-%m-%d').date()
             except ValueError:
-                pass
+                beneficiario.data_nascimento_ou_ano = None
+        else:
+            beneficiario.data_nascimento_ou_ano = None
+    else: # Humano
+        beneficiario.ano_fab_veiculo = None
+        beneficiario.especie_marca = None
+        beneficiario.raca_modelo = None
+        if data_nasc:
+            from datetime import datetime
+            try:
+                beneficiario.data_nascimento_ou_ano = datetime.strptime(data_nasc, '%Y-%m-%d').date()
+            except ValueError:
+                beneficiario.data_nascimento_ou_ano = None
+        else:
+            beneficiario.data_nascimento_ou_ano = None
 
-    # Tratamento de Upload de Foto
+    # =========================================================================
+    # 📸 UPLOAD DA FOTO DO BENEFICIÁRIO (MÓDULO AGENDA)
+    # =========================================================================
     arquivo_foto = request.files.get('foto_perfil')
-    if arquivo_foto and arquivo_foto.filename:
-        filename = secure_filename(f"beneficiario_{cliente_atual.id}_{uuid.uuid4().hex[:8]}_{arquivo_foto.filename}")
-        upload_folder = os.path.join('feedin', 'static', 'uploads', 'beneficiarios')
-        os.makedirs(upload_folder, exist_ok=True)
-        caminho_completo = os.path.join(upload_folder, filename)
-        arquivo_foto.save(caminho_completo)
-        beneficiario.foto_perfil = f"uploads/beneficiarios/{filename}"
 
-    if not beneficiario_id:
+    if arquivo_foto and arquivo_foto.filename:
+        upload_folder = os.path.join(current_app.root_path, 'modules', 'agenda', 'static', 'uploads', 'beneficiarios')
+        os.makedirs(upload_folder, exist_ok=True)
+
+        extensao = os.path.splitext(arquivo_foto.filename)[1].lower() or '.jpg'
+        nome_seguro = f"beneficiario_{uuid.uuid4().hex[:8]}{extensao}"
+        caminho_completo = os.path.join(upload_folder, nome_seguro)
+
+        arquivo_foto.save(caminho_completo)
+        beneficiario.foto_perfil = f"uploads/beneficiarios/{nome_seguro}"
+    else:
+        if not beneficiario_id_raw:
+            beneficiario.foto_perfil = None
+
+    if not beneficiario_id_raw:
         db.session.add(beneficiario)
 
     db.session.commit()
     flash('Beneficiário salvo com sucesso!', 'success')
+    return redirect(url_for('agenda.listar_beneficiarios'))
+
+
+@agenda_bp.route('/beneficiarios/desvincular/<int:id>', methods=['POST'])
+@login_required
+def desvincular_beneficiario(id):
+    """📌 Remove o vínculo do beneficiário alterando a flag ativo para False."""
+    from feedin.modules.auth.models import ModCadastroCliente
+
+    beneficiario = ClienteBeneficiario.query.get_or_404(id)
+
+    # Garante que pertence ao cliente logado
+    if str(beneficiario.cliente_id) != str(current_user.id):
+        flash('Acesso não autorizado.', 'danger')
+        return redirect(url_for('agenda.listar_beneficiarios'))
+
+    beneficiario.ativo = False
+    db.session.commit()
+
+    flash('Beneficiário desvinculado com sucesso.', 'info')
     return redirect(url_for('agenda.listar_beneficiarios'))
 
 
@@ -8973,3 +9096,163 @@ def salvar_contato_cliente():
     db.session.commit()
     flash('Canal de contato salvo com sucesso!', 'success')
     return redirect(url_for('agenda.listar_contatos_cliente'))
+
+
+def calcular_idade(data_nascimento):
+    if not data_nascimento:
+        return None
+    hoje = date.today()
+    return hoje.year - data_nascimento.year - ((hoje.month, hoje.day) < (data_nascimento.month, data_nascimento.day))
+
+
+@agenda_bp.route('/api/prontuario/cliente', methods=['GET'])
+def get_prontuario_cliente():
+    try:
+        cliente_id = request.args.get('cliente_id')
+        beneficiario_id = request.args.get('beneficiario_id')
+
+        if not cliente_id or str(cliente_id).strip() in ('None', 'undefined', ''):
+            return jsonify({'sucesso': False, 'mensagem': 'ID do cliente titular é obrigatório.'}), 400
+
+        cliente_id_str = str(cliente_id).strip()
+
+        # --- BUSCA DO TITULAR ---
+        titular = ModCadastroCliente.query.get(cliente_id_str)
+        if not titular:
+            titular = ModCadastroCliente.query.filter(ModCadastroCliente.id == cliente_id_str).first()
+
+        if not titular:
+            return jsonify({'sucesso': False, 'mensagem': 'Cliente titular não encontrado.'}), 404
+
+        # --- BUSCA DO BENEFICIÁRIO (SE HOUVER) ---
+        beneficiario = None
+        if beneficiario_id and str(beneficiario_id).strip() not in ('None', 'undefined', '', 'None'):
+            benef_str = str(beneficiario_id).strip()
+            if benef_str.isdigit():
+                beneficiario = ClienteBeneficiario.query.get(int(benef_str))
+            if not beneficiario:
+                beneficiario = ClienteBeneficiario.query.filter(ClienteBeneficiario.id == benef_str).first()
+
+        atendido = beneficiario if beneficiario else titular
+        is_beneficiario = beneficiario is not None
+
+        tipo_persona_raw = getattr(atendido, 'tipo_persona', 'humano') if is_beneficiario else 'humano'
+        tipo_persona = str(tipo_persona_raw).lower().strip()
+
+        # --- TRATAMENTO DE DATAS E IDADE ---
+        dt_nasc = getattr(atendido, 'data_nascimento_ou_ano', None) if is_beneficiario else getattr(atendido,
+                                                                                                    'data_nascimento',
+                                                                                                    None)
+        is_aniversario_hoje = False
+        nascimento_fmt = "Não informado"
+
+        if dt_nasc:
+            if isinstance(dt_nasc, str):
+                try:
+                    dt_nasc = datetime.strptime(dt_nasc, '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+
+            if isinstance(dt_nasc, (date, datetime)):
+                hoje = date.today()
+                is_aniversario_hoje = (dt_nasc.month == hoje.month and dt_nasc.day == hoje.day)
+
+                if tipo_persona == 'veiculo':
+                    ano_fab = getattr(atendido, 'ano_fab_veiculo', None)
+                    nascimento_fmt = f"Ano {ano_fab}" if ano_fab else f"Ano {dt_nasc.year}"
+                else:
+                    idade = calcular_idade(dt_nasc)
+                    nascimento_fmt = f"{dt_nasc.strftime('%d/%m/%Y')} ({idade} anos)" if idade is not None else dt_nasc.strftime(
+                        '%d/%m/%Y')
+        elif tipo_persona == 'veiculo':
+            ano_fab = getattr(atendido, 'ano_fab_veiculo', None)
+            nascimento_fmt = f"Ano {ano_fab}" if ano_fab else "Ano N/I"
+
+        # --- CONTROLE DOS CAMPOS ESPECÍFICOS POR TIPO DE PERSONA ---
+        rotulo_secundario_1 = None
+        valor_secundario_1 = None
+        rotulo_secundario_2 = None
+        valor_secundario_2 = None
+        exibir_bloco_secundario = False
+
+        if tipo_persona == 'pet':
+            exibir_bloco_secundario = True
+            rotulo_secundario_1 = "Espécie"
+            valor_secundario_1 = getattr(atendido, 'especie_marca', None) or "Não informada"
+            rotulo_secundario_2 = "Raça"
+            valor_secundario_2 = getattr(atendido, 'raca_modelo', None) or "Não informada"
+        elif tipo_persona == 'veiculo':
+            exibir_bloco_secundario = True
+            rotulo_secundario_1 = "Marca"
+            valor_secundario_1 = getattr(atendido, 'especie_marca', None) or "Não informada"
+            rotulo_secundario_2 = "Modelo"
+            valor_secundario_2 = getattr(atendido, 'raca_modelo', None) or "Não informado"
+        else:
+            if not is_beneficiario:
+                # Titular humano exibe estado civil e gênero normalmente
+                exibir_bloco_secundario = True
+                rotulo_secundario_1 = "Estado Civil"
+                valor_secundario_1 = getattr(atendido, 'estado_civil', None) or "Não informado"
+                rotulo_secundario_2 = "Gênero"
+                gen_obj = getattr(atendido, 'genero', None)
+                valor_secundario_2 = gen_obj.nome if gen_obj and hasattr(gen_obj, 'nome') else "Não informado"
+            else:
+                # Beneficiário humano: omitimos estado civil e gênero conforme solicitado
+                exibir_bloco_secundario = False
+
+        # --- AVALIAÇÃO INTERNA ---
+        avaliacao_val = getattr(atendido, 'avaliacao_interna', None)
+        if not avaliacao_val and is_beneficiario and titular:
+            avaliacao_val = getattr(titular, 'avaliacao_interna', 5.0)
+        avaliacao_fmt = f"{float(avaliacao_val or 5.0):.1f}"
+
+        # --- FOTO E TELEFONE ---
+        foto_url = atendido.url_foto if (is_beneficiario and hasattr(atendido, 'url_foto')) else (
+                    getattr(atendido, 'foto_url', None) or getattr(atendido, 'foto', None))
+
+        telefone = getattr(atendido, 'telefone', None)
+        usa_telefone_titular = False
+        if is_beneficiario:
+            tel_titular = getattr(titular, 'telefone', None) or getattr(titular, 'celular', None)
+            if tel_titular:
+                telefone = tel_titular
+                usa_telefone_titular = True
+
+        cliente_desde = getattr(atendido, 'criado_em', None) or getattr(atendido, 'created_at', None) or getattr(
+            atendido, 'data_cadastro', None)
+        cliente_desde_fmt = cliente_desde.strftime('%d/%m/%Y') if cliente_desde and hasattr(cliente_desde,
+                                                                                            'strftime') else "--/--/----"
+
+        resposta = {
+            'sucesso': True,
+            'atendido': {
+                'nome': getattr(atendido, 'nome', 'Cliente'),
+                'foto_url': foto_url,
+                'tipo_persona': tipo_persona.capitalize(),
+                'is_beneficiario': is_beneficiario,
+                'nome_titular_responsavel': getattr(titular, 'nome', None) if is_beneficiario else None,
+                'avaliacao_interna': avaliacao_fmt,
+                'telefone': telefone,
+                'usa_telefone_titular': usa_telefone_titular,
+                'is_aniversario_hoje': is_aniversario_hoje,
+                'cliente_desde': cliente_desde_fmt,
+                'nascimento_ou_ano': nascimento_fmt,
+
+                'exibir_bloco_secundario': exibir_bloco_secundario,
+                'rotulo_secundario_1': rotulo_secundario_1,
+                'valor_secundario_1': valor_secundario_1,
+                'rotulo_secundario_2': rotulo_secundario_2,
+                'valor_secundario_2': valor_secundario_2,
+
+                'preferencias': getattr(atendido, 'preferencias', None) or "Nenhuma preferência cadastrada."
+            },
+            'ultima_visita': None,
+            'top_servicos': [],
+            'observacoes': []
+        }
+
+        return jsonify(resposta)
+
+    except Exception as e:
+        print(f"Erro ao buscar prontuário: {str(e)}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro interno no servidor: {str(e)}'}), 500

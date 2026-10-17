@@ -54,6 +54,44 @@
     backdrop-filter: blur(8px);
     background-color: rgba(255, 255, 255, 0.95);
   }
+
+  /* Estilo base do card profissional/beneficiário */
+  .label-profissional-card {
+      border: 2px solid #dee2e6 !important;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+  }
+
+  .label-profissional-card:hover {
+      border-color: var(--bs-primary, #6c757d) !important;
+      transform: translateY(-2px);
+  }
+
+  /* Quando o rádio estiver CHECADO (Selecionado) */
+  .btn-check:checked + .label-profissional-card {
+      border-color: var(--bs-primary, #0d6efd) !important;
+      background-color: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.04) !important;
+      box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.075) !important;
+  }
+
+  /* Indicador visual de seleção (opcional, exibe um selo de check sutil no canto) */
+  .btn-check:checked + .label-profissional-card::after {
+      content: "✓";
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      width: 18px;
+      height: 18px;
+      background-color: var(--bs-primary, #0d6efd);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
 </style>
 
 <div class="container py-3 mb-5" style="max-width: 1080px; font-family: system-ui, -apple-system, sans-serif;">
@@ -182,6 +220,84 @@
           </button>
         </div>
       </div>
+
+      <!-- SELEÇÃO DE BENEFICIÁRIO / PERSONA (Exibido apenas se houver beneficiários cadastrados) -->
+      {% if beneficiarios %}
+        <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-3">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <label class="fw-bold text-dark m-0 small d-flex align-items-center gap-1.5">
+              <i class="bi bi-person-heart text-empresa"></i> Para quem é o atendimento?
+            </label>
+            {% if requer_triagem_dependente %}
+              <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small" style="font-size: 0.68rem;">
+                Obrigatório
+              </span>
+            {% else %}
+              <span class="badge bg-light text-muted border rounded-pill small" style="font-size: 0.68rem;">
+                Opcional
+              </span>
+            {% endif %}
+          </div>
+
+          <div class="row g-2">
+
+          <!-- Opção Padrão: O Próprio Titular -->
+          <div class="col-6 col-sm-4">
+            <input type="radio"
+                   class="btn-check card-profissional-check"
+                   name="beneficiario_id"
+                   id="beneficiario_titular"
+                   value=""
+                   checked>
+            <label class="label-profissional-card rounded-3 p-2.5 w-100 d-flex flex-column align-items-center text-center bg-white position-relative" for="beneficiario_titular">
+
+              <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                {% if url_foto_titular %}
+                  <img src="{{ url_foto_titular }}"
+                       class="rounded-circle border object-fit-cover w-100 h-100 shadow-sm"
+                       style="background-color: #fcfbfa;"
+                       alt="Titular">
+                {% else %}
+                  <div class="rounded-circle text-white fw-bold d-flex align-items-center justify-content-center shadow-sm w-100 h-100 border border-white"
+                       style="font-size: 0.85rem; background-color: {{ cor_empresa }};">
+                    {{ (cliente.nome if (cliente and cliente.nome) else 'C')[0] | upper }}
+                  </div>
+                {% endif %}
+              </div>
+
+              <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;">Para Mim (Titular)</strong>
+              <small class="text-muted" style="font-size: 0.68rem;">Atendimento próprio</small>
+            </label>
+          </div>
+
+            <!-- Demais Beneficiários (Dependentes, Pets, Veículos) -->
+            {% for b in beneficiarios %}
+              <div class="col-6 col-sm-4">
+                <input type="radio"
+                       class="btn-check card-profissional-check"
+                       name="beneficiario_id"
+                       id="beneficiario_{{ b.id }}"
+                       value="{{ b.id }}">
+                <label class="label-profissional-card rounded-3 p-2.5 w-100 d-flex flex-column align-items-center text-center bg-white shadow-sm border cursor-pointer" for="beneficiario_{{ b.id }}">
+                  <div class="position-relative flex-shrink-0 mb-1" style="width: 40px; height: 40px; min-width: 40px; min-height: 40px;">
+                    <img src="{{ b.url_foto }}"
+                         class="rounded-circle border object-fit-cover w-100 h-100 shadow-sm"
+                         style="background-color: #fcfbfa;"
+                         alt="{{ b.nome }}">
+                  </div>
+                  <strong class="small text-dark d-block text-truncate w-100" style="font-size: 0.78rem;" title="{{ b.nome }}">
+                    {{ b.nome }}
+                  </strong>
+                  <small class="text-muted text-truncate w-100" style="font-size: 0.68rem;">
+                    {% if b.tipo_persona == 'pet' %}🐾 Pet{% elif b.tipo_persona == 'veiculo' %}🚗 Veículo{% else %}👤 Dependente{% endif %}
+                    {% if b.idade_formatada %} • {{ b.idade_formatada }}{% endif %}
+                  </small>
+                </label>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
 
       {# CARD CONTAINER DO CATÁLOGO DE SERVIÇOS #}
       <div class="card border-0 bg-white rounded-4 shadow-sm p-4">
@@ -615,21 +731,30 @@
   };
 
   window.avancarParaHorarios = function() {
-    if (!window.servicosSelecionados || window.servicosSelecionados.size === 0) {
-        alert("Por favor, selecione ao menos um serviço para continuar.");
-        return;
-    }
+      if (!window.servicosSelecionados || window.servicosSelecionados.size === 0) {
+          alert("Por favor, selecione ao menos um serviço para continuar.");
+          return;
+      }
 
-    const idsServicos = Array.from(window.servicosSelecionados.keys()).join(',');
-    const slugEmpresa = "{{ empresa.slug if empresa and empresa.slug else empresa.id }}";
+      const idsServicos = Array.from(window.servicosSelecionados.keys()).join(',');
+      const slugEmpresa = "{{ empresa.slug if empresa and empresa.slug else empresa.id }}";
 
-    if (!slugEmpresa) {
-        alert("Empresa não identificada.");
-        return;
-    }
+      // Captura o beneficiario selecionado, se houver
+      const radioBeneficiario = document.querySelector('input[name="beneficiario_id"]:checked');
+      const beneficiarioId = radioBeneficiario ? radioBeneficiario.value : '';
 
-    window.location.href = `/agenda/${slugEmpresa}/agendar?servicos=${encodeURIComponent(idsServicos)}`;
-};
+      if (!slugEmpresa) {
+          alert("Empresa não identificada.");
+          return;
+      }
+
+      let url = `/agenda/${slugEmpresa}/agendar?servicos=${encodeURIComponent(idsServicos)}`;
+      if (beneficiarioId) {
+          url += `&beneficiario_id=${encodeURIComponent(beneficiarioId)}`;
+      }
+
+      window.location.href = url;
+  };
 
   window.filtrarServicos = function() {
     const input = document.getElementById('input-busca-servico');
@@ -647,6 +772,70 @@
       }
     });
   };
+
+  /**
+ * ⭐️ Alterna o status de favorito de um estabelecimento
+ * @param {number|string} empresaId - ID da empresa
+ */
+async function toggleFavorito(empresaId) {
+    if (!empresaId) return;
+
+    const btn = document.getElementById('btnFavoritarHeader');
+    const icone = document.getElementById('iconeFavoritoHeader');
+    const texto = document.getElementById('textoFavoritoHeader');
+
+    // Obtém o CSRF token do meta tag da página
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    // Efeito de feedback visual imediato no botão (desabilita momentaneamente)
+    if (btn) btn.disabled = true;
+
+    try {
+        const response = await fetch(`/agenda/empresas/${empresaId}/favoritar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.sucesso) {
+            // Se virou favorita
+            if (data.eh_favorita) {
+                if (icone) {
+                    icone.className = 'bi bi-star-fill text-warning fs-6';
+                }
+                if (texto) {
+                    texto.textContent = 'Favorita';
+                }
+            } else {
+                // Se deixou de ser favorita
+                if (icone) {
+                    icone.className = 'bi bi-star text-secondary fs-6';
+                }
+                if (texto) {
+                    texto.textContent = 'Favoritar';
+                }
+            }
+
+            // Exibe notificação Toast se a função existir no seu ambiente
+            if (typeof exibirToast === 'function') {
+                exibirToast('Sucesso', data.mensagem || 'Favoritos atualizados!', 'success');
+            }
+        } else {
+            alert(data.mensagem || 'Não foi possível alterar os favoritos.');
+        }
+    } catch (erro) {
+        console.error('Erro ao alternar favorito:', erro);
+        alert('Ocorreu um erro ao processar sua solicitação. Tente novamente.');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
 </script>
 
 {% endblock %}

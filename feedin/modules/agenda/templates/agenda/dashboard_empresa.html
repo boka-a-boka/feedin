@@ -7,7 +7,7 @@
 {% set cor_empresa = (empresa.cor_primaria if empresa and empresa.cor_primaria else '#0d6efd') %}
 
 <style>
-/* Destaque visual para o agendamento em atendimento */
+/* 🟢 Destaque visual para o agendamento em atendimento */
 .item-agendamento-atendimento {
     border: 2px solid #0d6efd !important;
     box-shadow: 0 0 10px rgba(13, 110, 253, 0.25) !important;
@@ -28,7 +28,7 @@
     color: #ffffff !important;
 }
 
-/* Card com estado Concluído */
+/* 🟢 Card com estado Concluído */
 .card-status-concluido {
     background-color: #f4fbf7 !important;
     border-left: 4px solid #198754 !important;
@@ -164,6 +164,19 @@
 
 .area-cliente-detalhes * {
     pointer-events: none; /* Garante que os filhos repassem o evento de clique para o contêiner pai */
+}
+
+/* 🟢 AJUSTES DE ENCAIXE E CENTRALIZAÇÃO PERFEITA PARA AVATARES (DESKTOP & MOBILE) */
+.area-cliente-detalhes img,
+.item-agendamento img {
+    object-fit: cover !important;
+    object-position: center !important;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.grayscale-50 {
+    filter: grayscale(50%);
 }
 </style>
 
@@ -404,12 +417,19 @@
             {% if slots_grade %}
                 {% for slot in slots_grade %}
 
-                    {# 🟢 1. TRATAMENTO E EXTRAÇÃO DE CLIENTE #}
+                    {# 🟢 1. TRATAMENTO E EXTRAÇÃO DE CLIENTE (AJUSTADO PARA UUID) #}
                     {% set raw_cliente = slot.cliente_nome or (slot.cliente.nome if slot.cliente else '') or (slot.agendamento.cliente.nome if slot.agendamento and slot.agendamento.cliente else '') or (slot.agendamento.cliente_nome if slot.agendamento else '') %}
                     {% set nome_cliente = raw_cliente if (raw_cliente and raw_cliente | string not in ['None', 'null', '']) else 'Cliente' %}
-                    {% set cliente_id_slot = slot.cliente_id or (slot.cliente.id if slot.cliente else '') or (slot.agendamento.cliente_id if slot.agendamento else '') %}
 
-                    {# 🟢 2. VARREDURA COMPLETA DE PROFISSIONAL (OBJETO, SLOT, AGENDAMENTO E ITEM) #}
+                    {# Garante a prioridade absoluta para a captura do UUID real do cliente em vez do ID numérico de slot #}
+                    {% set cliente_id_slot = (slot.cliente.uuid if slot.cliente and slot.cliente.uuid is defined else '')
+                        or (slot.cliente.id if slot.cliente and slot.cliente.id is defined and slot.cliente.id | string | length > 10 else '')
+                        or (slot.agendamento.cliente.uuid if slot.agendamento and slot.agendamento.cliente and slot.agendamento.cliente.uuid is defined else '')
+                        or slot.cliente_uuid
+                        or slot.uuid_cliente
+                        or slot.cliente_id %}
+
+                    {# 🟢 2. VARREDURA COMPLETA DE PROFISSIONAL #}
                     {% set item_primeiro = (slot.itens[0] if slot.itens is defined and slot.itens and slot.itens | length > 0 else (slot.agendamento.itens[0] if slot.agendamento and slot.agendamento.itens and slot.agendamento.itens | length > 0 else {})) %}
                     {% set prof_obj = slot.colaborador or slot.profissional or (slot.agendamento.colaborador if slot.agendamento else None) or (slot.agendamento.profissional if slot.agendamento else None) or (item_primeiro.colaborador if item_primeiro and item_primeiro.colaborador is defined else None) or (item_primeiro.profissional if item_primeiro and item_primeiro.profissional is defined else None) or {} %}
 
@@ -424,65 +444,46 @@
                     {# ID do Profissional #}
                     {% set prof_id_slot = slot.colaborador_id or slot.profissional_id or (prof_obj.id if prof_obj and prof_obj.id is defined else '') or (prof_obj.uuid_colaborador if prof_obj and prof_obj.uuid_colaborador is defined else '') %}
 
-                    {# 🟢 3. VARREDURA COMPLETA DO NOME DO SERVIÇO #}
+                    {# 🟢 3. VARREDURA DO NOME DO SERVIÇO #}
                     {% set serv_obj = slot.servico or (slot.agendamento.servico if slot.agendamento else {}) %}
                     {% set raw_servico = slot.servico_nome or slot.nome_servico or slot.servico_titulo or (serv_obj.nome if serv_obj and serv_obj.nome is defined else '') or (serv_obj.titulo if serv_obj and serv_obj.titulo is defined else '') or (item_primeiro.nome_servico if item_primeiro and item_primeiro.nome_servico is defined else '') %}
                     {% set nome_servico = raw_servico if (raw_servico and raw_servico | string not in ['None', 'null', '']) else 'Serviço' %}
 
-                    {# 🟢 4. EXTRAÇÃO DO INÍCIO REAL (BUSCA DIRETA EM ENCERRAMENTO, ITEM E SLOTS) #}
+                    {# 🟢 4. STATUS E INÍCIO REAL #}
                     {% set status_slug_norm = (slot.status if slot.status is defined else (slot.get('status') if slot.get is defined else 'agendado')) | string | lower | trim | replace(' ', '_') %}
-
-                    {% set inicio_real_fmt = slot.inicio_real_fmt if (slot.inicio_real_fmt is defined and slot.inicio_real_fmt) else '--:--' %}
-
-                    {% if status_slug_norm in ['em_atendimento', 'em_andamento'] %}
-                        {# 1. Mapeia o objeto de encerramento, se existir no slot ou no agendamento #}
-                        {% set encerramento_obj = slot.encerramento or (slot.agendamento.encerramento if slot.agendamento and slot.agendamento.encerramento else {}) %}
-                        {% set item_em_execucao = (itens_pendentes | first) if (itens_pendentes is defined and itens_pendentes and itens_pendentes | length > 0) else item_primeiro %}
-
-                        {# 2. Varredura com prioridade: Encerramento -> Item -> Slot -> Agendamento #}
-                        {% set raw_inicio_real = (encerramento_obj.data_hora_inicio_real if encerramento_obj and encerramento_obj.data_hora_inicio_real is defined else '')
-                            or (encerramento_obj.get('data_hora_inicio_real') if encerramento_obj and encerramento_obj.get is defined else '')
-                            or (item_em_execucao.data_hora_inicio_real if item_em_execucao and item_em_execucao.data_hora_inicio_real is defined else '')
-                            or (item_em_execucao.get('data_hora_inicio_real') if item_em_execucao and item_em_execucao.get is defined else '')
-                            or slot.data_hora_inicio_real or slot.inicio_real or (slot.agendamento.data_hora_inicio_real if slot.agendamento else '') %}
-
-                        {# 3. Formatação estrita para HH:MM #}
-                        {% if raw_inicio_real and raw_inicio_real | string not in ['None', 'null', ''] %}
-                            {% if raw_inicio_real.strftime is defined %}
-                                {% set inicio_real_fmt = raw_inicio_real.strftime('%H:%M') %}
-                            {% else %}
-                                {% set str_inicio = raw_inicio_real | string %}
-                                {% if ' ' in str_inicio %}
-                                    {% set inicio_real_fmt = str_inicio.split(' ')[1][:5] %}
-                                {% elif 'T' in str_inicio %}
-                                    {% set inicio_real_fmt = str_inicio.split('T')[1][:5] %}
-                                {% else %}
-                                    {% set inicio_real_fmt = str_inicio[:5] %}
-                                {% endif %}
-                            {% endif %}
-                        {% endif %}
-                    {% endif %}
-
-                    {# Outras variáveis básicas #}
                     {% set status_slug = (slot.status or 'agendado') | string | lower | trim %}
                     {% set hora_inicio_txt = slot.hora_inicio or '00:00' %}
                     {% set hora_fim_txt = slot.hora_fim or '00:00' %}
                     {% set valor_total_fmt = slot.valor_formatado or 'R$ 0,00' %}
 
-                    {# Fotos do Cliente/Atendido #}
-                    {% set raw_foto_cli = slot.foto_atendido or slot.cliente_foto or slot.foto_cliente or slot.foto or (slot.cliente.foto if slot.cliente else '') %}
-                    {% set url_foto_atendido = raw_foto_cli if (raw_foto_cli and raw_foto_cli | string not in ['None', 'null', '']) else '' %}
+                    {# 🟢 5. EXTRAÇÃO ROBUSTA DE FOTOS E BENEFICIÁRIO (RESOLVIDO NO TOPO) #}
+                    {% set benef_obj = slot.beneficiario or (slot.agendamento.beneficiario if slot.agendamento else None) %}
+                    {% set tem_benef = (slot.tem_beneficiario is defined and slot.tem_beneficiario) or (slot.get('tem_beneficiario') if slot.get is defined else false) or (benef_obj is not none) %}
 
-                    {% set raw_foto_tit = slot.foto_titular or (slot.titular.foto if slot.titular else '') %}
+                    {# Dados do Titular / Responsável #}
+                    {% set raw_foto_cli = slot.foto_atendido or slot.cliente_foto or slot.foto_cliente or slot.foto or (slot.cliente.foto if slot.cliente else '') %}
+                    {% set raw_foto_tit = slot.foto_titular or (slot.titular.foto if slot.titular else '') or (slot.agendamento.titular.foto if slot.agendamento and slot.agendamento.titular else '') or raw_foto_cli %}
                     {% set url_foto_titular = raw_foto_tit if (raw_foto_tit and raw_foto_tit | string not in ['None', 'null', '']) else '' %}
+
+                    {# Fallback por UUID do cliente titular se não houver foto direta #}
+                    {% if not url_foto_titular and cliente_id_slot %}
+                        {% set url_foto_titular = '/media/agenda/uploads/avatares/perfil_' ~ cliente_id_slot ~ '.webp' %}
+                    {% endif %}
+
+                    {# Dados do Beneficiário / Atendido #}
+                    {% set raw_foto_benef = slot.foto_beneficiario or slot.beneficiario_foto or (benef_obj.url_foto if benef_obj and benef_obj.url_foto is defined else '') or (benef_obj.get('url_foto') if benef_obj and benef_obj.get is defined else '') %}
+                    {% set url_foto_beneficiario = raw_foto_benef if (raw_foto_benef and raw_foto_benef | string not in ['None', 'null', ''] and not raw_foto_benef.endswith('perfil_1.webp')) else '' %}
+
+                    {# Foto do Atendido (Se tem beneficiário, exibe o beneficiário; senão, o titular) #}
+                    {% set url_foto_atendido = url_foto_beneficiario if tem_benef else url_foto_titular %}
 
                     {% set inicial_cliente = (nome_cliente[:1] | upper) if nome_cliente else 'C' %}
                     {% set e_atrasado = (status_slug == 'atrasado') %}
 
                     {% if slot.tipo == 'ocupado' or slot.get('tipo') == 'ocupado' %}
                         {# IDs #}
-                        {% set agend_id_val = slot.agendamento_id if slot.agendamento_id is defined and slot.agendamento_id else (slot.get('agendamento_id') if slot.get is defined and slot.get('agendamento_id') else (slot.agendamento.id if slot.agendamento and slot.agendamento.id else slot.id)) %}
-                        {% set item_id_val = slot.item_id if slot.item_id is defined and slot.item_id else (slot.get('item_id') if slot.get is defined and slot.get('item_id') else slot.id) %}
+                        {% set agend_id_val = slot.agendamento_id if slot.agendamento_id is defined and slot.agendamento_id else (slot.get('agendamento_id') if slot.get is defined else (slot.agendamento.id if slot.agendamento and slot.agendamento.id else slot.id)) %}
+                        {% set item_id_val = slot.item_id if slot.item_id is defined and slot.item_id else (slot.get('item_id') if slot.get is defined else slot.id) %}
 
                         {# Filtro de itens da lista #}
                         {% set itens_lista = (slot.itens if slot.itens is defined else slot.get('itens', [])) or (slot.agendamento.itens if slot.agendamento and slot.agendamento.itens else []) %}
@@ -616,6 +617,8 @@
 
                                     <!-- CLIENTE E SERVIÇO -->
                                     <div class="area-cliente-detalhes d-flex align-items-center gap-2 my-1 p-1 rounded"
+                                         data-cliente-id="{{ cliente_id_slot }}"
+                                         data-beneficiario-id="{{ slot.beneficiario_id if slot.beneficiario_id is defined else (beneficiario_id if beneficiario_id is defined else '') }}"
                                          data-cliente-nome="{{ nome_cliente | e }}"
                                          data-cliente-telefone="{{ slot.cliente_telefone if slot.cliente_telefone is defined else (slot.get('cliente_telefone') if slot.get is defined else 'Contato via Plataforma') }}"
                                          data-cliente-foto="{{ url_foto_atendido }}"
@@ -623,20 +626,22 @@
                                          data-valor="{{ valor_total_fmt }}"
                                          data-obs="{{ slot.observacoes if slot.observacoes is defined else (slot.get('observacoes') if slot.get is defined else 'Sem observações adicionais.') }}"
                                          data-hora="{{ hora_inicio_txt }}"
+                                         ondblclick="abrirModalDetalhesCliente(this)"
                                          title="Duplo clique ou toque longo para abrir a ficha do cliente"
                                          style="cursor: pointer; user-select: none;">
 
-                                        <div class="position-relative flex-shrink-0" style="width: 36px; height: 36px;">
+                                        <div class="position-relative flex-shrink-0 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm" style="width: 36px; height: 36px; min-width: 36px; min-height: 36px;">
                                             {% set tem_benef = slot.tem_beneficiario if slot.tem_beneficiario is defined else (slot.get('tem_beneficiario') if slot.get is defined else false) %}
                                             {% set raw_benef = slot.nome_beneficiario if slot.nome_beneficiario is defined else (slot.get('nome_beneficiario') if slot.get is defined else '') %}
                                             {% set nome_benef = raw_benef if (raw_benef and raw_benef | string not in ['None', 'null', '']) else '' %}
                                             {% set tipo_persona = slot.tipo_persona if slot.tipo_persona is defined else (slot.get('tipo_persona') if slot.get is defined else 'humano') %}
 
                                             {% if tem_benef %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 {% if status_slug_norm == 'concluido' %}border-success{% elif status_slug_norm == 'finalizado' %}border-warning{% else %}border-primary{% endif %} d-flex align-items-center justify-content-center {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-warning-emphasis{% else %}text-primary{% endif %} shadow-sm"
+                                                <!-- FOTO PRINCIPAL: O BENEFICIÁRIO (PET, VEÍCULO, DEPENDENTE) -->
+                                                <div class="w-100 h-100 rounded-circle overflow-hidden bg-light border border-2 {% if status_slug_norm == 'concluido' %}border-success{% elif status_slug_norm == 'finalizado' %}border-warning{% else %}border-primary{% endif %} d-flex align-items-center justify-content-center position-relative"
                                                      title="Beneficiário: {{ nome_benef }}">
-                                                    {% if url_foto_atendido %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_benef }}" onerror="this.style.display='none';">
+                                                    {% if url_foto_beneficiario %}
+                                                        <img src="{{ url_foto_beneficiario }}" class="w-100 h-100 position-absolute top-50 start-50 translate-middle" style="object-fit: cover !important;" alt="{{ nome_benef }}" onerror="this.style.display='none';">
                                                     {% else %}
                                                         {% if tipo_persona == 'pet' %}
                                                             <i class="bi bi-paw-fill fs-5"></i>
@@ -648,27 +653,30 @@
                                                     {% endif %}
                                                 </div>
 
-                                                <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden"
-                                                     style="width: 16px; height: 16px;" title="Responsável: {{ nome_cliente }}">
+                                                <!-- FOTO MENOR NO CANTO: O TITULAR / RESPONSÁVEL -->
+                                                <div class="position-absolute bottom-0 end-0 rounded-circle border border-white shadow-sm bg-secondary overflow-hidden d-flex align-items-center justify-content-center"
+                                                     style="width: 16px; height: 16px; z-index: 2;" title="Responsável: {{ nome_cliente }}">
                                                     {% if url_foto_titular %}
-                                                        <img src="{{ url_foto_titular }}" class="w-100 h-100 object-fit-cover" onerror="this.style.display='none';">
+                                                        <img src="{{ url_foto_titular }}" class="w-100 h-100 position-absolute top-50 start-50 translate-middle" style="object-fit: cover !important;" onerror="this.style.display='none';">
                                                     {% else %}
-                                                        <span class="text-white fw-bold d-flex align-items-center justify-content-center h-100" style="font-size: 0.5rem;">
+                                                        <span class="text-white fw-bold d-flex align-items-center justify-content-center h-100 w-100" style="font-size: 0.45rem;">
                                                             {{ inicial_cliente }}
                                                         </span>
                                                     {% endif %}
                                                 </div>
                                             {% else %}
-                                                <div class="w-100 h-100 rounded-circle overflow-hidden border bg-light d-flex align-items-center justify-content-center shadow-sm">
-                                                    {% if url_foto_atendido %}
-                                                        <img src="{{ url_foto_atendido }}" class="w-100 h-100 object-fit-cover" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
-                                                        <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
-                                                    {% else %}
-                                                        <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6">
-                                                            {{ inicial_cliente }}
-                                                        </span>
-                                                    {% endif %}
-                                                </div>
+                                                <!-- ATENDIMENTO NORMAL (APENAS O TITULAR) -->
+                                                {% if url_foto_atendido %}
+                                                    <img src="{{ url_foto_atendido }}" class="w-100 h-100 position-absolute top-50 start-50 translate-middle" style="object-fit: cover !important;" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
+                                                    <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
+                                                {% elif url_foto_titular %}
+                                                    <img src="{{ url_foto_titular }}" class="w-100 h-100 position-absolute top-50 start-50 translate-middle" style="object-fit: cover !important;" alt="{{ nome_cliente }}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('d-none');">
+                                                    <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6 d-none">{{ inicial_cliente }}</span>
+                                                {% else %}
+                                                    <span class="fw-bold {% if status_slug_norm == 'concluido' %}text-success{% elif status_slug_norm == 'finalizado' %}text-dark{% else %}text-primary{% endif %} fs-6">
+                                                        {{ inicial_cliente }}
+                                                    </span>
+                                                {% endif %}
                                             {% endif %}
                                         </div>
 
@@ -819,72 +827,165 @@
     </div>
 </div>
 
-{# MODAL DE DETALHES DO CLIENTE #}
+{# MODAL DE DETALHES DO CLIENTE E PRONTUÁRIO #}
 <div class="modal fade" id="modalDetalhesClienteEmpresa" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 shadow">
-            <div class="modal-header border-bottom pb-3">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+            <div class="modal-header border-bottom pb-3 bg-light">
                 <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
-                    <i class="bi bi-person-lines-fill text-primary"></i>Detalhes do Agendamento
+                    <i class="bi bi-person-lines-fill text-primary"></i>Prontuário e Detalhes do Atendimento
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body py-3">
-                <input type="hidden" id="modal-finalizar-agendamento-id">
-                <input type="hidden" id="modal-finalizar-avaliacao" value="5">
 
-                <div class="d-flex align-items-center gap-3 mb-3 pb-3 border-bottom">
-                    <div style="width: 50px; height: 50px; min-width: 50px; min-height: 50px;" class="position-relative flex-shrink-0">
+            <div class="modal-body py-3" style="max-height: 75vh; overflow-y: auto;">
+
+                <!-- ALERTA DE ANIVERSÁRIO (EXIBIDO APENas SE FOR O DIA) -->
+                <div id="bannerAniversarioCliente" class="alert alert-warning border-0 shadow-sm rounded-3 mb-3 d-none align-items-center gap-2 py-2">
+                    <i class="bi bi-cake2-fill text-danger fs-4"></i>
+                    <div>
+                        <strong class="text-dark">Parabéns!</strong> Hoje é o aniversário de <span id="txtNomeAniversariante" class="fw-bold"></span>! Não deixe de parabenizá-lo(a) no atendimento.
+                    </div>
+                </div>
+
+                <!-- CABEÇALHO DO PERFIL (FOTO AMPLADA 75x75px E NOME DO ATENDIDO) -->
+                <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                    <div style="width: 75px; height: 75px; min-width: 75px; min-height: 75px;" class="position-relative flex-shrink-0">
                         <img id="modalClienteEmpresaFoto"
                              src=""
-                             alt="Foto do Cliente"
+                             alt="Foto do Atendido"
                              class="rounded-circle object-fit-cover w-100 h-100 border shadow-sm"
                              style="display: none;"
                              onerror="this.style.display='none'; const el = document.getElementById('modalClienteEmpresaInicial'); if(el) el.style.display='flex';">
 
                         <div id="modalClienteEmpresaInicial"
-                             class="rounded-circle bg-primary text-white align-items-center justify-content-center fw-bold fs-4 w-100 h-100 border shadow-sm"
+                             class="rounded-circle bg-primary text-white align-items-center justify-content-center fw-bold fs-3 w-100 h-100 border shadow-sm"
                              style="display: flex;">
                             C
                         </div>
                     </div>
 
-                    <div>
-                        <h5 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Cliente</h5>
-                        <small class="text-muted" id="modalClienteEmpresaTelefone"><i class="bi bi-whatsapp text-success me-1"></i>--</small>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span id="modalBadgeTipoPersona" class="badge bg-secondary mb-1" style="font-size: 0.65rem;">Titular</span>
+                                <h4 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Atendido</h4>
+                                <small id="lblSubtituloTitular" class="text-muted d-block small d-none mt-0.5">
+                                    Responsável: <strong id="modalNomeTitularResp" class="text-dark">--</strong>
+                                </small>
+                            </div>
+                            <!-- Avaliação Interna -->
+                            <div class="text-end">
+                                <span class="badge bg-warning text-dark px-2.5 py-1.5 fw-bold shadow-sm" id="modalClienteAvaliacaoInterna" title="Avaliação Interna">
+                                    <i class="bi bi-star-fill text-dark me-1"></i><span id="modalValNotaAvaliacao">5.0</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Telefone com Alerta Especial se for Beneficiário -->
+                        <div class="mt-2">
+                            <a href="#" id="linkTelefoneUrgencia" class="text-decoration-none fw-bold text-success small">
+                                <i class="bi bi-whatsapp me-1"></i><span id="modalClienteEmpresaTelefone">--</span>
+                            </a>
+                            <span id="alertaTitularResponsavel" class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-2 d-none" style="font-size: 0.65rem;">
+                                <i class="bi bi-shield-check me-1"></i>Contato do Responsável (Urgência)
+                            </span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
+                <!-- GRADE DE DADOS DINÂMICOS (OCULTA CAMPOS INVÁLIDOS PARA PETS/VEÍCULOS) -->
+                <div class="row g-2 mb-3" id="gradeDadosCadastrais">
+                    <div class="col-6 col-md-3">
                         <div class="p-2 bg-light rounded-3 border">
-                            <small class="text-muted d-block">Horário</small>
-                            <span class="fw-bold text-dark" id="modalClienteEmpresaHora">--:--</span>
+                            <small class="text-muted d-block" style="font-size: 0.7rem;">Cliente Desde</small>
+                            <span class="fw-bold text-dark small" id="modalClienteDesde">--/--/----</span>
                         </div>
                     </div>
-                    <div class="col-6">
+                    <div class="col-6 col-md-3" id="wrapperNascimentoOuAno">
                         <div class="p-2 bg-light rounded-3 border">
-                            <small class="text-muted d-block">Valor Total</small>
-                            <span class="fw-bold text-success" id="modalClienteEmpresaValor">R$ 0,00</span>
+                            <small class="text-muted d-block" style="font-size: 0.7rem;" id="lblTituloNascimento">Nascimento / Idade</small>
+                            <span class="fw-bold text-dark small" id="modalClienteNascimento">--</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3" id="wrapperEstadoCivil">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block" style="font-size: 0.7rem;">Estado Civil</small>
+                            <span class="fw-bold text-dark small" id="modalClienteEstadoCivil">--</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3" id="wrapperGenero">
+                        <div class="p-2 bg-light rounded-3 border">
+                            <small class="text-muted d-block" style="font-size: 0.7rem;">Gênero</small>
+                            <span class="fw-bold text-dark small" id="modalClienteGenero">--</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- PREFERÊNCIAS -->
                 <div class="mb-3">
-                    <label class="fw-semibold text-muted small d-block mb-1">Serviço Solicitado</label>
-                    <div class="p-2 bg-light rounded-3 border text-dark fw-medium" id="modalClienteEmpresaServico">
-                        --
+                    <label class="fw-bold text-dark small d-block mb-1">
+                        <i class="bi bi-bookmark-heart text-primary me-1"></i>Preferências
+                    </label>
+                    <div class="p-2.5 bg-light rounded-3 border text-dark small fw-medium" id="modalClientePreferencias">
+                        Nenhuma preferência cadastrada.
                     </div>
                 </div>
 
-                <div>
-                    <label class="fw-semibold text-muted small d-block mb-1">Observações</label>
-                    <div class="p-2 bg-light rounded-3 border text-secondary small" id="modalClienteEmpresaObs">
-                        Nenhuma observação.
+                <!-- ÚLTIMA VISITA -->
+                <div class="mb-3">
+                    <label class="fw-bold text-dark small d-block mb-1">
+                        <i class="bi bi-clock-history text-secondary me-1"></i>Última Visita Registrada
+                    </label>
+                    <div class="p-2.5 bg-light rounded-3 border text-dark small" id="modalUltimaVisita">
+                        Nenhum registro anterior encontrado.
                     </div>
                 </div>
+
+                <!-- SERVIÇOS MAIS CONTRATADOS (Top 5) -->
+                <div class="mb-3">
+                    <label class="fw-bold text-dark small d-block mb-1">
+                        <i class="bi bi-graph-up-arrow text-success me-1"></i>Serviços Mais Contratados (Top 5)
+                    </label>
+                    <div class="p-2.5 bg-light rounded-3 border text-dark small" id="modalServicosFrequentes">
+                        <span class="text-muted">Nenhum serviço anterior registrado.</span>
+                    </div>
+                </div>
+
+                <!-- OBSERVAÇÕES REGISTRADAS -->
+                <div class="mb-3">
+                    <label class="fw-bold text-dark small d-block mb-1">
+                        <i class="bi bi-journal-text text-warning me-1"></i>Observações de Atendimentos Anteriores
+                    </label>
+                    <div class="p-2.5 bg-light rounded-3 border text-dark small" id="modalClienteEmpresaObs" style="max-height: 110px; overflow-y: auto;">
+                        Nenhuma observação registrada.
+                    </div>
+                </div>
+
+                <!-- RODAPÉ DE ALTO CONTRASTE (ATENDIMENTO ATUAL) -->
+                <div class="p-3 bg-light border border-2 border-primary-subtle rounded-3 mt-4 shadow-sm">
+                    <span class="text-uppercase fw-bold text-primary d-block mb-2" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-calendar-event me-1"></i>Detalhes Deste Atendimento Atual
+                    </span>
+                    <div class="row g-2 align-items-center">
+                        <div class="col-12 col-md-6">
+                            <small class="text-muted d-block fw-semibold" style="font-size: 0.7rem;">Serviço Solicitado</small>
+                            <span class="fw-bold text-dark fs-6" id="modalClienteEmpresaServico">--</span>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <small class="text-muted d-block fw-semibold" style="font-size: 0.7rem;">Horário Agendado</small>
+                            <span class="fw-bold text-dark fs-6" id="modalClienteEmpresaHora">--:--</span>
+                        </div>
+                        <div class="col-6 col-md-3 text-md-end">
+                            <small class="text-muted d-block fw-semibold" style="font-size: 0.7rem;">Valor Total</small>
+                            <span class="fw-extrabold text-success fs-5" id="modalClienteEmpresaValor">R$ 0,00</span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-            <div class="modal-footer border-top pt-2">
+
+            <div class="modal-footer border-top pt-2 bg-light">
                 <button type="button" class="btn btn-secondary rounded-pill px-4 fw-semibold" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
@@ -1621,69 +1722,219 @@ function obterEmpresaIdContexto() {
 // 2. FUNÇÕES EXPOSTAS NO ESCOPO GLOBAL (WINDOW)
 // =========================================================================
 
-// Função global acionada pelo seu duplo clique existente
-window.abrirModalDetalhesCliente = function(areaCliente) {
-    if (!areaCliente) return;
+/**
+ * Abre o Prontuário do Cliente/Beneficiário via Duplo Clique (Blindada contra elementos HTML)
+ * @param {number|HTMLElement} clienteIdOrElement - ID do Titular ou o próprio elemento HTML (this)
+ * @param {number|null} beneficiarioId - ID do Beneficiário (opcional)
+ * @param {Object} atendimentoAtual - Dados do agendamento atual (serviço, hora, valor)
+ */
+function abrirModalDetalhesCliente(clienteIdOrElement, beneficiarioId = null, atendimentoAtual = {}) {
+    let clienteId = clienteIdOrElement;
 
-    // Resgata a div do card pai caso o clique venha de um elemento filho
-    const cardElemento = areaCliente.classList.contains('area-cliente-detalhes')
-        ? areaCliente
-        : (areaCliente.closest('.area-cliente-detalhes') || areaCliente.closest('.item-agendamento'));
+    // Se passou o elemento HTML (this), extrai tudo o que ele tem nos data- attributes
+    if (clienteIdOrElement instanceof HTMLElement) {
+        clienteId = clienteIdOrElement.dataset.clienteId || clienteIdOrElement.dataset.id;
+        beneficiarioId = beneficiarioId || clienteIdOrElement.dataset.beneficiarioId || null;
 
-    if (!cardElemento) {
-        console.warn("⚠️ [MODAL DETALHES] Elemento do card não localizado.");
+        // Aproveita para capturar os dados do atendimento atual diretamente do card visual
+        atendimentoAtual = {
+            servico: atendimentoAtual.servico || clienteIdOrElement.dataset.servico,
+            hora: atendimentoAtual.hora || clienteIdOrElement.dataset.hora,
+            valor: atendimentoAtual.valor || clienteIdOrElement.dataset.valor
+        };
+
+        // Preenche imediatamente o nome e foto do card se existirem, para ganho de performance visual
+        const nomeCard = clienteIdOrElement.dataset.clienteNome;
+        const fotoCard = clienteIdOrElement.dataset.clienteFoto;
+        if (nomeCard) document.getElementById('modalClienteEmpresaNome').innerText = nomeCard;
+        if (fotoCard && fotoCard !== 'None') {
+            const imgEl = document.getElementById('modalClienteEmpresaFoto');
+            const inicialEl = document.getElementById('modalClienteEmpresaInicial');
+            imgEl.src = fotoCard;
+            imgEl.style.display = 'block';
+            inicialEl.style.display = 'none';
+        }
+    }
+
+    // Validação final de segurança
+    if (!clienteId || clienteId === 'undefined' || clienteId === 'None') {
+        console.error("Elemento HTML sem data-cliente-id:", clienteIdOrElement);
+        alert("Erro: O ID do cliente não foi configurado neste elemento HTML. Adicione o atributo data-cliente-id.");
         return;
     }
 
-    // Extrai os dados gravados diretamente no HTML do slot
-    const nome = cardElemento.getAttribute('data-cliente-nome') || cardElemento.getAttribute('data-cliente') || 'Cliente';
-    const telefone = cardElemento.getAttribute('data-cliente-telefone') || '--';
-    const fotoUrl = cardElemento.getAttribute('data-cliente-foto');
-    const servico = cardElemento.getAttribute('data-servico') || '--';
-    const valor = cardElemento.getAttribute('data-valor') || 'R$ 0,00';
-    const obs = cardElemento.getAttribute('data-obs') || 'Nenhuma observação.';
-    const hora = cardElemento.getAttribute('data-hora') || '--:--';
+    // Preenche o Rodapé de Alto Contraste (Atendimento Atual)
+    document.getElementById('modalClienteEmpresaServico').innerText = atendimentoAtual.servico || '--';
+    document.getElementById('modalClienteEmpresaHora').innerText = atendimentoAtual.hora || '--:--';
+    document.getElementById('modalClienteEmpresaValor').innerText = atendimentoAtual.valor || 'R$ 0,00';
 
-    // Preenche os campos do formulário/modal (#modalDetalhesClienteEmpresa)
-    const elNome = document.getElementById('modalClienteEmpresaNome');
-    const elTel = document.getElementById('modalClienteEmpresaTelefone');
-    const elHora = document.getElementById('modalClienteEmpresaHora');
-    const elValor = document.getElementById('modalClienteEmpresaValor');
-    const elServico = document.getElementById('modalClienteEmpresaServico');
-    const elObs = document.getElementById('modalClienteEmpresaObs');
+    // Chamada AJAX ao Endpoint Flask
+    const url = `/agenda/api/prontuario/cliente?cliente_id=${clienteId}` + (beneficiarioId ? `&beneficiario_id=${beneficiarioId}` : '');
 
-    if (elNome) elNome.textContent = nome;
-    if (elTel) elTel.innerHTML = `<i class="bi bi-whatsapp text-success me-1"></i>${telefone !== 'None' ? telefone : 'Contato via Plataforma'}`;
-    if (elHora) elHora.textContent = hora;
-    if (elValor) elValor.textContent = valor;
-    if (elServico) elServico.textContent = servico;
-    if (elObs) elObs.textContent = obs;
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.sucesso) {
+                alert(data.mensagem || "Erro ao carregar prontuário.");
+                return;
+            }
 
-    // Trata a foto do cliente ou o avatar com a inicial
-    const imgEl = document.getElementById('modalClienteEmpresaFoto');
-    const inicialEl = document.getElementById('modalClienteEmpresaInicial');
+            const p = data.atendido;
 
-    if (fotoUrl && fotoUrl !== 'None' && fotoUrl.trim() !== '') {
-        if (imgEl) {
-            imgEl.src = fotoUrl;
-            imgEl.style.display = 'block';
-        }
-        if (inicialEl) inicialEl.style.display = 'none';
-    } else {
-        if (imgEl) imgEl.style.display = 'none';
-        if (inicialEl) {
-            inicialEl.style.display = 'flex';
-            inicialEl.textContent = (nome || 'C').charAt(0).toUpperCase();
-        }
-    }
+            // --- 1. CABEÇALHO & FOTO ---
+            document.getElementById('modalClienteEmpresaNome').innerText = p.nome;
+            document.getElementById('modalValNotaAvaliacao').innerText = p.avaliacao_interna;
 
-    // Exibe o modal via Bootstrap
-    const modalEl = document.getElementById('modalDetalhesClienteEmpresa');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modal.show();
-    }
-};
+            // Banner Aniversário
+            const bannerAniv = document.getElementById('bannerAniversarioCliente');
+            if (p.is_aniversario_hoje) {
+                document.getElementById('txtNomeAniversariante').innerText = p.nome;
+                bannerAniv.classList.remove('d-none');
+                bannerAniv.classList.add('d-flex');
+            } else {
+                bannerAniv.classList.add('d-none');
+                bannerAniv.classList.remove('d-flex');
+            }
+
+            // Foto / Inicial
+            const imgEl = document.getElementById('modalClienteEmpresaFoto');
+            const inicialEl = document.getElementById('modalClienteEmpresaInicial');
+
+            if (p.foto_url) {
+                imgEl.src = p.foto_url;
+                imgEl.style.display = 'block';
+                inicialEl.style.display = 'none';
+            } else {
+                imgEl.style.display = 'none';
+                inicialEl.innerText = p.nome ? p.nome.charAt(0).toUpperCase() : 'C';
+                inicialEl.style.display = 'flex';
+            }
+
+            // Subtítulo Responsável & Badge
+            const lblSubtitulo = document.getElementById('lblSubtituloTitular');
+            const badgeTipo = document.getElementById('modalBadgeTipoPersona');
+
+            if (p.is_beneficiario) {
+                badgeTipo.innerText = p.tipo_persona;
+                badgeTipo.className = "badge bg-info text-dark mb-1";
+                document.getElementById('modalNomeTitularResp').innerText = p.nome_titular_responsavel || '--';
+                lblSubtitulo.classList.remove('d-none');
+            } else {
+                badgeTipo.innerText = "Titular";
+                badgeTipo.className = "badge bg-secondary mb-1";
+                lblSubtitulo.classList.add('d-none');
+            }
+
+            // Telefone & WhatsApp
+            document.getElementById('modalClienteEmpresaTelefone').innerText = p.telefone || 'Não informado';
+            const linkTel = document.getElementById('linkTelefoneUrgencia');
+            if (p.telefone) {
+                linkTel.href = `https://wa.me/55${p.telefone.replace(/\D/g, '')}`;
+            } else {
+                linkTel.href = '#';
+            }
+
+            const alertaResp = document.getElementById('alertaTitularResponsavel');
+            if (p.usa_telefone_titular) {
+                alertaResp.classList.remove('d-none');
+            } else {
+                alertaResp.classList.add('d-none');
+            }
+
+            // --- 2. GRADE DE DADOS CADASTRAIS DINÂMICA ---
+            document.getElementById('modalClienteDesde').innerText = p.cliente_desde;
+            document.getElementById('modalClienteNascimento').innerText = p.nascimento_ou_ano;
+
+            const lblNasc = document.getElementById('lblTituloNascimento');
+            if (p.tipo_persona.toLowerCase() === 'veiculo') {
+                lblNasc.innerText = "Ano de Fabricação";
+            } else {
+                lblNasc.innerText = "Nascimento / Idade";
+            }
+
+            const wrapperEC = document.getElementById('wrapperEstadoCivil');
+            const wrapperGen = document.getElementById('wrapperGenero');
+
+            if (p.exibir_bloco_secundario) {
+                if (wrapperEC && p.rotulo_secundario_1) {
+                    wrapperEC.querySelector('small').innerText = p.rotulo_secundario_1;
+                    wrapperEC.querySelector('span').innerText = p.valor_secundario_1 || '--';
+                    wrapperEC.classList.remove('d-none');
+                }
+                if (wrapperGen && p.rotulo_secundario_2) {
+                    wrapperGen.querySelector('small').innerText = p.rotulo_secundario_2;
+                    wrapperGen.querySelector('span').innerText = p.valor_secundario_2 || '--';
+                    wrapperGen.classList.remove('d-none');
+                }
+            } else {
+                // Oculta os campos extras caso seja beneficiário humano (que não possui estado civil ou gênero cadastrado)
+                if (wrapperEC) wrapperEC.classList.add('d-none');
+                if (wrapperGen) wrapperGen.classList.add('d-none');
+            }
+
+            // --- 3. PREFERÊNCIAS ---
+            document.getElementById('modalClientePreferencias').innerText = p.preferencias;
+
+            // --- 4. ÚLTIMA VISITA ---
+            const containerUltima = document.getElementById('modalUltimaVisita');
+            if (data.ultima_visita) {
+                const uv = data.ultima_visita;
+                containerUltima.innerHTML = `
+                    <div class="d-flex justify-content-between fw-bold text-dark border-bottom pb-1 mb-1">
+                        <span><i class="bi bi-calendar3 me-1"></i>${uv.data}</span>
+                        <span class="text-success">R$ ${parseFloat(uv.valor_total).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                    </div>
+                    <div><strong>Profissionais:</strong> ${uv.profissionais || 'Não informado'}</div>
+                    <div><strong>Serviços:</strong> ${uv.servicos || 'Não informado'}</div>
+                `;
+            } else {
+                containerUltima.innerHTML = `<span class="text-muted">Nenhum registro anterior encontrado.</span>`;
+            }
+
+            // --- 5. TOP 5 SERVIÇOS ---
+            const containerTop = document.getElementById('modalServicosFrequentes');
+            if (data.top_servicos && data.top_servicos.length > 0) {
+                let htmlBadges = '<div class="d-flex flex-wrap gap-1.5">';
+                data.top_servicos.forEach(s => {
+                    htmlBadges += `
+                        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle px-2 py-1 fs-7">
+                            ${s.nome} <span class="badge bg-success text-white rounded-pill ms-1">${s.qtd}x</span>
+                        </span>`;
+                });
+                htmlBadges += '</div>';
+                containerTop.innerHTML = htmlBadges;
+            } else {
+                containerTop.innerHTML = `<span class="text-muted">Nenhum serviço anterior registrado.</span>`;
+            }
+
+            // --- 6. OBSERVAÇÕES ---
+            const containerObs = document.getElementById('modalClienteEmpresaObs');
+            if (data.observacoes && data.observacoes.length > 0) {
+                let htmlObs = '<ul class="list-unstyled m-0">';
+                data.observacoes.forEach(o => {
+                    htmlObs += `
+                        <li class="mb-1.5 pb-1.5 border-bottom border-light-subtle">
+                            <small class="text-muted fw-bold">${o.data}:</small>
+                            <span class="text-dark">${o.texto}</span>
+                        </li>`;
+                });
+                htmlObs += '</ul>';
+                containerObs.innerHTML = htmlObs;
+            } else {
+                containerObs.innerHTML = `<span class="text-muted">Nenhuma observação registrada.</span>`;
+            }
+
+            // --- 7. EXIBIR O MODAL ---
+            const modalEl = document.getElementById('modalDetalhesClienteEmpresa');
+            const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            bsModal.show();
+        })
+        .catch(err => {
+            console.error("Erro no AJAX do prontuário:", err);
+            alert("Falha ao se comunicar com o servidor.");
+        });
+}
+
 
 function togglePainelAcoes(cardElement) {
     const painel = cardElement.querySelector('.painel-acoes-slot');

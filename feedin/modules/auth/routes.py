@@ -29,7 +29,7 @@ from feedin.modules.auth.models import (ModCadastroCliente, ModFilaAtivacaoClien
 
 # Modelos do módulo Empresa necessários para validações no fluxo de autenticação
 from feedin.modules.empresa.models import (EseProcessoClaim, EseEmpresa,EscalaTrabalhoColaborador, EseConviteColaborador,
-                                           ColaboradorContrato, ColaboradorDetalhesPessoais, )
+                                           ColaboradorContrato, ColaboradorDetalhesPessoais, ClienteBeneficiario, )
 
 from feedin.utils import validar_cpf_estrutura, validar_hash_senha
 
@@ -507,6 +507,14 @@ def processar_identidade():
 
         db.session.flush()
 
+        # No momento em que o novo ModCadastroCliente é criado com sucesso:
+        # Localiza qualquer ClienteBeneficiario ativo que possua o mesmo hash de CPF e desativa:
+        ClienteBeneficiario.query.filter_by(
+            documento_identificador=documento_hash,
+            ativo=True
+        ).update({ClienteBeneficiario.ativo: False})
+
+        db.session.commit()
         # ---------------------------------------------------------------------
         # 🤝 PASSO 3: VERIFICAÇÃO DE CONVITES PENDENTES (Colaborador/Equipe)
         # ---------------------------------------------------------------------

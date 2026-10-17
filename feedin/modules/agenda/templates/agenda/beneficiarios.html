@@ -45,19 +45,19 @@
                                     {% if b.tipo_persona == 'veiculo' %}
                                         {{ b.especie_marca or 'Marca' }} {{ b.raca_modelo or 'Modelo' }} • Placa: {{ b.documento_identificador or 'N/I' }}
                                     {% else %}
-                                        {{ b.idade_formatada }} • Doc: {{ b.documento_identificador or 'N/I' }}
+                                        {{ b.idade_formatada }}
                                     {% endif %}
                                 </small>
                             </div>
                         </div>
 
-                        <!-- AÇÕES -->
+                        <!-- AÇÕES (EDITAR E DESVINCULAR) -->
                         <div class="d-flex align-items-center gap-1">
-                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-secondary p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick='editarBeneficiario({{ b | tojson | safe }})' title="Editar">
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-secondary p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick='editarBeneficiario({{ b.to_dict() | tojson | safe }})' title="Editar">
                                 <i class="bi bi-pencil" style="font-size: 0.8rem;"></i>
                             </button>
-                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-danger p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick="excluirBeneficiario({{ b.id }})" title="Excluir">
-                                <i class="bi bi-trash" style="font-size: 0.8rem;"></i>
+                            <button type="button" class="btn btn-sm btn-light border rounded-circle text-danger p-0 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;" onclick="desvincularBeneficiario({{ b.id }})" title="Desvincular">
+                                <i class="bi bi-link-45deg" style="font-size: 0.9rem;"></i>
                             </button>
                         </div>
                     </div>
@@ -91,7 +91,7 @@
                 </div>
 
                 <div class="modal-body py-3">
-                    
+
                     <!-- SELETOR DE TIPO DE PERSONA -->
                     <div class="mb-3">
                         <label class="form-label small fw-semibold text-muted">Tipo de Beneficiário</label>
@@ -294,24 +294,23 @@ function previewImagemBeneficiario(input) {
     }
 }
 
-function excluirBeneficiario(id) {
-    if (!confirm('Deseja realmente remover este beneficiário?')) return;
+function desvincularBeneficiario(id) {
+    if (!confirm('Deseja realmente desvincular este beneficiário?')) return;
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-    fetch(`/agenda/beneficiarios/${id}/excluir`, {
+    fetch(`/agenda/beneficiarios/desvincular/${id}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': csrfToken
         }
     })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso) {
+    .then(res => {
+        if (res.ok) {
             location.reload();
         } else {
-            alert(data.mensagem || 'Erro ao excluir.');
+            alert('Erro ao desvincular o beneficiário.');
         }
     })
     .catch(err => console.error('Erro:', err));

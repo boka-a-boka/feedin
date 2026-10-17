@@ -405,7 +405,7 @@
             {% endif %}
         </div>
 
-{# 6.5. ACESSO RÁPIDO: MEUS BENEFICIÁRIOS / PERSONAS (EXIBIÇÃO CONDICIONAL/FACTO NOVO) #}
+        {# 6.5. ACESSO RÁPIDO: MEUS BENEFICIÁRIOS / PERSONAS (EXIBIÇÃO CONDICIONAL/FACTO NOVO) #}
         {% if beneficiarios_cliente and beneficiarios_cliente | length > 0 %}
             <div class="mb-4 animate-fade-in">
                 <div class="d-flex align-items-center justify-content-between mb-2 px-1">
@@ -418,26 +418,44 @@
                 </div>
 
                 <div class="d-flex gap-2 overflow-x-auto pb-2 scrollbar-hidden" style="scroll-snap-type: x mandatory;">
-                    {% for b in beneficiarios_cliente %}
-                        <div class="flex-shrink-0" style="width: 190px; scroll-snap-align: start;">
-                            <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="text-decoration-none">
-                                <div class="card border-0 shadow-sm rounded-3 p-2 h-100 bg-white hover-shadow transition">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="position-relative flex-shrink-0" style="width: 36px; height: 36px; min-width: 36px;">
-                                            <img src="{{ b.url_foto }}" class="rounded-circle border object-fit-cover w-100 h-100" style="background-color: #fcfbfa;" alt="{{ b.nome }}">
+                {% for b in beneficiarios_cliente %}
+                    <div class="flex-shrink-0" style="width: 200px; scroll-snap-align: start;">
+                        <div class="card border-0 shadow-sm rounded-4 p-2.5 h-100 bg-white">
+                            <div class="d-flex align-items-center gap-2.5">
+                                <!-- Avatar / Foto do Beneficiário -->
+                                <div class="position-relative flex-shrink-0 rounded-circle border d-flex align-items-center justify-content-center overflow-hidden bg-light shadow-sm" style="width: 42px; height: 42px; min-width: 42px;">
+                                    {% if b.foto_perfil and b.url_foto %}
+                                        <img src="{{ b.url_foto }}"
+                                             class="object-fit-cover w-100 h-100"
+                                             alt="{{ b.nome }}"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <div class="position-absolute top-0 start-0 w-100 h-100 align-items-center justify-content-center text-secondary fw-bold" style="display: none; font-size: 0.9rem; background-color: #e9ecef;">
+                                            {{ b.nome[0] | upper }}
                                         </div>
-                                        <div class="text-truncate min-w-0">
-                                            <span class="d-block text-dark fw-semibold small text-truncate">{{ b.nome }}</span>
-                                            <small class="text-muted d-block text-truncate" style="font-size: 0.68rem;">
-                                                {% if b.tipo_persona == 'pet' %}🐾 Pet{% elif b.tipo_persona == 'veiculo' %}🚗 Veículo{% else %}👤 Humano{% endif %}
-                                                {% if b.idade_formatada %} • {{ b.idade_formatada }}{% endif %}
-                                            </small>
-                                        </div>
-                                    </div>
+                                    {% else %}
+                                        <span class="text-secondary fw-bold" style="font-size: 0.9rem;">
+                                            {{ b.nome[0] | upper }}
+                                        </span>
+                                    {% endif %}
                                 </div>
-                            </a>
+                                <!-- Informações do Beneficiário -->
+                                <div class="text-truncate min-w-0">
+                                    <span class="d-block text-dark fw-bold small text-truncate" style="font-size: 0.8rem;" title="{{ b.nome }}">{{ b.nome }}</span>
+                                    <small class="text-muted d-block text-truncate mt-0.5" style="font-size: 0.7rem;">
+                                        {% if b.tipo_persona == 'pet' %}
+                                            <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill px-1.5 py-0" style="font-size: 0.62rem;">🐾 Pet</span>
+                                        {% elif b.tipo_persona == 'veiculo' %}
+                                            <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill px-1.5 py-0" style="font-size: 0.62rem;">🚗 Veículo</span>
+                                        {% else %}
+                                            <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill px-1.5 py-0" style="font-size: 0.62rem;">👤 Humano</span>
+                                        {% endif %}
+                                        {% if b.idade_formatada %} • {{ b.idade_formatada }}{% endif %}
+                                    </small>
+                                </div>
+                            </div>
                         </div>
-                    {% endfor %}
+                    </div>
+                {% endfor %}
                 </div>
             </div>
         {% endif %}
