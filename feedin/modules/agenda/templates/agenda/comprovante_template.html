@@ -78,16 +78,24 @@
             </div>
         </div>
 
-        <!-- Dados do Cliente e Profissional -->
+        <!-- Dados do Pagador, Beneficiário Condicional e Profissionais -->
         <div class="bg-light p-3 rounded mb-4">
-            <div class="row g-2">
-                <div class="col-12">
-                    <small class="text-muted d-block">Cliente / Beneficiário</small>
-                    <span><strong>{{ c.cliente_nome }}</strong> (CPF/CNPJ: {{ c.cliente_cpf }})</span>
+            <div class="row g-3">
+                <div class="col-12 {% if c.beneficiario_nome %}border-bottom pb-2{% endif %}">
+                    <small class="text-muted d-block">Pagador / Titular (Responsável Financeiro)</small>
+                    <span><strong>{{ c.pagador_nome }}</strong> (CPF/CNPJ: {{ c.pagador_cpf }})</span>
                 </div>
+
+                {% if c.beneficiario_nome %}
+                <div class="col-12 border-bottom pb-2">
+                    <small class="text-muted d-block">Beneficiário / Paciente (Atendido)</small>
+                    <span><strong>{{ c.beneficiario_nome }}</strong></span>
+                </div>
+                {% endif %}
+
                 <div class="col-12">
-                    <small class="text-muted d-block">Atendido por</small>
-                    <span>{{ c.profissional }}</span>
+                    <small class="text-muted d-block">Profissional(is) Executor(es)</small>
+                    <span><strong>{{ c.profissionais | join(', ') }}</strong></span>
                 </div>
             </div>
         </div>
@@ -136,12 +144,10 @@
 
 <script>
 function fecharOuVoltar(event) {
-    // Se a página foi aberta em uma aba/janela nova (como ocorre via target="_blank" da notificação)
     if (window.opener || window.history.length <= 1) {
         event.preventDefault();
         window.close();
     }
-    // Caso a aba não possa ser fechada pelo navegador, segue o redirecionamento seguro para a dashboard do cliente
 }
 </script>
 

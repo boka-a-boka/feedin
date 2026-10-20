@@ -12,3 +12,4 @@ with app.app_context():
 if __name__ == "__main__":
     # use_reloader=False mantido conforme sua configuração de debug atual
     app.run(debug=True, use_reloader=False, port=8000)
+

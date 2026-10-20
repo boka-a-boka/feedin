@@ -166,9 +166,7 @@ class AghAgendamentoItem(db.Model):
 
     @property
     def agendamento_pai(self):
-        """
-        Alias de retrocompatibilidade para códigos legados que ainda leiam item.agendamento_pai.
-        """
+        """Alias de retrocompatibilidade para códigos legados que ainda leiam item.agendamento_pai."""
         return self.agendamento
 
     @property
@@ -179,11 +177,6 @@ class AghAgendamentoItem(db.Model):
 
     @property
     def _obter_contrato_profissional(self):
-        """
-        Método auxiliar interno para recuperar o contrato do colaborador.
-        Faz a ponte caso o relacionamento ORM nativo falhe devido à divergência entre
-        a Foreign Key String e a PK Integer de ColaboradorContrato.
-        """
         if self.profissional:
             return self.profissional
 
@@ -191,66 +184,44 @@ class AghAgendamentoItem(db.Model):
             try:
                 from feedin.models import ColaboradorContrato
                 uuid_limpo = str(self.colaborador_id_contrato).strip()
-
-                # Busca principal via id_cadastro_cliente (CHAR 36 oficial do contrato)
                 contrato = ColaboradorContrato.query.filter_by(id_cadastro_cliente=uuid_limpo).first()
                 if contrato:
                     return contrato
-
-                # Fallback secundário se o ID gravado for numérico
                 if uuid_limpo.isdigit():
                     return ColaboradorContrato.query.get(int(uuid_limpo))
             except Exception:
                 return None
-
         return None
 
     @property
     def nome_profissional(self) -> str:
-        """
-        Consome a @property 'nome' oficial de ColaboradorContrato com fallbacks limpos.
-        """
         prof = self._obter_contrato_profissional
         if not prof:
             return "Profissional"
-
-        # 1. Tenta a property 'nome' nativa da ColaboradorContrato
         nome_resolvido = getattr(prof, 'nome', None)
         if nome_resolvido and nome_resolvido != "Profissional Sem Nome":
             return nome_resolvido
-
-        # 2. Fallbacks diretos para atributos de exibição
         return getattr(prof, 'nome_exibicao', None) or getattr(prof, 'nome_completo', None) or "Profissional"
 
     @property
     def foto_profissional_url(self) -> str:
-        """
-        Resolve a URL pública da foto do profissional consumindo a @property
-        'url_foto_profissional' oficial da ColaboradorContrato ou formatando o caminho relativo.
-        """
         prof = self._obter_contrato_profissional
         if not prof:
             return None
-
-        # 1. Tenta a @property oficial da ColaboradorContrato (resolvida via resolver_url_midia)
         foto_oficial = getattr(prof, 'url_foto_profissional', None)
         if foto_oficial:
             return foto_oficial
 
-        # 2. Resgate e formatação direta do arquivo caso a property oficial venha nula
         foto_bruta = (
             getattr(prof, 'foto_profissional', None)
             or getattr(prof, 'url_foto_perfil', None)
             or getattr(prof, 'foto_url', None)
         )
-
         if not foto_bruta:
             return None
-
         if str(foto_bruta).startswith(('http://', 'https://', '/')):
             return str(foto_bruta)
 
-        # Formatação para o caminho estático do módulo
         empresa_id = getattr(prof, 'id_local', None) or getattr(prof, 'empresa_id', None) or '2'
         return f"/empresa/empresa/static/uploads/empresas/{empresa_id}/colaboradores/{str(foto_bruta).lstrip('/')}"
 
@@ -280,91 +251,6 @@ class AghAgendamentoItem(db.Model):
             "status_item": self.status_item,
             "observacao_item": self.observacao_item
         }
-
-    @staticmethod
-    def iniciar_atendimento_servico(agendamento_id, agendamento_item_id, empresa_id, usuario_id, colaborador_id_contrato=None):
-        try:
-            # 1. Carrega o item específico
-            item = AghAgendamentoItem.query.get(agendamento_item_id)
-            if not item:
-                return {"status": "error", "mensagem": "Item de agendamento não encontrado."}, 404
-
-            tz_sp = ZoneInfo('America/Sao_Paulo')
-            agora = datetime.now(tz_sp)
-
-            # Atualiza o colaborador caso tenha sido explicitamente redefinido na abertura
-            if colaborador_id_contrato:
-                item.colaborador_id_contrato = str(colaborador_id_contrato).strip()
-
-            # 2. Atualiza APENAS o estado do item do serviço
-            item.status_item = 'em_atendimento'
-            item.data_hora_inicio_real = agora
-
-            # 3. Atualiza o status global do Agendamento PAI (se ainda for 'agendado'/'pendente')
-            agendamento_pai = item.agendamento
-            if agendamento_pai and getattr(agendamento_pai, 'status', None) not in ['em_atendimento', 'concluido',
-                                                                                    'finalizado']:
-                agendamento_pai.status = 'em_atendimento'
-
-            # 4. Resgate do ID (CHAR 36) do colaborador associado
-            colaborador_uuid = str(item.colaborador_id_contrato).strip() if item.colaborador_id_contrato else None
-
-            # 5. Registra/Recupera a sessão de encerramento SOMENTE para este item
-            encerramento_item = AghAgendamentoEncerramento.query.filter_by(
-                agendamento_item_id=item.id
-            ).first()
-
-            if not encerramento_item:
-                encerramento_item = AghAgendamentoEncerramento(
-                    agendamento_id=agendamento_id,
-                    agendamento_item_id=item.id,
-                    empresa_id=empresa_id,
-                    colaborador_id_contrato=colaborador_uuid,  # 🟢 Gravação em String (CHAR 36)
-                    data_hora_inicio=agora,
-                    status='em_atendimento',
-                    criado_por=str(usuario_id)
-                )
-                db.session.add(encerramento_item)
-
-            db.session.commit()
-            return {"status": "success", "mensagem": f"Serviço #{item.id} iniciado com sucesso."}, 200
-
-        except Exception as e:
-            db.session.rollback()
-            return {"status": "error", "mensagem": f"Erro interno ao processar início: {str(e)}"}, 500
-
-    def processar_inicio_item_servico(agendamento_id, item_id, colaborador_contrato_id=None):
-        agendamento = AghAgendamento.query.get(agendamento_id)
-        if not agendamento:
-            return {"sucesso": False, "mensagem": "Agendamento não encontrado."}, 404
-
-        item = AghAgendamentoItem.query.filter_by(id=item_id, agendamento_id=agendamento_id).first()
-        if not item:
-            return {"sucesso": False, "mensagem": "Item não encontrado no agendamento."}, 404
-
-        status_item_atual = str(getattr(item, 'status_item', '')).lower()
-
-        # 1. Trava apenas se O ITEM ESPECÍFICO já foi encerrado/cancelado
-        if status_item_atual in ['finalizado', 'concluido', 'concluído', 'cancelado']:
-            return {
-                "sucesso": False,
-                "mensagem": f"O item/serviço #{item.id} já consta como '{status_item_atual}'."
-            }, 400
-
-        agora = datetime.now()
-
-        # 2. Transição do ITEM: inicia o serviço selecionado
-        item.status_item = 'em_andamento'
-        if hasattr(item, 'data_hora_inicio_real') and not item.data_hora_inicio_real:
-            item.data_hora_inicio_real = agora
-
-        # 3. Transição do AGENDAMENTO PAI: Reabre a comanda/atendimento
-        # Se o pai estava 'finalizado' (por causa de outro profissional), ele volta a 'em_andamento'
-        if agendamento.status in ['finalizado', 'agendado', 'confirmado']:
-            agendamento.status = 'em_andamento'
-
-        db.session.commit()
-        return {"sucesso": True, "mensagem": "Serviço iniciado com sucesso!"}, 200
 
     profissional_id = synonym('colaborador_id_contrato')
 
@@ -1114,32 +1000,25 @@ class AghAgendamentoEncerramento(db.Model):
         db.Index('idx_agendamento_item_enc', 'agendamento_id', 'agendamento_item_id'),
     )
 
-    # Chave Primária própria (UUID)
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-
-    # Estruturas relacionais numéricas (Integer)
     agendamento_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento.id'), nullable=False)
     agendamento_item_id = db.Column(db.Integer, db.ForeignKey('agh_agendamento_item.id'), nullable=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False)
 
-    # Entidades baseadas em UUID / String(36)
     colaborador_contrato_id = db.Column(db.String(36), db.ForeignKey('colaborador_contratos.id'), nullable=True)
     usuario_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
 
-    # Horários e Encerramento Operacional
     data_hora_inicio_real = db.Column(db.DateTime, nullable=True)
     data_hora_fim_real = db.Column(db.DateTime, nullable=True)
     data_hora_encerramento = db.Column(db.DateTime, nullable=True)
     observacoes = db.Column(db.Text, nullable=True)
     nota_avaliacao_cliente = db.Column(db.SmallInteger, nullable=True)
 
-    # Fechamento Financeiro / Caixa
     valor_final_cobrado = db.Column(db.Numeric(10, 2), nullable=True)
     valor_total = db.Column(db.Numeric(10, 2), nullable=True)
     forma_pagamento = db.Column(db.String(50), nullable=True)
     observacao = db.Column(db.Text, nullable=True)
 
-    # Auditabilidade e Cancelamento (UUID)
     motivo_cancelamento = db.Column(db.String(255), nullable=True)
     cancelado_por_id = db.Column(db.String(36), db.ForeignKey('mod_cadastro_cliente.id'), nullable=True)
     data_cancelamento = db.Column(db.DateTime, nullable=True)
@@ -1148,8 +1027,6 @@ class AghAgendamentoEncerramento(db.Model):
     agendamento = db.relationship('AghAgendamento', backref=db.backref('encerramentos', lazy='dynamic'))
     agendamento_item = db.relationship('AghAgendamentoItem', backref=db.backref('encerramento', uselist=False))
     colaborador_contrato = db.relationship('ColaboradorContrato', backref='atendimentos_encerrados')
-
-    # Relacionamentos mapeados para ModCadastroCliente
     usuario = db.relationship('ModCadastroCliente', foreign_keys=[usuario_id], backref='encerramentos_realizados')
     cancelado_por = db.relationship('ModCadastroCliente', foreign_keys=[cancelado_por_id], backref='encerramentos_cancelados')
 
@@ -1157,17 +1034,18 @@ class AghAgendamentoEncerramento(db.Model):
     def iniciar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int,
                                     colaborador_contrato_id: str = None, usuario_id: str = None):
         """
-        Inicia o atendimento do serviço:
-        1. Altera o status do agendamento pai para 'em_atendimento'.
-        2. Altera o status_item em AghAgendamentoItem para 'em_andamento'.
-        3. Registra/Atualiza o inicio real em AghAgendamentoEncerramento (sem marcar encerramento).
+        Inicia o atendimento garantindo a herança estrita do empresa_id do Agendamento Pai
+        e a resolução correta do usuario_id (Beneficiário -> Titular).
         """
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
-        agendamento = AghAgendamento.query.filter_by(id=agendamento_id, empresa_id=empresa_id).first()
+        agendamento = AghAgendamento.query.filter_by(id=agendamento_id).first()
         if not agendamento:
             return {'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}, 404
+
+        # 🛡️ Blindagem de Empresa ID: Força herdar do agendamento pai
+        empresa_id_real = getattr(agendamento, 'empresa_id', None) or empresa_id
 
         status_permitidos = ['agendado', 'confirmado', 'aguardando', 'soft_lock', 'pendente', 'ausente_pendente']
         st_agendamento = str(getattr(agendamento, 'status', '')).lower().strip()
@@ -1175,18 +1053,27 @@ class AghAgendamentoEncerramento(db.Model):
         if st_agendamento not in status_permitidos and st_agendamento != 'em_atendimento':
             return {'sucesso': False, 'mensagem': f'Não é possível iniciar com status "{agendamento.status}".'}, 400
 
+        # 🎯 Resolução Robusta do Usuário (Beneficiário ou Titular)
+        atendido_id_final = (
+            usuario_id or
+            getattr(agendamento, 'beneficiario_id', None) or
+            getattr(agendamento, 'cliente_beneficiario_id', None) or
+            getattr(agendamento, 'cliente_id', None)
+        )
+        if atendido_id_final is not None:
+            atendido_id_final = str(atendido_id_final).strip()
+
         try:
-            # 1. Transição de status do Agendamento Pai
             agendamento.status = 'em_atendimento'
 
-            # 2. Transição do Item Específico na AghAgendamentoItem
             item = AghAgendamentoItem.query.get(agendamento_item_id)
             if item:
                 item.status_item = 'em_andamento'
                 if not item.data_hora_inicio_real:
                     item.data_hora_inicio_real = agora_sp
+                if colaborador_contrato_id and not item.colaborador_id_contrato:
+                    item.colaborador_id_contrato = str(colaborador_contrato_id).strip()
 
-            # 3. Registro / Upsert do início operacional na AghAgendamentoEncerramento
             encerramento = cls.query.filter_by(
                 agendamento_id=agendamento_id,
                 agendamento_item_id=agendamento_item_id
@@ -1196,47 +1083,37 @@ class AghAgendamentoEncerramento(db.Model):
                 encerramento = cls(
                     agendamento_id=agendamento_id,
                     agendamento_item_id=agendamento_item_id,
-                    empresa_id=empresa_id,
-                    colaborador_contrato_id=colaborador_contrato_id,
-                    usuario_id=usuario_id or agendamento.cliente_id,
-                    data_hora_inicio_real=agora_sp,
-                    # Mantém data_hora_encerramento e data_hora_fim_real estritamente como None
+                    empresa_id=empresa_id_real,
+                    colaborador_contrato_id=colaborador_contrato_id or getattr(item, 'colaborador_id_contrato', None),
+                    usuario_id=atendido_id_final,
+                    data_hora_inicio_real=agora_sp
                 )
                 db.session.add(encerramento)
             else:
-                encerramento.colaborador_contrato_id = colaborador_contrato_id
-                if usuario_id:
-                    encerramento.usuario_id = usuario_id
+                encerramento.empresa_id = empresa_id_real
+                if colaborador_contrato_id:
+                    encerramento.colaborador_contrato_id = colaborador_contrato_id
+                if atendido_id_final:
+                    encerramento.usuario_id = atendido_id_final
                 encerramento.data_hora_inicio_real = agora_sp
 
-            # 4. Histórico de Presença / Auditoria
-            data_agendada = agendamento.data_hora_inicio
-            if data_agendada:
-                if data_agendada.tzinfo is None:
-                    data_agendada = data_agendada.replace(tzinfo=tz_sp)
-                desvio_minutos = int((agora_sp - data_agendada).total_seconds() // 60)
-            else:
-                desvio_minutos = 0
-
             historico_presenca = AghHistoricoPresenca(
-                estabelecimento_id=empresa_id,
+                estabelecimento_id=empresa_id_real,
                 cliente_id=agendamento.cliente_id,
                 agendamento_id=agendamento.id,
                 tipo_evento='inicio_atendimento',
                 data_hora_agendada=agendamento.data_hora_inicio,
                 data_hora_evento=agora_sp,
-                desvio_minutos=desvio_minutos,
+                desvio_minutos=int((agora_sp - agendamento.data_hora_inicio).total_seconds() // 60) if agendamento.data_hora_inicio else 0,
                 motivo='Início de atendimento acionado na grade',
             )
             db.session.add(historico_presenca)
-
             db.session.commit()
 
             return {
                 'sucesso': True,
                 'mensagem': 'Atendimento iniciado com sucesso!',
                 'data_hora_inicio': agora_sp.strftime('%H:%M:%S'),
-                'desvio_minutos': desvio_minutos,
             }, 200
 
         except Exception as e:
@@ -1246,50 +1123,61 @@ class AghAgendamentoEncerramento(db.Model):
     @classmethod
     def encerrar_atendimento_servico(cls, agendamento_id: int, agendamento_item_id: int, empresa_id: int):
         """
-        Conclui o serviço individual:
-        1. Atualiza AghAgendamentoItem para 'concluido'.
-        2. Atualiza AghAgendamentoEncerramento marcando data_hora_encerramento e valores.
-        3. Verifica se restam itens em andamento/pendentes para liberar a comanda global.
+        Conclui o serviço individual e força a gravação exata de empresa_id e usuario_id.
         """
+        print(
+            f"\n🚨 [DEBUG ENCERRAMENTO] Iniciando para agendamento_id={agendamento_id}, item_id={agendamento_item_id}, empresa_param={empresa_id}")
+
         item = AghAgendamentoItem.query.get(agendamento_item_id)
         if not item:
             return {'sucesso': False, 'mensagem': 'Item de agendamento não encontrado.'}, 404
 
+        agendamento = AghAgendamento.query.get(agendamento_id)
+        if not agendamento:
+            return {'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}, 404
+
+        # 🔍 Print de auditoria dos dados de origem
+        print(f"  🏢 [ORIGEM] AghAgendamento.empresa_id = {agendamento.empresa_id}")
+        print(
+            f"  👤 [ORIGEM] AghAgendamento.cliente_id = {agendamento.cliente_id} | beneficiario_id = {getattr(agendamento, 'beneficiario_id', 'N/A')}")
+
         tz_sp = ZoneInfo('America/Sao_Paulo')
         agora_sp = datetime.now(tz_sp)
 
-        # Busca o agendamento pai para garantir que temos o cliente_id à mão
-        agendamento = AghAgendamento.query.get(agendamento_id)
-        cliente_do_agendamento = agendamento.cliente_id if agendamento else None
+        # 🎯 FORÇA BRUTA DE VALORES REAIS (Garante que nunca usará fallback incorreto)
+        empresa_id_real = int(agendamento.empresa_id) if agendamento.empresa_id else int(empresa_id)
+
+        atendido_id_final = (
+                getattr(agendamento, 'beneficiario_id', None) or
+                getattr(agendamento, 'cliente_beneficiario_id', None) or
+                agendamento.cliente_id
+        )
+        if atendido_id_final is not None:
+            atendido_id_final = str(atendido_id_final).strip()
+
+        print(f"  ✅ [DEFINITIVO] Empresa ID Gravado: {empresa_id_real} | Usuario ID Gravado: {atendido_id_final}")
 
         try:
-            # 1. Atualização da fonte da verdade do Item
             item.status_item = 'concluido'
             item.data_hora_fim_real = agora_sp
 
-            valor_item = float(getattr(item, 'preco_unitario', 0.0) or getattr(item, 'valor', 0.0) or 0.0)
+            valor_item = float(getattr(item, 'preco_unitario', 0.0) or 0.0)
 
-            # 2. Atualização / Preenchimento dos dados de Fechamento no Encerramento
+            # Busca ou cria o registro garantindo os campos obrigatórios
             encerramento = cls.query.filter_by(
                 agendamento_id=agendamento_id,
                 agendamento_item_id=agendamento_item_id
             ).first()
 
-            if encerramento:
-                encerramento.data_hora_fim_real = agora_sp
-                encerramento.data_hora_encerramento = agora_sp
-                if not encerramento.usuario_id and cliente_do_agendamento:
-                    encerramento.usuario_id = cliente_do_agendamento  # 👈 Preenche se estiver vazio
-                if not encerramento.valor_total or encerramento.valor_total == 0:
-                    encerramento.valor_total = valor_item
-                    encerramento.valor_final_cobrado = valor_item
-            else:
+            if not encerramento:
                 encerramento = cls(
                     agendamento_id=agendamento_id,
                     agendamento_item_id=agendamento_item_id,
-                    empresa_id=empresa_id,
-                    colaborador_contrato_id=getattr(item, 'profissional_id', None),
-                    usuario_id=cliente_do_agendamento,  # 👈 Já nasce preenchido corretamente
+                    empresa_id=empresa_id_real,
+                    usuario_id=atendido_id_final,
+                    colaborador_contrato_id=getattr(item, 'profissional_id', None) or getattr(item,
+                                                                                              'colaborador_id_contrato',
+                                                                                              None),
                     data_hora_inicio_real=item.data_hora_inicio_real or agora_sp,
                     data_hora_fim_real=agora_sp,
                     data_hora_encerramento=agora_sp,
@@ -1297,22 +1185,27 @@ class AghAgendamentoEncerramento(db.Model):
                     valor_final_cobrado=valor_item
                 )
                 db.session.add(encerramento)
+            else:
+                # SOBRESCREVE DIRETAMENTE SEM CONDIÇÕES PARA CURAR A FALHA
+                encerramento.empresa_id = empresa_id_real
+                encerramento.usuario_id = atendido_id_final
+                encerramento.data_hora_fim_real = agora_sp
+                encerramento.data_hora_encerramento = agora_sp
+                encerramento.valor_total = valor_item
+                encerramento.valor_final_cobrado = valor_item
 
-            # 3. Checagem de itens pendentes no Agendamento Pai
             itens_pendentes_totais = AghAgendamentoItem.query.filter(
                 AghAgendamentoItem.agendamento_id == agendamento_id,
                 db.func.lower(AghAgendamentoItem.status_item) != 'concluido'
             ).count()
 
             agendamento_totalmente_concluido = (itens_pendentes_totais == 0)
-
-            # Se TODOS os itens do agendamento foram concluídos, atualiza o status pai
             if agendamento_totalmente_concluido:
-                agendamento = AghAgendamento.query.get(agendamento_id)
-                if agendamento:
-                    agendamento.status = 'concluido'  # Pronto para 'Liquidar Comanda' / Financeiro
+                agendamento.status = 'concluido'
 
             db.session.commit()
+            print(
+                f"  🎉 [SUCESSO] Encerramento gravado com empresa_id={empresa_id_real} e usuario_id={atendido_id_final}\n")
 
             return {
                 'sucesso': True,
@@ -1323,6 +1216,7 @@ class AghAgendamentoEncerramento(db.Model):
 
         except Exception as e:
             db.session.rollback()
+            print(f"  ❌ [ERRO CRÍtICO] Falha ao encerrar: {str(e)}")
             return {'sucesso': False, 'mensagem': f'Erro ao encerrar serviço: {str(e)}'}, 500
 
 

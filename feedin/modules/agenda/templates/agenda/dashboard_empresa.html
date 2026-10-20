@@ -403,10 +403,11 @@
         <!-- Botão de Alternância de Filtro de Grade -->
         <button type="button"
                 id="btnFiltrarAgendados"
-                class="btn btn-sm btn-outline-secondary rounded-pill ms-2 fw-semibold"
-                onclick="toggleFiltroApenasAgendados()"
-                data-filtrado="false">
-            <i class="bi bi-filter-circle me-1"></i> Apenas Agendados
+                class="btn btn-secondary btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm"
+                data-filtrado="true"
+                onclick="toggleFiltroAgendados(this)">
+            <i class="bi bi-calendar-check-fill me-1"></i>
+            <span>Apenas Agendados</span>
         </button>
 
     </div>
@@ -725,8 +726,8 @@
 
                                                 <button type="button"
                                                         class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold shadow-sm"
-                                                        onclick="event.stopPropagation(); prepararModalFinalizarItem('{{ agend_id_val }}', '{{ item_id_target_p }}', '{{ servico_nome_target_p | e }}', '{{ nome_cliente | e }}', '{{ inicio_item }}')">
-                                                    <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p }}
+                                                        onclick="prepararModalFinalizarItem('{{ slot.agendamento_id if slot.agendamento_id is defined else (slot.id if slot.id is defined else '') }}', '{{ slot.item_id if slot.item_id is defined else (slot.id if slot.id is defined else '') }}', '{{ nome_servico | e }}', '{{ nome_cliente | e }}', '{{ slot.data_hora_inicio_real if slot.data_hora_inicio_real is defined else (hora_inicio_txt if hora_inicio_txt is defined else '') }}')">
+                                                    <i class="bi bi-check-circle me-1"></i> Concluir {{ servico_nome_target_p or nome_servico }}
                                                 </button>
                                             {% else %}
                                                 <span class="badge bg-success-subtle text-success border border-success-subtle py-1.5 px-2.5">
@@ -840,7 +841,7 @@
 
             <div class="modal-body py-3" style="max-height: 75vh; overflow-y: auto;">
 
-                <!-- ALERTA DE ANIVERSÁRIO (EXIBIDO APENas SE FOR O DIA) -->
+                <!-- ALERTA DE ANIVERSÁRIO -->
                 <div id="bannerAniversarioCliente" class="alert alert-warning border-0 shadow-sm rounded-3 mb-3 d-none align-items-center gap-2 py-2">
                     <i class="bi bi-cake2-fill text-danger fs-4"></i>
                     <div>
@@ -848,7 +849,7 @@
                     </div>
                 </div>
 
-                <!-- CABEÇALHO DO PERFIL (FOTO AMPLADA 75x75px E NOME DO ATENDIDO) -->
+                <!-- CABEÇALHO DO PERFIL -->
                 <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
                     <div style="width: 75px; height: 75px; min-width: 75px; min-height: 75px;" class="position-relative flex-shrink-0">
                         <img id="modalClienteEmpresaFoto"
@@ -871,7 +872,7 @@
                                 <span id="modalBadgeTipoPersona" class="badge bg-secondary mb-1" style="font-size: 0.65rem;">Titular</span>
                                 <h4 class="fw-bold text-dark m-0" id="modalClienteEmpresaNome">Nome do Atendido</h4>
                                 <small id="lblSubtituloTitular" class="text-muted d-block small d-none mt-0.5">
-                                    Responsável: <strong id="modalNomeTitularResp" class="text-dark">--</strong>
+                                    Responsável (Titular): <strong id="modalNomeTitularResp" class="text-dark">--</strong>
                                 </small>
                             </div>
                             <!-- Avaliação Interna -->
@@ -882,9 +883,9 @@
                             </div>
                         </div>
 
-                        <!-- Telefone com Alerta Especial se for Beneficiário -->
+                        <!-- Telefone / WhatsApp de Urgência -->
                         <div class="mt-2">
-                            <a href="#" id="linkTelefoneUrgencia" class="text-decoration-none fw-bold text-success small">
+                            <a href="#" id="linkTelefoneUrgencia" target="_blank" class="text-decoration-none fw-bold text-success small">
                                 <i class="bi bi-whatsapp me-1"></i><span id="modalClienteEmpresaTelefone">--</span>
                             </a>
                             <span id="alertaTitularResponsavel" class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-2 d-none" style="font-size: 0.65rem;">
@@ -894,9 +895,9 @@
                     </div>
                 </div>
 
-                <!-- GRADE DE DADOS DINÂMICOS (OCULTA CAMPOS INVÁLIDOS PARA PETS/VEÍCULOS) -->
+                <!-- GRADE DE DADOS CADASTRAIS (COMPATÍVEL COM GÊNERO & ESTADO CIVIL) -->
                 <div class="row g-2 mb-3" id="gradeDadosCadastrais">
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-3" id="wrapperClienteDesde">
                         <div class="p-2 bg-light rounded-3 border">
                             <small class="text-muted d-block" style="font-size: 0.7rem;">Cliente Desde</small>
                             <span class="fw-bold text-dark small" id="modalClienteDesde">--/--/----</span>
@@ -922,16 +923,6 @@
                     </div>
                 </div>
 
-                <!-- PREFERÊNCIAS -->
-                <div class="mb-3">
-                    <label class="fw-bold text-dark small d-block mb-1">
-                        <i class="bi bi-bookmark-heart text-primary me-1"></i>Preferências
-                    </label>
-                    <div class="p-2.5 bg-light rounded-3 border text-dark small fw-medium" id="modalClientePreferencias">
-                        Nenhuma preferência cadastrada.
-                    </div>
-                </div>
-
                 <!-- ÚLTIMA VISITA -->
                 <div class="mb-3">
                     <label class="fw-bold text-dark small d-block mb-1">
@@ -942,10 +933,10 @@
                     </div>
                 </div>
 
-                <!-- SERVIÇOS MAIS CONTRATADOS (Top 5) -->
+                <!-- SERVIÇOS MAIS CONTRATADOS -->
                 <div class="mb-3">
                     <label class="fw-bold text-dark small d-block mb-1">
-                        <i class="bi bi-graph-up-arrow text-success me-1"></i>Serviços Mais Contratados (Top 5)
+                        <i class="bi bi-graph-up-arrow text-success me-1"></i>Serviços Mais Contratados
                     </label>
                     <div class="p-2.5 bg-light rounded-3 border text-dark small" id="modalServicosFrequentes">
                         <span class="text-muted">Nenhum serviço anterior registrado.</span>
@@ -955,14 +946,14 @@
                 <!-- OBSERVAÇÕES REGISTRADAS -->
                 <div class="mb-3">
                     <label class="fw-bold text-dark small d-block mb-1">
-                        <i class="bi bi-journal-text text-warning me-1"></i>Observações de Atendimentos Anteriores
+                        <i class="bi bi-journal-text text-warning me-1"></i>Histórico e Observações Anteriores
                     </label>
                     <div class="p-2.5 bg-light rounded-3 border text-dark small" id="modalClienteEmpresaObs" style="max-height: 110px; overflow-y: auto;">
                         Nenhuma observação registrada.
                     </div>
                 </div>
 
-                <!-- RODAPÉ DE ALTO CONTRASTE (ATENDIMENTO ATUAL) -->
+                <!-- RODAPÉ DADOS DO ATENDIMENTO ATUAL -->
                 <div class="p-3 bg-light border border-2 border-primary-subtle rounded-3 mt-4 shadow-sm">
                     <span class="text-uppercase fw-bold text-primary d-block mb-2" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                         <i class="bi bi-calendar-event me-1"></i>Detalhes Deste Atendimento Atual
@@ -1872,9 +1863,6 @@ function abrirModalDetalhesCliente(clienteIdOrElement, beneficiarioId = null, at
                 if (wrapperGen) wrapperGen.classList.add('d-none');
             }
 
-            // --- 3. PREFERÊNCIAS ---
-            document.getElementById('modalClientePreferencias').innerText = p.preferencias;
-
             // --- 4. ÚLTIMA VISITA ---
             const containerUltima = document.getElementById('modalUltimaVisita');
             if (data.ultima_visita) {
@@ -1910,18 +1898,26 @@ function abrirModalDetalhesCliente(clienteIdOrElement, beneficiarioId = null, at
             // --- 6. OBSERVAÇÕES ---
             const containerObs = document.getElementById('modalClienteEmpresaObs');
             if (data.observacoes && data.observacoes.length > 0) {
-                let htmlObs = '<ul class="list-unstyled m-0">';
-                data.observacoes.forEach(o => {
+                let htmlObs = '<div class="d-flex flex-column gap-2">';
+                data.observacoes.forEach(item => {
                     htmlObs += `
-                        <li class="mb-1.5 pb-1.5 border-bottom border-light-subtle">
-                            <small class="text-muted fw-bold">${o.data}:</small>
-                            <span class="text-dark">${o.texto}</span>
-                        </li>`;
+                        <div class="p-2 bg-white rounded border shadow-sm">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge bg-primary-subtle text-primary fw-bold" style="font-size: 0.65rem;">
+                                    <i class="bi bi-person-badge me-1"></i>${item.autor}
+                                </span>
+                                <small class="text-muted" style="font-size: 0.65rem;">
+                                    <i class="bi bi-clock me-1"></i>${item.data}
+                                </small>
+                            </div>
+                            <p class="mb-0 text-dark small">${item.observacao}</p>
+                        </div>
+                    `;
                 });
-                htmlObs += '</ul>';
+                htmlObs += '</div>';
                 containerObs.innerHTML = htmlObs;
             } else {
-                containerObs.innerHTML = `<span class="text-muted">Nenhuma observação registrada.</span>`;
+                containerObs.innerHTML = '<span class="text-muted">Nenhuma observação registrada.</span>';
             }
 
             // --- 7. EXIBIR O MODAL ---
@@ -2083,7 +2079,7 @@ function confirmarEGravarEncerramentoItem() {
         btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Salvando...`;
     }
 
-    fetch('/agenda/api/agendamento/concluir-item', {
+fetch('/agenda/api/agendamento/concluir-item', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -2099,18 +2095,21 @@ function confirmarEGravarEncerramentoItem() {
     })
     .then(data => {
         const modalElement = document.getElementById('modalFinalizarItem');
-        const modalInstance = bootstrap.Modal.getInstance(modalElement);
-        if (modalInstance) modalInstance.hide();
+        if (modalElement && typeof bootstrap !== 'undefined') {
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) modalInstance.hide();
+        }
 
-        if (data.comanda_pronta || data.exibir_comanda) {
+        // 🟢 AJUSTE PONTUAL: Verifica se a comanda unificada existe antes de chamá-la
+        if ((data.comanda_pronta || data.exibir_comanda) && typeof window.abrirModalFechamentoComandaUnificada === 'function') {
             window.abrirModalFechamentoComandaUnificada(
                 data.agendamento_id || agendamentoId,
                 data.valor_total_fmt || data.valor_total
             );
         } else {
-            location.reload();
+            window.location.reload();
         }
-    })
+    }) // <--- A chave que faltava fechar corretamente ficava aqui
     .catch(error => {
         console.error('Erro:', error);
         alert(error.message || 'Não foi possível concluir o item.');
@@ -2226,7 +2225,7 @@ window.registrarFimRealEEncerrar = registrarFimRealEEncerrar;
  * Alterna o filtro visual para exibir apenas agendamentos.
  * Pode ser invocada via onclick="toggleFiltroApenasAgendados(this)" ou sem parâmetros.
  */
-window.toggleFiltroApenasAgendados = function(elemento) {
+function toggleFiltroAgendados(elemento) {
     // 1. Obtém o elemento do botão (via parâmetro ou ID de fallback)
     const btn = elemento || document.getElementById('btnFiltrarAgendados');
     if (!btn) {
@@ -2240,13 +2239,22 @@ window.toggleFiltroApenasAgendados = function(elemento) {
 
     btn.setAttribute('data-filtrado', novoEstado ? 'true' : 'false');
 
-    // 3. Atualiza as classes visuais do Bootstrap
+    // 3. Atualiza as classes visuais do Bootstrap e o rótulo/ícone
+    const icone = btn.querySelector('i');
+    const label = btn.querySelector('span');
+
     if (novoEstado) {
+        // Estado: Filtro Ativo (Exibe apenas os agendamentos)
         btn.classList.remove('btn-outline-secondary');
         btn.classList.add('btn-secondary');
+        if (icone) icone.className = 'bi bi-calendar-check-fill me-1';
+        if (label) label.textContent = 'Apenas Agendados';
     } else {
+        // Estado: Filtro Inativo (Exibe a grade completa com horários livres)
         btn.classList.remove('btn-secondary');
         btn.classList.add('btn-outline-secondary');
+        if (icone) icone.className = 'bi bi-calendar-range me-1';
+        if (label) label.textContent = 'Mostrar Todos (Com Livres)';
     }
 
     // 4. Dispara a aplicação global dos filtros na tela
@@ -2255,16 +2263,7 @@ window.toggleFiltroApenasAgendados = function(elemento) {
     } else if (typeof aplicarFiltrosGlobais === 'function') {
         aplicarFiltrosGlobais();
     }
-};
-
-window.alternarData = function(element) {
-    const dataSelecionada = element.value;
-    if (!dataSelecionada) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('data', dataSelecionada);
-    window.location.search = urlParams.toString();
-};
+}
 
 window.alternarProfissionalOuData = function() {
     const dataSelecionada = document.getElementById('filtro-data')?.value;
@@ -3415,7 +3414,145 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-</script>
+function abrirProntuarioCliente(dados) {
+    /* Expectativa do objeto dados:
+       {
+          agendamento_id: 123,
+          is_beneficiario: true/false,
+          tipo_persona: 'dependente' | 'pet' | 'veiculo' | 'titular',
+          nome: "Nome do Atendido",
+          foto: "url_foto",
+          nome_titular_responsavel: "Nome do Titular",
+          whatsapp: "19999999999",
+          cliente_desde: "15/01/2024",
+          data_nascimento: "20/05/1990",
+          genero_str: "Feminino",       // Mapeado a partir do id_genero
+          estado_civil_str: "Casado(a)", // Mapeado a partir do id_estado_civil / tabela estadocivil
+          eh_aniversario_hoje: false,
+          preferencias: "...",
+          ultima_visita: "10/10/2026",
+          servicos_top: ["Corte", "Barba"],
+          observacoes: "...",
+          servico_atual: "Consulta",
+          horario_atual: "14:30",
+          valor_atual: "R$ 150,00"
+       }
+    */
+
+    // 1. Foto e Inicial
+    const imgFoto = document.getElementById('modalClienteEmpresaFoto');
+    const divInicial = document.getElementById('modalClienteEmpresaInicial');
+    const nomeAtendido = dados.nome || 'Atendido';
+
+    if (dados.foto) {
+        imgFoto.src = dados.foto;
+        imgFoto.style.display = 'block';
+        if (divInicial) divInicial.style.display = 'none';
+    } else {
+        if (imgFoto) imgFoto.style.display = 'none';
+        if (divInicial) {
+            divInicial.style.display = 'flex';
+            divInicial.textContent = nomeAtendido.charAt(0).toUpperCase();
+        }
+    }
+
+    // 2. Nome e Tipo de Persona
+    document.getElementById('modalClienteEmpresaNome').textContent = nomeAtendido;
+    const badgePersona = document.getElementById('modalBadgeTipoPersona');
+    const lblSubtitulo = document.getElementById('lblSubtituloTitular');
+    const txtTitularResp = document.getElementById('modalNomeTitularResp');
+    const alertaUrgencia = document.getElementById('alertaTitularResponsavel');
+
+    if (dados.is_beneficiario) {
+        badgePersona.className = 'badge bg-info text-dark mb-1';
+        badgePersona.textContent = (dados.tipo_persona || 'Dependente').toUpperCase();
+
+        lblSubtitulo.classList.remove('d-none');
+        txtTitularResp.textContent = dados.nome_titular_responsavel || 'Titular';
+        if (alertaUrgencia) alertaUrgencia.classList.remove('d-none');
+    } else {
+        badgePersona.className = 'badge bg-secondary mb-1';
+        badgePersona.textContent = 'TITULAR';
+
+        lblSubtitulo.classList.add('d-none');
+        if (alertaUrgencia) alertaUrgencia.classList.add('d-none');
+    }
+
+    // 3. Telefone
+    const txtTel = document.getElementById('modalClienteEmpresaTelefone');
+    const linkTel = document.getElementById('linkTelefoneUrgencia');
+    const numLimpo = (dados.whatsapp || '').replace(/\D/g, '');
+    txtTel.textContent = dados.whatsapp || 'Não informado';
+    if (numLimpo) {
+        linkTel.href = `https://wa.me/55${numLimpo}`;
+    } else {
+        linkTel.href = '#';
+    }
+
+    // 4. Aniversário
+    const bannerAniv = document.getElementById('bannerAniversarioCliente');
+    if (dados.eh_aniversario_hoje) {
+        bannerAniv.classList.remove('d-none');
+        bannerAniv.classList.add('d-flex');
+        document.getElementById('txtNomeAniversariante').textContent = nomeAtendido;
+    } else {
+        bannerAniv.classList.add('d-none');
+        bannerAniv.classList.remove('d-flex');
+    }
+
+
+    // Preenche a última visita no modal
+    const elUltimaVisita = document.getElementById('modalUltimaVisita');
+    if (elUltimaVisita) {
+        elUltimaVisita.textContent = data.ultima_visita || 'Nenhum registro anterior encontrado.';
+    }
+
+    // 5. Visibilidade Condicional dos Campos Cadastrais (Pets/Veículos x Pessoas)
+    const wrapEstadoCivil = document.getElementById('wrapperEstadoCivil');
+    const wrapGenero = document.getElementById('wrapperGenero');
+
+    if (dados.tipo_persona === 'pet' || dados.tipo_persona === 'veiculo') {
+        if (wrapEstadoCivil) wrapEstadoCivil.classList.add('d-none');
+        if (wrapGenero) wrapGenero.classList.add('d-none');
+    } else {
+        if (wrapEstadoCivil) wrapEstadoCivil.classList.remove('d-none');
+        if (wrapGenero) wrapGenero.classList.remove('d-none');
+
+        document.getElementById('modalClienteEstadoCivil').textContent = dados.estado_civil_str || '--';
+        document.getElementById('modalClienteGenero').textContent = dados.genero_str || '--';
+    }
+
+    document.getElementById('modalClienteDesde').textContent = dados.cliente_desde || '--/--/----';
+    document.getElementById('modalClienteNascimento').textContent = dados.data_nascimento || '--';
+
+    // 6. Textos de Apoio
+    document.getElementById('modalUltimaVisita').textContent = dados.ultima_visita || 'Nenhum registro anterior encontrado.';
+    document.getElementById('modalClienteEmpresaObs').textContent = dados.observacoes || 'Nenhuma observação registrada.';
+
+    // 7. Atendimento Atual
+    document.getElementById('modalClienteEmpresaServico').textContent = dados.servico_atual || '--';
+    document.getElementById('modalClienteEmpresaHora').textContent = dados.horario_atual || '--:--';
+    document.getElementById('modalClienteEmpresaValor').textContent = dados.valor_atual || 'R$ 0,00';
+}
+
+/**
+ * Captura o valor do input de data alterado pelo usuário e recarrega
+ * o dashboard com a nova data selecionada via parâmetro GET na URL.
+ */
+function alternarData(inputElement) {
+    if (!inputElement || !inputElement.value) return;
+
+    const novaData = inputElement.value;
+
+    // Obtém a URL atual e manipula o parâmetro 'data'
+    const url = new URL(window.location.href);
+    url.searchParams.set('data', novaData);
+
+    // Redireciona a página para renderizar a agenda/dashboard da nova data
+    window.location.href = url.toString();
+}
+
+</script>'
 
 {% endblock %}
 

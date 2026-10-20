@@ -203,6 +203,9 @@
     <input type="hidden" name="servico_ids" id="input_servico_ids" value="{{ servicos_ids_string or servico_id_selecionado or '' }}">
     <input type="hidden" name="horario_agendamento" id="inputHorarioSelecionado" value="{{ horario_selecionado or '' }}">
 
+    {# 🎯 CAMPO OCULTO DO BENEFICIÁRIO: Recebe o ID vindo da rota GET / rascunho / passo 1 #}
+    <input type="hidden" name="beneficiario_id" id="inputBeneficiarioSelecionado" value="{{ beneficiario_id_selecionado or beneficiario_id or 0 }}">
+
     <!-- SELEÇÃO DE PROFISSIONAL -->
     {% set total_servicos = lista_servicos | length if lista_servicos else 0 %}
     {% set trava_selecao = (not permite_escolha_profissional) if permite_escolha_profissional is defined else (total_servicos > 1) %}
@@ -382,7 +385,6 @@
     const inputHorario = document.getElementById('inputHorarioSelecionado');
     if (inputHorario) inputHorario.value = horario;
 
-    // Atualiza o estado da variável de pré-seleção ativa
     horarioPreSelecionado = horario;
 
     const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
@@ -398,6 +400,9 @@
 
     const radioProfissional = document.querySelector('input[name="profissional_id"]:checked');
     const colaboradorId = radioProfissional ? radioProfissional.value : '';
+
+    const inputBeneficiario = document.getElementById('inputBeneficiarioSelecionado');
+    const beneficiarioId = inputBeneficiario ? inputBeneficiario.value : '0';
 
     const container = document.getElementById('container-slots-horario') || document.getElementById('container_horarios_disponiveis');
     const btnConfirmar = document.getElementById('btnConfirmarAgendamento');
@@ -435,7 +440,8 @@
       servico_ids: servicos,
       servico_id: servicos,
       colaborador_id: colaboradorId,
-      profissional_id: colaboradorId
+      profissional_id: colaboradorId,
+      beneficiario_id: beneficiarioId
     };
 
     if (reagendarIdConst) {
@@ -500,7 +506,6 @@
         if (elementoParaAutoSelecionar) {
           elementoParaAutoSelecionar.click();
         } else {
-          // Se o horário anterior não existe nos novos slots, limpa a seleção e desabilita o botão
           const inputHorario = document.getElementById('inputHorarioSelecionado');
           if (inputHorario) inputHorario.value = '';
           if (btnConfirmar) btnConfirmar.disabled = true;
@@ -540,7 +545,6 @@
       }
     });
 
-    // Executa a busca assíncrona para sincronizar slots caso não tenham sido renderizados via Jinja2
     const container = document.getElementById('container-slots-horario');
     if (!container || !container.querySelector('.btn-slot-horario')) {
       atualizarHorariosDisponiveis();

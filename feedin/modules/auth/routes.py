@@ -56,18 +56,18 @@ def login():
     # 1. CAPTURA UNIFICADA E CONSISTENTE DE PARÂMETROS
     # -------------------------------------------------------------------------
     next_url = (
-        request.args.get('next')
-        or request.args.get('next_url')
-        or request.form.get('next')
-        or request.form.get('next_url')
+            request.args.get('next')
+            or request.args.get('next_url')
+            or request.form.get('next')
+            or request.form.get('next_url')
     )
 
     # Prioriza o módulo passado explicitamente; fallback para a sessão do módulo atual ou 'agenda'
     modulo_slug = (
-        request.args.get('modulo')
-        or request.form.get('modulo_slug')
-        or request.form.get('modulo')
-        or session.get('modulo_slug_atual', 'agenda')
+            request.args.get('modulo')
+            or request.form.get('modulo_slug')
+            or request.form.get('modulo')
+            or session.get('modulo_slug_atual', 'agenda')
     )
 
     origem_hub = request.args.get('origem') == 'hub' or 'hub' in (next_url or '')
@@ -76,7 +76,7 @@ def login():
 
     form = FormLoginUniversal()
 
-    # Sanitização e preservação de query params no next_url (ex: ?empresa_id=2)
+    # Sanitização estrita do next_url para evitar loops de redirecionamento para o login
     if next_url:
         next_url_decodificado = unquote(next_url)
         if any(auth_path in next_url_decodificado for auth_path in ['/login', '/auth', 'auth.login']):
@@ -93,9 +93,8 @@ def login():
     # 🔑 VALIDAÇÃO SE O USUÁRIO JÁ POSSUI SESSÃO ATIVA PARA ESTE MÓDULO
     # -------------------------------------------------------------------------
     if current_user.is_authenticated:
-        # Se a sessão do módulo JÁ FOI VALIDADA anteriormente, libera a navegação
         if session.get(chave_autenticacao_modulo) is True:
-            if next_url and next_url.startswith('/') and next_url != request.path:
+            if next_url and next_url.startswith('/') and next_url != request.path and '/login' not in next_url:
                 return redirect(next_url)
 
             modulo_info = ModulosSistema.query.filter_by(slug=modulo_slug, ativo=True).first()
@@ -103,7 +102,7 @@ def login():
             if modulo_info and modulo_info.endpoint and modulo_info.endpoint != 'auth.login':
                 try:
                     url_destino = url_for(modulo_info.endpoint)
-                    if url_destino != request.path and url_destino != request.full_path:
+                    if url_destino != request.path:
                         return redirect(url_destino)
                 except Exception as err:
                     current_app.logger.error(f"[LOGIN] Falha ao resolver endpoint do módulo '{modulo_slug}': {err}")
@@ -112,9 +111,6 @@ def login():
                 return redirect(url_for(f"{modulo_slug}.dashboard_cliente"))
             except Exception:
                 return redirect(url_for(f"{modulo_slug}.index"))
-
-        # Se ele está logado na aplicação central mas NÃO possui a flag do módulo na sessão,
-        # Mantém na renderização do login_modulo.html para pedir a confirmação do módulo.
 
     # Atualiza o contexto da sessão para o módulo em foco
     session['modulo_slug_atual'] = modulo_slug
@@ -133,22 +129,26 @@ def login():
 
         if cliente_modulo and validar_hash_senha(cliente_modulo, senha_digitada):
 
-            # Persistência/Validação de Vínculo
             cpf_hash_alvo = getattr(cliente_modulo, 'cpf_hash', None)
 
-            if cpf_hash_alvo:
-                vinculo_ativo = ModVinculoModulo.query.filter(
-                    ModVinculoModulo.cpf_hash == cpf_hash_alvo,
+            # Mesmo se o cpf_hash for nulo em cadastros antigos/novos, garantimos o vínculo por ID/E-mail para evitar travamentos
+            try:
+                query_vinculo = ModVinculoModulo.query.filter(
                     ModVinculoModulo.modulo_slug == modulo_slug,
                     db.or_(
                         ModVinculoModulo.email_customizado == cliente_modulo.email,
                         ModVinculoModulo.email_customizado.is_(None)
                     )
-                ).first()
+                )
+
+                if cpf_hash_alvo:
+                    query_vinculo = query_vinculo.filter(ModVinculoModulo.cpf_hash == cpf_hash_alvo)
+
+                vinculo_ativo = query_vinculo.first()
 
                 if not vinculo_ativo:
                     vinculo_ativo = ModVinculoModulo(
-                        cpf_hash=cpf_hash_alvo,
+                        cpf_hash=cpf_hash_alvo or f"temp_{cliente_modulo.id}",
                         modulo_slug=modulo_slug,
                         local_id=session.get('local_id_atual'),
                         email_customizado=cliente_modulo.email,
@@ -159,8 +159,11 @@ def login():
                 elif not vinculo_ativo.ativo:
                     vinculo_ativo.ativo = True
                     db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"⚠️ [LOGIN] Erro ao gravar ModVinculoModulo para novo usuário: {e}")
 
-            # Efetiva o login no Flask-Login e grava o passe na sessão
+            # Efetiva o login no Flask-Login
             login_user(cliente_modulo, remember=getattr(form, 'lembrar_me', False) and form.lembrar_me.data)
             session.permanent = True
 
@@ -172,8 +175,8 @@ def login():
 
             flash(f"Acesso concedido ao módulo '{modulo_slug.upper()}'. Bem-vindo de volta!", "success")
 
-            # Redirecionamento preservando query params
-            if next_url and next_url.startswith('/') and next_url != '/auth/login':
+            # Redirecionamento seguro pós-login
+            if next_url and next_url.startswith('/') and '/login' not in next_url:
                 return redirect(next_url)
 
             if modulo_info and modulo_info.endpoint:
@@ -192,10 +195,10 @@ def login():
         else:
             flash("E-mail ou senha incorretos. Verifique suas credenciais.", "danger")
 
-    # Determina o fallback do next_url garantindo o contexto do módulo
+    # Fallback seguro
     FALLBACK_ENDPOINTS = {
         'agenda': 'agenda.dashboard_cliente',
-        'empresa': 'empresa.dashboard_empresa',  # Atualizado para o nome exato da sua função no blueprint empresa
+        'empresa': 'empresa.dashboard_empresa',
     }
 
     endpoint_padrao = FALLBACK_ENDPOINTS.get(modulo_slug, f"{modulo_slug}.dashboard")
@@ -212,7 +215,6 @@ def login():
         modulo_slug=modulo_slug,
         modulo_info=modulo_info
     )
-
 
 # =========================================================================
 # 🔄 2. CADASTRO ORGÂNICO ETAPA 1: Credenciais Básicas (E-mail e Senha)
@@ -359,11 +361,8 @@ def processar_identidade():
     acesso nos módulos. Todo o direcionamento operacional é guiado pela
     tabela 'ModulosSistema' e parâmetros de rota ('next_url').
     """
-
-    # =========================================================================
-    # 📑 1. CAPTURA DE CONTEXTO E FLUXO VOLÁTIL
-    # =========================================================================
-    email_cadastro = session.get('temp_cadastro_email')
+    # Recupera o e-mail da sessão ou do campo de transporte oculto do formulário
+    email_cadastro = session.get('temp_cadastro_email') or request.form.get('email_transporte')
 
     if not email_cadastro and current_user.is_authenticated:
         email_cadastro = current_user.email
@@ -379,10 +378,7 @@ def processar_identidade():
 
     modulo_atual_slug = session.get('modulo_slug_atual', 'core')
     local_atual_id = session.get('local_id_atual') or session.get('empresa_ativa_id')
-
-    # Prioridade de redirecionamento: Parâmetro da requisição > Sessão
     proximo_passo = request.args.get('next_url') or session.pop('next_url', None)
-
     whatsapp_input = request.form.get('whatsapp', '').strip()
     whatsapp_final = whatsapp_input if whatsapp_input else None
 
@@ -397,24 +393,21 @@ def processar_identidade():
         flash("O CPF informado é inválido.", "danger")
         return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
+    # 🔑 REGRA SOBERANA: O CPF HASH É O ÚNICO E VERDADEIRO ELO DE LIGAÇÃO
     hash_digitado = IdentidadeCivil.gerar_hash(cpf_digitado)
     identidade_existente = IdentidadeCivil.query.filter_by(cpf_hash=hash_digitado).first()
 
     # =========================================================================
-    # 🔍 3. BUSCA E VERIFICAÇÃO DO ID CORE (LÓGICA EXISTENTE PRESERVADA)
+    # 🔍 3. BUSCA DO ID CORE (Exclusivamente via IdentidadeCivil / CPF Hash)
     # =========================================================================
     id_usuario_core = None
 
-    if identidade_existente:
+    if identidade_existente and identidade_existente.usuario_id:
         id_usuario_core = identidade_existente.usuario_id
     elif current_user.is_authenticated and isinstance(current_user.id, int):
         id_usuario_core = current_user.id
-    else:
-        usuario_core = Usuario.query.filter_by(email=email_cadastro).first()
-        if usuario_core:
-            id_usuario_core = usuario_core.id
 
-    # Conflito de integridade se o CPF tentar cruzar com uma conta Core divergente
+    # Conflito de integridade se o CPF já estiver associado a outro Core diferente
     if identidade_existente and identidade_existente.usuario_id and id_usuario_core:
         if identidade_existente.usuario_id != id_usuario_core:
             flash("Este CPF já está vinculado a outra conta ativa no sistema.", "danger")
@@ -430,13 +423,13 @@ def processar_identidade():
         genero_val = int(genero_id) if str(genero_id).isdigit() else None
 
         # ---------------------------------------------------------------------
-        # 🪐 PASSO 1: ALFÂNDEGA / COFRE CIVIL GLOBAL (SEMPRE GRAVA/EXISTE)
+        # 🪐 PASSO 1: COFRE CIVIL GLOBAL (IdentidadeCivil)
         # ---------------------------------------------------------------------
         if not identidade_existente:
             cpf_protegido = current_app.fernet.encrypt(cpf_digitado.encode())
 
             identidade_existente = IdentidadeCivil(
-                usuario_id=id_usuario_core,  # Pode ser None (Totalmente desacoplado)
+                usuario_id=id_usuario_core,  # Pode ser None se for totalmente novo no Core
                 nome_completo_oficial=nome_real,
                 cpf_criptografado=cpf_protegido,
                 cpf_hash=hash_digitado,
@@ -445,14 +438,12 @@ def processar_identidade():
                 versao_termos_aceita="1.0-BETA"
             )
             db.session.add(identidade_existente)
-            db.session.flush()  # Garante a persistência imediata na IdentidadeCivil
-
+            db.session.flush()
         elif id_usuario_core and not identidade_existente.usuario_id:
-            # Se a identidade já existia sem vínculo e localizou um ID Core agora, atualiza o vínculo
             identidade_existente.usuario_id = id_usuario_core
             db.session.flush()
 
-        # Atualiza/Cria Perfil no Core APENAS se houver conta Core associada
+        # Atualiza o Perfil no Core APENAS se houver conta Core associada
         if id_usuario_core:
             perfil = Perfil.query.filter_by(id_usuario=id_usuario_core).first()
             if not perfil:
@@ -464,11 +455,18 @@ def processar_identidade():
                 )
                 db.session.add(perfil)
             else:
-                # Atualiza os dados cadastrais no Perfil existente caso estejam vazios ou desatualizados
                 perfil.nome_completo = nome_real
                 perfil.data_nascimento = data_nasc_obj
                 if genero_val is not None:
                     perfil.genero = genero_val
+
+                # Captura e tratamento dos campos numéricos
+                genero_id = request.form.get("genero")
+                estado_civil_id = request.form.get("estado_civil")
+
+                genero_val = int(genero_id) if (genero_id and str(genero_id).isdigit()) else None
+                estado_civil_val = int(estado_civil_id) if (
+                            estado_civil_id and str(estado_civil_id).isdigit()) else None
 
         # ---------------------------------------------------------------------
         # 🟢 PASSO 2: ESTEIRA DE CADASTRO DO MÓDULO (ModCadastroCliente)
@@ -476,28 +474,28 @@ def processar_identidade():
         cliente_local = ModCadastroCliente.query.filter_by(email=email_cadastro).first()
 
         if cliente_local:
-            # Grava/Atualiza o id_usuario_core capturado na busca
             cliente_local.usuario_id = id_usuario_core
             cliente_local.nome = nome_real
             cliente_local.cpf = cpf_digitado
             cliente_local.data_nascimento = data_nasc_obj
+            cliente_local.genero = genero_val
+            cliente_local.estado_civil = estado_civil_val  # 🎯 Grava o ID da tabela EstadoCivil
             if whatsapp_final:
                 cliente_local.whatsapp = whatsapp_final
             cliente_local.status_conta = 'ativo'
-
-            ModFilaAtivacaoCliente.query.filter_by(email=email_cadastro).delete()
         else:
             senha_temporaria = session.get('temp_cadastro_senha', '')
             senha_hash_local = generate_password_hash(senha_temporaria) if senha_temporaria else ""
             username_padronizado = generar_username_corporativo(nome_real)
 
-            # Instancia o cliente gravando o usuario_id (seja um ID numérico ou None)
             cliente_local = ModCadastroCliente(
                 usuario_id=id_usuario_core,
                 nome=nome_real,
                 email=email_cadastro,
                 whatsapp=whatsapp_final or "",
                 data_nascimento=data_nasc_obj,
+                genero=genero_val,
+                estado_civil=estado_civil_val,  # 🎯 Grava o ID da tabela EstadoCivil
                 username_modulo=username_padronizado,
                 senha_hash=senha_hash_local,
                 status_conta='ativo'
@@ -505,84 +503,11 @@ def processar_identidade():
             cliente_local.cpf = cpf_digitado
             db.session.add(cliente_local)
 
-        db.session.flush()
-
-        # No momento em que o novo ModCadastroCliente é criado com sucesso:
-        # Localiza qualquer ClienteBeneficiario ativo que possua o mesmo hash de CPF e desativa:
-        ClienteBeneficiario.query.filter_by(
-            documento_identificador=documento_hash,
-            ativo=True
-        ).update({ClienteBeneficiario.ativo: False})
-
-        db.session.commit()
-        # ---------------------------------------------------------------------
-        # 🤝 PASSO 3: VERIFICAÇÃO DE CONVITES PENDENTES (Colaborador/Equipe)
-        # ---------------------------------------------------------------------
-        hash_convite = EseConviteColaborador.gerar_hash_cpf(cpf_digitado)
-        convite_trabalho = EseConviteColaborador.query.filter_by(
-            cpf_hash=hash_convite,
-            data_nascimento=data_nasc_obj,
-            status='pendente'
-        ).first()
-
-        if convite_trabalho:
-            try:
-                novo_contrato = ColaboradorContrato(
-                    usuario_id=id_usuario_core,
-                    empresa_id=convite_trabalho.estabelecimento_id,
-                    data_contratacao=convite_trabalho.data_contratacao,
-                    status_profissional='ativo',
-                    papel_nome='Colaborador'
-                )
-                db.session.add(novo_contrato)
-                db.session.flush()
-
-                convite_trabalho.status = 'aceito'
-                db.session.commit()
-
-                flash("🎉 Convite de trabalho localizado! Por favor, complete sua ficha cadastral.", "success")
-                return redirect(url_for('empresa.preencher_ficha_colaborador', contrato_id=novo_contrato.id))
-
-            except Exception as e:
-                db.session.rollback()
-                print(f"❌ Erro ao processar vínculo do convite: {e}")
-                flash("Erro ao vincular convite de colaborador.", "danger")
-
-        # ---------------------------------------------------------------------
-        # 🚀 PASSO 4: VÍNCULO NO CATÁLOGO DE MÓDULOS (ModVinculoModulo)
-        # ---------------------------------------------------------------------
-        vinculo_ativo = ModVinculoModulo.query.filter_by(
-            cpf_hash=hash_digitado,
-            email_customizado=email_cadastro,
-            modulo_slug=modulo_atual_slug,
-            local_id=local_atual_id
-        ).first()
-
-        if not vinculo_ativo:
-            vinculo_ativo = ModVinculoModulo(
-                cpf_hash=hash_digitado,
-                modulo_slug=modulo_atual_slug,
-                local_id=local_atual_id,
-                email_customizado=email_cadastro,
-                criado_em=datetime.now(timezone.utc),
-                ativo=True
-            )
-            db.session.add(vinculo_ativo)
-        else:
-            vinculo_ativo.ativo = True
-
-        db.session.commit()
-
         # ---------------------------------------------------------------------
         # 🔒 AUTENTICAÇÃO E SESSÃO
         # ---------------------------------------------------------------------
-        if not current_user.is_authenticated:
-            if cliente_local:
-                login_user(cliente_local, remember=True)
-            elif id_usuario_core:
-                usuario_master = Usuario.query.get(id_usuario_core)
-                if usuario_master:
-                    login_user(usuario_master, remember=True)
+        if not current_user.is_authenticated and cliente_local:
+            login_user(cliente_local, remember=True)
 
         if cliente_local:
             session['cliente_modulo_id'] = cliente_local.id
@@ -599,74 +524,35 @@ def processar_identidade():
 
     except Exception as err:
         db.session.rollback()
-        print(f"❌ [ALFÂNDEGA] Erro crítico ao processar identidade civil: {err}")
+        import traceback
+        traceback.print_exc()  # Mantém o rastreio seguro no console caso ocorra erro inesperado
         flash("Ocorreu um erro interno ao processar seus dados. Tente novamente.", "danger")
         return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
     # =========================================================================
-    # 🧭 5. RESOLUÇÃO DE REDIRECIONAMENTO DINÂMICO (COM SUPORTE AO HUB)
+    # 🧭 5. RESOLUÇÃO DE REDIRECIONAMENTO DINÂMICO
     # =========================================================================
     if destino_prioritario:
         return redirect(destino_prioritario)
 
     if proximo_passo and '/login' in proximo_passo:
-        print(f"⚠️ [ALFÂNDEGA] 'next_url' descartado por conter rota de Login: {proximo_passo}")
         proximo_passo = None
 
     if proximo_passo and proximo_passo.startswith('/'):
-        print(f"🎯 [ALFÂNDEGA] Direcionando para destino explícito 'next_url': {proximo_passo}")
         return redirect(proximo_passo)
 
     if local_atual_id:
-        print(f"🏢 [ALFÂNDEGA] Contexto de estabelecimento ativo detectado (ID: {local_atual_id}). Direcionando para o Hub.")
         return redirect(url_for('empresa.hub_empresa', empresa_id=local_atual_id))
 
     modulo_info = ModulosSistema.query.filter_by(slug=modulo_atual_slug, ativo=True).first()
     if modulo_info and modulo_info.endpoint:
         try:
             url_destino = url_for(modulo_info.endpoint)
-            print(f"🚀 [ALFÂNDEGA] Direcionando para o endpoint do módulo '{modulo_atual_slug}': {url_destino}")
             return redirect(url_destino)
-        except Exception as err:
-            print(f"⚠️ [ROTEADOR] Falha ao resolver endpoint '{modulo_info.endpoint}' do banco: {err}")
+        except Exception:
+            pass
 
     return redirect(url_for('core.dashboard'))
-
-
-@auth_bp.route('/admin/esteira-manutencao', methods=['POST'])
-# 🔒 Coloque seu decorador de segurança aqui (ex: @admin_required)
-@login_required
-def rodar_esteira_manutencao():
-    if getattr(current_user, 'nivel_acesso', 0) < 100:
-        return jsonify({"status": "error", "message": "Acesso restrito."}), 403
-
-    from feedin.tools.manutencao import CaixaFerramentasManutencao
-    relatorio_geral = {}
-
-    try:
-        # 🔧 Executa a Ferramenta 1: Saneamento de Épocas
-        status_epocas = CaixaFerramentasManutencao.sanear_termos_atualmente(db)
-        relatorio_geral["saneamento_epocas"] = status_epocas
-
-        # 🔧 [Futuro] Executa a Ferramenta 2...
-        # relatorio_geral["tarefa_2"] = CaixaFerramentasManutencao.tarefa_2(database)
-
-        # Se todas as tarefas acopladas rodarem com sucesso, consolidamos o banco de uma vez
-        db.session.commit()
-
-        return jsonify({
-            "status": "success",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "relatorio": relatorio_geral
-        })
-
-    except Exception as e:
-        db.session.rollback()
-        print(f"Falha na esteira de manutenção: {e}")
-        return jsonify({
-            "status": "error",
-            "message": f"Erro crítico durante a execução da esteira: {str(e)}"
-        }), 500
 
 
 # =========================================================================
@@ -1070,26 +956,26 @@ def logout():
     """
     🚪 LOGOUT INTEGRADO E ADAPTATIVO
     Limpa o estado de login do Flask-Login (Core) e destrói
-    completamente as credenciais comerciais de 36 caracteres da sessão.
+    completamente as credenciais e contextos de módulos da sessão.
     """
-    # 1. Limpa a autenticação padrão do Flask-Login (se houver)
     if current_user.is_authenticated:
         logout_user()
 
-    # 2. Destrói as chaves de controle comercial que criamos para os módulos
-    # para garantir que ninguém herde IDs de sessões passadas
-    chaves_modulo = [
+    # Destrói chaves comerciais, IDs de módulos e limpa vestígios de sessões passadas
+    chaves_para_remover = [
         'cliente_modulo_id',
+        'usuario_id',
         'modulo_slug_atual',
         'empresa_id_atual',
         'local_id_atual',
-        'next_url'
+        'empresa_ativa_id',
+        'next_url',
+        'temp_cadastro_email',
+        'temp_cadastro_senha',
+        'navegacao_via_hub'
     ]
-    for chave in chaves_modulo:
+    for chave in chaves_para_remover:
         session.pop(chave, None)
-
-    # Nota: Não usamos session.clear() direto porque você pode ter variáveis temporárias
-    # úteis do processo de Claim (como 'temp_cadastro_email') que não quer perder imediatamente.
 
     flash("Você saiu do sistema com segurança.", "info")
     return redirect(url_for('auth.login'))

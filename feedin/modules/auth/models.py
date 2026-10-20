@@ -15,7 +15,8 @@ from feedin.utils import resolver_url_midia
 class ModCadastroCliente(db.Model, UserMixin):
     """
     PERFIL DE CREDENCIAIS UNIFICADO: Tabela paralela de clientes comum a todos os módulos.
-    Centraliza o e-mail, metadados de balcão e hash de senha para acesso seguro ao PWA.
+    Centraliza e-mail, metadados de balcão, gênero, estado civil, WhatsApp, CPF (criptografado/hash)
+    e hash de senha para acesso seguro ao PWA.
     """
     __tablename__ = 'mod_cadastro_cliente'
 
@@ -32,13 +33,19 @@ class ModCadastroCliente(db.Model, UserMixin):
     whatsapp = db.Column(db.String(20), nullable=False)
     data_nascimento = db.Column(db.Date, nullable=True)
 
+    # 🎯 DOMÍNIOS DE GÊNERO E ESTADO CIVIL NO MÓDULO (Chaves Estrangeiras Integer)
+    genero = db.Column(db.Integer, db.ForeignKey('generos.id'), nullable=True)
+    estado_civil = db.Column(db.Integer, db.ForeignKey('estadocivil.id'), nullable=True)
+
+    # Relacionamentos para consulta rápida das descrições nas tabelas de domínio
+    rel_genero = db.relationship('Generos', foreign_keys=[genero], lazy='select')
+    rel_estado_civil = db.relationship('EstadoCivil', foreign_keys=[estado_civil], lazy='select')
+
     # Motores de Segurança e Conformidade do CPF
-    # 🎯 unique=False garante que o mesmo CPF ancore múltiplos perfis/e-mails de acesso
     cpf_hash = db.Column(db.String(64), index=True, unique=False)
     cpf_encrypted = db.Column(db.LargeBinary, nullable=False)
 
     # Credenciais de Acesso ao Módulo
-    # 🎯 unique=True e tamanho 50: Sob medida para o padrão imutável "primeiro.ultimo+num"
     username_modulo = db.Column(db.String(50), unique=True, nullable=False)
     senha_hash = db.Column(db.String(255), nullable=False)
 
@@ -56,7 +63,7 @@ class ModCadastroCliente(db.Model, UserMixin):
 
     def get_id(self):
         """Retorna a chave primária UUID (String 36) para o Flask-Login."""
-        return str(self.id)  # 👈 CORRIGIDO: O id JÁ É o UUID de 36 caracteres
+        return str(self.id)
 
     @property
     def cpf(self):
@@ -66,7 +73,7 @@ class ModCadastroCliente(db.Model, UserMixin):
 
     @cpf.setter
     def cpf(self, plain_cpf):
-        """MÁGICA INTERNA: Hashea e encripta o CPF usando os motores do Core."""
+        """Hashea e encripta o CPF usando os motores do Core."""
         from flask import current_app
         from feedin.models import IdentidadeCivil
         self.cpf_hash = IdentidadeCivil.gerar_hash(plain_cpf)
@@ -77,15 +84,8 @@ class ModCadastroCliente(db.Model, UserMixin):
 
     @property
     def nome_completo(self):
-        """
-        Resolve o nome do usuário para os módulos conexos.
-        Tenta buscar o nome oficial na Identidade Civil através do Core,
-        se não houver vínculo, retorna o nome de balcão registrado no módulo.
-        """
         if self.usuario_core and self.usuario_core.identidade:
             return self.usuario_core.identidade.nome_completo_oficial
-
-        # Fallback para usuários puramente de balcão/módulo
         return self.nome
 
 

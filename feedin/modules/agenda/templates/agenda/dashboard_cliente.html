@@ -639,6 +639,7 @@
                         {% set esta_atrasado = item.atrasado if item.atrasado is defined else False %}
                         {% set slug_empresa_destinataria = item.empresa.slug if (item.empresa is defined and item.empresa and item.empresa.slug) else 'geral' %}
                         {% set itens_lista = item.itens if (item.itens is defined and item.itens) else [] %}
+                        {% set beneficiario_obj = item.beneficiario or item.cliente_beneficiario %}
 
                         <div class="bg-white p-3 rounded-4 shadow-sm border border-start border-4 {% if esta_atrasado %}border-warning bg-warning-subtle bg-opacity-10{% else %}border-primary{% endif %} card-atendimento-item">
 
@@ -653,6 +654,14 @@
                                         {{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}
                                     </span>
                                 </div>
+
+                                {# BADGE DE BENEFICIÁRIO (QUANDO NÃO É PARA O PRÓPRIO TITULAR) #}
+                                {% if beneficiario_obj %}
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill small d-inline-flex align-items-center gap-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-person-heart text-info"></i>
+                                        {{ beneficiario_obj.nome or beneficiario_obj.nome_completo or 'Beneficiário' }}
+                                    </span>
+                                {% endif %}
                             </div>
 
                             <hr class="my-2 text-black-50 opacity-10">
@@ -680,7 +689,8 @@
                                              data-servico-nome="{{ nome_servico }}"
                                              data-servico-desc="{{ srv_item.descricao if (srv_item is defined and srv_item.descricao) else 'Serviço agendado via plataforma.' }}"
                                              data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
-                                             data-valor="R$ {{ '%.2f'|format(valor_servico) }}">
+                                             data-valor="R$ {{ '%.2f'|format(valor_servico) }}"
+                                             data-beneficiario="{{ beneficiario_obj.nome if beneficiario_obj else 'Titular' }}">
 
                                             <div class="d-flex align-items-center justify-content-between mb-1">
                                                 <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
