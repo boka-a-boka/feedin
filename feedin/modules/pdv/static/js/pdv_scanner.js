@@ -2,9 +2,9 @@
 // MOTOR GLOBAL DE LEITOR DE CÓDIGO DE BARRAS E CÂMERA (MÓDULO PDV)
 // =========================================================================
 let html5QrCodeEstoque = null;
-let timerDebounceEstoque = null;
+let targetInputIdGlobal = null;
 
-// 1. AVISO SONORO (BEEP) NATIVO
+// AVISO SONORO (BEEP) NATIVO
 window.tocarBip = function() {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -22,130 +22,91 @@ window.tocarBip = function() {
     }
 };
 
-// 2. INICIALIZAÇÃO DE EVENTOS DO MODAL E INPUT
-document.addEventListener('DOMContentLoaded', function() {
-    const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
-    const inputBarras = document.getElementById('inputBarrasEstoque');
-
-    if (modalItemColab) {
-        // Foco automático ao abrir o modal
-        modalItemColab.addEventListener('shown.bs.modal', function () {
-            if (inputBarras) {
-                inputBarras.focus();
-                inputBarras.select();
-            }
-        });
-
-        // Encerramento seguro da câmera ao fechar o modal
-        modalItemColab.addEventListener('hidden.bs.modal', function () {
-            window.pararLeitorCamera();
-        });
-    }
-
-    // Escuta a tecla Enter disparada por leitores USB físicos
-    if (inputBarras) {
-        inputBarras.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                clearTimeout(timerDebounceEstoque);
-                const valor = this.value.trim();
-                if (valor && typeof consultarProdutoEstoque === 'function') {
-                    window.tocarBip();
-                    consultarProdutoEstoque(valor, true);
-                }
-            }
-        });
-    }
-});
-
-// 3. CONTROLE DE DEBOUNCE PARA DIGITAÇÃO RÁPIDA
-window.aoDigitarCodigoEstoque = function(valor) {
-    clearTimeout(timerDebounceEstoque);
-    timerDebounceEstoque = setTimeout(() => {
-        if (typeof consultarProdutoEstoque === 'function') {
-            consultarProdutoEstoque(valor, false);
-        }
-    }, 300);
-};
-
-// 4. LÓGICA DE CÂMERA INLINE COM RECORTES PARA EAN-13
-window.alternarLeitorCamera = function() {
-    const container = document.getElementById('container-scanner-camera');
-    if (!container) return;
-
-    if (!container.classList.contains('d-none')) {
-        window.pararLeitorCamera();
+// FUNÇÃO GLOBAL DE ABERTURA DE CÂMERA (Compatível com qualquer tela)
+window.abrirLeitorCameraUniversal = function(targetInputId) {
+    targetInputIdGlobal = targetInputId;
+    const modalEl = document.getElementById('modalLeitorCamera');
+    if (!modalEl) {
+        console.error("Modal com ID #modalLeitorCamera não encontrado na página.");
         return;
     }
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
 
     if (typeof Html5Qrcode === 'undefined') {
-        alert("A biblioteca leitora de código de barras não está carregada.");
+        alert("Biblioteca de câmera não carregada.");
         return;
     }
 
-    container.classList.remove('d-none');
-
-    try {
-        html5QrCodeEstoque = new Html5Qrcode("reader-camera-estoque");
-
-        const config = {
-            fps: 15,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-                const minEdgePercentage = 0.75;
-                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
-                const qrboxSize = Math.floor(minDimension * minEdgePercentage);
-                return {
-                    width: Math.max(qrboxSize, 220),
-                    height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
-                };
-            },
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
-        };
-
-        html5QrCodeEstoque.start(
-            { facingMode: "environment" },
-            config,
-            onScanSuccessEstoque
-        ).catch(err => {
-            console.error("Erro ao iniciar câmera:", err);
-            window.pararLeitorCamera();
-        });
-
-    } catch (e) {
-        console.error("Exceção na inicialização da câmera:", e);
-        window.pararLeitorCamera();
+    // Garante que a div #reader existe
+    if (!document.getElementById('reader')) {
+        console.error("Elemento com ID #reader não encontrado no modal.");
+        return;
     }
+
+    html5QrCodeEstoque = new Html5Qrcode("reader");
+    const config = {
+        fps: 15,
+        qrbox: function(viewfinderWidth, viewfinderHeight) {
+            const minEdgePercentage = 0.75;
+            const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
+            const qrboxSize = Math.floor(minDimension * minEdgePercentage);
+            return {
+                width: Math.max(qrboxSize, 220),
+                height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
+            };
+        },
+        formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.CODE_93,
+            Html5QrcodeSupportedFormats.ITF,      // Usado em caixas/fardos fechados (Interleaved 2 of 5)
+            Html5QrcodeSupportedFormats.QR_CODE  // Suporte a QR Code
+        ],
+        experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+        }
+    };
+
+    html5QrCodeEstoque.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+            if (typeof window.tocarBip === 'function') window.tocarBip();
+
+            if (targetInputIdGlobal) {
+                const inputTarget = document.getElementById(targetInputIdGlobal);
+                if (inputTarget) {
+                    inputTarget.value = decodedText;
+                    inputTarget.dispatchEvent(new Event('input'));
+                    inputTarget.dispatchEvent(new Event('change'));
+                }
+            }
+            window.fecharLeitorCameraUniversal();
+        }
+    ).catch(err => {
+        console.error("Erro ao iniciar câmera:", err);
+        window.fecharLeitorCameraUniversal();
+    });
 };
 
-function onScanSuccessEstoque(decodedText) {
-    window.tocarBip();
-
-    const inputBarras = document.getElementById('inputBarrasEstoque');
-    if (inputBarras) {
-        inputBarras.value = decodedText;
-        if (typeof consultarProdutoEstoque === 'function') {
-            consultarProdutoEstoque(decodedText, true);
-        }
-    }
-
-    window.pararLeitorCamera();
-}
-
-window.pararLeitorCamera = function() {
-    const container = document.getElementById('container-scanner-camera');
-
+window.fecharLeitorCameraUniversal = function() {
     if (html5QrCodeEstoque) {
         html5QrCodeEstoque.stop().then(() => {
             html5QrCodeEstoque.clear();
             html5QrCodeEstoque = null;
-            if (container) container.classList.add('d-none');
         }).catch(() => {
             html5QrCodeEstoque = null;
-            if (container) container.classList.add('d-none');
         });
-    } else {
-        if (container) container.classList.add('d-none');
+    }
+    const modalEl = document.getElementById('modalLeitorCamera');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
     }
 };

@@ -90,7 +90,7 @@
                                        oninput="sincronizarProdutoId('input_produto_entrada', 'produto_id_entrada', 'codigo_barras_entrada')">
                                 <button type="button"
                                         class="btn btn-outline-secondary rounded-end-3"
-                                        onclick="abrirLeitorCameraEmpresa('input_produto_entrada')"
+                                        onclick="abrirLeitorCameraUniversal('input_produto_entrada')"
                                         title="Escanear com a câmera">
                                     <i class="bi bi-camera-fill text-primary"></i>
                                 </button>
@@ -143,7 +143,7 @@
                                        oninput="sincronizarProdutoId('input_produto_saida', 'produto_id_saida', 'codigo_barras_saida')">
                                 <button type="button"
                                         class="btn btn-outline-secondary rounded-end-3"
-                                        onclick="abrirLeitorCameraEmpresa('input_produto_saida')"
+                                        onclick="abrirLeitorCameraUniversal('input_produto_saida')"
                                         title="Escanear com a câmera">
                                     <i class="bi bi-camera-fill text-primary"></i>
                                 </button>
@@ -199,7 +199,7 @@
     </div>
 </div>
 
-{# 📷 MODAL DO LEITOR DE CÂMERA #}
+{# 📷 MODAL DO LEITOR DE CÂMERA (Usa o ID global #reader exigido pelo pdv_scanner.js) #}
 <div class="modal fade" id="modalLeitorCamera" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 border-0 shadow">
@@ -207,7 +207,7 @@
                 <h6 class="modal-title fw-bold text-dark">
                     <i class="bi bi-camera me-1"></i> Ler Código de Barras
                 </h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="fecharLeitorCameraEmpresa()"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="fecharLeitorCameraUniversal()"></button>
             </div>
             <div class="modal-body text-center p-3">
                 <div id="reader" style="width: 100%; min-height: 250px; background: #000;" class="rounded-3 overflow-hidden"></div>
@@ -216,7 +216,7 @@
                 </p>
             </div>
             <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" data-bs-dismiss="modal" onclick="fecharLeitorCameraEmpresa()">Cancelar</button>
+                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" data-bs-dismiss="modal" onclick="fecharLeitorCameraUniversal()">Cancelar</button>
             </div>
         </div>
     </div>
@@ -254,69 +254,14 @@
         }
     }
 
-    // Integração específica do modal desta tela com o Html5Qrcode global
-    let html5QrCodeEmpresaInstancia = null;
-    let targetInputIdGlobal = null;
-
-    function abrirLeitorCameraEmpresa(targetInputId) {
-        targetInputIdGlobal = targetInputId;
-        const modalEl = document.getElementById('modalLeitorCamera');
-        const modal = new bootstrap.Modal(modalEl);
-        modal.show();
-
-        if (typeof Html5Qrcode === 'undefined') {
-            alert("Biblioteca de câmera não carregada.");
-            return;
-        }
-
-        html5QrCodeEmpresaInstancia = new Html5Qrcode("reader");
-        const config = {
-            fps: 15,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-                const minEdgePercentage = 0.75;
-                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
-                const qrboxSize = Math.floor(minDimension * minEdgePercentage);
-                return {
-                    width: Math.max(qrboxSize, 220),
-                    height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
-                };
-            },
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
+    // Garante parada limpa da câmera caso o modal seja fechado por eventos externos do Bootstrap
+    const modalLeitorEl = document.getElementById('modalLeitorCamera');
+    if (modalLeitorEl) {
+        modalLeitorEl.addEventListener('hidden.bs.modal', function () {
+            if (typeof window.fecharLeitorCameraUniversal === 'function') {
+                window.fecharLeitorCameraUniversal();
             }
-        };
-
-        html5QrCodeEmpresaInstancia.start(
-            { facingMode: "environment" },
-            config,
-            (decodedText) => {
-                if (typeof window.tocarBip === 'function') window.tocarBip();
-
-                if (targetInputIdGlobal) {
-                    const inputTarget = document.getElementById(targetInputIdGlobal);
-                    if (inputTarget) {
-                        inputTarget.value = decodedText;
-                        inputTarget.dispatchEvent(new Event('input'));
-                        inputTarget.dispatchEvent(new Event('change'));
-                    }
-                }
-                fecharLeitorCameraEmpresa();
-            }
-        ).catch(err => {
-            console.error("Erro ao iniciar câmera:", err);
-            fecharLeitorCameraEmpresa();
         });
-    }
-
-    function fecharLeitorCameraEmpresa() {
-        if (html5QrCodeEmpresaInstancia) {
-            html5QrCodeEmpresaInstancia.stop().then(() => {
-                html5QrCodeEmpresaInstancia.clear();
-                html5QrCodeEmpresaInstancia = null;
-            }).catch(() => {
-                html5QrCodeEmpresaInstancia = null;
-            });
-        }
     }
 </script>
 {% endblock %}

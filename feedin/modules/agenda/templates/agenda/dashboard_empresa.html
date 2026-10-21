@@ -1338,8 +1338,8 @@
                                                oninput="aoDigitarCodigoEstoque(this.value)"
                                                autocomplete="off">
 
-                                        <!-- Botão Câmera -->
-                                        <button class="btn btn-outline-secondary" type="button" id="btnIniciarCameraEstoque" onclick="alternarLeitorCamera()" title="Ativar Câmera">
+                                        <!-- Botão Câmera (Atualizado para chamar a função universal informando o input de destino) -->
+                                        <button class="btn btn-outline-secondary" type="button" id="btnIniciarCameraEstoque" onclick="abrirLeitorCameraUniversal('inputBarrasEstoque')" title="Ativar Câmera">
                                             <i class="bi bi-camera"></i>
                                         </button>
                                     </div>
@@ -1352,10 +1352,10 @@
                                 </div>
                         </div>
 
-                        <!-- Área de Renderização do Scanner da Câmera -->
+                        <!-- Área de Renderização do Scanner da Câmera (Ajustado o ID do reader para 'reader' para o script universal encontrar) -->
                         <div id="container-scanner-camera" class="mb-3 d-none border rounded overflow-hidden position-relative" style="max-height: 280px;">
-                            <div id="reader-camera-estoque" style="width: 100%;"></div>
-                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 z-index-3" onclick="pararLeitorCamera()">
+                            <div id="reader" style="width: 100%;"></div>
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-2" style="z-index: 1060;" onclick="fecharLeitorCameraUniversal()">
                                 <i class="bi bi-x-lg"></i> Fechar Câmera
                             </button>
                         </div>
@@ -3442,6 +3442,45 @@ function alternarData(inputElement) {
     window.location.href = url.toString();
 }
 
+function sincronizarProdutoId(inputId, hiddenId, barcodeHiddenId) {
+        const input = document.getElementById(inputId);
+        const hidden = document.getElementById(hiddenId);
+        const barcodeHidden = document.getElementById(barcodeHiddenId);
+        const list = document.getElementById('lista-produtos-autocomplete');
+        if (!list || !input) return;
+
+        const options = list.getElementsByTagName('option');
+        const valorDigitado = input.value.trim();
+
+        hidden.value = '';
+        if (barcodeHidden) barcodeHidden.value = '';
+
+        for (let i = 0; i < options.length; i++) {
+            const optValue = options[i].value;
+            const optId = options[i].getAttribute('data-id');
+            const optBarcode = options[i].getAttribute('data-barcode');
+
+            if (optValue === valorDigitado) {
+                hidden.value = optId;
+                if (barcodeHidden) barcodeHidden.value = optBarcode || valorDigitado;
+                break;
+            }
+        }
+
+        if (!hidden.value && barcodeHidden) {
+            barcodeHidden.value = valorDigitado;
+        }
+    }
+
+    // Garante parada limpa da câmera ao fechar o modal pelo 'X' ou botão cancelar
+    const modalEl = document.getElementById('modalLeitorCamera');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            if (typeof window.fecharLeitorCameraUniversal === 'function') {
+                window.fecharLeitorCameraUniversal();
+            }
+        });
+    }
 </script>'
 
 {% endblock %}
