@@ -1260,25 +1260,30 @@ def home_negocios():
 @agenda_bp.route('/logout')
 def logout():
     """
-    📌 DESCONEXÃO ISOLADA DO MÓDULO AGENDA
-    Revoga apenas o passe do módulo Agenda e redireciona para o Auth da Agenda.
+    🚪 LOGOUT INTEGRADO E ADAPTATIVO
+    Limpa o estado de login do Flask-Login (Core) e destrói
+    completamente as credenciais e contextos de módulos da sessão.
     """
-    # 1. Revoga o passe e limpa contexto exclusivo da Agenda
-    session.pop('autenticado_modulo_agenda', None)
+    if current_user.is_authenticated:
+        logout_user()
 
-    chaves_agenda = [
+    # Destrói chaves comerciais, IDs de módulos e limpa vestígios de sessões passadas
+    chaves_para_remover = [
         'cliente_modulo_id',
-        'modo_visao_agenda',
-        'local_contexto_id',
+        'usuario_id',
+        'modulo_slug_atual',
+        'empresa_id_atual',
+        'local_id_atual',
         'empresa_ativa_id',
-        'next_url_agenda',
+        'next_url',
+        'temp_cadastro_email',
+        'temp_cadastro_senha',
         'navegacao_via_hub'
     ]
-    for chave in chaves_agenda:
+    for chave in chaves_para_remover:
         session.pop(chave, None)
 
-    flash("Sessão da Agenda encerrada.", "info")
-
+    flash("Você saiu do sistema com segurança.", "info")
     # 2. REDIRECIONAMENTO DIRETO E SEMPRE PARA O AUTH DO MÓDULO
     return redirect(url_for('auth.login', modulo='agenda'))
 

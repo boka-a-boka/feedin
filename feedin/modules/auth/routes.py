@@ -351,7 +351,6 @@ def validar_identidade_tela():
     return render_template('auth/validar_identidade.html', next_url=next_url, modulo_slug=modulo_slug)
 
 
-
 @auth_bp.route('/processar-identidade', methods=['GET', 'POST'])
 def processar_identidade():
     """
@@ -361,20 +360,32 @@ def processar_identidade():
     acesso nos módulos. Todo o direcionamento operacional é guiado pela
     tabela 'ModulosSistema' e parâmetros de rota ('next_url').
     """
+    print("\n----------------------------------------------------")
+    print("🔍 [DEBUG] Entrou em processar-identidade via método:", request.method)
+
     # Recupera o e-mail da sessão ou do campo de transporte oculto do formulário
     email_cadastro = session.get('temp_cadastro_email') or request.form.get('email_transporte')
+    print(f"🔍 [DEBUG] 1. email_cadastro obtido: {email_cadastro}")
 
     if not email_cadastro and current_user.is_authenticated:
         email_cadastro = current_user.email
+        print(f"🔍 [DEBUG] 1.1. Recuperado via current_user: {email_cadastro}")
 
     if not email_cadastro:
+        print("❌ [DEBUG] REDIRECIONANDO: email_cadastro ausente (Sessão expirada)!")
         flash("Sessão de identificação expirada. Por favor, reinicie o processo.", "warning")
         return redirect(url_for('auth.cadastro_inicio'))
 
     nome_real = request.form.get('nome_real', '').strip().upper()
     cpf_digitado = re.sub(r'\D', '', request.form.get('cpf', ''))
     data_nasc_str = request.form.get('data_nascimento')
+
+    # 🎯 CAPTURA SEGURA DOS NOVOS CAMPOS NO TOPO
     genero_id = request.form.get("genero")
+    estado_civil_id = request.form.get("estado_civil")
+
+    print(
+        f"🔍 [DEBUG] 2. Dados do form -> Nome preenchido: {bool(nome_real)}, CPF: {bool(cpf_digitado)}, Data: {bool(data_nasc_str)}, Gênero: {genero_id}, Estado Civil: {estado_civil_id}")
 
     modulo_atual_slug = session.get('modulo_slug_atual', 'core')
     local_atual_id = session.get('local_id_atual') or session.get('empresa_ativa_id')
@@ -386,10 +397,12 @@ def processar_identidade():
     # 🛡️ 2. VALIDAÇÕES CRÍTICAS E ESTRUTURAIS
     # =========================================================================
     if not nome_real or not cpf_digitado or not data_nasc_str or not genero_id:
+        print(f"❌ [DEBUG] REDIRECIONANDO: Campos obrigatórios vazios!")
         flash("Todos os campos de identidade são obrigatórios.", "warning")
         return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
     if not validar_cpf_estrutura(cpf_digitado):
+        print("❌ [DEBUG] REDIRECIONANDO: CPF inválido pela estrutura!")
         flash("O CPF informado é inválido.", "danger")
         return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
@@ -410,6 +423,7 @@ def processar_identidade():
     # Conflito de integridade se o CPF já estiver associado a outro Core diferente
     if identidade_existente and identidade_existente.usuario_id and id_usuario_core:
         if identidade_existente.usuario_id != id_usuario_core:
+            print("❌ [DEBUG] REDIRECIONANDO: Conflito de CPF com outro usuário core!")
             flash("Este CPF já está vinculado a outra conta ativa no sistema.", "danger")
             return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
@@ -420,7 +434,10 @@ def processar_identidade():
     # =========================================================================
     try:
         data_nasc_obj = datetime.strptime(data_nasc_str, '%Y-%m-%d').date()
-        genero_val = int(genero_id) if str(genero_id).isdigit() else None
+
+        # Conversões seguras dos IDs numéricos
+        genero_val = int(genero_id) if (genero_id and str(genero_id).isdigit()) else None
+        estado_civil_val = int(estado_civil_id) if (estado_civil_id and str(estado_civil_id).isdigit()) else None
 
         # ---------------------------------------------------------------------
         # 🪐 PASSO 1: COFRE CIVIL GLOBAL (IdentidadeCivil)
@@ -460,14 +477,6 @@ def processar_identidade():
                 if genero_val is not None:
                     perfil.genero = genero_val
 
-                # Captura e tratamento dos campos numéricos
-                genero_id = request.form.get("genero")
-                estado_civil_id = request.form.get("estado_civil")
-
-                genero_val = int(genero_id) if (genero_id and str(genero_id).isdigit()) else None
-                estado_civil_val = int(estado_civil_id) if (
-                            estado_civil_id and str(estado_civil_id).isdigit()) else None
-
         # ---------------------------------------------------------------------
         # 🟢 PASSO 2: ESTEIRA DE CADASTRO DO MÓDULO (ModCadastroCliente)
         # ---------------------------------------------------------------------
@@ -479,7 +488,7 @@ def processar_identidade():
             cliente_local.cpf = cpf_digitado
             cliente_local.data_nascimento = data_nasc_obj
             cliente_local.genero = genero_val
-            cliente_local.estado_civil = estado_civil_val  # 🎯 Grava o ID da tabela EstadoCivil
+            cliente_local.estado_civil = estado_civil_val
             if whatsapp_final:
                 cliente_local.whatsapp = whatsapp_final
             cliente_local.status_conta = 'ativo'
@@ -495,13 +504,48 @@ def processar_identidade():
                 whatsapp=whatsapp_final or "",
                 data_nascimento=data_nasc_obj,
                 genero=genero_val,
-                estado_civil=estado_civil_val,  # 🎯 Grava o ID da tabela EstadoCivil
+                estado_civil=estado_civil_val,
                 username_modulo=username_padronizado,
                 senha_hash=senha_hash_local,
                 status_conta='ativo'
             )
             cliente_local.cpf = cpf_digitado
             db.session.add(cliente_local)
+
+        db.session.flush()
+
+        # Desativa beneficiário antigo com o mesmo CPF hash
+        ClienteBeneficiario.query.filter_by(
+            documento_identificador=hash_digitado,
+            ativo=True
+        ).update({ClienteBeneficiario.ativo: False})
+
+        db.session.commit()
+
+        # ---------------------------------------------------------------------
+        # 🚀 PASSO 3: VÍNCULO NO CATÁLOGO DE MÓDULOS (ModVinculoModulo)
+        # ---------------------------------------------------------------------
+        vinculo_ativo = ModVinculoModulo.query.filter_by(
+            cpf_hash=hash_digitado,
+            modulo_slug=modulo_atual_slug,
+            local_id=local_atual_id
+        ).first()
+
+        if not vinculo_ativo:
+            vinculo_ativo = ModVinculoModulo(
+                cpf_hash=hash_digitado,
+                modulo_slug=modulo_atual_slug,
+                local_id=local_atual_id,
+                email_customizado=email_cadastro,
+                criado_em=datetime.now(timezone.utc),
+                ativo=True
+            )
+            db.session.add(vinculo_ativo)
+        else:
+            vinculo_ativo.ativo = True
+            vinculo_ativo.email_customizado = email_cadastro
+
+        db.session.commit()
 
         # ---------------------------------------------------------------------
         # 🔒 AUTENTICAÇÃO E SESSÃO
@@ -521,11 +565,13 @@ def processar_identidade():
         session.pop('temp_cadastro_senha', None)
 
         flash("Validação realizada com sucesso. Acesso liberado!", "success")
+        print("✅ [DEBUG] Processo concluído com sucesso! Redirecionando para o destino...")
 
     except Exception as err:
         db.session.rollback()
         import traceback
-        traceback.print_exc()  # Mantém o rastreio seguro no console caso ocorra erro inesperado
+        traceback.print_exc()
+        print(f"❌ [ALFÂNDEGA] Erro crítico ao processar identidade civil: {err}")
         flash("Ocorreu um erro interno ao processar seus dados. Tente novamente.", "danger")
         return redirect(url_for('auth.validar_identidade_tela', next_url=proximo_passo))
 
