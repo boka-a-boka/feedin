@@ -1333,8 +1333,7 @@
                                                id="inputBarrasEstoque"
                                                class="form-control"
                                                placeholder="Digite o nome ou escaneie o código..."
-                                               oninput="consultarProdutoEstoque(this.value)"
-                                               onchange="consultarProdutoEstoque(this.value)"
+                                               oninput="aoDigitarCodigoEstoque(this.value)"
                                                autocomplete="off">
 
                                         <!-- Botão Câmera -->
@@ -1463,6 +1462,52 @@
 </div>
 
 <script>
+// =========================================================================
+// CORREÇÃO PONTUAL: LEITOR DE CÓDIGO DE BARRAS USB E CÂMERA
+// =========================================================================
+let timerDebounceEstoque = null;
+
+// 1. DÁ FOCO AUTOMÁTICO NO INPUT QUANDO O MODAL DE LANÇAMENTO ABRE
+document.addEventListener('DOMContentLoaded', function() {
+    const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
+    if (modalItemColab) {
+        modalItemColab.addEventListener('shown.bs.modal', function () {
+            const inputBarras = document.getElementById('inputBarrasEstoque');
+            if (inputBarras) {
+                inputBarras.focus();
+                inputBarras.select();
+            }
+        });
+    }
+});
+
+// 2. ESCUTA A TECLA ENTER DISPARADA POR LEITORES USB FÍSICOS
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBarras = document.getElementById('inputBarrasEstoque');
+    if (inputBarras) {
+        inputBarras.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Impede o envio acidental do form
+                clearTimeout(timerDebounceEstoque);
+                const valor = this.value.trim();
+                if (valor && typeof consultarProdutoEstoque === 'function') {
+                    consultarProdutoEstoque(valor, true); // Força busca imediata
+                }
+            }
+        });
+    }
+});
+
+// 3. CONTROLE DE DEBOUNCE PARA DIGITAÇÃO E LEITURA RÁPIDA
+function aoDigitarCodigoEstoque(valor) {
+    clearTimeout(timerDebounceEstoque);
+    timerDebounceEstoque = setTimeout(() => {
+        if (typeof consultarProdutoEstoque === 'function') {
+            consultarProdutoEstoque(valor, false);
+        }
+    }, 300); // Aguarda 300ms para estabilizar a cadeia de caracteres do leitor
+}
+
 // =========================================================================
 // 1. UTILITÁRIOS E ESTADO GLOBAL
 // =========================================================================
@@ -2490,11 +2535,13 @@ function renderizarAutocompleteProdutos(produtos) {
 }
 
 // Função principal de busca ajustada
-window.consultarProdutoEstoque = function(termo) {
+window.window.consultarProdutoEstoque = function(termo, buscaExata = false) {
     termo = termo ? termo.trim() : '';
 
     const inputBusca = document.getElementById('inputBarrasEstoque');
     const containerResultados = document.getElementById('resultado_busca_produtos');
+    const hdnEstoque = document.getElementById('hdnEstoqueProdutoId');
+    const boxResultado = document.getElementById('boxResultadoEstoque');
 
     if (!containerResultados) return;
 
@@ -2518,6 +2565,29 @@ window.consultarProdutoEstoque = function(termo) {
                 return;
             }
 
+            // Se o leitor USB enviou um código exato (ou retornou apenas 1 item compatível)
+            if (produtos.length === 1 && (buscaExata || produtos[0].codigo === termo || produtos[0].codigo_barras === termo)) {
+                const prodUnico = produtos.shift();
+                if (hdnEstoque) hdnEstoque.value = prodUnico.id;
+                if (inputBusca) inputBusca.value = prodUnico.nome;
+
+                // Atualiza o box visual do produto encontrado se ele existir
+                const txtNome = document.getElementById('txtEstoqueNomeProd');
+                const txtPreco = document.getElementById('txtEstoquePreco');
+                if (txtNome) txtNome.innerText = prodUnico.nome;
+                if (txtPreco) txtPreco.innerText = parseFloat(prodUnico.preco || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                if (boxResultado) boxResultado.classList.remove('d-none');
+
+                containerResultados.classList.add('d-none');
+                const inputQtd = document.getElementById('inputEstoqueQtd');
+                if (inputQtd) {
+                    inputQtd.focus();
+                    inputQtd.select();
+                }
+                return;
+            }
+
+            // Renderiza lista de opções no dropdown autocomplete caso haja múltiplos resultados
             const listGroup = document.createElement('div');
             listGroup.className = 'list-group shadow-sm border rounded bg-white';
 
@@ -2531,7 +2601,7 @@ window.consultarProdutoEstoque = function(termo) {
                 item.innerHTML = `
                     <div>
                         <strong class="d-block text-dark small">${prod.nome}</strong>
-                        <small class="text-muted" style="font-size: 0.75rem;">Cód: ${prod.codigo || 'N/A'}</small>
+                        <small class="text-muted" style="font-size: 0.75rem;">Cód: ${prod.codigo || prod.codigo_barras || 'N/A'}</small>
                     </div>
                     <span class="badge bg-primary rounded-pill">${precoFmt}</span>
                 `;
@@ -2539,29 +2609,13 @@ window.consultarProdutoEstoque = function(termo) {
                 item.addEventListener('click', function(e) {
                     e.preventDefault();
 
-                    // 1. Preenche o input visual de busca com o nome do produto
-                    if (inputBusca) {
-                        inputBusca.value = prod.nome; // ou prod.descricao / prod.codigo_barras
-                    }
+                    if (inputBusca) inputBusca.value = prod.nome;
+                    if (hdnEstoque) hdnEstoque.value = prod.id;
 
-                    // 2. PREENCHE O CAMPO OCULTO EXIGIDO PELO SEU SISTEMA:
-                    const hdnEstoque = document.getElementById('hdnEstoqueProdutoId');
-                    if (hdnEstoque) {
-                        hdnEstoque.value = prod.id; // Ou a chave ID que o objeto prod carrega do seu backend
-                    }
+                    if (txtNome) txtNome.innerText = prod.nome;
+                    if (txtPreco) txtPreco.innerText = precoFmt;
+                    if (boxResultado) boxResultado.classList.remove('d-none');
 
-                    // 3. Se houver um input de preço, quantidade ou código de barras, atualize também se necessário
-                    const inputCodigo = document.getElementById('inputBarrasEstoque');
-                    if (inputCodigo && prod.codigo_barras) {
-                        inputCodigo.value = prod.codigo_barras;
-                    }
-
-                    // 4. Se o seu sistema tiver um evento 'change' ou 'blur' para disparar a validação, dispara aqui:
-                    if (hdnEstoque) {
-                        hdnEstoque.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-
-                    // 5. Esconde o dropdown
                     containerResultados.innerHTML = '';
                     containerResultados.classList.add('d-none');
                 });

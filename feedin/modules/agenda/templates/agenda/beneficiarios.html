@@ -45,7 +45,7 @@
                                     {% if b.tipo_persona == 'veiculo' %}
                                         {{ b.especie_marca or 'Marca' }} {{ b.raca_modelo or 'Modelo' }} • Placa: {{ b.documento_identificador or 'N/I' }}
                                     {% else %}
-                                        {{ b.idade_formatada }}
+                                        {{ b.idade_formatada }} {% if b.genero %}• {{ b.genero | capitalize }}{% endif %}
                                     {% endif %}
                                 </small>
                             </div>
@@ -142,11 +142,19 @@
                         <input type="text" class="form-control form-control-sm rounded-3" id="inputDocumento" name="documento_identificador" placeholder="Opcional">
                     </div>
 
-                    <!-- CAMPOS ESPECÍFICOS (HUMANO / PET) -->
+                    <!-- DATA DE NASCIMENTO E GÊNERO/SEXO (HUMANO / PET) -->
                     <div class="row g-2 mb-3" id="blocoDataNasc">
-                        <div class="col-12">
+                        <div class="col-7" id="colDataNasc">
                             <label class="form-label small fw-semibold">Data de Nascimento</label>
                             <input type="date" class="form-control form-control-sm rounded-3" id="inputDataNasc" name="data_nascimento_ou_ano">
+                        </div>
+                        <div class="col-5" id="blocoGenero">
+                            <label class="form-label small fw-semibold" id="labelGenero">Gênero</label>
+                            <select class="form-select form-select-sm rounded-3" id="selectGenero" name="genero">
+                                <option value="" selected>Não informado</option>
+                                <option value="feminino">Feminino</option>
+                                <option value="masculino">Masculino</option>
+                            </select>
                         </div>
                     </div>
 
@@ -185,6 +193,8 @@ function alternarCamposPersona() {
     const labelNome = document.getElementById('labelNome');
     const labelDoc = document.getElementById('labelDocumento');
     const blocoDataNasc = document.getElementById('blocoDataNasc');
+    const blocoGenero = document.getElementById('blocoGenero');
+    const labelGenero = document.getElementById('labelGenero');
     const blocoPetVeiculo = document.getElementById('blocoPetVeiculo');
     const blocoAnoVeiculo = document.getElementById('blocoAnoVeiculo');
     const iconeSilhueta = document.getElementById('iconeSilhuetaPlaceholder');
@@ -204,19 +214,24 @@ function alternarCamposPersona() {
     if (tipo === 'humano') {
         labelNome.textContent = 'Nome Completo';
         labelDoc.textContent = 'Documento (RG / CPF)';
-        blocoDataNasc.style.display = 'block';
+        labelGenero.textContent = 'Gênero';
+        blocoDataNasc.style.display = 'flex';
+        blocoGenero.style.display = 'block';
         blocoPetVeiculo.style.display = 'none';
         blocoAnoVeiculo.style.display = 'none';
     } else if (tipo === 'pet') {
         labelNome.textContent = 'Nome do Pet';
         labelDoc.textContent = 'Microchip / RGA (Opcional)';
-        blocoDataNasc.style.display = 'block';
+        labelGenero.textContent = 'Sexo';
+        blocoDataNasc.style.display = 'flex';
+        blocoGenero.style.display = 'block';
         blocoPetVeiculo.style.display = 'flex';
         blocoAnoVeiculo.style.display = 'none';
     } else if (tipo === 'veiculo') {
         labelNome.textContent = 'Identificação do Veículo';
         labelDoc.textContent = 'Placa do Veículo';
         blocoDataNasc.style.display = 'none';
+        blocoGenero.style.display = 'none';
         blocoPetVeiculo.style.display = 'flex';
         blocoAnoVeiculo.style.display = 'block';
     }
@@ -225,6 +240,7 @@ function alternarCamposPersona() {
 function prepararNovoBeneficiario() {
     document.getElementById('formBeneficiario').reset();
     document.getElementById('beneficiarioId').value = '';
+    document.getElementById('selectGenero').value = '';
     document.getElementById('modalTituloBeneficiario').textContent = 'Novo Beneficiário';
 
     // Reseta a foto e exibe a silhueta padrão
@@ -247,6 +263,7 @@ function editarBeneficiario(b) {
     document.getElementById('inputEspecieMarca').value = b.especie_marca || '';
     document.getElementById('inputRacaModelo').value = b.raca_modelo || '';
     document.getElementById('inputAnoVeiculo').value = b.ano_fab_veiculo || '';
+    document.getElementById('selectGenero').value = b.genero ? b.genero.toLowerCase() : '';
 
     if (b.data_nascimento_ou_ano) {
         document.getElementById('inputDataNasc').value = b.data_nascimento_ou_ano;
