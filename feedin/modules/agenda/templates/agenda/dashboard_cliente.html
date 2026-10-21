@@ -1830,5 +1830,28 @@ async function enviarAvaliacoesMultiplasDoModal(agendamentoId) {
     }
 }
 
+// 4. GARANTE O ENCERRAMENTO DA CÂMERA AO FECHAR O MODAL (CORREÇÃO DE VAZAMENTO NO iOS)
+document.addEventListener('DOMContentLoaded', function() {
+    const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
+    if (modalItemColab) {
+        modalItemColab.addEventListener('hidden.bs.modal', function () {
+            // Procura por tags <video> ou instâncias ativas de stream dentro do modal e as encerra
+            const videos = modalItemColab.querySelectorAll('video');
+            videos.forEach(video => {
+                if (video.srcObject) {
+                    const stream = video.srcObject;
+                    const tracks = stream.getTracks();
+                    tracks.forEach(track => track.stop());
+                    video.srcObject = null;
+                }
+            });
+
+            // Se você estiver usando alguma variável global para a câmera (ex: html5QrCode ou similar), chame o stop dela aqui:
+            if (window.html5QrCodeScanner && typeof window.html5QrCodeScanner.clear === 'function') {
+                window.html5QrCodeScanner.clear().catch(err => console.error("Erro ao limpar leitor:", err));
+            }
+        });
+    }
+});
 </script>
 {% endblock %}

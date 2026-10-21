@@ -2,6 +2,8 @@
 {% block content %}
 <!-- Biblioteca para leitura de código de barras via câmera (iOS e Android) -->
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<!-- Carrega o script global de scanner direto do blueprint PDV -->
+<script src="{{ url_for('pdv.static', filename='js/pdv_scanner.js') }}"></script>
 
 {# TRATATIVA DE SEGURANÇA PARA A COR DA EMPRESA #}
 {% set cor_empresa = (empresa.cor_primaria if empresa and empresa.cor_primaria else '#0d6efd') %}
@@ -1462,51 +1464,6 @@
 </div>
 
 <script>
-// =========================================================================
-// CORREÇÃO PONTUAL: LEITOR DE CÓDIGO DE BARRAS USB E CÂMERA
-// =========================================================================
-let timerDebounceEstoque = null;
-
-// 1. DÁ FOCO AUTOMÁTICO NO INPUT QUANDO O MODAL DE LANÇAMENTO ABRE
-document.addEventListener('DOMContentLoaded', function() {
-    const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
-    if (modalItemColab) {
-        modalItemColab.addEventListener('shown.bs.modal', function () {
-            const inputBarras = document.getElementById('inputBarrasEstoque');
-            if (inputBarras) {
-                inputBarras.focus();
-                inputBarras.select();
-            }
-        });
-    }
-});
-
-// 2. ESCUTA A TECLA ENTER DISPARADA POR LEITORES USB FÍSICOS
-document.addEventListener('DOMContentLoaded', function() {
-    const inputBarras = document.getElementById('inputBarrasEstoque');
-    if (inputBarras) {
-        inputBarras.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault(); // Impede o envio acidental do form
-                clearTimeout(timerDebounceEstoque);
-                const valor = this.value.trim();
-                if (valor && typeof consultarProdutoEstoque === 'function') {
-                    consultarProdutoEstoque(valor, true); // Força busca imediata
-                }
-            }
-        });
-    }
-});
-
-// 3. CONTROLE DE DEBOUNCE PARA DIGITAÇÃO E LEITURA RÁPIDA
-function aoDigitarCodigoEstoque(valor) {
-    clearTimeout(timerDebounceEstoque);
-    timerDebounceEstoque = setTimeout(() => {
-        if (typeof consultarProdutoEstoque === 'function') {
-            consultarProdutoEstoque(valor, false);
-        }
-    }, 300); // Aguarda 300ms para estabilizar a cadeia de caracteres do leitor
-}
 
 // =========================================================================
 // 1. UTILITÁRIOS E ESTADO GLOBAL
@@ -2901,108 +2858,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-/* -------------------------------------------------------------------------- */
-/* LÓGICA DO LEITOR DE CÂMERA INLINE (NO CONTAINER DA TELA)                   */
-/* -------------------------------------------------------------------------- */
-let html5QrCodeEstoque = null;
 
-window.alternarLeitorCamera = function() {
-    const container = document.getElementById('container-scanner-camera');
-    if (!container) return;
-
-    if (!container.classList.contains('d-none')) {
-        window.pararLeitorCamera();
-        return;
-    }
-
-    if (typeof Html5Qrcode === 'undefined') {
-        alert("A biblioteca leitora de código de barras não está carregada.");
-        return;
-    }
-
-    container.classList.remove('d-none');
-
-    try {
-        html5QrCodeEstoque = new Html5Qrcode("reader-camera-estoque");
-
-        // Configuração ajustada para melhor foco de código de barras retangulares
-        const config = {
-            fps: 15,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-                // Área de leitura retangular perfeita para código de barras EAN-13
-                const minEdgePercentage = 0.75;
-                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
-                const qrboxSize = Math.floor(minDimension * minEdgePercentage);
-                return {
-                    width: Math.max(qrboxSize, 220),
-                    height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
-                };
-            },
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
-        };
-
-        html5QrCodeEstoque.start(
-            { facingMode: "environment" },
-            config,
-            onScanSuccessEstoque
-        ).catch(err => {
-            console.error("Erro ao iniciar câmera:", err);
-            window.pararLeitorCamera();
-        });
-
-    } catch (e) {
-        console.error("Exceção na inicialização da câmera:", e);
-        window.pararLeitorCamera();
-    }
-};
-
-function onScanSuccessEstoque(decodedText) {
-    tocarBip();
-
-    const inputBarras = document.getElementById('inputBarrasEstoque');
-    if (inputBarras) {
-        inputBarras.value = decodedText;
-        window.consultarProdutoEstoque(decodedText);
-    }
-
-    window.pararLeitorCamera();
-}
-
-window.pararLeitorCamera = function() {
-    const container = document.getElementById('container-scanner-camera');
-
-    if (html5QrCodeEstoque) {
-        html5QrCodeEstoque.stop().then(() => {
-            html5QrCodeEstoque.clear();
-            html5QrCodeEstoque = null;
-            if (container) container.classList.add('d-none');
-        }).catch(() => {
-            html5QrCodeEstoque = null;
-            if (container) container.classList.add('d-none');
-        });
-    } else {
-        if (container) container.classList.add('d-none');
-    }
-};
-
-function tocarBip() {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = 1200;
-        gain.gain.value = 0.1;
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.12);
-    } catch (e) {
-        // Áudio opcional
-    }
-}
 
 // Ajuste Pontual: Autocomplete e Busca de Produtos Integrada
 function inicializarBuscaProdutos() {
@@ -3228,26 +3084,6 @@ function reabrirAtendimentoAdmin(agendamentoId) {
     });
 }
 
-// Handler chamado pelo botão "Confirmar Conclusão do Serviço" no #modalFinalizarItem
-function submeterConclusaoItemCadeira() {
-    const itemId = document.getElementById('modal-item-id')?.value;
-    const agendamentoId = document.getElementById('modal-item-agendamento-id')?.value;
-    const observacao = document.getElementById('modal-item-observacao')?.value || '';
-
-    if (!itemId || !agendamentoId) {
-        alert('Identificador do item ou agendamento ausente.');
-        return;
-    }
-
-    const payload = {
-        item_id: parseInt(itemId),
-        agendamento_id: parseInt(agendamentoId),
-        observacao: observacao
-    };
-
-    // Dispara a função de conclusão
-    concluirItemNaCadeira(payload);
-}
 
 // Handler chamado pelo botão "Confirmar Conclusão do Serviço" no #modalFinalizarItem
 function submeterConclusaoItemCadeira() {

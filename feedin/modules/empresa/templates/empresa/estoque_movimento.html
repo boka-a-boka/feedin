@@ -5,6 +5,8 @@
 {% block content %}
 <!-- Biblioteca para leitura de código de barras via câmera (iOS e Android) -->
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<!-- Carrega o script global de scanner direto do blueprint PDV -->
+<script src="{{ url_for('pdv.static', filename='js/pdv_scanner.js') }}"></script>
 
 <style>
     .fundo-acetinado-pwa {
@@ -88,7 +90,7 @@
                                        oninput="sincronizarProdutoId('input_produto_entrada', 'produto_id_entrada', 'codigo_barras_entrada')">
                                 <button type="button"
                                         class="btn btn-outline-secondary rounded-end-3"
-                                        onclick="abrirLeitorCamera('input_produto_entrada')"
+                                        onclick="abrirLeitorCameraEmpresa('input_produto_entrada')"
                                         title="Escanear com a câmera">
                                     <i class="bi bi-camera-fill text-primary"></i>
                                 </button>
@@ -141,7 +143,7 @@
                                        oninput="sincronizarProdutoId('input_produto_saida', 'produto_id_saida', 'codigo_barras_saida')">
                                 <button type="button"
                                         class="btn btn-outline-secondary rounded-end-3"
-                                        onclick="abrirLeitorCamera('input_produto_saida')"
+                                        onclick="abrirLeitorCameraEmpresa('input_produto_saida')"
                                         title="Escanear com a câmera">
                                     <i class="bi bi-camera-fill text-primary"></i>
                                 </button>
@@ -205,7 +207,7 @@
                 <h6 class="modal-title fw-bold text-dark">
                     <i class="bi bi-camera me-1"></i> Ler Código de Barras
                 </h6>
-                <button type="button" class="btn-close" onclick="fecharLeitorCamera()"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="fecharLeitorCameraEmpresa()"></button>
             </div>
             <div class="modal-body text-center p-3">
                 <div id="reader" style="width: 100%; min-height: 250px; background: #000;" class="rounded-3 overflow-hidden"></div>
@@ -214,23 +216,22 @@
                 </p>
             </div>
             <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" onclick="fecharLeitorCamera()">Cancelar</button>
+                <button type="button" class="btn btn-secondary btn-sm w-100 rounded-pill" data-bs-dismiss="modal" onclick="fecharLeitorCameraEmpresa()">Cancelar</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    /**
-     * Sincroniza a busca de texto/bipagem com os inputs ocultos (produto_id e codigo_barras)
-     */
+    // Sincronização específica do datalist desta tela
     function sincronizarProdutoId(inputId, hiddenId, barcodeHiddenId) {
         const input = document.getElementById(inputId);
         const hidden = document.getElementById(hiddenId);
         const barcodeHidden = document.getElementById(barcodeHiddenId);
         const list = document.getElementById('lista-produtos-autocomplete');
-        const options = list.getElementsByTagName('option');
+        if (!list || !input) return;
 
+        const options = list.getElementsByTagName('option');
         const valorDigitado = input.value.trim();
 
         hidden.value = '';
@@ -248,99 +249,73 @@
             }
         }
 
-        // Caso tenha bipado um código de barras direto que não está no autocomplete
         if (!hidden.value && barcodeHidden) {
             barcodeHidden.value = valorDigitado;
         }
     }
 
-    /* -------------------------------------------------------------------------- */
-    /* LÓGICA DO LEITOR DE CÂMERA (PWA / SMARTPHONE)                             */
-    /* -------------------------------------------------------------------------- */
-    let html5QrCode = null;
+    // Integração específica do modal desta tela com o Html5Qrcode global
+    let html5QrCodeEmpresaInstancia = null;
     let targetInputIdGlobal = null;
 
-    function abrirLeitorCamera(targetInputId) {
+    function abrirLeitorCameraEmpresa(targetInputId) {
         targetInputIdGlobal = targetInputId;
         const modalEl = document.getElementById('modalLeitorCamera');
         const modal = new bootstrap.Modal(modalEl);
         modal.show();
 
-        html5QrCode = new Html5Qrcode("reader");
+        if (typeof Html5Qrcode === 'undefined') {
+            alert("Biblioteca de câmera não carregada.");
+            return;
+        }
+
+        html5QrCodeEmpresaInstancia = new Html5Qrcode("reader");
         const config = {
-            fps: 10,
-            qrbox: { width: 250, height: 150 },
-            formatsToSupport: [
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E
-            ]
+            fps: 15,
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                const minEdgePercentage = 0.75;
+                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
+                const qrboxSize = Math.floor(minDimension * minEdgePercentage);
+                return {
+                    width: Math.max(qrboxSize, 220),
+                    height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
+                };
+            },
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
         };
 
-        // Força o uso da câmera traseira do smartphone ('environment')
-        html5QrCode.start(
+        html5QrCodeEmpresaInstancia.start(
             { facingMode: "environment" },
             config,
-            onScanSuccess
+            (decodedText) => {
+                if (typeof window.tocarBip === 'function') window.tocarBip();
+
+                if (targetInputIdGlobal) {
+                    const inputTarget = document.getElementById(targetInputIdGlobal);
+                    if (inputTarget) {
+                        inputTarget.value = decodedText;
+                        inputTarget.dispatchEvent(new Event('input'));
+                        inputTarget.dispatchEvent(new Event('change'));
+                    }
+                }
+                fecharLeitorCameraEmpresa();
+            }
         ).catch(err => {
-            alert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
-            fecharLeitorCamera();
+            console.error("Erro ao iniciar câmera:", err);
+            fecharLeitorCameraEmpresa();
         });
     }
 
-    function onScanSuccess(decodedText) {
-        tocarBip();
-
-        if (targetInputIdGlobal) {
-            const inputTarget = document.getElementById(targetInputIdGlobal);
-            if (inputTarget) {
-                inputTarget.value = decodedText;
-
-                // Dispara os eventos para acionar o autocomplete e a sincronização
-                inputTarget.dispatchEvent(new Event('input'));
-                inputTarget.dispatchEvent(new Event('change'));
-            }
-        }
-
-        fecharLeitorCamera();
-    }
-
-    function fecharLeitorCamera() {
-        if (html5QrCode && html5QrCode.isScanning) {
-            html5QrCode.stop().then(() => {
-                html5QrCode.clear();
-                ocultarModal();
-            }).catch(err => {
-                console.error(err);
-                ocultarModal();
+    function fecharLeitorCameraEmpresa() {
+        if (html5QrCodeEmpresaInstancia) {
+            html5QrCodeEmpresaInstancia.stop().then(() => {
+                html5QrCodeEmpresaInstancia.clear();
+                html5QrCodeEmpresaInstancia = null;
+            }).catch(() => {
+                html5QrCodeEmpresaInstancia = null;
             });
-        } else {
-            ocultarModal();
-        }
-    }
-
-    function ocultarModal() {
-        const modalEl = document.getElementById('modalLeitorCamera');
-        const modal = bootstrap.Modal.getInstance(modalEl);
-        if (modal) modal.hide();
-    }
-
-    function tocarBip() {
-        try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = "sine";
-            osc.frequency.value = 1200;
-            gain.gain.value = 0.1;
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.12);
-        } catch (e) {
-            // Ignora falhas de áudio
         }
     }
 </script>
