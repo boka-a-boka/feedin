@@ -888,33 +888,33 @@
             <hr class="flex-grow-1 m-0">
         </div>
 
-{# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA - TEMPORÁRIO) #}
-{% set url_banner_temp = url_for('publicidade.static', filename='uploads/file_00000000d984820ebf694d257639ef14.jpg') %}
-{% set link_destino_temp = publicidade_ativa.link_destino if (publicidade_ativa and publicidade_ativa.link_destino) else 'https://boka-a-boka.com.br' %}
+        {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA - TEMPORÁRIO) #}
+        {% set url_banner_temp = url_for('publicidade.static', filename='uploads/file_00000000d984820ebf694d257639ef14.jpg') %}
+        {% set link_destino_temp = 'https://open.spotify.com/album/4O0Lbx0NA9ncABIFAP7puV?si=6gpUBaJ_TB2GR5W_-hiFNg&utm_source=copy-link' %}
 
-<div class="mb-4">
-    <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark position-relative">
+        <div class="mb-4">
+            <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark position-relative">
 
-        <!-- SELO PATROCINADO SOBREPOSTO -->
-        <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5 rounded-bottom-start"
-              style="font-size: 0.65rem; z-index: 3; letter-spacing: 0.5px;">
-            PATROCINADO
-        </span>
+                <!-- SELO PATROCINADO SOBREPOSTO -->
+                <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5 rounded-bottom-start"
+                      style="font-size: 0.65rem; z-index: 3; letter-spacing: 0.5px;">
+                    PATROCINADO
+                </span>
 
-        <!-- LINK E IMAGEM DO BANNER -->
-        <a href="{{ link_destino_temp }}"
-           target="_blank"
-           rel="noopener noreferrer"
-           class="text-decoration-none d-block">
-            <img src="{{ url_banner_temp }}"
-                 alt="Anúncio Patrocinado"
-                 class="w-100 d-block object-fit-cover"
-                 style="max-height: 140px; min-height: 100px; width: 100%; border-radius: 1rem;"
-                 onerror="this.src='/static/img/banner_placeholder.jpg';">
-        </a>
+                <!-- LINK E IMAGEM DO BANNER -->
+                <a href="{{ link_destino_temp }}"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   class="text-decoration-none d-block">
+                    <img src="{{ url_banner_temp }}"
+                         alt="Anúncio Patrocinado"
+                         class="w-100 d-block object-fit-cover"
+                         style="max-height: 140px; min-height: 100px; width: 100%; border-radius: 1rem;"
+                         onerror="this.src='/static/img/banner_placeholder.jpg';">
+                </a>
 
-    </div>
-</div>
+            </div>
+        </div>
 
         {# 9. HISTÓRICO: ÚLTIMAS VISITAS #}
         <div class="accordion mb-3" id="accordionHistorico">
