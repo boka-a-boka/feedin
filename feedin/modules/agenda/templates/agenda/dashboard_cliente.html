@@ -888,45 +888,33 @@
             <hr class="flex-grow-1 m-0">
         </div>
 
-        {# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA) #}
-        {% if publicidade_ativa %}
-            {% set img_pub = get_avatar_url(publicidade_ativa.imagem_url) if (publicidade_ativa.imagem_url and get_avatar_url is defined) else publicidade_ativa.imagem_url %}
-            <div class="mb-4">
-                <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark text-white position-relative">
-                    <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5"
-                          style="font-size: 0.65rem; z-index: 2; border-bottom-left-radius: 4px; letter-spacing: 0.5px;">
-                        PATROCINADO
-                    </span>
+{# 7.6. ÁREA DE PUBLICIDADE INTEGRADA (BANNER PWA - TEMPORÁRIO) #}
+{% set url_banner_temp = url_for('publicidade.static', filename='uploads/file_00000000d984820ebf694d257639ef14.jpg') %}
+{% set link_destino_temp = publicidade_ativa.link_destino if (publicidade_ativa and publicidade_ativa.link_destino) else 'https://boka-a-boka.com.br' %}
 
-                    <a href="{{ publicidade_ativa.link_destino or 'javascript:void(0);' }}"
-                       {% if publicidade_ativa.link_destino %}target="_blank"{% endif %}
-                       class="text-decoration-none d-block">
+<div class="mb-4">
+    <div class="card border-0 rounded-4 shadow-sm overflow-hidden bg-dark position-relative">
 
-                            {% if img_pub %}
-                                <img src="{{ img_pub }}"
-                                     alt="{{ publicidade_ativa.titulo or 'Publicidade' }}"
-                                     class="w-100 d-block object-fit-cover"
-                                     style="max-height: 140px; min-height: 100px;">
-                            {% else %}
-                                <div class="p-3 bg-gradient bg-secondary text-white d-flex align-items-center justify-content-between" style="min-height: 100px;">
-                                    <div class="pe-3">
-                                        <span class="badge bg-warning text-dark mb-1" style="font-size: 0.65rem;">
-                                            {{ publicidade_ativa.tag_referencia_nome if publicidade_ativa.tag_referencia_nome else 'Destaque Local' }}
-                                        </span>
-                                        <h6 class="fw-bold mb-1 text-white" style="font-size: 0.88rem;">
-                                            {{ publicidade_ativa.titulo or 'Conheça nossos parceiros em Piracicaba' }}
-                                        </h6>
-                                        <p class="small text-white-50 mb-0" style="font-size: 0.72rem;">
-                                            {{ publicidade_ativa.texto_formatado or 'Valorize o comércio da nossa cidade!' }}
-                                        </p>
-                                    </div>
-                                    <i class="bi bi-arrow-up-right-circle-fill text-warning fs-2 flex-shrink-0"></i>
-                                </div>
-                            {% endif %}
-                    </a>
-                </div>
-            </div>
-        {% endif %}
+        <!-- SELO PATROCINADO SOBREPOSTO -->
+        <span class="position-absolute top-0 end-0 bg-dark bg-opacity-75 text-white-50 px-2 py-0.5 rounded-bottom-start"
+              style="font-size: 0.65rem; z-index: 3; letter-spacing: 0.5px;">
+            PATROCINADO
+        </span>
+
+        <!-- LINK E IMAGEM DO BANNER -->
+        <a href="{{ link_destino_temp }}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="text-decoration-none d-block">
+            <img src="{{ url_banner_temp }}"
+                 alt="Anúncio Patrocinado"
+                 class="w-100 d-block object-fit-cover"
+                 style="max-height: 140px; min-height: 100px; width: 100%; border-radius: 1rem;"
+                 onerror="this.src='/static/img/banner_placeholder.jpg';">
+        </a>
+
+    </div>
+</div>
 
         {# 9. HISTÓRICO: ÚLTIMAS VISITAS #}
         <div class="accordion mb-3" id="accordionHistorico">
