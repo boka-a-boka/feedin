@@ -35,25 +35,25 @@ CONFIG_IMAGENS = {
     # Módulo Empresa
     'empresa_logo': {
         'modulo_alvo': 'empresa',
-        'subpasta': 'Uploads/empresas/{empresa_id}',
+        'subpasta': 'uploads/empresas/{empresa_id}',
         'tamanho': (400, 400),
         'qualidade': 90
     },
     'empresa_colaborador': {
         'modulo_alvo': 'empresa',
-        'subpasta': 'Uploads/empresas/{empresa_id}/colaboradores',
+        'subpasta': 'uploads/empresas/{empresa_id}/colaboradores',
         'tamanho': (600, 600),
         'qualidade': 85
     },
     'empresa_compliance': {
         'modulo_alvo': 'empresa',
-        'subpasta': 'Uploads/empresas/{empresa_id}/compliance',
+        'subpasta': 'uploads/empresas/{empresa_id}/compliance',
         'tamanho': (1200, 1200),
         'qualidade': 85
     },
     'empresa_fachada': {
             'modulo_alvo': 'empresa',
-            'subpasta': 'Uploads/empresas/{empresa_id}',
+            'subpasta': 'uploads/empresas/{empresa_id}',
             'tamanho': (1200, 800),
             'qualidade': 85
     }
