@@ -6954,3 +6954,49 @@ def produto_catalogo_tela(empresa_id):
         ese_empresa=ese_empresa,
         produtos=produtos
     )
+
+
+@empresa_bp.route('/<int:empresa_id>/servicos/tabela-impressao', methods=['GET'])
+@login_required
+def tabela_precos_impressao(empresa_id):
+    """
+    Renderiza a tabela de preços dinâmica (fundo preto, foco na logo,
+    fonte proporcional ao maior texto e serviços com valor > 0).
+    """
+    empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    try:
+        servicos_oferecidos = EseServicoOferecido.query.filter_by(empresa_id=empresa_id).all()
+        precos_dict = {p.taxonomia_id: p for p in EseServicoPreco.query.filter_by(empresa_id=empresa_id).all()}
+
+        itens_tabela = []
+        for servico in servicos_oferecidos:
+            taxonomia_id = servico.taxonomia_id
+            preco_obj = precos_dict.get(taxonomia_id)
+
+            # Garante que tem preço válido e maior que zero
+            if preco_obj and hasattr(preco_obj, 'preco') and preco_obj.preco > 0:
+                nome_servico = None
+                if servico.servico_taxonomia and hasattr(servico.servico_taxonomia, 'nome'):
+                    nome_servico = servico.servico_taxonomia.nome
+
+                if not nome_servico:
+                    nome_servico = f"Serviço #{taxonomia_id}"
+
+                itens_tabela.append({
+                    'nome': nome_servico,
+                    'valor': preco_obj.preco
+                })
+
+        # Ordenação A-Z pelo nome do serviço
+        itens_tabela.sort(key=lambda x: x['nome'].lower())
+
+    except Exception as e:
+        print(f"Erro ao carregar tabela de preços impressao: {e}")
+        itens_tabela = []
+
+    return render_template(
+        'empresa/tabela_precos_impressao.html',
+        ese_empresa=empresa,
+        itens_tabela=itens_tabela
+    )

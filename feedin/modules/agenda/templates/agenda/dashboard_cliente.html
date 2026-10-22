@@ -1144,48 +1144,48 @@
         <!-- ACORDION GRUPAL DE RECURSOS -->
         <div class="accordion accordion-flush d-flex flex-column gap-2" id="accordionFerramentas">
 
-        <!-- GRUPO 1: CADASTROS -->
-        <div class="accordion-item border rounded-3 overflow-hidden">
-            <h2 class="accordion-header" id="headingCadastros">
-                <button class="accordion-button py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCadastros" aria-expanded="true" aria-controls="collapseCadastros" style="font-size: 0.85rem;">
-                    <i class="bi bi-folder-plus text-primary me-2 fs-6"></i> Cadastros & Personas
-                </button>
-            </h2>
+            <!-- GRUPO 1: CADASTROS -->
+            <div class="accordion-item border rounded-3 overflow-hidden">
+                <h2 class="accordion-header" id="headingCadastros">
+                    <button class="accordion-button py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCadastros" aria-expanded="true" aria-controls="collapseCadastros" style="font-size: 0.85rem;">
+                        <i class="bi bi-folder-plus text-primary me-2 fs-6"></i> Cadastros & Personas
+                    </button>
+                </h2>
 
-            <div id="collapseCadastros" class="accordion-collapse collapse show" aria-labelledby="headingCadastros" data-bs-parent="#accordionFerramentas">
-                <div class="accordion-body p-2 d-flex flex-column gap-1">
+                <div id="collapseCadastros" class="accordion-collapse collapse show" aria-labelledby="headingCadastros" data-bs-parent="#accordionFerramentas">
+                    <div class="accordion-body p-2 d-flex flex-column gap-1">
 
-                    <!-- ITEM: GERENCIAR BENEFICIÁRIOS -->
-                    <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                <i class="bi bi-people-fill"></i>
+                        <!-- ITEM: GERENCIAR BENEFICIÁRIOS -->
+                        <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                    <i class="bi bi-people-fill"></i>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meus Beneficiários / Personas</strong>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Cadastrar dependentes, pets ou veículos</small>
+                                </div>
                             </div>
-                            <div>
-                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meus Beneficiários / Personas</strong>
-                                <small class="text-muted d-block" style="font-size: 0.7rem;">Cadastrar dependentes, pets ou veículos</small>
-                            </div>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted small"></i>
-                    </a>
+                            <i class="bi bi-chevron-right text-muted small"></i>
+                        </a>
 
-                    <!-- ITEM: CANAIS DE COMUNICAÇÃO -->
-                    <a href="{{ url_for('agenda.listar_contatos_cliente') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                <i class="bi bi-whatsapp"></i>
+                        <!-- ITEM: CANAIS DE COMUNICAÇÃO -->
+                        <a href="{{ url_for('agenda.listar_contatos_cliente') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                    <i class="bi bi-whatsapp"></i>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Canais de Comunicação</strong>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Definir WhatsApp, e-mail e canal preferencial</small>
+                                </div>
                             </div>
-                            <div>
-                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Canais de Comunicação</strong>
-                                <small class="text-muted d-block" style="font-size: 0.7rem;">Definir WhatsApp, e-mail e canal preferencial</small>
-                            </div>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted small"></i>
-                    </a>
+                            <i class="bi bi-chevron-right text-muted small"></i>
+                        </a>
 
+                    </div>
                 </div>
             </div>
-        </div>
 
             <!-- GRUPO 2: PESQUISAS -->
             <div class="accordion-item border rounded-3 overflow-hidden">
@@ -1209,8 +1209,22 @@
                     </button>
                 </h2>
                 <div id="collapseRelatorios" class="accordion-collapse collapse" aria-labelledby="headingRelatorios" data-bs-parent="#accordionFerramentas">
-                    <div class="accordion-body p-2 text-muted small">
-                        Acesse seu histórico consolidado e extratos.
+                    <div class="accordion-body p-2 d-flex flex-column gap-1">
+
+                        <!-- ITEM: INDICADORES DE DESEMPENHO -->
+                        <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if empresa is defined and empresa and empresa.id else (empresa_id if empresa_id is defined and empresa_id else (empresa_ativa.id if empresa_ativa is defined and empresa_ativa else 0))) }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                    <i class="bi bi-graph-up-arrow"></i>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Indicadores de Desempenho</strong>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato de atendimentos e produtividade</small>
+                                </div>
+                            </div>
+                            <i class="bi bi-chevron-right text-muted small"></i>
+                        </a>
+
                     </div>
                 </div>
             </div>

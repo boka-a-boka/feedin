@@ -1,10 +1,10 @@
 // =========================================================================
-// MOTOR GLOBAL DE LEITOR DE CÓDIGO DE BARRAS E CÂMERA (MÓDULO PDV)
+// MOTOR GLOBAL ROBUSTO DE CÂMERA E LEITOR DE CÓDIGO DE BARRAS (PDV)
 // =========================================================================
-let html5QrCodeEstoque = null;
+let html5QrCodeGlobal = null;
 let targetInputIdGlobal = null;
 
-// AVISO SONORO (BEEP) NATIVO
+// Audio Beep Nativo
 window.tocarBip = function() {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -22,88 +22,117 @@ window.tocarBip = function() {
     }
 };
 
-// FUNÇÃO GLOBAL DE ABERTURA DE CÂMERA (Compatível com qualquer tela)
-window.abrirLeitorCameraUniversal = function(targetInputId) {
+// LIBERAÇÃO FORÇADA DE HARDWARE DA CÂMERA (iOS/Android)
+async function liberarHardwareCamera() {
+    if (html5QrCodeGlobal) {
+        try {
+            await html5QrCodeGlobal.stop();
+            html5QrCodeGlobal.clear();
+        } catch (e) {
+            // Se já estivesse parado, ignora
+        }
+        html5QrCodeGlobal = null;
+    }
+
+    // Mata qualquer rastro de stream preso no navegador móvel
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(() => null);
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        } catch (e) {
+            // Ignora
+        }
+    }
+}
+
+// ABERTURA UNIVERSAL
+window.abrirLeitorCameraUniversal = async function(targetInputId) {
     targetInputIdGlobal = targetInputId;
+
+    // 1. Limpa qualquer processo residual de câmera no celular
+    await liberarHardwareCamera();
+
     const modalEl = document.getElementById('modalLeitorCamera');
     if (!modalEl) {
-        console.error("Modal com ID #modalLeitorCamera não encontrado na página.");
+        alert("Erro: Elemento #modalLeitorCamera não encontrado.");
         return;
     }
 
-    const modal = new bootstrap.Modal(modalEl);
-    modal.show();
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
 
-    if (typeof Html5Qrcode === 'undefined') {
-        alert("Biblioteca de câmera não carregada.");
-        return;
-    }
+    // 2. Garante que a câmera SÓ INICIA quando o modal estiver 100% visível
+    const iniciarScannerAposModal = async function () {
+        modalEl.removeEventListener('shown.bs.modal', iniciarScannerAposModal);
 
-    // Garante que a div #reader existe
-    if (!document.getElementById('reader')) {
-        console.error("Elemento com ID #reader não encontrado no modal.");
-        return;
-    }
+        if (typeof Html5Qrcode === 'undefined') {
+            alert("Biblioteca Html5Qrcode não carregada.");
+            return;
+        }
 
-    html5QrCodeEstoque = new Html5Qrcode("reader");
-    const config = {
-        fps: 15,
-        qrbox: function(viewfinderWidth, viewfinderHeight) {
-            const minEdgePercentage = 0.75;
-            const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
-            const qrboxSize = Math.floor(minDimension * minEdgePercentage);
-            return {
-                width: Math.max(qrboxSize, 220),
-                height: Math.floor(Math.max(qrboxSize, 220) * 0.5)
-            };
-        },
-        formatsToSupport: [
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.CODE_93,
-            Html5QrcodeSupportedFormats.ITF,      // Usado em caixas/fardos fechados (Interleaved 2 of 5)
-            Html5QrcodeSupportedFormats.QR_CODE  // Suporte a QR Code
-        ],
-        experimentalFeatures: {
-            useBarCodeDetectorIfSupported: true
+        const containerReader = document.getElementById('reader');
+        if (!containerReader) return;
+        containerReader.innerHTML = ''; // Limpa div interna
+
+        html5QrCodeGlobal = new Html5Qrcode("reader");
+
+        const config = {
+            fps: 15,
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                const minDimension = Math.min(viewfinderWidth, viewfinderHeight);
+                const size = Math.floor(minDimension * 0.75);
+                return {
+                    width: Math.max(size, 200),
+                    height: Math.floor(Math.max(size, 200) * 0.5)
+                };
+            },
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E,
+                Html5QrcodeSupportedFormats.CODE_39
+            ],
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
+        };
+
+        try {
+            await html5QrCodeGlobal.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    if (typeof window.tocarBip === 'function') window.tocarBip();
+
+                    if (targetInputIdGlobal) {
+                        const inputTarget = document.getElementById(targetInputIdGlobal);
+                        if (inputTarget) {
+                            inputTarget.value = decodedText;
+                            inputTarget.dispatchEvent(new Event('input', { bubbles: true }));
+                            inputTarget.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                    window.fecharLeitorCameraUniversal();
+                }
+            );
+        } catch (err) {
+            console.error("Erro ao iniciar câmera:", err);
+            alert("Não foi possível acessar a câmera. Verifique as permissões do navegador.");
+            window.fecharLeitorCameraUniversal();
         }
     };
 
-    html5QrCodeEstoque.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-            if (typeof window.tocarBip === 'function') window.tocarBip();
-
-            if (targetInputIdGlobal) {
-                const inputTarget = document.getElementById(targetInputIdGlobal);
-                if (inputTarget) {
-                    inputTarget.value = decodedText;
-                    inputTarget.dispatchEvent(new Event('input'));
-                    inputTarget.dispatchEvent(new Event('change'));
-                }
-            }
-            window.fecharLeitorCameraUniversal();
-        }
-    ).catch(err => {
-        console.error("Erro ao iniciar câmera:", err);
-        window.fecharLeitorCameraUniversal();
-    });
+    modalEl.addEventListener('shown.bs.modal', iniciarScannerAposModal);
+    modal.show();
 };
 
-window.fecharLeitorCameraUniversal = function() {
-    if (html5QrCodeEstoque) {
-        html5QrCodeEstoque.stop().then(() => {
-            html5QrCodeEstoque.clear();
-            html5QrCodeEstoque = null;
-        }).catch(() => {
-            html5QrCodeEstoque = null;
-        });
-    }
+// FECHAMENTO UNIVERSAL
+window.fecharLeitorCameraUniversal = async function() {
+    await liberarHardwareCamera();
+
     const modalEl = document.getElementById('modalLeitorCamera');
     if (modalEl) {
         const modal = bootstrap.Modal.getInstance(modalEl);
