@@ -116,9 +116,9 @@
         {# 🗂️ 2. GRADE DE CARDS EM ESTILO PORTAL PWA #}
         <div class="row g-2 mb-4">
 
-            {# CARD 1: IDENTIDADE VISUAL #}
+            {# CARD 1: IDENTIDADE VISUAL (Fase 1) #}
             <div class="col-6">
-                <a href="{{ url_for('empresa.configurar_layout', empresa_id=processo.local_id if processo else empresa.local_id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-success">
+                <a href="{{ url_for('empresa.configurar_layout', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-success">
                     <div class="d-flex flex-column justify-content-between h-100">
                         <div>
                             <div class="d-flex justify-content-between align-items-start mb-2">
@@ -137,7 +137,53 @@
                 </a>
             </div>
 
-            {# CARD 2: DOCUMENTAÇÃO #}
+            {# CARD 2: HORÁRIOS DA EMPRESA (Fase 1) #}
+            <div class="col-6">
+                <a href="{{ url_for('empresa.configurar_horarios_empresa', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if grade_map %}border-start-success{% else %}border-start-warning{% endif %}">
+                    <div class="d-flex flex-column justify-content-between h-100">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="p-2 {% if grade_map %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %} rounded-3">
+                                    <i class="bi bi-clock-history fs-5 d-block"></i>
+                                </div>
+                                {% if grade_map %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Configurado</span>
+                                {% else %}
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Pendente</span>
+                                {% endif %}
+                            </div>
+                            <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Horários da Empresa</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Grade de funcionamento semanal padrão do estabelecimento.</p>
+                        </div>
+                        <div class="text-end mt-2">
+                            <span class="{% if grade_map %}text-success{% else %}text-warning{% endif %} small fw-semibold" style="font-size: 0.65rem;">Configurar <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            {# CARD 3: PARÂMETROS DE OPERAÇÃO (Fase 1) #}
+            <div class="col-6">
+                <a href="{{ url_for('empresa.parametros_operacao', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
+                    <div class="d-flex flex-column justify-content-between h-100">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="p-2 bg-primary-subtle text-primary rounded-3">
+                                    <i class="bi bi-sliders fs-5 d-block"></i>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Gerenciar</span>
+                            </div>
+                            <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Parâmetros de Operação</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Calendário de feriados, recessos e regras do ecossistema.</p>
+                        </div>
+                        <div class="text-end mt-2">
+                            <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Acessar <i class="bi bi-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            {# CARD 4: DOCUMENTAÇÃO - O Marco Final da Fase 1 #}
             <div class="col-6">
                 {% if ese_empresa.status_homologacao == 'em_analise' %}
                     <div class="card h-100 shadow-sm rounded-4 p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-info">
@@ -187,91 +233,21 @@
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Documentação</h6>
                                 <p class="text-dark m-0 mt-1 fw-medium" style="font-size: 0.7rem; line-height: 1.2;">
-                                    <span class="text-warning-emphasis d-block mb-1"><i class="bi bi-clock-fill"></i> Prazo Provisório Ativo</span>
-                                    Envie os comprovantes definitivos para evitar o bloqueio da vitrine.
+                                    <span class="text-warning-emphasis d-block mb-1"><i class="bi bi-clock-fill"></i> Pendente de Envio</span>
+                                    Envie os comprovantes definitivos para liberação da empresa.
                                 </p>
                             </div>
                             <div class="text-end mt-2">
-                                <span class="text-warning-emphasis small fw-bold" style="font-size: 0.65rem;">Resolver Pendência <i class="bi bi-arrow-right"></i></span>
+                                <span class="text-warning-emphasis small fw-bold" style="font-size: 0.65rem;">Enviar Docs <i class="bi bi-arrow-right"></i></span>
                             </div>
                         </div>
                     </a>
                 {% endif %}
             </div>
 
-            {# CARD 3: HORÁRIOS DA EMPRESA #}
+            {# CARD 5: SERVIÇOS & PREÇOS (Fase 2 - Avançado) #}
             <div class="col-6">
-                <a href="{{ url_for('empresa.configurar_horarios_empresa', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if grade_map %}border-start-success{% else %}border-start-warning{% endif %}">
-                    <div class="d-flex flex-column justify-content-between h-100">
-                        <div>
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="p-2 {% if grade_map %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %} rounded-3">
-                                    <i class="bi bi-clock-history fs-5 d-block"></i>
-                                </div>
-                                {% if grade_map %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Configurado</span>
-                                {% else %}
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Pendente</span>
-                                {% endif %}
-                            </div>
-                            <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Horários da Empresa</h6>
-                            <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Grade de funcionamento semanal padrão do estabelecimento.</p>
-                        </div>
-                        <div class="text-end mt-2">
-                            <span class="{% if grade_map %}text-success{% else %}text-warning{% endif %} small fw-semibold" style="font-size: 0.65rem;">Configurar <i class="bi bi-arrow-right"></i></span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            {# CARD 4: PARÂMETROS DE OPERAÇÃO #}
-            <div class="col-6">
-                {% if tem_acesso_pro %}
-                    <a href="{{ url_for('empresa.parametros_operacao', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
-                        <div class="d-flex flex-column justify-content-between h-100">
-                            <div>
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="p-2 bg-primary-subtle text-primary rounded-3">
-                                        <i class="bi bi-sliders fs-5 d-block"></i>
-                                    </div>
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Gerenciar</span>
-                                </div>
-                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Parâmetros de Operação</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Calendário de feriados, recessos e regras do ecossistema.</p>
-                            </div>
-                            <div class="text-end mt-2">
-                                <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Acessar <i class="bi bi-arrow-right"></i></span>
-                            </div>
-                        </div>
-                    </a>
-                {% else %}
-                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden"
-                         style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#modalRecursoPro">
-                        <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
-                            <i class="bi bi-star-fill text-warning me-1"></i>PRO
-                        </span>
-                        <div class="d-flex flex-column justify-content-between h-100 opacity-75">
-                            <div>
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
-                                        <i class="bi bi-lock-fill fs-5 d-block"></i>
-                                    </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Bloqueado</span>
-                                </div>
-                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Parâmetros de Operação</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Regras de recesso e políticas operacionais finas.</p>
-                            </div>
-                            <div class="text-end mt-2">
-                                <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Liberar Recursos <i class="bi bi-shield-lock"></i></span>
-                            </div>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
-
-            {# CARD 5: CONFIGURAÇÃO DE PRODUTOS E SERVIÇOS #}
-            <div class="col-6">
-                {% if tem_acesso_pro %}
+                {% if empresa_homologada and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.menu_servicos_precos', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
@@ -279,7 +255,7 @@
                                     <div class="p-2 bg-danger-subtle text-danger rounded-3">
                                         <i class="bi bi-tags fs-5 d-block"></i>
                                     </div>
-                                    {% if tem_servicos_cadastrados %}
+                                    {% if modulo_servicos_concluido %}
                                         <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Ativo</span>
                                     {% else %}
                                         <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Pendente</span>
@@ -294,10 +270,9 @@
                         </div>
                     </a>
                 {% else %}
-                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden"
-                         style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#modalRecursoPro">
+                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden">
                         <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
-                            <i class="bi bi-star-fill text-warning me-1"></i>PRO
+                            <i class="bi bi-lock-fill text-warning me-1"></i>FASE 2
                         </span>
                         <div class="d-flex flex-column justify-content-between h-100 opacity-75">
                             <div>
@@ -305,36 +280,36 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Bloqueado</span>
+                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Serviços & Preços</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Catálogo de serviços e preços para agendamento.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Disponível após aprovação da documentação.</p>
                             </div>
                             <div class="text-end mt-2">
-                                <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Liberar Recursos <i class="bi bi-shield-lock"></i></span>
+                                <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>
                             </div>
                         </div>
                     </div>
                 {% endif %}
             </div>
 
-            {# CARD 6: GESTÃO DE EQUIPE E JORNADAS #}
+            {# CARD 6: EQUIPE & JORNADAS (Fase 2 - Avançado) #}
             <div class="col-6">
-                {% if tem_acesso_pro %}
+                {% if empresa_homologada and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.configurar_jornadas_tela', empresa_id=ese_empresa.id) }}"
-                       class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if total_convites_aceitos and total_convites_aceitos > 0 %}border-start-primary{% elif tem_jornadas_configuradas %}border-start-success{% else %}border-start-warning{% endif %} position-relative">
+                       class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if total_convites_aceitos and total_convites_aceitos > 0 %}border-start-primary{% elif modulo_equipe_concluido %}border-start-success{% else %}border-start-warning{% endif %} position-relative">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
                                 <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="p-2 {% if total_convites_aceitos and total_convites_aceitos > 0 %}bg-primary-subtle text-primary{% elif tem_jornadas_configuradas %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %} rounded-3">
+                                    <div class="p-2 {% if total_convites_aceitos and total_convites_aceitos > 0 %}bg-primary-subtle text-primary{% elif modulo_equipe_concluido %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %} rounded-3">
                                         <i class="bi bi-people fs-5 d-block"></i>
                                     </div>
                                     {% if total_convites_aceitos and total_convites_aceitos > 0 %}
                                         <span class="badge bg-primary text-white rounded-pill fw-bold" style="font-size: 0.55rem;">
                                             <i class="bi bi-bell-fill me-1"></i>{{ total_convites_aceitos }} Novo(s)
                                         </span>
-                                    {% elif tem_jornadas_configuradas %}
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Jornadas Ativas</span>
+                                    {% elif modulo_equipe_concluido %}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Ativo</span>
                                     {% else %}
                                         <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Pendente</span>
                                     {% endif %}
@@ -343,9 +318,9 @@
                                 <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Defina os membros do time e escalas de trabalho.</p>
                             </div>
                             <div class="text-end mt-2">
-                                <span class="{% if total_convites_aceitos and total_convites_aceitos > 0 %}text-primary fw-bold{% elif tem_jornadas_configuradas %}text-success{% else %}text-warning{% endif %} small fw-semibold" style="font-size: 0.65rem;">
+                                <span class="{% if total_convites_aceitos and total_convites_aceitos > 0 %}text-primary fw-bold{% elif modulo_equipe_concluido %}text-success{% else %}text-warning{% endif %} small fw-semibold" style="font-size: 0.65rem;">
                                     {% if total_convites_aceitos and total_convites_aceitos > 0 %}
-                                        Concluir Vínculo <i class="bi bi-arrow-right"></i>
+                                        Ver Candidatos <i class="bi bi-arrow-right"></i>
                                     {% else %}
                                         Gerenciar <i class="bi bi-arrow-right"></i>
                                     {% endif %}
@@ -354,10 +329,9 @@
                         </div>
                     </a>
                 {% else %}
-                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden"
-                         style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#modalRecursoPro">
+                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden">
                         <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
-                            <i class="bi bi-star-fill text-warning me-1"></i>PRO
+                            <i class="bi bi-lock-fill text-warning me-1"></i>FASE 2
                         </span>
                         <div class="d-flex flex-column justify-content-between h-100 opacity-75">
                             <div>
@@ -365,26 +339,23 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Bloqueado</span>
+                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Equipe & Jornadas</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Escalas e jornadas individuais dos colaboradores.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Escalas, horários e membros da equipe.</p>
                             </div>
                             <div class="text-end mt-2">
-                                <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Liberar Recursos <i class="bi bi-shield-lock"></i></span>
+                                <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>
                             </div>
                         </div>
                     </div>
                 {% endif %}
             </div>
 
-        </div>
-
-        {# CARD 7: MOVIMENTAÇÃO DE ESTOQUE & CONSUMO #}
-        <div class="col-6">
-            {% if tem_acesso_pro %}
-                    <a href="{{ url_for('empresa.estoque_hub_tela', empresa_id=ese_empresa.id) }}"
-                       class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
+            {# CARD 7: MOVIMENTAÇÃO DE ESTOQUE & CONSUMO (Integrado na grade) #}
+            <div class="col-6">
+                {% if tem_acesso_pro %}
+                    <a href="{{ url_for('empresa.estoque_hub_tela', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
                                 <div class="d-flex justify-content-between align-items-start mb-2">
@@ -401,29 +372,31 @@
                             </div>
                         </div>
                     </a>
-            {% else %}
-                <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden"
-                     style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#modalRecursoPro">
-                    <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
-                        <i class="bi bi-star-fill text-warning me-1"></i>PRO
-                    </span>
-                    <div class="d-flex flex-column justify-content-between h-100 opacity-75">
-                        <div>
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
-                                    <i class="bi bi-lock-fill fs-5 d-block"></i>
+                {% else %}
+                    <div class="card h-100 shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden"
+                         style="cursor: pointer;" data-bs-toggle="modal" data-bs-target="#modalRecursoPro">
+                        <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
+                            <i class="bi bi-star-fill text-warning me-1"></i>PRO
+                        </span>
+                        <div class="d-flex flex-column justify-content-between h-100 opacity-75">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
+                                        <i class="bi bi-lock-fill fs-5 d-block"></i>
+                                    </div>
+                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Bloqueado</span>
                                 </div>
-                                <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Bloqueado</span>
+                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Estoque & Compras</h6>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Controle de insumos e reposição de produtos do estabelecimento.</p>
                             </div>
-                            <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Estoque & Compras</h6>
-                            <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Controle de insumos e reposição de produtos do estabelecimento.</p>
-                        </div>
-                        <div class="text-end mt-2">
-                            <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Liberar Recursos <i class="bi bi-shield-lock"></i></span>
+                            <div class="text-end mt-2">
+                                <span class="text-primary small fw-semibold" style="font-size: 0.65rem;">Liberar Recursos <i class="bi bi-shield-lock"></i></span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            {% endif %}
+                {% endif %}
+            </div>
+
         </div>
 
         {# 🚪 3. BLOCO DE SESSÃO FIXADO NO HUB DE ATIVAÇÃO #}

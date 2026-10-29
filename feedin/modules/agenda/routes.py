@@ -35,7 +35,8 @@ from feedin.middlewares import empresa_acesso_required
 
 # 3. UTILS DO SISTEMA
 import feedin.utils as utils
-from feedin.utils import (_parse_profissional_id, converter_duracao_para_minutos, resolver_url_midia,)
+from feedin.utils import (converter_duracao_para_minutos, requer_modulo, verificar_e_atualizar_vigencia_modulo,
+                          validar_limite_modulo)
 
 # 4. 🧩 CONTRATO OFICIAL DO BLUEPRINT E QUERIES DO MÓDULO AGENDA
 # Mantido em ÚNICO local para evitar duplicidade e desconexão de rotas
@@ -90,8 +91,6 @@ from feedin.modules.empresa.models import (
     EseConviteColaborador, ClienteBeneficiario, ClienteContato, ClienteEndereco, EseNotificacao,
     EseRegraPontuacao, ModClientePontos, EseLogMensagemAutomatica, ModEmpresaModulo
 )
-
-from feedin.modules.empresa.routes import pode_gerenciar_empresa
 
 from weasyprint import HTML
 from feedin.modules.agenda.services.agendamento_service import (_encontrar_colaborador_apto, registrar_falta_cliente_service, )
@@ -327,6 +326,13 @@ TEMPO_SOFT_LOCK_MINUTOS = 10
 @agenda_bp.route('/empresa/<int:empresa_id>/balcao', methods=['GET'])
 @login_required
 def agenda_balcao(empresa_id):
+    # 1. VALIDAÇÃO DE VIGÊNCIA DO MÓDULO (O Semáforo de Entrada)
+    # Se o plano venceu, bloqueia a visualização do painel e avisa
+    autorizado, aviso = verificar_e_atualizar_vigencia_modulo(empresa_id, 'agenda')
+    if not autorizado:
+        flash(aviso, "danger")
+        return redirect(url_for('empresa.dashboard_geral'))  # ou tela de renovação
+
     empresa = EseEmpresa.query.get_or_404(empresa_id)
     hoje = datetime.now()
 
@@ -369,6 +375,7 @@ def agenda_balcao(empresa_id):
 # =========================================================================
 @agenda_bp.route('/empresa/<int:empresa_id>/dashboard', methods=['GET'])
 @login_required
+@requer_modulo('agenda')
 def dashboard_empresa(empresa_id):
     """
     📌 DASHBOARD OPERACIONAL DA EMPRESA (GRANULARIDADE POR ITEM COM SUPORTE A FOTOS DE COLABORADORES)
@@ -1076,54 +1083,79 @@ from feedin.modules.agenda import agenda_bp
 from feedin.modules.empresa.models import ColaboradorContrato, EseEmpresa
 
 
-@agenda_bp.route('/painel', methods=['GET'])
-@requer_acesso_modulo('agenda')  # Já garante o contrato ativo no local e o passe de módulo
-def painel_agenda():
-    # 1. Recupera o contexto já resolvido pelo middleware ou pega da query string/sessão
-    empresa_id = request.args.get('empresa_id', type=int) or getattr(g, 'empresa_id', None)
+@agenda_bp.route('/painel-gerencial', methods=['GET'], endpoint='painel_gerencial_raiz')
+@agenda_bp.route('/<int:empresa_id>/painel-gerencial', methods=['GET'], endpoint='painel_agenda')
+@login_required
+def painel_agenda(empresa_id=None):
+    if not empresa_id:
+        empresa_id = request.args.get('empresa_id', type=int)
 
     if not empresa_id:
-        flash("Empresa/Local não informado.", "warning")
-        return redirect(url_for('dashboard.index'))
+        flash("Estabelecimento não especificado.", "warning")
+        return redirect(url_for('dashboard'))
 
-    user_uuid = str(g.user.id) if hasattr(g, 'user') else str(current_user.id)
-    empresa = EseEmpresa.query.get_or_404(empresa_id)
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+    agora_utc = datetime.now(timezone.utc)
 
-    # 2. Identifica se é o proprietário do estabelecimento
-    proprietario_id = str(getattr(empresa, 'proprietario_id', None) or getattr(empresa, 'usuario_proprietario_id', ''))
-    eh_proprietario = (proprietario_id == user_uuid)
+    # 1. Dados do Plano e Limites (Via ModEmpresaModulo)
+    modulo_agenda = ModEmpresaModulo.query.filter_by(
+        empresa_id=ese_empresa.id,
+        modulo_slug='agenda'
+    ).first()
 
-    # 3. Recupera o contrato ativo obtido pelo middleware ou faz a busca direta por UUID
-    contrato = getattr(g, 'contrato_ativo', None)
-    if not contrato:
-        contrato = ColaboradorContrato.query.filter_by(
-            id_local=empresa_id,
-            id_cadastro_cliente=user_uuid,
-            status_profissional='ativo'
-        ).first()
+    total_profissionais = ColaboradorContrato.query.filter_by(
+        id_local=ese_empresa.id,
+        status_profissional='ativo',
+        data_desligamento=None
+    ).count()
 
-    # 4. Obtém o nível de acesso no contexto da empresa
-    nivel_acesso = 999 if eh_proprietario else getattr(contrato, 'nivel_acesso', 300)
+    limite_profissionais = modulo_agenda.limite_profissionais if modulo_agenda else 3
+    limite_clientes = modulo_agenda.limite_clientes if modulo_agenda else 12
+    tipo_plano = modulo_agenda.tipo_plano if modulo_agenda else 'vitrine'
+    data_vencimento = modulo_agenda.data_vencimento if modulo_agenda else None
 
-    # CORTE DE PERMISSÃO: >= 666 Gestão | < 600 Operacional
-    pode_gerenciar_todos = (nivel_acesso >= 666)
+    # Tratativa segura para a data de vencimento (evita erro de fuso)
+    dias_restantes = 'Vitalício/Ilimitado'
+    if data_vencimento:
+        if data_vencimento.tzinfo is None:
+            data_vencimento = data_vencimento.replace(tzinfo=timezone.utc)
+        dias_restantes = (data_vencimento - agora_utc).days
 
-    if pode_gerenciar_todos:
-        # Visão ampla: Carrega todos os colaboradores ativos do local
-        equipe_agenda = ColaboradorContrato.query.filter_by(
-            id_local=empresa_id,
-            status_profissional='ativo'
-        ).all()
-    else:
-        # Visão restrita (< 600): Apenas a própria linha de agenda
-        equipe_agenda = [contrato] if contrato else []
+    # 2. Checklist de Prontidão (Calculado ANTES de ser usado)
+    tem_servicos = EseServicoOferecido.query.filter_by(empresa_id=ese_empresa.id).count() > 0
+    tem_profissionais = total_profissionais > 0
+    tem_horarios = True
+
+    checklist = [
+        {"item": "Cadastro de Serviços e Preços", "atendido": tem_servicos,
+         "detalhe": "Necessário para os clientes escolherem o atendimento."},
+        {"item": "Vínculo de Profissionais na Equipe", "atendido": tem_profissionais,
+         "detalhe": "Necessário para alocação de horários."},
+        {"item": "Expediente e Horários de Atendimento", "atendido": tem_horarios,
+         "detalhe": "Parâmetros de abertura e fechamento configurados."}
+    ]
+
+    # 🎯 Variável calculada com sucesso aqui
+    pronto_para_uso = all(c['atendido'] for c in checklist)
+
+    # 3. Link seguro para o painel principal da agenda
+    link_publico = url_for('agenda.dashboard_empresa', empresa_id=ese_empresa.id,
+                           _external=True) if pronto_para_uso else ""
 
     return render_template(
         'agenda/painel_agenda.html',
-        empresa=empresa,
-        equipe=equipe_agenda,
-        pode_gerenciar_todos=pode_gerenciar_todos,
-        contrato_logado=contrato
+        empresa=ese_empresa,
+        empresa_id=empresa_id,
+        modulo=modulo_agenda,
+        tipo_plano=tipo_plano,
+        data_vencimento=data_vencimento,
+        dias_restantes=dias_restantes,
+        total_profissionais=total_profissionais,
+        limite_profissionais=limite_profissionais,
+        limite_clientes=limite_clientes,
+        checklist=checklist,
+        pronto_para_uso=pronto_para_uso,
+        link_publico=link_publico
     )
 
 
@@ -1173,16 +1205,12 @@ def gerenciar_servicos():
         servicos=servicos_cadastrados
     )
 
-
-@agenda_bp.route('/empresa/<int:empresa_id>/favoritar', methods=['POST'])
+@agenda_bp.route('/empresas/<int:empresa_id>/favoritar', methods=['POST'])
 @login_required
 def toggle_favorito_empresa(empresa_id):
     usuario_logado_id = current_user.id
-
-    # 1. Valida existência da empresa sem sobrescrever o ID
     empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 2. Busca favorito existente usando a PK (empresa.id)
     favorito_existente = UsuarioFavorito.query.filter_by(
         usuario_id=usuario_logado_id,
         empresa_id=empresa.id
@@ -1192,8 +1220,8 @@ def toggle_favorito_empresa(empresa_id):
         db.session.delete(favorito_existente)
         db.session.commit()
         return jsonify({
-            "success": True,
-            "is_favorito": False,
+            "sucesso": True,          # <--- Note que o JS lê 'sucesso'
+            "eh_favorita": False,      # <--- Note que o JS lê 'eh_favorita'
             "mensagem": "Removido dos favoritos"
         }), 200
 
@@ -1205,8 +1233,8 @@ def toggle_favorito_empresa(empresa_id):
     db.session.commit()
 
     return jsonify({
-        "success": True,
-        "is_favorito": True,
+        "sucesso": True,          # <--- Note que o JS lê 'sucesso'
+        "eh_favorita": True,       # <--- Note que o JS lê 'eh_favorita'
         "mensagem": "Adicionado aos favoritos com sucesso!"
     }), 200
 
@@ -1465,7 +1493,7 @@ def credenciamento_balcao():
             ocupacao = HistoricoOcupacaoLocal(
                 local=local,
                 id_empreendedor=empreendedor_id,
-                plano_contratado=getattr(local, 'plano_marketing', 'degustacao')
+                plano_contratado='pro'  # <--- Alterado de 'degustacao' para 'pro'
             )
             db.session.add(ocupacao)
 
@@ -1483,13 +1511,13 @@ def credenciamento_balcao():
             db.session.add(nova_empresa)
             db.session.flush()
 
-            # 3. VÍNCULO AUTOMÁTICO COM O MÓDULO 'AGENDA'
+            # 3. VÍNCULO AUTOMÁTICO COM O MÓDULO 'AGENDA' (MODO PRO / SEM DEGUSTAÇÃO)
             modulo_agenda = ModEmpresaModulo(
                 empresa_id=nova_empresa.id,
                 modulo_slug='agenda',
                 ativo=True,
                 status_homologacao='homologado',
-                tipo_plano='degustacao',
+                tipo_plano='pro',  # <--- Alterado de 'degustacao' para 'pro'
                 termo_aceito=True,
                 data_aceite=datetime.now(timezone.utc)
             )
@@ -3566,22 +3594,30 @@ def upload_foto_perfil():
 @login_required
 def catalogo_servicos():
     """
-    📌 BUSCA INTELIGENTE DE ESTABELECIMENTOS E CATEGORIAS (HUB COMERCIAL)
+    📌 BUSCA INTELIGENTE DE ESTABELECIMENTOS (HUB COMERCIAL)
     --------------------------------------------------------------------------------------
-    Objetivo:
-        Exibir o diretório de empresas/estabelecimentos ativos no FeedIn.
-        A busca localiza a empresa por:
-        1. Nome da Empresa (EseEmpresa.nome)
-        2. Categoria Principal da Empresa (EseEmpresa.categoria -> Taxonomia)
-        3. Serviços oferecidos no catálogo (EseServicoOferecido -> Taxonomia)
+    Governança: Validação rigorosa baseada exclusivamente no status operacional do Local
+    e na vigência do módulo ativo na ModEmpresaModulo.
     """
     termo_busca = request.args.get('q', '').strip()
     categoria_id = request.args.get('categoria', type=int)
     lista_empresas = []
+    agora_utc = datetime.now(timezone.utc)
+
+    # ----------------------------------------------------------------------------------
+    # 0. SUBCONSULTA MESTRE: FONTE DA VERDADE (ModEmpresaModulo)
+    # ----------------------------------------------------------------------------------
+    subq_modulo_ativo = db.session.query(ModEmpresaModulo.id).filter(
+        ModEmpresaModulo.empresa_id == EseEmpresa.id,
+        ModEmpresaModulo.ativo == True,
+        or_(
+            ModEmpresaModulo.data_vencimento.is_(None),
+            ModEmpresaModulo.data_vencimento >= agora_utc
+        )
+    ).correlate(EseEmpresa).exists()
 
     # ----------------------------------------------------------------------------------
     # 1. CATEGORIAS DE EMPRESAS PARA FILTRAGEM (PÍLULAS)
-    #    Traz apenas categorias que possuem pelo menos 1 empresa ativa/verificada (A-Z)
     # ----------------------------------------------------------------------------------
     categorias = []
     try:
@@ -3592,7 +3628,11 @@ def catalogo_servicos():
                 or_(
                     Local.status_operacional == "ativo",
                     Local.status_operacional == "verificado",
-                )
+                ),
+                EseEmpresa.nome.isnot(None),
+                EseEmpresa.slug.isnot(None),
+                EseEmpresa.categoria.isnot(None),
+                subq_modulo_ativo  # 🚦 A única fonte de verdade para liberação comercial
             )
             .group_by(Taxonomia.id)
             .order_by(Taxonomia.nome.asc())
@@ -3616,7 +3656,12 @@ def catalogo_servicos():
             or_(
                 Local.status_operacional == "ativo",
                 Local.status_operacional == "verificado",
-            )
+            ),
+            EseEmpresa.local_id.isnot(None),
+            EseEmpresa.nome.isnot(None),
+            EseEmpresa.slug.isnot(None),
+            EseEmpresa.categoria.isnot(None),
+            subq_modulo_ativo  # 🚦 Governado estritamente pelo Semáforo de Módulos
         )
     )
 
@@ -3647,7 +3692,7 @@ def catalogo_servicos():
         query = query.filter(EseEmpresa.categoria == categoria_id)
 
     # ----------------------------------------------------------------------------------
-    # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO (Corrigido para fora do if categoria_id)
+    # 4. EXECUÇÃO DA BUSCA E MONTAGEM DO RETORNO
     # ----------------------------------------------------------------------------------
     try:
         empresas_resultado = (
@@ -3665,7 +3710,7 @@ def catalogo_servicos():
                 'id': emp.id,
                 'nome': emp.nome,
                 'slug': emp.slug,
-                'logomarca_url': emp.url_logomarca,  # Usa diretamente a property da model
+                'logomarca_url': emp.url_logomarca,
                 'fachada': emp.fachada,
                 'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
                 'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
@@ -3682,7 +3727,6 @@ def catalogo_servicos():
         termo_busca=termo_busca,
         categoria_selecionada=categoria_id
     )
-
 
 @agenda_bp.route('/meus-agendamentos', methods=['GET'])
 @login_required
@@ -4698,7 +4742,7 @@ def _processar_post_agendamento(empresa, cliente_id, session_token, agendamento_
 
 
 # =============================================================================
-# ROTA PRINCIPAL REFATORADA
+# ROTA PRINCIPAL REFATORADA E BLINDADA
 # =============================================================================
 @agenda_bp.route('/<string:slug_empresa>/agendar', methods=['GET', 'POST'])
 def agendar(slug_empresa: str):
@@ -4712,6 +4756,25 @@ def agendar(slug_empresa: str):
 
     empresa = EseEmpresa.query.filter_by(slug=slug_empresa).first_or_404()
     cliente_id, session_token = _obter_ou_criar_sessao_cliente()
+
+    # =========================================================================
+    # 🚦 SEMÁFORO DE LIMITE DE CLIENTES NA DEGUSTAÇÃO
+    # =========================================================================
+    if cliente_id:
+        # Verifica se este cliente específico já tem atendimento concluído nesta empresa
+        cliente_ja_atendido = AghAgendamento.query.filter_by(
+            empresa_id=empresa.id,
+            cliente_id=cliente_id,
+            status='concluido'
+        ).first()
+
+        # Se o cliente é NOVO para esta empresa, validamos se o plano permite mais clientes
+        if not cliente_ja_atendido:
+            liberado, aviso = validar_limite_modulo(empresa.id, 'agenda', 'clientes')
+            if not liberado:
+                flash(f"Aviso do Estabelecimento: {aviso}", "warning")
+                return render_template('agenda/limite_degustacao_atingido.html', empresa=empresa)
+    # =========================================================================
 
     dados_post = (request.get_json(silent=True) if request.is_json else request.form) or {}
 
@@ -4727,7 +4790,11 @@ def agendar(slug_empresa: str):
     data_expiracao_calculada = None
 
     if reagendar_id:
-        agendamento_original = AghAgendamento.query.filter_by(id=reagendar_id, empresa_id=empresa.id).first()
+        agendamento_original = AghAgendamento.query.filter_by(
+            id=reagendar_id,
+            empresa_id=empresa.id
+        ).first()
+
         if agendamento_original:
             horas_antecedencia, data_expiracao_calculada = _avaliar_prazo_reagendamento(agendamento_original)
 
@@ -4745,9 +4812,9 @@ def agendar(slug_empresa: str):
     # 🎯 CAPTURA E IDENTIFICAÇÃO DO BENEFICIÁRIO SELECIONADO (PASSO 1 / RASCUNHO)
     # ----------------------------------------------------------------------------------
     ben_raw_get = (
-        request.args.get('beneficiario_id') or
-        (getattr(rascunho, 'beneficiario_id', None) if rascunho else None) or
-        (getattr(agendamento_original, 'beneficiario_id', None) if agendamento_original else None)
+            request.args.get('beneficiario_id') or
+            (getattr(rascunho, 'beneficiario_id', None) if rascunho else None) or
+            (getattr(agendamento_original, 'beneficiario_id', None) if agendamento_original else None)
     )
 
     beneficiario_id_selecionado = 0
@@ -4758,8 +4825,10 @@ def agendar(slug_empresa: str):
         joinedload(EseServicoOferecido.servico_taxonomia)
     ).filter_by(empresa_id=empresa.id).all()
 
-    precos = EseServicoPreco.query.filter(EseServicoPreco.empresa_id == empresa.id,
-                                          EseServicoPreco.novo_valor > 0).all()
+    precos = EseServicoPreco.query.filter(
+        EseServicoPreco.empresa_id == empresa.id,
+        EseServicoPreco.novo_valor > 0
+    ).all()
     mapa_precos = {p.taxonomia_id: float(p.novo_valor) for p in precos}
 
     duracoes_validas = []
@@ -4810,12 +4879,9 @@ def agendar(slug_empresa: str):
         if feriado_encontrado:
             if not (excecao_empresa_dia and excecao_empresa_dia.trabalha):
                 empresa_fechada_hoje = True
-                print(
-                    f"🚫 [AGENDAR GET] Bloqueado por Feriado Oficial: {feriado_encontrado.nome} em {data_obj_checagem}")
 
         if excecao_empresa_dia and not excecao_empresa_dia.trabalha:
             empresa_fechada_hoje = True
-            print(f"🚫 [AGENDAR GET] Bloqueado por Exceção/Recesso da Empresa em {data_obj_checagem}")
 
     except Exception as e:
         print(f"⚠️ [AGENDAR GET] Erro ao validar feriado/exceção: {e}")
@@ -4839,7 +4905,8 @@ def agendar(slug_empresa: str):
                 servicos_url_ids.append(int(val))
 
     servicos_rascunho_ids = [item.servico_id for item in rascunho.itens] if (
-            rascunho and getattr(rascunho, 'itens', None)) else []
+            rascunho and getattr(rascunho, 'itens', None)
+    ) else []
 
     servicos_original_ids = []
     if agendamento_original:
@@ -4859,7 +4926,8 @@ def agendar(slug_empresa: str):
     soma_selecionados = sum(float(getattr(s, 'preco_vigente', 0) or 0) for s in servicos_selecionados)
     valor_total_cobrado = soma_selecionados if soma_selecionados > 0 else (
         float(agendamento_original.valor_total) if (
-                agendamento_original and getattr(agendamento_original, 'valor_total', None)) else 0.0
+                agendamento_original and getattr(agendamento_original, 'valor_total', None)
+        ) else 0.0
     )
 
     # Análise de Colaboradores Habilitados
@@ -4945,7 +5013,8 @@ def agendar(slug_empresa: str):
         ).all()
 
     servico_id_principal = request.args.get('servico_id', type=int) or (
-        todos_servicos_ids[0] if todos_servicos_ids else None)
+        todos_servicos_ids[0] if todos_servicos_ids else None
+    )
 
     return render_template(
         'agenda/agendamento_passo_unico.html',
@@ -4961,7 +5030,7 @@ def agendar(slug_empresa: str):
         colaboradores=colaboradores,
         profissionais=colaboradores,
         beneficiarios=beneficiarios,
-        beneficiario_id_selecionado=beneficiario_id_selecionado,  # 🎯 DADO AGORA PASSADO PARA O TEMPLATE
+        beneficiario_id_selecionado=beneficiario_id_selecionado,
         colaboradores_payload=colaboradores_payload,
         profissional_id_selecionado=profissional_id_selecionado,
         permite_escolha_profissional=permite_escolha_profissional,
@@ -9469,3 +9538,41 @@ def get_prontuario_cliente():
         import traceback
         traceback.print_exc()
         return jsonify({'sucesso': False, 'mensagem': f'Erro interno no servidor: {str(e)}'}), 500
+
+
+def resolver_contexto_usuario_agenda(cliente_modulo):
+    """
+    Identifica o nível de acesso e o estabelecimento do usuário na Agenda
+    baseando-se estritamente na tabela de contratos e no papel_nivel.
+    """
+    uuid_cliente = str(cliente_modulo.id)
+
+    # Busca os contratos ativos deste cliente
+    contratos = ColaboradorContrato.query.filter(
+        ColaboradorContrato.id_cadastro_cliente == uuid_cliente,
+        ColaboradorContrato.status_profissional == 'ativo'
+    ).all()
+
+    if not contratos:
+        return {'perfil': 'degustacao', 'local_id': None, 'nivel': 0}
+
+    # Verifica se possui algum contrato com nível de Proprietário/Diretor (>= 999)
+    diretorias = [c for c in contratos if c.papel_nivel >= 999]
+    if diretorias:
+        # Se tiver múltiplos, pega o mais recente ou o principal
+        principal = diretorias[0]
+        return {
+            'perfil': 'proprietario',
+            'local_id': principal.id_local,
+            'nivel': principal.papel_nivel,
+            'contrato': principal
+        }
+
+    # Caso contrário, é colaborador/operador padrão (< 999)
+    operacional = contratos[0]
+    return {
+        'perfil': 'colaborador',
+        'local_id': operacional.id_local,
+        'nivel': operacional.papel_nivel,
+        'contrato': operacional
+    }

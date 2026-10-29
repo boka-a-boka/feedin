@@ -1,10 +1,149 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Suporte ao Empreendedor{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilização customizada dos cards de departamento (Radio Button Elegante) */
+    .dept-card-option {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 2px solid #e9ecef;
+    }
+    .dept-card-option:hover {
+        border-color: #ced4da;
+        background-color: #fcfbfa;
+    }
+    .btn-check:checked + .dept-card-option {
+        border-color: #212529 !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+    }
+    .btn-check:checked + .dept-card-option .radio-indicator {
+        background-color: #212529;
+        border-color: #212529;
+    }
+    .btn-check:checked + .dept-card-option .radio-indicator::after {
+        content: '';
+        display: block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #ffffff;
+    }
+    .radio-indicator {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid #adb5bd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+</style>
+
+<div class="container py-3 fundo-acetinado-pwa position-relative" style="max-width: 540px; min-height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
+
+    {# 🔙 BOTÃO VOLTAR #}
+    <a href="{{ url_for('empresa.parametros_operacao', empresa_id=ese_empresa.id) }}"
+       class="btn btn-sm btn-dark border-0 rounded-circle d-flex align-items-center justify-content-center shadow mb-3"
+       style="width: 40px; height: 40px; background-color: #212529 !important; color: #ffffff !important;"
+       title="Voltar">
+        <i class="bi bi-arrow-left text-white fs-5"></i>
+    </a>
+
+    {# 📄 CARD PRINCIPAL #}
+    <div class="card border-0 bg-white p-4 rounded-4 shadow-sm mb-4">
+        
+        {# Cabeçalho #}
+        <div class="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
+            <div>
+                <h5 class="fw-bold text-dark m-0" style="font-size: 1.1rem;">
+                    <i class="bi bi-headset text-dark me-2"></i>Suporte ao Empreendedor
+                </h5>
+                <span class="text-muted small">Canal Direto Core Staff FeedIn</span>
+            </div>
+            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1" style="font-size: 0.65rem;">
+                <i class="bi bi-circle-fill me-1" style="font-size: 0.4rem;"></i>Ativo
+            </span>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show rounded-3 small py-2 px-3 mb-3" role="alert">
+                        <i class="bi bi-info-circle-fill me-1"></i> {{ message }}
+                        <button type="button" class="btn-close py-2" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('empresa.suporte_empreendedor', empresa_id=ese_empresa.id) }}">
+
+            {# 🛡️ CAMINHO OBRIGATÓRIO DO CSRF TOKEN #}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            {# 1. SELEÇÃO DE DEPARTAMENTO #}
+            <label class="form-label fw-bold text-dark mb-2" style="font-size: 0.85rem;">
+                1. Selecione o Departamento Destino
+            </label>
+            
+            <div class="d-flex flex-column gap-2 mb-4">
+                {% for dept in departamentos %}
+                    <div>
+                        <input type="radio" class="btn-check" name="departamento_id" id="dept_{{ dept.id }}" value="{{ dept.id }}" {% if loop.first %}checked{% endif %} required>
+                        <label class="dept-card-option w-100 p-3 rounded-4 bg-light d-flex align-items-start justify-content-between gap-3" for="dept_{{ dept.id }}">
+                            <div>
+                                {# Linha 1: Nome do Departamento #}
+                                <strong class="d-block text-dark" style="font-size: 0.88rem; line-height: 1.2;">
+                                    {{ dept.nome }}
+                                </strong>
+                                {# Linha 2: Descrição do Departamento #}
+                                <span class="text-muted d-block mt-1" style="font-size: 0.72rem; line-height: 1.2;">
+                                    {{ dept.descricao or 'Atendimento especializado para demandas operacionais do setor.' }}
+                                </span>
+                            </div>
+                            <div class="radio-indicator mt-1"></div>
+                        </label>
+                    </div>
+                {% else %}
+                    <div class="p-3 bg-light rounded-3 text-muted small text-center">
+                        Nenhum departamento cadastrado no momento.
+                    </div>
+                {% endfor %}
+            </div>
+
+            {# 2. MENSAGEM / NECESSIDADE #}
+            <div class="mb-4">
+                <label for="mensagem" class="form-label fw-bold text-dark mb-1" style="font-size: 0.85rem;">
+                    2. Descreva sua Necessidade ou Dúvida
+                </label>
+                <textarea class="form-control rounded-3 border p-3 small"
+                          id="mensagem"
+                          name="mensagem"
+                          rows="4"
+                          placeholder="Digite aqui os detalhes da solicitação para a nossa equipe..."
+                          style="font-size: 0.82rem; resize: none;"
+                          required></textarea>
+            </div>
+
+            {# BOTÃO DE ENVIO #}
+            <button type="submit" class="btn btn-dark fw-bold w-100 py-2.5 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-send-fill fs-6"></i> Enviar Solicitação ao Suporte
+            </button>
+
+        </form>
+
+        {# Rodapé informativo #}
+        <div class="mt-4 pt-3 border-top text-center">
+            <span class="text-muted" style="font-size: 0.68rem; line-height: 1.3; display: block;">
+                <i class="bi bi-clock-history me-1"></i> As mensagens geram um ticket pendente na central Core. Assim que um atendente assumir e responder, a pendência é concluída.
+            </span>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

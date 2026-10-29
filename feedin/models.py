@@ -1351,3 +1351,89 @@ class ModulosSistema(database.Model):
 
     def __repr__(self):
         return f"<ModuloSistema {self.nome} ({self.slug})>"
+
+
+class CoreDepartamento(db.Model):
+    """
+    Departamentos internos do FeedIn (ex: Homologação, Financeiro, Comercial, Suporte).
+    """
+    __tablename__ = 'core_departamentos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), unique=True, nullable=False, index=True)  # ex: 'homologacao', 'comercial'
+    nome = db.Column(db.String(100), nullable=False)  # ex: 'Equipe de Homologação & Onboarding'
+    descricao = db.Column(db.String(255), nullable=True)
+    ativo = db.Column(db.Boolean, default=True)
+
+
+class CoreStaff(db.Model):
+    __tablename__ = 'core_staff'
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id', ondelete='CASCADE'), unique=True, nullable=False,
+                           index=True)
+
+    cargo = db.Column(db.String(100), nullable=True)
+    email_profissional = db.Column(db.String(150), nullable=False)
+    whatsapp = db.Column(db.String(30), nullable=False)  # Obrigatório
+    rede_social_url = db.Column(db.String(255), nullable=True)  # Link completo ou alias para acesso direto
+
+    ativo = db.Column(db.Boolean, default=True)
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(TZ_BRASIL))
+
+    # Relacionamento com a tabela de Usuário padrão do FeedIn
+    usuario = db.relationship('Usuario', backref=db.backref('perfil_staff', uselist=False, cascade='all, delete'))
+
+    # Relacionamento N:N com departamentos
+    departamentos = db.relationship(
+        'CoreDepartamento',
+        secondary='core_staff_departamento',
+        backref=db.backref('membros_staff', lazy='dynamic')
+    )
+
+
+class CoreStaffDepartamento(db.Model):
+    """
+    Tabela associativa para lotar membros do staff em múltiplos departamentos.
+    """
+    __tablename__ = 'core_staff_departamento'
+
+    id = db.Column(db.Integer, primary_key=True)
+    staff_id = db.Column(db.Integer, db.ForeignKey('core_staff.id', ondelete='CASCADE'), nullable=False)
+    departamento_id = db.Column(db.Integer, db.ForeignKey('core_departamentos.id', ondelete='CASCADE'), nullable=False)
+
+
+class CoreAcaoPendente(db.Model):
+    """
+    Fila centralizada do Core para gerenciar processos de módulos que exigem intervenção do staff.
+    """
+    __tablename__ = 'core_acoes_pendentes'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Vinculação estrita por ID ao catálogo mestre de módulos (ModulosSistema)
+    modulo_id = db.Column(
+        db.Integer,
+        db.ForeignKey('modulos_sistema.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
+
+    entidade_id = db.Column(db.Integer, nullable=False,
+                            index=True)  # Ex: ID da EseEmpresa (576) ou ID do pedido de anúncio
+    departamento_id = db.Column(db.Integer, db.ForeignKey('core_departamentos.id', ondelete='RESTRICT'), nullable=False,
+                                index=True)
+
+    status = db.Column(db.String(30), default='pendente',
+                       index=True)  # 'pendente', 'em_analise', 'concluido', 'rejeitado'
+    titulo = db.Column(db.String(255), nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+    payload_dados = db.Column(db.JSON, default={})  # Metadados dinâmicos (contexto específico do módulo)
+
+    notificado = db.Column(db.Boolean, default=False)
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    atualizado_em = db.Column(db.DateTime, onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relacionamentos
+    modulo = db.relationship('ModulosSistema', backref=db.backref('acoes_pendentes', lazy='dynamic'))
+    departamento = db.relationship('CoreDepartamento', backref=db.backref('acoes', lazy='dynamic'))

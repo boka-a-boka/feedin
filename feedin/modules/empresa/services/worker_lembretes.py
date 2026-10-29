@@ -1,57 +1,49 @@
-# app/services/worker_lembretes.py
-
-from datetime import datetime, timedelta
 import logging
+from flask import current_app, url_for
+from feedin.modules.empresa.models import EseEmpresa, EseProcessoClaim
 
-from app import create_app  # Seu factory do Flask
-from app.models import db, Agendamento, EseLogMensagemAutomatica
-from app.services.notificacao_service import obter_mensagem_formatada, disparar_mensagem_cliente
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def processar_regua_lembretes():
+def disparar_notificacao_auditoria_empresa(empresa_id: int):
     """
-    Varre os agendamentos próximos e dispara lembretes (48h, 24h, 3h).
-    Devidamente protegido contra envios duplicados via EseLogMensagemAutomatica.
+    Dispara notificação multicanal (WhatsApp/E-mail) para a equipe de atendimento
+    informando que uma empresa concluiu o envio de documentos e está aguardando auditoria.
     """
-    agora = datetime.utcnow()
+    try:
+        empresa = EseEmpresa.query.get(empresa_id)
+        if not empresa:
+            logger.warning(f"[NOTIFICAÇÃO EMPRESA] Empresa #{empresa_id} não encontrada para notificação de auditoria.")
+            return False
 
-    # Tolerância de janela de busca (ex: 15 min para mais ou para menos)
-    janelas = {
-        'lembrete_48h': (agora + timedelta(hours=47, minutes=45), agora + timedelta(hours=48, minutes=15)),
-        'lembrete_24h': (agora + timedelta(hours=23, minutes=45), agora + timedelta(hours=24, minutes=15)),
-        'lembrete_3h': (agora + timedelta(hours=2, minutes=45), agora + timedelta(hours=3, minutes=15))
-    }
+        processo = EseProcessoClaim.query.filter_by(local_id=empresa.local_id).order_by(
+            EseProcessoClaim.id.desc()).first()
+        token = processo.token_validacao if processo else "N/A"
 
-    for marco, (inicio_janela, fim_janela) in janelas.items():
-        # Busca agendamentos ativos/confirmados dentro do intervalo de tempo
-        agendamentos = Agendamento.query.filter(
-            Agendamento.data_hora >= inicio_janela,
-            Agendamento.data_hora <= fim_janela,
-            Agendamento.status == 'confirmado'
-        ).all()
+        # Link direto para o painel de auditoria interna ou hub da empresa
+        try:
+            link_auditoria = url_for('empresa.hub_ativacao', empresa_id=empresa.id, _external=True)
+        except Exception:
+            link_auditoria = f"/empresa/hub/{empresa.id}"
 
-        for ag in agendamentos:
-            # Garante a idempotência (evita disparar 2x o mesmo marco para o mesmo agendamento)
-            ja_enviado = EseLogMensagemAutomatica.query.filter_by(
-                referencia_id=ag.id,
-                marco_gatilho=marco
-            ).first()
+        nome_empresa = empresa.nome or f"Empresa #{empresa.id}"
 
-            if not ja_enviado:
-                try:
-                    disparar_mensagem_cliente(ag, marco)
-                    logger.info(f"[{marco}] Lembrete enviado com sucesso | Agendamento ID: {ag.id}")
-                except Exception as e:
-                    logger.error(f"Erro ao enviar {marco} para Agendamento ID {ag.id}: {str(e)}")
+        logger.info(
+            f"🔔 [AUDITORIA EMPRESA] Disparando alerta para atendimento: "
+            f"Estabelecimento '{nome_empresa}' enviou a documentação e está aguardando análise humana. Token: {token}"
+        )
 
+        # ---------------------------------------------------------------------
+        # INTEGRAÇÃO DE DISPARO (Exemplo usando o canal oficial do sistema)
+        # ---------------------------------------------------------------------
+        # Aqui você pode plugar a chamada para a sua API de WhatsApp de suporte:
+        # from feedin.services.whatsapp_service import disparar_whatsapp_suporte
+        # mensagem = f"🚨 *Nova Empresa em Auditoria*\n\nEstabelecimento: {nome_empresa}\nAcesse para homologar: {link_auditoria}"
+        # disparar_whatsapp_suporte(mensagem)
 
-if __name__ == "__main__":
-    # Inicializa o contexto do Flask para ter acesso ao Banco de Dados (SQLAlchemy)
-    app = create_app()
-    with app.app_context():
-        logger.info("Iniciando varredura de lembretes automáticos...")
-        processar_regua_lembretes()
-        logger.info("Varredura concluída.")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ [ERRO NOTIFICAÇÃO EMPRESA] Falha ao notificar atendimento sobre a empresa #{empresa_id}: {e}",
+                     exc_info=True)
+        return False

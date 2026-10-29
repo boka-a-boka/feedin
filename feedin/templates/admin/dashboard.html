@@ -97,7 +97,7 @@
             <div class="card bg-dark text-white border-secondary h-100">
                 <div class="card-header border-secondary d-flex justify-content-between align-items-center py-3">
                     <span class="fw-bold text-uppercase text-warning" style="letter-spacing: 1px;">
-                        <i class="fas fa-sitemap"></i> 1. Consultar Termo Pai
+                        1. <i class="fas fa-sitemap"></i> Consultar Termo Pai
                     </span>
                 </div>
                 <div class="card-body">
@@ -273,7 +273,7 @@
 
     </div>
 
-    <!-- DEVOLUÇÃO DO AJUSTE PONTUAL SOLICITADO: NOVO BLOCO 3 ADAPTADO COM INTELIGÊNCIA COMERCIAL -->
+    <!-- BLOCO 3: PUBLICIDADE CONTEXTUAL -->
     {% if pai_selecionado %}
     <div class="row mb-5">
         <div class="col-lg-12">
@@ -284,17 +284,14 @@
                     </span>
                 </div>
                 <div class="card-body">
-                    <!-- Rota apontando dinamicamente para o ID da Taxonomia ativa -->
-                    <form method="POST" action="{{ url_for('admin_configurar_anuncio', taxonomia_id=pai_selecionado.id) }}" enctype="multipart/form-data">
+                    <form method="POST" action="{{ url_for('publicidade.admin_configurar_campanha', modulo_slug='taxonomia', nome_slot='destaque_topo', taxonomia_id=pai_selecionado.id) }}" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small text-white-50">Empresa Proprietária do Anúncio (Digite o nome):</label>
-
                                 <input type="text" id="busca_local_autocomplete" class="form-control bg-secondary text-white border-0"
                                        placeholder="Comece a digitar o nome..." required>
-
                                 <input type="hidden" id="local_id_hidden" name="local_id" required>
                             </div>
                             <div class="col-md-12 mb-3">
@@ -310,31 +307,10 @@
                                 <input type="file" name="flyer_arte" class="form-control bg-secondary text-white border-0" accept="image/*">
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small text-white-50">Data de Expiração da Divulgação (Janela de Avaliação):</label>
+                                <label class="form-label small text-white-50">Data de Expiração da Divulgação:</label>
                                 <input type="date" name="data_expiracao" class="form-control bg-secondary text-white border-0" required>
                             </div>
                         </div>
-
-                        {# Se o termo já possuir campanhas ativas mapeadas em nosso novo relacionamento #}
-                        {% if pai_selecionado.anuncios %}
-                        <div class="mb-4 p-3 rounded border border-secondary text-center" style="background-color: #212529;">
-                            <div class="row align-items-center">
-                                <div class="col-md-4 text-md-start">
-                                    <small class="text-success fw-bold d-block mb-1"><i class="fas fa-check-circle"></i> Campanha Ativa no Contexto:</small>
-                                    <span class="small text-white-50 d-block">Termo: {{ pai_selecionado.nome }}</span>
-                                    <span class="small text-warning d-block mt-2">
-                                        <i class="fas fa-eye"></i> Exibições Computadas: <strong>{{ pai_selecionado.anuncios[0].visualizacoes }}</strong>
-                                    </span>
-                                </div>
-                                <div class="col-md-8 text-md-end">
-                                    <img src="{{ url_for('static', filename='uploads/flyers/' ~ pai_selecionado.anuncios[0].url_flyer) }}"
-                                         class="img-fluid rounded border border-secondary"
-                                         style="max-height: 120px; object-fit: contain;"
-                                         alt="Flyer Ativo">
-                                </div>
-                            </div>
-                        </div>
-                        {% endif %}
 
                         <button type="submit" class="btn btn-warning text-dark fw-bold w-100 py-2">
                             <i class="fas fa-rocket"></i> Validar e Injetar Publicidade no Feed
@@ -346,12 +322,12 @@
     </div>
     {% endif %}
 
-    <!-- SEÇÃO ACCORDION: GESTÃO DE USUÁRIOS -->
+    <!-- SEÇÃO ACCORDION: GESTÃO DE USUÁRIOS & STAFF INTEGRADO -->
     <div class="row">
         <div class="col-lg-12">
             <div class="card bg-dark text-white border-secondary">
-                <div class="card-header border-secondary py-3">
-                    <span class="fw-bold text-uppercase" style="letter-spacing: 1px;">Gestão de Níveis e Pioneirismo</span>
+                <div class="card-header border-secondary py-3 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-uppercase" style="letter-spacing: 1px;">Gestão de Níveis, Pioneirismo e Staff</span>
                 </div>
                 <div class="card-body p-0">
                     <div class="accordion accordion-flush" id="accordionUsuarios">
@@ -403,20 +379,33 @@
                                                     {% else %}
                                                         <span class="badge bg-secondary text-light border border-light-subtle">Comum</span>
                                                     {% endif %}
+
+                                                    {% if u.perfil_staff %}
+                                                        <span class="badge bg-warning text-dark fw-bold ms-1"><i class="fas id-badge"></i> Staff</span>
+                                                    {% endif %}
                                                 </td>
 
                                                 <td class="text-end pe-3">
                                                     <div class="btn-group">
+                                                        <!-- BOTÃO INTELIGENTE DE STAFF (CRIAÇÃO/EDIÇÃO DIRETA DO USUÁRIO) -->
+                                                        <button type="button"
+                                                                class="btn btn-sm {% if u.perfil_staff %}btn-warning text-dark{% else %}btn-outline-secondary{% endif %} me-2"
+                                                                data-bs-toggle="modal"
+                                                                data-bs-target="#modalStaff{{ u.id }}"
+                                                                title="{% if u.perfil_staff %}Gerenciar Staff{% else %}Tornar Membro do Staff{% endif %}">
+                                                            <i class="fas fa-id-badge"></i>
+                                                        </button>
+
                                                         {% if u.nivel_acesso == 1 %}
                                                         <a href="{{ url_for('admin_reenviar_confirmacao', usuario_id=u.id) }}"
                                                            class="btn btn-sm btn-info text-dark me-2 fw-bold"
                                                            title="Reenviar e-mail de confirmação">
-                                                            <i class="fas fa-paper-plane"></i> Reenviar Link
+                                                            <i class="fas fa-paper-plane"></i>
                                                         </a>
                                                         {% endif %}
 
                                                         {% if not u.is_pioneiro %}
-                                                        <a href="{{ url_for('promover_pioneiro', usuario_id=u.id) }}" class="btn btn-sm btn-warning text-dark me-2 fw-bold">
+                                                        <a href="{{ url_for('promover_pioneiro', usuario_id=u.id) }}" class="btn btn-sm btn-warning text-dark me-2 fw-bold" title="Promover a Pioneiro">
                                                             <i class="fas fa-medal"></i>
                                                         </a>
                                                         {% endif %}
@@ -435,6 +424,58 @@
                                                     </div>
                                                 </td>
                                             </tr>
+
+                                            <!-- MODAL DINÂMICO DE STAFF POR USUÁRIO -->
+                                            <div class="modal fade text-start" id="modalStaff{{ u.id }}" tabindex="-1">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content bg-dark text-white border-warning">
+                                                        <form action="{{ url_for('admin_cadastrar_staff', usuario_id=u.id) }}" method="POST">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                            <!-- GARANTIA ADICIONAL -->
+                                                            <input type="hidden" name="usuario_id" value="{{ u.id }}">
+                                                            <div class="modal-header border-secondary">
+                                                                <h5 class="modal-title text-warning">
+                                                                    <i class="fas fa-id-badge"></i> Staff: {{ u.username }}
+                                                                </h5>
+                                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-white-50">E-mail Profissional (Obrigatório):</label>
+                                                                    <input type="email" name="email_profissional" class="form-control bg-secondary text-white border-0" value="{{ u.email }}" required>
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-white-50">WhatsApp (Obrigatório):</label>
+                                                                    <input type="text" name="whatsapp" class="form-control bg-secondary text-white border-0" placeholder="+5519999999999" value="{{ u.perfil_staff.whatsapp if u.perfil_staff else '' }}" required>
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-white-50">Cargo / Função:</label>
+                                                                    <input type="text" name="cargo" class="form-control bg-secondary text-white border-0" placeholder="Ex: Analista de Homologação" value="{{ u.perfil_staff.cargo if u.perfil_staff else '' }}">
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-white-50">Link da Rede Social (Alias ou URL):</label>
+                                                                    <input type="url" name="rede_social_url" class="form-control bg-secondary text-white border-0" placeholder="https://instagram.com/..." value="{{ u.perfil_staff.rede_social_url if u.perfil_staff else '' }}">
+                                                                </div>
+                                                                <div class="mb-3">
+                                                                    <label class="form-label small text-white-50">Departamentos Responsáveis:</label>
+                                                                    <select name="departamento_ids" class="form-select bg-secondary text-white border-0" multiple required style="min-height: 100px;">
+                                                                        {% for depto in departamentos_core %}
+                                                                            <option value="{{ depto.id }}" {% if u.perfil_staff and depto in u.perfil_staff.departamentos %}selected{% endif %}>
+                                                                                {{ depto.nome }}
+                                                                            </option>
+                                                                        {% endfor %}
+                                                                    </select>
+                                                                    <small class="text-muted">Segure Ctrl ou Cmd para selecionar múltiplos setores.</small>
+                                                                </div>
+                                                            </div>
+                                                            <div class="modal-footer border-secondary">
+                                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                                <button type="submit" class="btn btn-warning text-dark fw-bold">Salvar Vínculo de Staff</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            </div>
                                             {% endfor %}
                                         </tbody>
                                     </table>
@@ -447,6 +488,293 @@
             </div>
         </div>
     </div>
+
+    <!-- SEÇÃO 5: GESTÃO DE DEPARTAMENTOS DO CORE -->
+    <div class="row mb-5">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-info">
+                <div class="card-header border-info d-flex justify-content-between align-items-center py-3">
+                    <span class="fw-bold text-uppercase text-info" style="letter-spacing: 1px;">
+                        <i class="fas fa-sitemap"></i> 5. Gestão de Departamentos Operacionais
+                    </span>
+                    <button type="button" class="btn btn-sm btn-info text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#modalNovoDepartamento">
+                        <i class="fas fa-plus-circle"></i> Novo Departamento
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0 align-middle">
+                            <thead>
+                                <tr class="small text-muted border-secondary">
+                                    <th class="ps-3">Código (Slug)</th>
+                                    <th>Nome do Departamento</th>
+                                    <th>Descrição</th>
+                                    <th>Status</th>
+                                    <th class="text-end pe-3">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if departamentos_core %}
+                                    {% for depto in departamentos_core %}
+                                    <tr class="border-secondary">
+                                        <td class="ps-3"><code class="text-warning">{{ depto.codigo }}</code></td>
+                                        <td><strong>{{ depto.nome }}</strong></td>
+                                        <td><small class="text-muted">{{ depto.descricao or 'Sem descrição' }}</small></td>
+                                        <td>
+                                            {% if depto.ativo %}
+                                                <span class="badge bg-success">Ativo</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Inativo</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <div class="btn-group">
+                                                <!-- Botão Editar -->
+                                                <button type="button" class="btn btn-sm btn-outline-info me-2" data-bs-toggle="modal" data-bs-target="#modalEditarDepto{{ depto.id }}" title="Editar Departamento">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+
+                                                <!-- Botão Ativar/Desativar -->
+                                                <form action="{{ url_for('admin_alternar_status_departamento', depto_id=depto.id) }}" method="POST" class="d-inline">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <button type="submit" class="btn btn-sm {% if depto.ativo %}btn-outline-danger{% else %}btn-outline-success{% endif %}" title="{% if depto.ativo %}Desativar{% else %}Ativar{% endif %}">
+                                                        <i class="fas {% if depto.ativo %}fa-ban{% else %}fa-check{% endif %}"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    <!-- MODAL DE EDIÇÃO DO DEPARTAMENTO -->
+                                    <div class="modal fade text-start" id="modalEditarDepto{{ depto.id }}" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content bg-dark text-white border-info">
+                                                <form action="{{ url_for('admin_salvar_departamento') }}" method="POST">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="departamento_id" value="{{ depto.id }}">
+                                                    <div class="modal-header border-secondary">
+                                                        <h5 class="modal-title text-info"><i class="fas fa-edit"></i> Editar Departamento</h5>
+                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <div class="mb-3">
+                                                            <label class="form-label small text-white-50">Código Único (Slug - ex: 'homologacao'):</label>
+                                                            <input type="text" name="codigo" class="form-control bg-secondary text-white border-0" value="{{ depto.codigo }}" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small text-white-50">Nome do Setor:</label>
+                                                            <input type="text" name="nome" class="form-control bg-secondary text-white border-0" value="{{ depto.nome }}" required>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small text-white-50">Descrição:</label>
+                                                            <textarea name="descricao" class="form-control bg-secondary text-white border-0" rows="2">{{ depto.descricao }}</textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer border-secondary">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                        <button type="submit" class="btn btn-info text-dark fw-bold">Salvar Alterações</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">Nenhum departamento cadastrado.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🛡️ SEÇÃO 6: FILA DE HOMOLOGAÇÃO E AUDITORIA DE EMPRESAS -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-warning shadow-sm">
+                <div class="card-header border-warning d-flex justify-content-between align-items-center py-3">
+                    <span class="fw-bold text-uppercase text-warning" style="letter-spacing: 1px;">
+                        <i class="fas fa-shield-alt me-1"></i> 6. Fila de Homologação e Auditoria de Empresas
+                    </span>
+                    <span class="badge bg-warning text-dark">{{ pendencias_homologacao|length }} Pendente(s)</span>
+                </div>
+                <div class="card-body">
+                    {% if pendencias_homologacao %}
+                        <div class="accordion accordion-flush" id="accordionHomologacao">
+                            {% for p in pendencias_homologacao %}
+                            <div class="accordion-item bg-dark text-white border-secondary mb-3 rounded overflow-hidden">
+                                <h2 class="accordion-header" id="headingAcao{{ p.id }}">
+                                    <button class="accordion-button collapsed bg-secondary text-white fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAcao{{ p.id }}">
+                                        <i class="fas fa-building text-warning me-2"></i> {{ p.titulo }} &nbsp;<small class="text-white-50">(Ação ID: #{{ p.id }})</small>
+                                    </button>
+                                </h2>
+                                <div id="collapseAcao{{ p.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionHomologacao">
+                                    <div class="accordion-body p-4" style="background-color: #212529;">
+                                        <div class="row mb-3">
+                                            <div class="col-md-12">
+                                                <small class="text-muted d-block">Detalhes da Solicitação:</small>
+                                                <p class="text-white">{{ p.descricao }}</p>
+
+                                                {% if p.payload_dados %}
+                                                    <div class="p-2 rounded bg-dark border border-secondary mt-2">
+                                                        <small class="text-info d-block fw-bold"><i class="fas fa-info-circle"></i> Metadados do Claim:</small>
+                                                        <code class="text-light small">{{ p.payload_dados }}</code>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                        <hr class="border-secondary">
+
+                                        <form action="{{ url_for('tratar_pendencia_core', acao_id=p.id) }}" method="POST">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                            <div class="mb-3">
+                                                <label class="form-label small text-muted">Decisão de Auditoria:</label>
+                                                <select name="decisao" class="form-select bg-secondary text-white border-0" required>
+                                                    <option value="" selected disabled>Escolha o parecer...</option>
+                                                    <option value="aprovar">✅ Aprovar Documentação (Liberar Cadastro e Vínculo)</option>
+                                                    <option value="rejeitar">⚠️ Solicitar Correção de Inconsistências</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label small text-warning">Parecer Técnico / Motivo (Obrigatório se rejeitar):</label>
+                                                <textarea name="parecer" class="form-control bg-secondary text-white border-0" rows="3" placeholder="Descreva detalhadamente o ajuste necessário..."></textarea>
+                                            </div>
+
+                                            <button type="submit" class="btn btn-warning text-dark fw-bold w-100 py-2">
+                                                <i class="fas fa-paper-plane me-1"></i> Protocolar Decisão e Notificar Solicitante
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-check-circle text-success fs-3 mb-2 d-block"></i>
+                            <p class="mb-0">Nenhuma empresa aguardando auditoria no momento.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🎧 SEÇÃO 7: FILA DE SUPORTE E CHAMADOS DE DEPARTAMENTO -->
+    <div class="row mb-5">
+        <div class="col-lg-12">
+            <div class="card bg-dark text-white border-info shadow-sm">
+                <div class="card-header border-info d-flex justify-content-between align-items-center py-3">
+                    <span class="fw-bold text-uppercase text-info" style="letter-spacing: 1px;">
+                        <i class="fas fa-headset me-1"></i> 7. Fila de Suporte e Chamados de Balcão
+                    </span>
+                    <span class="badge bg-info text-dark">{{ pendencias_suporte|length }} Chamado(s)</span>
+                </div>
+                <div class="card-body">
+                    {% if pendencias_suporte %}
+                        <div class="accordion accordion-flush" id="accordionSuporte">
+                            {% for p in pendencias_suporte %}
+                            <div class="accordion-item bg-dark text-white border-secondary mb-3 rounded overflow-hidden">
+                                <h2 class="accordion-header" id="headingSuporte{{ p.id }}">
+                                    <button class="accordion-button collapsed bg-secondary text-white fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSuporte{{ p.id }}">
+                                        <i class="fas fa-ticket-alt text-info me-2"></i> {{ p.titulo }} &nbsp;<small class="text-white-50">(Chamado ID: #{{ p.id }})</small>
+                                    </button>
+                                </h2>
+                                <div id="collapseSuporte{{ p.id }}" class="accordion-collapse collapse" data-bs-parent="#accordionSuporte">
+                                    <div class="accordion-body p-4" style="background-color: #212529;">
+                                        <div class="row mb-3">
+                                            <div class="col-md-12">
+                                                <small class="text-muted d-block">Mensagem do Empreendedor:</small>
+                                                <p class="text-white">{{ p.descricao }}</p>
+
+                                                {% if p.payload_dados %}
+                                                    <div class="p-2 rounded bg-dark border border-secondary mt-2">
+                                                        <small class="text-info d-block fw-bold"><i class="fas fa-info-circle"></i> Metadados do Chamado:</small>
+                                                        <code class="text-light small">{{ p.payload_dados }}</code>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+
+                                        <hr class="border-secondary">
+
+                                        <form action="{{ url_for('tratar_pendencia_core', acao_id=p.id) }}" method="POST">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                                            <div class="mb-3">
+                                                <label class="form-label small text-muted">Ação de Atendimento:</label>
+                                                <select name="decisao" class="form-select bg-secondary text-white border-0" required>
+                                                    <option value="" selected disabled>Escolha a resolução...</option>
+                                                    <option value="concluir">✅ Marcar Chamado como Concluído / Atendido</option>
+                                                    <option value="rejeitar">🔒 Arquivar / Fechar Chamado</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label small text-info">Resposta / Parecer do Atendente (Opcional):</label>
+                                                <textarea name="parecer" class="form-control bg-secondary text-white border-0" rows="3" placeholder="Descreva a solução ou orientações repassadas ao lojista..."></textarea>
+                                            </div>
+
+                                            <button type="submit" class="btn btn-info text-dark fw-bold w-100 py-2">
+                                                <i class="fas fa-check-circle me-1"></i> Concluir Atendimento e Fechar Chamado
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-smile text-info fs-3 mb-2 d-block"></i>
+                            <p class="mb-0">Nenhum chamado de suporte pendente na fila.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: NOVO DEPARTAMENTO -->
+    <div class="modal fade text-start" id="modalNovoDepartamento" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white border-info">
+                <form action="{{ url_for('admin_salvar_departamento') }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="modal-header border-secondary">
+                        <h5 class="modal-title text-info"><i class="fas fa-plus-circle"></i> Cadastrar Novo Departamento</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small text-white-50">Código Único (Slug - ex: 'financeiro', 'suporte'):</label>
+                            <input type="text" name="codigo" class="form-control bg-secondary text-white border-0" placeholder="Ex: comercial" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small text-white-50">Nome do Setor:</label>
+                            <input type="text" name="nome" class="form-control bg-secondary text-white border-0" placeholder="Ex: Equipe Comercial & Vendas" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small text-white-50">Descrição:</label>
+                            <textarea name="descricao" class="form-control bg-secondary text-white border-0" rows="2" placeholder="Responsável pelo onboarding de novos parceiros..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-secondary">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-info text-dark fw-bold">Criar Departamento</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -611,5 +939,47 @@ jQuery(document).ready(function($) {
     });
 });
 
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.matches('[class*="select-acao-auditoria-"]')) {
+        const empresaId = e.target.getAttribute('data-empresa-id');
+        const box = document.getElementById('boxMotivo' + empresaId);
+        if (e.target.value === 'corrigir') {
+            box.classList.remove('d-none');
+        } else {
+            box.classList.add('d-none');
+        }
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Seleciona todos os selects de ação de auditoria na fila
+    const selectsAcao = document.querySelectorAll('[class*="select-acao-auditoria-"]');
+
+    selectsAcao.forEach(function (select) {
+        select.addEventListener('change', function () {
+            const empresaId = this.getAttribute('data-empresa-id');
+            const boxMotivo = document.getElementById('boxMotivo' + empresaId);
+
+            if (!boxMotivo) return;
+
+            const textareaMotivo = boxMotivo.querySelector('textarea');
+
+            if (this.value === 'corrigir') {
+                // Exibe a caixa de texto e a torna obrigatória
+                boxMotivo.classList.remove('d-none');
+                if (textareaMotivo) {
+                    textareaMotivo.required = true;
+                }
+            } else {
+                // Oculta a caixa de texto, remove a obrigatoriedade e limpa o valor
+                boxMotivo.classList.add('d-none');
+                if (textareaMotivo) {
+                    textareaMotivo.required = false;
+                    textareaMotivo.value = '';
+                }
+            }
+        });
+    });
+});
 </script>
 {% endblock %}

@@ -141,14 +141,19 @@ def login():
                     )
                 )
 
-                if cpf_hash_alvo:
-                    query_vinculo = query_vinculo.filter(ModVinculoModulo.cpf_hash == cpf_hash_alvo)
+                # Chave da verdade estrita para o ModVinculoModulo
+                cpf_hash_alvo = getattr(cliente_modulo, 'cpf_hash', None) or f"temp_{cliente_modulo.id}"
 
-                vinculo_ativo = query_vinculo.first()
+                vinculo_ativo = ModVinculoModulo.query.filter(
+                    ModVinculoModulo.modulo_slug == modulo_slug,
+                    ModVinculoModulo.cpf_hash == cpf_hash_alvo,
+                    ModVinculoModulo.email_customizado == cliente_modulo.email,
+                    ModVinculoModulo.ativo == True
+                ).first()
 
                 if not vinculo_ativo:
                     vinculo_ativo = ModVinculoModulo(
-                        cpf_hash=cpf_hash_alvo or f"temp_{cliente_modulo.id}",
+                        cpf_hash=cpf_hash_alvo,
                         modulo_slug=modulo_slug,
                         local_id=session.get('local_id_atual'),
                         email_customizado=cliente_modulo.email,

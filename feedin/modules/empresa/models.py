@@ -77,6 +77,31 @@ class ModEmpresaModulo(db.Model):
     )
 
 
+class ModEmpresaModuloLog(db.Model):
+    """
+    Trilha de auditoria e histórico de alterações contratuais e de status por módulo.
+    """
+    __tablename__ = 'mod_empresa_modulos_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_modulo_id = db.Column(db.Integer, db.ForeignKey('mod_empresa_modulos.id', ondelete='CASCADE'),
+                                  nullable=False, index=True)
+
+    # O que mudou?
+    acao = db.Column(db.String(50),
+                     nullable=False)  # ex: 'solicitacao_degustacao', 'aceite_termo', 'upgrade_pro', 'bloqueio_vencimento'
+    tipo_plano_anterior = db.Column(db.String(30), nullable=True)
+    tipo_plano_novo = db.Column(db.String(30), nullable=True)
+    status_anterior = db.Column(db.String(20), nullable=True)
+    status_novo = db.Column(db.String(20), nullable=True)
+
+    # Metadados de rastreio legal
+    usuario_responsavel_id = db.Column(db.String(36), nullable=True)  # UUID de quem executou a ação
+    ip_origem = db.Column(db.String(45), nullable=True)
+    detalhes = db.Column(db.Text, nullable=True)  # JSON ou texto descritivo
+    criado_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class EseEmpresa(db.Model):
     """
     📌 ESE_EMPRESA: O Hub Comercial e de Branding do Empreendedor

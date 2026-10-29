@@ -76,7 +76,7 @@
         </div>
     </div>
 
-    {# ⚙️ LISTA DE CONFIGURAÇÕES DIRETAS #}
+{# ⚙️ LISTA DE CONFIGURAÇÕES DIRETAS #}
     <div class="d-flex flex-column gap-2 mb-4">
 
         {# CARD 1: Calendário e Exceções #}
@@ -96,7 +96,7 @@
         </div>
 
         {# CARD 2: Termos de Uso #}
-        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Regulamentos de convivência e aceite de termos em desenvolvimento para a fase Beta.')">
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="window.location.href='{{ url_for('empresa.termos_de_uso', empresa_id=ese_empresa.id) }}'">
             <div class="card-body p-3 d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
@@ -112,7 +112,7 @@
         </div>
 
         {# CARD 3: LGPD #}
-        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Termos de conformidade com LGPD em desenvolvimento.')">
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="window.location.href='{{ url_for('empresa.lgpd_privacidade', empresa_id=ese_empresa.id) }}'">
             <div class="card-body p-3 d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">
@@ -128,7 +128,7 @@
         </div>
 
         {# CARD 4: Suporte Técnico #}
-        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="alert('Suporte técnico FeedIn local.')">
+        <div class="card card-operacao-direta bg-white rounded-4 shadow-sm" onclick="window.location.href='{{ url_for('empresa.suporte_empreendedor', empresa_id=ese_empresa.id) }}'">
             <div class="card-body p-3 d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-3 d-flex align-items-center justify-content-center border" style="width: 44px; height: 44px; min-width: 44px; background-color: #fcfbfa;">

@@ -74,21 +74,26 @@
                 </div>
             </a>
 
-            {# AÇÃO 3: VITRINE DA TV / RECEPÇÃO (DESTRAVADO!) #}
-            <a href="{{ url_for('empresa.vitrine_tv', empresa_id=ese_empresa.id) }}" class="card shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
+            {# AÇÃO 3: VITRINE DIGITAL / TV (BLOQUEADO / EM BREVE) #}
+            <div class="card shadow-sm rounded-4 p-3 bg-light text-muted border border-secondary-subtle border-start-4 border-start-secondary position-relative overflow-hidden opacity-75">
+                <span class="position-absolute top-0 end-0 bg-secondary text-white fw-bold px-2 py-0.5 shadow-sm" style="font-size: 0.55rem; border-bottom-left-radius: 8px;">
+                    <i class="bi bi-hourglass-split text-warning me-1"></i>EM BREVE
+                </span>
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                        <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                             <i class="bi bi-tv fs-4 d-block"></i>
                         </div>
                         <div>
-                            <h6 class="fw-bold m-0" style="font-size: 0.9rem;">3. Vitrine Digital / TV</h6>
-                            <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">Acesse a tela limpa da sua tabela comercial, ideal para transmissão em Smart TVs na recepção.</p>
+                            <h6 class="fw-bold m-0 text-dark" style="font-size: 0.9rem;">3. Vitrine Digital / TV</h6>
+                            <p class="text-muted m-0 mt-1" style="font-size: 0.72rem; line-height: 1.2;">Tela limpa da tabela comercial para transmissão em Smart TVs na recepção.</p>
                         </div>
                     </div>
-                    <i class="bi bi-chevron-right text-danger fs-5"></i>
+                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.6rem;">
+                        <i class="bi bi-lock-fill me-1"></i> Em Breve
+                    </span>
                 </div>
-            </a>
+            </div>
 
             {# AÇÃO 4: TABELA DE PREÇOS PARA IMPRESSÃO (NOVO!) #}
             <a href="{{ url_for('empresa.tabela_precos_impressao', empresa_id=ese_empresa.id) }}" target="_blank" class="card shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">

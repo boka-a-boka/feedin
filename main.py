@@ -5,6 +5,8 @@ from feedin import create_app, database
 # Solicita a construção de uma instância limpa do aplicativo
 app = create_app()
 
+app.jinja_env.cache = {}  # Desativa o cache do Jinja em ambiente de desenvolvimento
+
 with app.app_context():
     database.create_all()
     print("Banco de dados verificado com sucesso!")

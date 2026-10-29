@@ -67,9 +67,10 @@ from feedin.models import (
     PostagemInteracao, postagem_tags, usuarios_interesses, ReivindicacaoLocal,
     AvaliacaoLocal, Notificacao, Bloqueios, Desconexoes, MarcacaoPostagem,
     CredencialBiometrica, Publicacao, AnuncioClique, LocalAnuncio, HistoricoOcupacaoLocal,
-    Cargo, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo, ModulosSistema
+    Cargo, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo, ModulosSistema, CoreAcaoPendente, CoreStaff, CoreDepartamento,
+    CoreStaffDepartamento,
 )
-from feedin.modules.empresa.models import ModHomologacaoEmpresa, CadastroFeriado
+from feedin.modules.empresa.models import ModHomologacaoEmpresa, CadastroFeriado, EseEmpresa, EseProcessoClaim
 from feedin.modules.auth.models import VinculoUsuarioEmpresa, ModVinculoModulo
 
 # 8. UTILITÁRIOS E FERRAMENTAS DE MANUTENÇÃO
@@ -95,6 +96,9 @@ fuso_sp = pytz.timezone('America/Sao_Paulo')
 # Chave Mestra para Criptografia Reversível (Mantida por consistência legada)
 CHAVE_MESTRA = b'VUSlvfpIeAMtezp0VfI76eArKJ6f-Xp9UsPqmZDzxlI='
 fernet = Fernet(CHAVE_MESTRA)
+
+# Fuso horário padrão do sistema
+TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
 
 
 def apenas_admin(f):
@@ -1264,7 +1268,7 @@ def upload_foto_perfil():
 
     if arquivo:
         # Chamada unificada com modulo='perfil'
-        nome_processado = salvar_imagem_modulos(arquivo, current_user.id, modulo='perfil')
+        nome_processado = salvar_imagem_modulo(arquivo, current_user.id, modulo='perfil')
 
         if nome_processado:
             foto_antiga = current_user.foto_perfil
@@ -1292,7 +1296,7 @@ def upload_capa():
 
     if arquivo:
         # Chamada unificada com modulo='capa'
-        nome_processado = salvar_imagem_modulos(arquivo, current_user.id, modulo='capa')
+        nome_processado = salvar_imagem_modulo(arquivo, current_user.id, modulo='capa')
 
         if nome_processado:
             if not current_user.perfil:
@@ -2868,6 +2872,7 @@ def apenas_admin(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
 # ------------> rota que renderiza a central e a rota específica que dispara o download do CSV da tabela "Locais".
 
 @current_app.route('/admin/dashboard')
@@ -2907,7 +2912,31 @@ def admin_sistema(pai_id=None):
         agrupado_bruto[letra].append(u)
 
     usuarios_agrupados = {letra: agrupado_bruto[letra] for letra in sorted(agrupado_bruto.keys())}
-    # =================================================================
+
+    # 4. CARREGAMENTO DOS DADOS DE STAFF E DEPARTAMENTOS DO CORE
+    staff_membros = CoreStaff.query.all()
+    departamentos_core = CoreDepartamento.query.filter_by(ativo=True).all()
+
+    # 5. CARREGAMENTO DA FILA DE HOMOLOGAÇÃO (SEÇÃO 6) E SUPORTE (SEÇÃO 7)
+    depto_homologacao = CoreDepartamento.query.filter_by(codigo='homologacao').first()
+
+    pendencias_homologacao = []
+    if depto_homologacao:
+        pendencias_homologacao = CoreAcaoPendente.query.filter_by(
+            departamento_id=depto_homologacao.id,
+            status='pendente'
+        ).order_by(CoreAcaoPendente.criado_em.desc()).all()
+
+    # 🔍 Busca todos os chamados pendentes de suporte ou de outros departamentos (que não sejam homologação pura)
+    query_suporte = CoreAcaoPendente.query.filter_by(status='pendente')
+    if depto_homologacao:
+        query_suporte = query_suporte.filter(CoreAcaoPendente.departamento_id != depto_homologacao.id)
+
+    pendencias_suporte = query_suporte.order_by(CoreAcaoPendente.criado_em.desc()).all()
+
+    # 🔍 PRINT DE DIAGNÓSTICO RÁPIDO NO TERMINAL DO PYCHARM
+    print(
+        f"\n[DEBUG ADMIN DASHBOARD] Homologações: {len(pendencias_homologacao)} | Suporte/Outros: {len(pendencias_suporte)}\n")
 
     return render_template(
         'admin/dashboard.html',
@@ -2915,7 +2944,11 @@ def admin_sistema(pai_id=None):
         pai_selecionado=pai_selecionado,
         avos=avos,
         qtd_filhos=qtd_filhos,
-        usuarios_agrupados=usuarios_agrupados
+        usuarios_agrupados=usuarios_agrupados,
+        staff_membros=staff_membros,
+        departamentos_core=departamentos_core,
+        pendencias_homologacao=pendencias_homologacao,  # <--- Alimentando a Seção 6
+        pendencias_suporte=pendencias_suporte  # <--- Alimentando a Seção 7 (Suporte)
     )
 
 
@@ -3313,6 +3346,208 @@ def admin_novo_local():
             flash("Erro de integridade ou dados duplicados.", "danger")
 
     return render_template("admin/form_local.html", categorias=categorias)
+
+
+# =========================================================================
+# 🛡️ GESTÃO DE STAFF E DEPARTAMENTOS DO CORE (INTEGRAÇÃO ADMINISTRATIVA)
+# =========================================================================
+
+@current_app.route('/core/admin/staff/cadastrar', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_cadastrar_staff():
+    """Cadastra ou atualiza um membro do staff vinculado diretamente ao usuário."""
+    usuario_id = request.args.get('usuario_id', type=int) or request.form.get('usuario_id', type=int)
+
+    if not usuario_id:
+        flash("Usuário não identificado para vinculação de Staff.", "danger")
+        return redirect(url_for('admin_sistema'))
+
+    usuario_alvo = Usuario.query.get_or_404(usuario_id)
+
+    email_profissional = request.form.get('email_profissional', '').strip()
+    whatsapp = request.form.get('whatsapp', '').strip()
+    cargo = request.form.get('cargo', '').strip()
+    rede_social_url = request.form.get('rede_social_url', '').strip()
+    deptos_ids = request.form.getlist('departamento_ids')
+
+    if not email_profissional or not whatsapp:
+        flash("E-mail profissional e WhatsApp são obrigatórios.", "warning")
+        return redirect(url_for('admin_sistema'))
+
+    try:
+        staff = CoreStaff.query.filter_by(usuario_id=usuario_alvo.id).first()
+
+        if not staff:
+            import uuid
+            uuid_temp = getattr(usuario_alvo, 'uuid', None) or str(uuid.uuid4())
+
+            staff = CoreStaff(
+                usuario_id=usuario_alvo.id,
+                email_profissional=email_profissional,
+                whatsapp=whatsapp,
+                cargo=cargo,
+                ativo=True,
+                criado_em=datetime.now(timezone.utc)  # <-- Corrigido usando timezone padrão
+            )
+            if hasattr(staff, 'rede_social_url'):
+                staff.rede_social_url = rede_social_url
+
+            database.session.add(staff)
+        else:
+            staff.email_profissional = email_profissional
+            staff.whatsapp = whatsapp
+            staff.cargo = cargo
+            if hasattr(staff, 'rede_social_url'):
+                staff.rede_social_url = rede_social_url
+
+        database.session.flush()
+
+        # Vínculo dos Departamentos
+        CoreStaffDepartamento.query.filter_by(staff_id=staff.id).delete()
+
+        for depto_id in deptos_ids:
+            if depto_id.isdigit():
+                associacao = CoreStaffDepartamento(
+                    staff_id=staff.id,
+                    departamento_id=int(depto_id)
+                )
+                database.session.add(associacao)
+
+        database.session.commit()
+        flash(f"Colaborador {usuario_alvo.username} salvo com sucesso no Staff!", "success")
+
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao salvar colaborador no Staff: {str(e)}", "danger")
+
+    return redirect(url_for('admin_sistema'))
+
+
+@current_app.route('/core/admin/staff/<int:staff_id>/excluir', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_excluir_staff(staff_id):
+    """Remove um colaborador do staff."""
+    try:
+        staff = CoreStaff.query.get_or_404(staff_id)
+        database.session.delete(staff)
+        database.session.commit()
+        flash("Colaborador removido do staff com sucesso.", "success")
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao remover colaborador: {e}", "danger")
+
+    return redirect(url_for('admin_sistema'))
+
+
+@current_app.route('/core/admin/pendencias/<int:acao_id>/tratar', methods=['POST'])
+@login_required
+@apenas_admin
+def tratar_pendencia_core(acao_id):
+    """Processa a decisão do staff sobre uma pendência ou chamado de suporte do Core."""
+    acao = CoreAcaoPendente.query.get_or_404(acao_id)
+    decisao = request.form.get('decisao')  # 'aprovar' (ou 'concluir') / 'rejeitar'
+    parecer = request.form.get('parecer', '').strip()
+
+    try:
+        # 1. TRATAMENTO ESPECÍFICO DO MÓDULO EMPRESA (HOMOLOGAÇÃO)
+        if acao.modulo and acao.modulo.slug == 'empresa':
+            empresa = EseEmpresa.query.get(acao.entidade_id)
+            processo = None
+            if empresa and empresa.local_id:
+                processo = EseProcessoClaim.query.filter_by(local_id=empresa.local_id).order_by(
+                    EseProcessoClaim.id.desc()
+                ).first()
+
+            if decisao in ['aprovar', 'concluir']:
+                if empresa:
+                    empresa.status_homologacao = 'homologado'
+                if processo:
+                    processo.status_processo = 'concluido'
+
+                acao.status = 'concluido'
+
+                # Injeção do Passaporte Civil (ModVinculoModulo)
+                if processo and processo.usuario_solicitante_id:
+                    from feedin.modules.auth.models import ModVinculoModulo, ModCadastroCliente
+                    from feedin.models import IdentidadeCivil
+
+                    usuario_solicitante = ModCadastroCliente.query.get(processo.usuario_solicitante_id)
+                    identidade = IdentidadeCivil.query.filter_by(
+                        usuario_id=processo.usuario_solicitante_id).first() if usuario_solicitante else None
+
+                    if identidade and identidade.cpf_hash:
+                        vinculo_existente = ModVinculoModulo.query.filter_by(
+                            cpf_hash=identidade.cpf_hash,
+                            modulo_slug='empresa',
+                            local_id=empresa.local_id if empresa else None
+                        ).first()
+
+                        if not vinculo_existente:
+                            novo_vinculo = ModVinculoModulo(
+                                cpf_hash=identidade.cpf_hash,
+                                modulo_slug='empresa',
+                                local_id=empresa.local_id if empresa else None,
+                                email_customizado=usuario_solicitante.email if usuario_solicitante else None,
+                                ativo=True
+                            )
+                            database.session.add(novo_vinculo)
+
+                titulo_notif = f"Parabéns! Empresa Homologada: {empresa.nome if empresa else ''}"
+                desc_notif = f"A documentação enviada para o estabelecimento '{empresa.nome if empresa else ''}' foi aprovada. A gestão completa está liberada!"
+                flash(f"Empresa '{empresa.nome if empresa else 'N/A'}' homologada e liberada com sucesso.", "success")
+
+            elif decisao == 'rejeitar':
+                if not parecer:
+                    flash("É necessário fornecer um parecer detalhando as inconsistências.", "warning")
+                    return redirect(url_for('listar_pendencias'))
+
+                if empresa:
+                    empresa.status_homologacao = 'pendente_correcao'
+                if processo:
+                    processo.status_processo = 'pendente_correcao'
+
+                acao.status = 'rejeitado'
+                titulo_notif = f"Ação Necessária: Correção de Documentos - {empresa.nome if empresa else ''}"
+                desc_notif = f"Inconsistências apontadas pela auditoria:\n{parecer}\nPor favor, envie os documentos corrigidos."
+                flash(f"Ação devolvida para correção.", "warning")
+
+            # Disparo de notificação para o solicitante da empresa
+            if processo and processo.usuario_solicitante_id:
+                from feedin.modules.core.services.notificacao_core_service import CoreNotificacaoService
+                CoreNotificacaoService.registrar_acao_e_notificar(
+                    modulo_id=acao.modulo_id,
+                    entidade_id=empresa.id if empresa else acao.entidade_id,
+                    departamento_codigo='usuario',
+                    titulo=titulo_notif,
+                    descricao=desc_notif,
+                    payload={'token_processo': getattr(processo, 'token_validacao', ''), 'parecer_staff': parecer}
+                )
+
+        # 2. TRATAMENTO DE CHAMADOS DE SUPORTE / OUTROS MÓDULOS
+        else:
+            if decisao in ['aprovar', 'concluir']:
+                acao.status = 'concluido'
+                flash(f"Chamado/Pendência #{acao_id} concluído com sucesso.", "success")
+            elif decisao == 'rejeitar':
+                acao.status = 'rejeitado'
+                flash(f"Chamado #{acao_id} rejeitado / arquivado.", "warning")
+
+        # Atualização dos metadados da Ação Pendente
+        payload = acao.payload_dados or {}
+        payload['parecer_staff'] = parecer
+        payload['tratado_por'] = getattr(current_user, 'username', 'Staff')
+        acao.payload_dados = payload
+
+        database.session.commit()
+
+    except Exception as e:
+        database.session.rollback()
+        current_app.logger.error(f"❌ Erro ao tratar pendência #{acao_id}: {e}")
+        flash(f"Erro ao processar a pendência: {e}", "danger")
+
+    return redirect(url_for('listar_pendencias'))
 
 
 def obter_atividades_feed(usuario):
@@ -5275,7 +5510,7 @@ def criar_postagem():
     if arquivo:
         try:
             # Substituição realizada: chamando salvar_imagem_modulos com o módulo 'posts'
-            nome_final = salvar_imagem_modulos(arquivo, current_user.id, modulo='posts')
+            nome_final = salvar_imagem_modulo(arquivo, current_user.id, modulo='posts')
             if not nome_final:
                 flash("Formato de imagem inválido ou falha no processamento.", "danger")
                 return redirect(request.referrer)
@@ -5522,7 +5757,7 @@ def editar_post(post_id):
         file = request.files.get('imagem_post')
         if file and file.filename != '':
             # Chamada unificada com modulo='posts' (ou omitindo o 3º parâmetro, pois 'posts' é o padrão)
-            novo_nome_imagem = salvar_imagem_modulos(file, current_user.id, modulo='posts')
+            novo_nome_imagem = salvar_imagem_modulo(file, current_user.id, modulo='posts')
             if novo_nome_imagem:
                 post.imagem_url = novo_nome_imagem
 
@@ -6400,67 +6635,6 @@ def exibir_feed():
     return render_template('feed.html', atividade_lista=postagens_do_feed)
 
 
-@current_app.route('/admin/configurar-anuncio/<int:taxonomia_id>', methods=['POST'])
-@login_required
-@apenas_admin
-def admin_configurar_anuncio(taxonomia_id):
-    termo_pai = Taxonomia.query.get_or_404(taxonomia_id)
-
-    local_id = request.form.get('local_id')
-    if not local_id:
-        flash('Por favor, selecione uma empresa proprietária do flyer.', 'danger')
-        return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
-
-    local = Local.query.get_or_404(local_id)
-    plano = request.form.get('plano_marketing', 'gratuito')
-    arquivo_foto = request.files.get('flyer_arte')
-
-    # Como estamos no cenário do Botão, vai ser None
-    if arquivo_foto and arquivo_foto.filename != '':
-        nome_imagem = salvar_imagem_anuncio(arquivo_foto, local.id)
-    else:
-        nome_imagem = None
-
-    # === O SEGREDO ESTÁ AQUI: Captura e converte a data do HTML ===
-    data_exp_form = request.form.get('data_expiracao')
-    data_expiracao = None
-
-    if data_exp_form:
-        try:
-            # Converte a string 'YYYY-MM-DD' do HTML em objeto Datetime para o SQLite
-            data_expiracao = datetime.strptime(data_exp_form, '%Y-%m-%d')
-        except ValueError:
-            data_expiracao = None # Segurança caso venha um formato inválido
-
-    url_destino_form = request.form.get('url_destino')
-
-    if not url_destino_form:
-        flash('Por favor, insira o link de destino (WhatsApp, Instagram ou Site) para o botão.', 'danger')
-        return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
-
-    # Injeta o campo na criação do registro
-    novo_anuncio = LocalAnuncio(
-        local_id=local.id,
-        taxonomia_id=taxonomia_id,
-        url_flyer=nome_imagem,
-        url_destino=url_destino_form,  # <-- GRAVA A URL AQUI!
-        plano_marketing=plano,
-        status='ativo',
-        data_expiracao=data_expiracao
-    )
-
-    database.session.add(novo_anuncio)
-
-    try:
-        database.session.commit()
-        flash(f'Anúncio de Ação (Botão) para "{local.nome}" ativado com sucesso!', 'success')
-    except Exception as e:
-        database.session.rollback()
-        flash(f'Erro ao salvar configurações no banco: {str(e)}', 'danger')
-
-    return redirect(url_for('admin_sistema', pai_id=taxonomia_id))
-
-
 @current_app.route('/anuncio/clique/<int:anuncio_id>')
 @login_required
 def registrar_clique(anuncio_id):
@@ -6699,7 +6873,6 @@ def central_hub():
     Varre estritamente os vínculos do CPF logado na tabela ModVinculoModulo e
     monta a lista de cards dinâmicos sem acoplamentos a blueprints inexistentes.
     """
-    from feedin.models import ModulosSistema
     from feedin.modules.auth.models import ModVinculoModulo
 
     # 1. Sinaliza o ambiente HUB na sessão para controle de retorno flutuante
@@ -6755,49 +6928,6 @@ def central_hub():
         'hub_concentrador.html',
         modulos=modulos_cards
     )
-
-
-@current_app.context_processor
-def injetar_identidade_visual_modulo():
-    """
-    🎛️ INJETOR CENTRAL DE CONTEXTO: Roda a cada requisição e define, baseado na URL,
-    qual é a cor ativa que o layout pai (base_empresa, base_auth, etc) deve vestir.
-    """
-    cor_padrao = '#111827'
-    try:
-        caminho_limpo = request.path.strip('/')
-        # ✏️ CORREÇÃO DO DIGITO: Mudado de 'camino_limpo' para 'caminho_limpo'
-        primeiro_segmento = caminho_limpo.split('/')[0] if caminho_limpo else None
-
-        if primeiro_segmento:
-            modulo = ModulosSistema.query.filter_by(slug=primeiro_segmento, ativo=True).first()
-            if modulo:
-                return dict(cor_ativa_sistema=modulo.cor_hex)
-    except Exception as e:
-        print(f"⚠️ [CONTEXT PROCESSOR] Erro ao ler cor do módulo: {e}")
-
-    return dict(cor_ativa_sistema=cor_padrao)
-
-
-@current_app.context_processor
-def injetar_identidade_visual_modulo():
-    """
-    🎛️ INJETOR CENTRAL DE CONTEXTO: Roda a cada requisição e define, baseado na URL,
-    qual é a cor ativa que o layout pai (base_empresa, base_auth, etc) deve vestir.
-    """
-    cor_padrao = '#111827'
-    try:
-        caminho_limpo = request.path.strip('/')
-        primeiro_segmento = caminho_limpo.split('/')[0] if caminho_limpo else None
-
-        if primeiro_segmento:
-            modulo = ModulosSistema.query.filter_by(slug=primeiro_segmento, ativo=True).first()
-            if modulo:
-                return dict(cor_ativa_sistema=modulo.cor_hex)
-    except Exception as e:
-        print(f"⚠️ [CONTEXT PROCESSOR] Erro ao ler cor do módulo: {e}")
-
-    return dict(cor_ativa_sistema=cor_padrao)
 
 
 @current_app.context_processor
@@ -6902,3 +7032,178 @@ def limpar_feriados_antigos():
     except Exception as e:
         database.session.rollback()
         print(f"[-] Falha ao expurgar resíduos de anos anteriores: {str(e)}")
+
+
+@current_app.route('/core/admin/pendencias', methods=['GET'])
+@login_required
+def listar_pendencias():
+    """
+    Painel central do Core para o staff visualizar ações pendentes em todos os módulos.
+    """
+    departamento_codigo = request.args.get('departamento')
+    status = request.args.get('status', 'pendente')
+
+    query = CoreAcaoPendente.query.filter_by(status=status)
+    if departamento_codigo:
+        depto = CoreDepartamento.query.filter_by(codigo=departamento_codigo).first()
+        if depto:
+            query = query.filter_by(departamento_id=depto.id)
+
+    pendencias = query.order_by(CoreAcaoPendente.criado_em.desc()).all()
+    departamentos = CoreDepartamento.query.filter_by(ativo=True).all()
+
+    # 🎯 SEPARAÇÃO DINÂMICA PARA AS SEÇÕES 6 (HOMOLOGAÇÃO) E 7 (SUPORTE / DEPARTAMENTOS)
+    pendencias_homologacao = []
+    pendencias_suporte = []
+
+    for p in pendencias:
+        # Verifica se é homologação da empresa (módulo 'empresa' sem origem explícita de suporte no payload)
+        is_homologacao = (
+                p.modulo and p.modulo.slug == 'empresa' and
+                not (p.payload_dados and p.payload_dados.get('origem') == 'suporte_balcao')
+        )
+
+        if is_homologacao:
+            pendencias_homologacao.append(p)
+        else:
+            pendencias_suporte.append(p)
+
+    # 🔍 PRINT DE DIAGNÓSTICO RÁPIDO NO TERMINAL DO PYCHARM
+    print(
+        f"\n[DEBUG PENDÊNCIAS] Total: {len(pendencias)} | Homologações: {len(pendencias_homologacao)} | Suporte: {len(pendencias_suporte)} (Status='{status}', Depto='{departamento_codigo}')\n")
+
+    return render_template(
+        'admin/admin_pendencias.html',  # Ou ajuste o caminho do template se for 'core/admin/admin_pendencias.html'
+        pendencias=pendencias,
+        pendencias_homologacao=pendencias_homologacao,
+        pendencias_suporte=pendencias_suporte,
+        departamentos=departamentos,
+        departamento_atual=departamento_codigo,
+        status_atual=status
+    )
+
+
+@current_app.route('/core/admin/departamentos/salvar', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_salvar_departamento():
+    """Cria um novo departamento ou atualiza um existente."""
+    depto_id = request.form.get('departamento_id')  # Vazio se for novo
+    codigo = request.form.get('codigo', '').strip().lower()
+    nome = request.form.get('nome', '').strip()
+    descricao = request.form.get('descricao', '').strip()
+
+    try:
+        if depto_id:
+            # Edição
+            depto = CoreDepartamento.query.get_or_404(depto_id)
+            depto.codigo = codigo
+            depto.nome = nome
+            depto.descricao = descricao
+            flash(f"Departamento '{nome}' atualizado com sucesso!", "success")
+        else:
+            # Criação
+            novo_depto = CoreDepartamento(
+                codigo=codigo,
+                nome=nome,
+                descricao=descricao,
+                ativo=True
+            )
+            database.session.add(novo_depto)
+            flash(f"Departamento '{nome}' criado com sucesso!", "success")
+
+        database.session.commit()
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao salvar departamento (verifique se o código é único): {e}", "danger")
+
+    return redirect(url_for('admin_sistema'))
+
+
+@current_app.route('/core/admin/staff/salvar/<int:usuario_id>', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_salvar_staff(usuario_id):
+    """
+    Cria ou atualiza o perfil de Staff do Core atrelado ao usuario_id informado.
+    """
+    usuario_alvo = Usuario.query.get_or_404(usuario_id)
+
+    email_profissional = request.form.get('email_profissional', '').strip()
+    whatsapp = request.form.get('whatsapp', '').strip()
+    cargo = request.form.get('cargo', '').strip()
+    rede_social_url = request.form.get('rede_social_url', '').strip()
+    deptos_ids = request.form.getlist('departamento_ids')
+
+    if not email_profissional or not whatsapp:
+        flash("E-mail profissional e WhatsApp são obrigatórios para membros do staff.", "warning")
+        return redirect(url_for('admin_sistema'))
+
+    try:
+        staff = CoreStaff.query.filter_by(usuario_id=usuario_alvo.id).first()
+
+        if staff:
+            # Atualização
+            staff.email_profissional = email_profissional
+            staff.whatsapp = whatsapp
+            staff.cargo = cargo
+            if hasattr(staff, 'rede_social_url'):
+                staff.rede_social_url = rede_social_url
+
+            flash(f"Perfil de Staff de '{usuario_alvo.username}' atualizado com sucesso!", "success")
+        else:
+            # Criação (Sem o argumento 'nome', pois o CoreStaff usa a relação com Usuario)
+            import uuid
+            staff = CoreStaff(
+                usuario_id=usuario_alvo.id,
+                usuario_uuid=str(uuid.uuid4()),
+                email_profissional=email_profissional,
+                whatsapp=whatsapp,
+                cargo=cargo,
+                ativo=True
+            )
+            if hasattr(staff, 'rede_social_url'):
+                staff.rede_social_url = rede_social_url
+
+            database.session.add(staff)
+            flash(f"'{usuario_alvo.username}' agora é um membro oficial do Staff!", "success")
+
+        database.session.flush()
+
+        # Re-alocação dos Departamentos
+        CoreStaffDepartamento.query.filter_by(staff_id=staff.id).delete()
+
+        for depto_id in deptos_ids:
+            if depto_id.isdigit():
+                associacao = CoreStaffDepartamento(
+                    staff_id=staff.id,
+                    departamento_id=int(depto_id)
+                )
+                database.session.add(associacao)
+
+        database.session.commit()
+
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao salvar dados do staff: {str(e)}", "danger")
+
+    return redirect(url_for('admin_sistema'))
+
+
+@current_app.route('/core/admin/departamentos/<int:depto_id>/alternar-status', methods=['POST'])
+@login_required
+@apenas_admin
+def admin_alternar_status_departamento(depto_id):
+    """Alterna o status ativo/inativo de um departamento."""
+    try:
+        depto = CoreDepartamento.query.get_or_404(depto_id)
+        depto.ativo = not depto.ativo
+        database.session.commit()
+
+        status_txt = "ativado" if depto.ativo else "desativado"
+        flash(f"Departamento '{depto.nome}' foi {status_txt}.", "success")
+    except Exception as e:
+        database.session.rollback()
+        flash(f"Erro ao alterar status do departamento: {e}", "danger")
+
+    return redirect(url_for('admin_sistema'))

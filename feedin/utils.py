@@ -9,8 +9,9 @@ import glob
 from datetime import datetime, timedelta, time, timezone
 from functools import wraps
 from unicodedata import normalize
+from sqlalchemy import func
 
-from flask import current_app, redirect, render_template, request, session, url_for, jsonify
+from flask import current_app, redirect, render_template, request, session, url_for, jsonify, flash
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
@@ -816,9 +817,11 @@ def servir_midia_modulo(modulo, filename):
 
 from flask import url_for
 
+
 def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str = None) -> str:
     """
-    Padroniza a resolução de URLs de mídia para o formato WebP e rotas centralizadas (/media/).
+    Padroniza a resolução de URLs de mídia para o formato WebP e rotas centralizadas (/media/),
+    blindando contra duplicações de diretórios, barras invertidas e caminhos redundantes.
     """
     if not caminho_arquivo:
         if fallback_filename:
@@ -829,9 +832,155 @@ def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str
     if caminho_arquivo.startswith(('http://', 'https://')):
         return caminho_arquivo
 
-    caminho_limpo = caminho_arquivo.lstrip('/')
+    # 1. Normalização profunda de caminhos (compatibilidade Windows/Linux)
+    caminho_limpo = caminho_arquivo.replace('\\', '/').lstrip('/')
 
+    # 2. BLINDAGEM CONTRA DUPLICAÇÃO DE DIRETÓRIOS:
+    partes = caminho_limpo.split('/')
+
+    # Remove repetições consecutivas indesejadas geradas por chamadas legadas
+    partes_filtradas = []
+    for i, parte in enumerate(partes):
+        if i > 0 and parte.lower() == partes[i - 1].lower():
+            continue
+        partes_filtradas.append(parte)
+
+    caminho_limpo = '/'.join(partes_filtradas)
+
+    # 3. Resolução segura da rota centralizada de mídia
     try:
         return url_for('media_global.servir_midia_modulo', modulo=modulo, filename=caminho_limpo)
     except Exception:
         return f"/media/{modulo}/{caminho_limpo}"
+
+
+def requer_modulo(modulo_slug):
+    """
+    Decorador para proteger rotas de um módulo específico.
+    Dispara automaticamente a verificação de vigência e status.
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Obtém a empresa ativa do usuário na sessão ou contexto atual
+            # (Ajuste conforme a forma como você recupera a empresa do lojista logado)
+            empresa_id = session.get('empresa_ativa_id')
+
+            if not empresa_id:
+                flash("Nenhuma empresa selecionada para gerenciar.", "warning")
+                return redirect(url_for('agenda.credenciamento_balcao'))
+
+            # DISPARA A NOSSA FUNÇÃO DE VIGÊNCIA
+            autorizado, mensagem = verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug)
+
+            if not autorizado:
+                flash(mensagem, "danger")
+                return redirect(url_for('empresa.dashboard_geral'))  # ou painel de renovação
+
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+from feedin import database as db
+from feedin.modules.empresa.models import ModEmpresaModulo
+def verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug):
+    """
+    Semáforo Mestre de Entrada:
+    Verifica se o módulo está ativo e se a vigência é válida.
+    Se a data atual ultrapassou o vencimento, muta o status para inativo automaticamente.
+    """
+    modulo = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa_id,
+        modulo_slug=modulo_slug
+    ).first()
+
+    if not modulo:
+        return False, "Módulo não vinculado a este estabelecimento."
+
+    agora = datetime.now(timezone.utc)
+
+    # 1. Se estiver marcado como ativo, validamos a linha do tempo
+    if modulo.ativo:
+        if modulo.data_vencimento and agora > modulo.data_vencimento:
+            # 🚨 PROVOU EM CONTRÁRIO: Venceu! Muda para False automaticamente.
+            modulo.ativo = False
+            db.session.commit()
+
+            # Opcional: Registrar no log que o módulo expirou por falta de renovação
+            print(
+                f"🔒 [VIGÊNCIA] Módulo '{modulo_slug}' da empresa {empresa_id} expirou e foi desativado automaticamente.")
+
+            return False, "Sua vigência expirou. Por favor, regularize sua assinatura para acessar o módulo."
+
+        # Se está ativo e a data é válida: Luz Verde! 🟢
+        return True, "Acesso autorizado"
+
+    # 2. Se já estava inativo de fábrica
+    return False, "Este módulo está desativado. Contrate ou renove seu plano para utilizar."
+
+
+from feedin.modules.agenda.models import AghAgendamento
+from feedin.modules.empresa.models import ColaboradorContrato
+
+def validar_limite_modulo(empresa_id, modulo_slug, tipo_recurso, contrato_id_atual=None):
+    """
+    Valida se a empresa atingiu o teto permitido pelo plano atual (degustacao vs pro).
+    Se contrato_id_atual for fornecido, ele é desconsiderado na contagem (permite edição de ativos).
+    """
+    modulo_contratado = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa_id,
+        modulo_slug=modulo_slug,
+        ativo=True
+    ).first()
+
+    if not modulo_contratado:
+        return False, "Módulo não contratado ou inativo."
+
+    if modulo_contratado.tipo_plano == 'pro':
+        return True, "Liberado"
+
+    if modulo_contratado.tipo_plano == 'degustacao':
+        if modulo_contratado.data_vencimento and datetime.now(timezone.utc) > modulo_contratado.data_vencimento:
+            return False, "O período de degustação deste módulo expirou. Faça o upgrade para o plano Pro."
+
+        if tipo_recurso == 'profissionais':
+            # Constrói a query base de ativos
+            query = ColaboradorContrato.query.filter_by(
+                id_local=empresa_id,
+                status_profissional='ativo'
+            )
+
+            # Se estamos editando um profissional que já é ativo, excluímos ele da contagem para não barrar a edição
+            if contrato_id_atual:
+                query = query.filter(ColaboradorContrato.id != contrato_id_atual)
+
+            total_atual = query.count()
+
+            # ATENÇÃO: Se o profissional atual NÃO está ativo ainda (está vindo de pendente para ativo),
+            # precisamos verificar se adicionar ele vai estourar o limite.
+            if contrato_id_atual:
+                contrato_atual = ColaboradorContrato.query.get(contrato_id_atual)
+                if contrato_atual and contrato_atual.status_profissional != 'ativo':
+                    # Ele é novo na equipe ativa, então o total_atual + 1 não pode passar do limite
+                    if total_atual >= modulo_contratado.limite_profissionais:
+                        return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_profissionais} profissionais ativos."
+            else:
+                if total_atual >= modulo_contratado.limite_profissionais:
+                    return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_profissionais} profissionais ativos."
+
+        elif tipo_recurso == 'clientes':
+            total_atual = db.session.query(
+                func.count(func.distinct(AghAgendamento.cliente_id))
+            ).filter(
+                AghAgendamento.empresa_id == empresa_id,
+                AghAgendamento.status == 'concluido',
+                AghAgendamento.cliente_id.isnot(None)
+            ).scalar() or 0
+
+            if total_atual >= modulo_contratado.limite_clientes:
+                return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_clientes} clientes atendidos na base."
+
+    return True, "Dentro dos limites"

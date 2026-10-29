@@ -12,7 +12,8 @@
                 {# Redirecionamento dinâmico (usa ID da Empresa se existir, senão usa ID do Local) #}
                 <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}"
                    class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white"
-                   style="width: 40px; height: 40px;">
+                   style="width: 40px; height: 40px;"
+                   title="Voltar ao Hub de Ativação">
                     <i class="bi bi-chevron-left fs-6"></i>
                 </a>
                 <div>
@@ -38,7 +39,7 @@
         {# PILAR 1: CORE PLATFORM (PLANO BASE)        #}
         {# ========================================== #}
         <div class="mb-2 ms-1">
-            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">1. Perfil & Gestão Base</span>
+            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">Perfil & Gestão Base</span>
         </div>
 
         <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden">
@@ -80,95 +81,104 @@
         </div>
 
         {# ========================================== #}
-        {# PILAR 2: MÍDIA & PUBLICIDADE CONTEXTUAL    #}
+        {# PILAR 2: DESTAQUE PRINCIPAL - AGENDA (APPS)#}
         {# ========================================== #}
         <div class="mb-2 ms-1">
-            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">2. Crescimento & Tráfego Qualificado</span>
+            <span class="text-uppercase fw-bold text-primary tracking-wider" style="font-size: 0.65rem;">2. Extensão Principal (Degustação Disponível)</span>
         </div>
 
-        <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden border-start border-4 border-danger">
+        <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden border-start border-4 border-primary">
             <div class="card-body p-4 bg-white">
                 <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div class="p-2 bg-danger-subtle text-danger rounded-3">
-                        <i class="bi bi-bullseye fs-4 d-block"></i>
+                    <div class="p-2 bg-primary-subtle text-primary rounded-3">
+                        <i class="bi bi-calendar-check fs-4 d-block"></i>
                     </div>
-                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Mídia Contextual</span>
+                    {% if 'agenda' in slugs_contratados %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Módulo Contratado</span>
+                    {% else %}
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1 fw-bold" style="font-size: 0.65rem;">Inclui Perfil PRO</span>
+                    {% endif %}
                 </div>
 
-                <h5 class="fw-bold text-dark mb-1">Publicidade Contextual & Mídia Segmentada</h5>
+                <h5 class="fw-bold text-dark mb-1">Módulo Agenda & Reservas</h5>
                 <p class="text-muted small mb-3" style="font-size: 0.8rem; line-height: 1.3;">
-                    Promova suas ofertas e o seu perfil diretamente para frequentadores locais, direcionando anúncios por <strong>classes de interesse</strong>, hábitos e categorias específicas.
+                    Sistema completo de horários, escalas de profissionais e agendamentos diretos integrados ao seu perfil comercial em Piracicaba.
                 </p>
 
                 <div class="row g-2 mb-3 text-muted" style="font-size: 0.75rem;">
-                    <div class="col-6"><i class="bi bi-pin-map-fill text-danger me-1"></i> Impacto Hyper-Local</div>
-                    <div class="col-6"><i class="bi bi-people-fill text-danger me-1"></i> Segmentação por Interesses</div>
-                    <div class="col-6"><i class="bi bi-megaphone-fill text-danger me-1"></i> Banners em Feeds e Buscas</div>
-                    <div class="col-6"><i class="bi bi-graph-up-arrow text-danger me-1"></i> Mídia Kit & Métricas Reais</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-primary me-1"></i> Agenda Online 24/7</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-primary me-1"></i> Escalas e Atendentes</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-primary me-1"></i> Gestão de Vínculos de Equipe</div>
+                    <div class="col-6"><i class="bi bi-check-circle-fill text-primary me-1"></i> Sincronizado com o PWA</div>
                 </div>
 
-                <button class="btn btn-danger text-white fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
-                    <i class="bi bi-megaphone"></i> Criar Campanha de Mídia
-                </button>
-            </div>
-        </div>
-
-        {# ========================================== #}
-        {# PILAR 3: EXTENSÕES OPERACIONAIS (APPS)    #}
-        {# ========================================== #}
-        <div class="mb-2 ms-1">
-            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">3. Extensões de Negócio (Apps)</span>
-        </div>
-
-        <div class="row g-3">
-            {# APP: AGENDA & AGENDAMENTOS #}
-            <div class="col-12 col-md-6">
-                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between">
-                    <div>
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <div class="p-2 bg-primary-subtle text-primary rounded-3">
-                                <i class="bi bi-calendar-check fs-5 d-block"></i>
-                            </div>
-                            {% if 'agenda' in slugs_contratados %}
-                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.6rem;">Contratado</span>
-                            {% else %}
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill fw-bold" style="font-size: 0.6rem;">Disponível (+ Perfil PRO)</span>
-                            {% endif %}
-                        </div>
-                        <h6 class="fw-bold text-dark m-0">Agendamentos & Reservas</h6>
-                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
-                            Gestão de horários, profissionais e agendamentos diretos do cliente.
-                        </p>
-                    </div>
-
-                    {# LÓGICA DE AÇÃO DO BOTÃO DA AGENDA #}
-                    {% if 'agenda' in slugs_contratados %}
-                        {% if base_empresa_pronta %}
-                            <!-- CASO 1: Contratado E status_processo == 'concluido' -->
+                {# LÓGICA DE AÇÃO DO BOTÃO DA AGENDA COM TRIAGEM DE PAPEL E POST SEGURO #}
+                {% if 'agenda' in slugs_contratados %}
+                    {% if base_empresa_pronta %}
+                        {% if papel_nivel >= 999 or eh_dono %}
+                            <!-- VISÃO PROPRIETÁRIO / DIRETOR -->
                             <a href="{{ url_for('agenda.painel_agenda', empresa_id=empresa_id, origem='empresa') }}"
-                               class="btn btn-sm btn-primary fw-bold w-100 rounded-3 mt-2">
-                                <i class="bi bi-gear-fill me-1"></i> Gerenciar Agenda
+                               class="btn btn-primary fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                                <i class="bi bi-gear-fill"></i> Gerenciar Agenda (Dono)
                             </a>
                         {% else %}
-                            <!-- CASO 2: Contratado, MAS status_processo == 'em_andamento' -->
-                            <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}"
-                               class="btn btn-sm btn-warning text-dark fw-bold w-100 rounded-3 mt-2"
-                               data-bs-toggle="tooltip"
-                               title="Processo de onboarding em andamento. Conclua para liberar o painel da Agenda.">
-                                <i class="bi bi-clock-history me-1"></i> Concluir Validação do Claim
+                            <!-- VISÃO COLABORADOR / PROFISSIONAL -->
+                            <a href="{{ url_for('agenda.dashboard_profissional', empresa_id=empresa_id) }}"
+                               class="btn btn-info text-dark fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                                <i class="bi bi-calendar-week"></i> Minha Agenda (Profissional)
                             </a>
                         {% endif %}
                     {% else %}
-                        <!-- CASO 3: Não contratado ainda -> Permite ativar para qualquer status -->
-                        <a href="{{ url_for('empresa.ativar_modulo_empresa', empresa_id=empresa_id, modulo_slug='agenda') }}"
-                           class="btn btn-sm btn-dark fw-bold w-100 rounded-3 mt-2">
-                            + Ativar Módulo (Concede Licença PRO)
+                        <!-- CLAIM EM ANDAMENTO -->
+                        <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa_id) }}"
+                           class="btn btn-warning text-dark fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2"
+                           data-bs-toggle="tooltip"
+                           title="Processo de onboarding em andamento. Conclua para liberar o painel da Agenda.">
+                            <i class="bi bi-clock-history"></i> Concluir Validação do Claim
                         </a>
                     {% endif %}
+                {% else %}
+                    <!-- ATIVAÇÃO / DEGUSTAÇÃO VIA POST SEGURO -->
+                    <form action="{{ url_for('empresa.ativar_modulo_empresa', empresa_id=empresa_id, modulo_slug='agenda') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-dark fw-bold w-100 py-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center gap-2">
+                            <i class="bi bi-rocket-takeoff-fill"></i> Degustar Módulo Agenda (Concede PRO)
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {# ========================================== #}
+        {# PILAR 3: RECURSOS EM DESENVOLVIMENTO / BREVE #}
+        {# ========================================== #}
+        <div class="mb-2 ms-1">
+            <span class="text-uppercase fw-bold text-muted tracking-wider" style="font-size: 0.65rem;">3. Próximos Lançamentos & Mídia (Em Breve)</span>
+        </div>
+
+        <div class="row g-3">
+            {# PUBLICIDADE CONTEXTUAL #}
+            <div class="col-12 col-md-6">
+                <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="p-2 bg-danger-subtle text-danger rounded-3">
+                                <i class="bi bi-bullseye fs-5 d-block"></i>
+                            </div>
+                            <span class="badge bg-danger-subtle text-danger rounded-pill fw-bold" style="font-size: 0.6rem;">Em Desenvolvimento</span>
+                        </div>
+                        <h6 class="fw-bold text-dark m-0">Publicidade Contextual</h6>
+                        <p class="text-muted mt-1 mb-2" style="font-size: 0.72rem; line-height: 1.2;">
+                            Impulsione sua marca com anúncios segmentados para clientes da região.
+                        </p>
+                    </div>
+                    <button class="btn btn-sm btn-light text-muted fw-semibold w-100 rounded-3 mt-2" disabled>
+                        <i class="bi bi-hourglass-split me-1"></i> Aguarde o Lançamento
+                    </button>
                 </div>
             </div>
 
-            {# APP: VENDAS & PEDIDOS #}
+            {# VENDAS & PEDIDOS #}
             <div class="col-12 col-md-6">
                 <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
                     <div>
@@ -189,7 +199,7 @@
                 </div>
             </div>
 
-            {# APP: FIDELIDADE & CASHBACK #}
+            {# FIDELIDADE & CASHBACK #}
             <div class="col-12 col-md-6">
                 <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
                     <div>
@@ -210,7 +220,7 @@
                 </div>
             </div>
 
-            {# APP: GESTÃO FINANCEIRA #}
+            {# GESTÃO FINANCEIRA #}
             <div class="col-12 col-md-6">
                 <div class="card border-0 rounded-4 shadow-sm h-100 p-3 bg-white d-flex flex-column justify-content-between opacity-75">
                     <div>
