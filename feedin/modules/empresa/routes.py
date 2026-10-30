@@ -2873,6 +2873,10 @@ def hub_ativacao(empresa_id):
 
     # 4. CÁLCULO DE PROGRESSO (FASE 1 vs. FASE 2)
     empresa_homologada = (ese_empresa.status_homologacao == 'homologado')
+
+    # 🔑 AJUSTE PONTUAL: Considera liberado para Fase 2 se homologada OU em beta/provisório com acesso PRO ativo
+    liberado_fase_2 = empresa_homologada or (ese_empresa.status_homologacao == 'provisorio_beta' and tem_acesso_pro)
+
     modulos_concluidos = 0
 
     # --- BLOCOS PADRÕES DA FASE 1 (Sempre presentes - Total: 4) ---
@@ -2907,11 +2911,9 @@ def hub_ativacao(empresa_id):
     total_modulos = 4
 
     # --- BLOCOS AVANÇADOS DA FASE 2 ---
-    # Só adiciona no total e no cálculo se o usuário realmente concluiu ou iniciou os módulos avançados,
-    # evitando inflar o denominador para empresas recém-homologadas em degustação.
     tem_fase_2_ativa = modulo_servicos_concluido or modulo_equipe_concluido or (total_convites_aceitos > 0)
 
-    if empresa_homologada and tem_fase_2_ativa:
+    if liberado_fase_2 and tem_fase_2_ativa:
         total_modulos += 2
 
         if modulo_servicos_concluido:
@@ -2919,8 +2921,7 @@ def hub_ativacao(empresa_id):
 
         if modulo_equipe_concluido:
             modulos_concluidos += 1
-    elif empresa_homologada:
-        # Se está homologada mas ainda não mexeu na Fase 2, o foco principal da esteira é 100% da Fase 1 (4/4)
+    elif liberado_fase_2:
         if modulo_servicos_concluido:
             modulos_concluidos += 1
             total_modulos = 5
@@ -2932,7 +2933,7 @@ def hub_ativacao(empresa_id):
     porcentagem_progresso = int(round((modulos_concluidos / total_modulos) * 100)) if total_modulos > 0 else 100
 
     # 🎨 O "Charme" de UX (Feedback visual de progresso iminente / exigência):
-    if not empresa_homologada:
+    if not liberado_fase_2:
         if status_doc == 'em_analise':
             porcentagem_progresso = 90  # Quase lá, aguardando staff
         elif status_doc == 'pendente_correcao':

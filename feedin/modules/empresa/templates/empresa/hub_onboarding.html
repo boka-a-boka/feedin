@@ -245,9 +245,9 @@
                 {% endif %}
             </div>
 
-            {# CARD 5: SERVIÇOS & PREÇOS (Fase 2 - Avançado) #}
+            {# CARD 5: SERVIÇOS & PREÇOS (Valida elegibilidade unificada da Fase 2) #}
             <div class="col-6">
-                {% if empresa_homologada and tem_acesso_pro %}
+                {% if liberado_fase_2 and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.menu_servicos_precos', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
@@ -293,9 +293,9 @@
                 {% endif %}
             </div>
 
-            {# CARD 6: EQUIPE & JORNADAS (Fase 2 - Avançado) #}
+            {# CARD 6: EQUIPE & JORNADAS (Valida elegibilidade unificada da Fase 2) #}
             <div class="col-6">
-                {% if empresa_homologada and tem_acesso_pro %}
+                {% if liberado_fase_2 and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.configurar_jornadas_tela', empresa_id=ese_empresa.id) }}"
                        class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if total_convites_aceitos and total_convites_aceitos > 0 %}border-start-primary{% elif modulo_equipe_concluido %}border-start-success{% else %}border-start-warning{% endif %} position-relative">
                         <div class="d-flex flex-column justify-content-between h-100">
