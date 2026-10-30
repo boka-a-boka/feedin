@@ -954,14 +954,35 @@ def configurar_jornadas_tela(empresa_id):
     if not contratos_equipe:
         return redirect(url_for('empresa.emitir_contrato_colaborador', empresa_id=empresa_id))
 
-    # 2. Busca o contrato do USUÁRIO LOGADO nesta empresa
-    contrato_logado = ColaboradorContrato.query.filter_by(
-        id_local=empresa.local_id,
-        id_cadastro_cliente=current_user.id
+    # 🛡️ Resolução soberana e segura do ID do usuário logado (suporta int e UUID string)
+    user_id_candidatos = [
+        getattr(current_user, 'usuario_id', None),
+        getattr(current_user, 'id', None),
+        str(getattr(current_user, 'id', ''))
+    ]
+    user_id_candidatos = [val for val in user_id_candidatos if val is not None]
+
+    # 2. Busca o contrato do USUÁRIO LOGADO nesta empresa com suporte a múltiplos formatos de ID
+    contrato_logado = ColaboradorContrato.query.filter(
+        ColaboradorContrato.id_local == empresa.local_id,
+        ColaboradorContrato.id_cadastro_cliente.in_(user_id_candidatos)
     ).first()
 
-    logado_nivel = contrato_logado.papel_nivel if contrato_logado else 0
-    logado_ativo = (contrato_logado.status_profissional == 'ativo') if contrato_logado else False
+    # 🔑 Fallback de segurança: Se for admin global ou proprietário direto da empresa, garante nível máximo
+    eh_proprietario_direto = (
+        str(getattr(empresa, 'proprietario_id', '')) in [str(u) for u in user_id_candidatos] or
+        getattr(current_user, 'is_admin', False)
+    )
+
+    if contrato_logado:
+        logado_nivel = contrato_logado.papel_nivel or 0
+        logado_ativo = (contrato_logado.status_profissional == 'ativo')
+    elif eh_proprietario_direto:
+        logado_nivel = 999  # Soberano por direito de propriedade/admin
+        logado_ativo = True
+    else:
+        logado_nivel = 0
+        logado_ativo = False
 
     hoje = date.today()
 
@@ -978,11 +999,11 @@ def configurar_jornadas_tela(empresa_id):
 
         # REGRAS DE GERENCIAMENTO:
         # 1. Usuário precisa estar ATIVO no sistema
-        # 2. Se for Soberano (Nível 999): tem controle total (inclusive sobre outros 999 para passar bastão)
+        # 2. Se for Soberano (Nível 999): tem controle total
         # 3. Se for Gerencial (>= 666): precisa ter nível ESTRITAMENTE MAIOR que o alvo
         nivel_alvo = contrato.papel_nivel or 0
 
-        is_soberano = (logado_nivel == 999)
+        is_soberano = (logado_nivel >= 999)
         is_gerente_superior = (logado_nivel >= 666 and logado_nivel > nivel_alvo)
 
         contrato.pode_gerenciar = logado_ativo and (is_soberano or is_gerente_superior)
