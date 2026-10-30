@@ -48,7 +48,7 @@
             {% endif %}
         </div>
 
-        {# 📊 CABEÇALHO COMPACTO DE PROGRESSO DINÂMICO #}
+        {# 📊 1. CABEÇALHO COMPACTO DE PROGRESSO DINÂMICO #}
         <div class="bg-white p-3 rounded-4 shadow-sm border border-secondary-subtle mb-3 text-center">
             <h5 class="fw-bold text-dark m-0">{{ ese_empresa.nome }}</h5>
             <p class="text-muted small m-0 mt-1">
@@ -245,9 +245,9 @@
                 {% endif %}
             </div>
 
-            {# CARD 5: SERVIÇOS & PREÇOS (Liberado via Homologado, Pro ou Provisório Beta) #}
+            {# CARD 5: SERVIÇOS & PREÇOS (Fase 2 - Avançado) #}
             <div class="col-6">
-                {% if empresa_homologada or tem_acesso_pro or ese_empresa.status_homologacao == 'provisorio_beta' %}
+                {% if empresa_homologada and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.menu_servicos_precos', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-danger">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
@@ -293,9 +293,9 @@
                 {% endif %}
             </div>
 
-            {# CARD 6: EQUIPE & JORNADAS (Liberado via Homologado, Pro ou Provisório Beta) #}
+            {# CARD 6: EQUIPE & JORNADAS (Fase 2 - Avançado) #}
             <div class="col-6">
-                {% if empresa_homologada or tem_acesso_pro or ese_empresa.status_homologacao == 'provisorio_beta' %}
+                {% if empresa_homologada and tem_acesso_pro %}
                     <a href="{{ url_for('empresa.configurar_jornadas_tela', empresa_id=ese_empresa.id) }}"
                        class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 {% if total_convites_aceitos and total_convites_aceitos > 0 %}border-start-primary{% elif modulo_equipe_concluido %}border-start-success{% else %}border-start-warning{% endif %} position-relative">
                         <div class="d-flex flex-column justify-content-between h-100">
@@ -352,9 +352,9 @@
                 {% endif %}
             </div>
 
-            {# CARD 7: MOVIMENTAÇÃO DE ESTOQUE & CONSUMO (Liberado via Pro ou Provisório Beta) #}
+            {# CARD 7: MOVIMENTAÇÃO DE ESTOQUE & CONSUMO (Integrado na grade) #}
             <div class="col-6">
-                {% if tem_acesso_pro or ese_empresa.status_homologacao == 'provisorio_beta' %}
+                {% if tem_acesso_pro %}
                     <a href="{{ url_for('empresa.estoque_hub_tela', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-primary">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>

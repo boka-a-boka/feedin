@@ -1494,9 +1494,8 @@ def dashboard_empresa():
 
     if empresa_id_alvo:
         # 1. Valida se existem serviços cadastrados
-        servicos_cadastrados = EseServicoOferecido.query.filter(
-            (EseServicoOferecido.local_id == empresa_id_alvo) |
-            (getattr(EseServicoOferecido, 'empresa_id', None) == empresa_id_alvo)
+        servicos_cadastrados = EseServicoOferecido.query.filter_by(
+            empresa_id=empresa_id_alvo
         ).all()
 
         if not servicos_cadastrados:
