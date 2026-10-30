@@ -1404,9 +1404,16 @@ def dashboard_empresa():
     Dashboard Central e Unificado do Módulo Empresa (Ponte da Arquitetura).
     Renderiza a central de controle em vez de redirecionar cegamente.
     """
-    from feedin.modules.empresa.models import EseEmpresa
+    from feedin.modules.empresa.models import EseEmpresa, EseProcessoClaim, EseServicoOferecido, ColaboradorContrato
+    from feedin.models import Local
 
-    # 0. INICIALIZAÇÃO SEGURA
+    # 1. 🛡️ BARREIRA RÍGIDA DO MÓDULO (Executa imediatamente antes de qualquer operação)
+    if not session.get('autenticado_modulo_empresa'):
+        session.pop('autenticado_modulo_empresa', None)
+        flash("Para acessar o painel corporativo, confirme suas credenciais.", "warning")
+        return redirect(url_for('auth.login', modulo='empresa', next_url=request.url))
+
+    # 2. INICIALIZAÇÃO SEGURA E IDENTIFICAÇÃO DO USUÁRIO
     user_core_id = getattr(current_user, 'usuario_id', None)
     if user_core_id is None and isinstance(current_user.id, int):
         user_core_id = current_user.id
@@ -1417,11 +1424,13 @@ def dashboard_empresa():
             EseProcessoClaim.usuario_solicitante_id == user_core_id
         ).order_by(EseProcessoClaim.id.desc()).first()
 
-    # 🎯 BLINDAGEM AUTOMÁTICA: Se há um processo ativo/concluído e a EseEmpresa ainda não existe, cria ela agora!
-    if processo and processo.local_id:
-        from feedin.modules.empresa.models import EseEmpresa
-        from feedin.models import Local
+    # ❌ BLOQUEIO ABSOLUTO POR FRAUDE
+    if processo and processo.status_processo == 'suspeito_bloqueado':
+        flash("🚨 Este processo foi suspenso temporariamente por inconsistência de dados. Contate o suporte.", "danger")
+        return redirect(url_for('auth.login', modulo='empresa'))
 
+    # 🎯 BLINDAGEM AUTOMÁTICA: Cria EseEmpresa caso ainda não exista para o processo
+    if processo and processo.local_id:
         empresa_verificada = EseEmpresa.query.filter(
             (EseEmpresa.id == processo.local_id) | (EseEmpresa.local_id == processo.local_id)
         ).first()
@@ -1440,7 +1449,6 @@ def dashboard_empresa():
                 )
                 db.session.add(nova_ese_empresa)
 
-                # Atualiza também o local e o processo
                 local_obj.id_empreendedor = user_core_id or current_user.id
                 local_obj.status_operacional = 'verificado'
                 processo.status_processo = 'preenchimento_dados'
@@ -1448,37 +1456,7 @@ def dashboard_empresa():
                 db.session.commit()
                 print(f"🏢 [AUTO-CRIAR DASHBOARD] Empresa ID {local_obj.id} criada automaticamente com sucesso!")
 
-    # 🛡️ 1. BARREIRA RÍGIDA DO MÓDULO (Executa antes de qualquer consulta ao banco)
-    if not session.get('autenticado_modulo_empresa'):
-        session.pop('autenticado_modulo_empresa', None)
-        flash("Para acessar o painel corporativo, confirme suas credenciais.", "warning")
-        return redirect(url_for('auth.login', modulo='empresa', next_url=request.url))
-
-    # 0. INICIALIZAÇÃO SEGURA
-    processo = None
-    ese_empresa = None
-
-    # Obtém o usuario_id do Core a partir do ModCadastroCliente logado
-    user_core_id = getattr(current_user, 'usuario_id', None)
-    if user_core_id is None and isinstance(current_user.id, int):
-        user_core_id = current_user.id
-
-    # ---------------------------------------------------------------------
-    # 2. IDENTIFICAÇÃO DE PROCESSO DE CLAIM / ONBOARDING
-    # ---------------------------------------------------------------------
-    if user_core_id:
-        processo = EseProcessoClaim.query.filter(
-            EseProcessoClaim.usuario_solicitante_id == user_core_id
-        ).order_by(EseProcessoClaim.id.desc()).first()
-
-    # ❌ BLOQUEIO ABSOLUTO POR FRAUDE (Segurança mantida)
-    if processo and processo.status_processo == 'suspeito_bloqueado':
-        flash("🚨 Este processo foi suspenso temporariamente por inconsistência de dados. Contate o suporte.", "danger")
-        return redirect(url_for('auth.login', modulo='empresa'))
-
-    # ---------------------------------------------------------------------
     # 3. RESOLUÇÃO DA EMPRESA E CONTRATOS DA CONTA
-    # ---------------------------------------------------------------------
     cliente_uuid = str(current_user.id)
     contratos_ativos = ColaboradorContrato.query.filter_by(
         id_cadastro_cliente=cliente_uuid,
@@ -1498,34 +1476,36 @@ def dashboard_empresa():
     elif contratos_ativos:
         real_local_id = contratos_ativos[0].id_local
 
-    # Busca o objeto EseEmpresa correspondente
+    ese_empresa = None
     if real_local_id:
-        ese_empresa = EseEmpresa.query.filter_by(local_id=real_local_id).first()
+        ese_empresa = EseEmpresa.query.filter(
+            (EseEmpresa.local_id == real_local_id) | (EseEmpresa.id == real_local_id)
+        ).first()
         session['local_id_atual'] = real_local_id
 
-    # ---------------------------------------------------------------------
     # 🛑 VALIDAÇÃO DE ACESSO MÍNIMO
-    # ---------------------------------------------------------------------
     if not processo and not contratos_ativos:
         flash("Não há empresas habilitadas ou em processo de ativação para a sua conta.", "warning")
         return redirect(url_for('auth.login', modulo='empresa'))
 
-    # ---------------------------------------------------------------------
-    # 🔍 VALIDAÇÃO DOS PRÉ-REQUISITOS OPERACIONAIS (Serviços, Colaboradores, Escala)
-    # ---------------------------------------------------------------------
+    # 4. 🔍 VALIDAÇÃO DOS PRÉ-REQUISITOS OPERACIONAIS (Serviços, Colaboradores, Escala)
     empresa_id_alvo = (ese_empresa.id if ese_empresa else real_local_id) or (processo.id if processo else None)
     pendencias = []
 
     if empresa_id_alvo:
-        # 1. Valida se existem serviços cadastrados com preço
-        servicos_cadastrados = EseServicoOferecido.query.filter_by(empresa_id=empresa_id_alvo).all()
+        # 1. Valida se existem serviços cadastrados
+        servicos_cadastrados = EseServicoOferecido.query.filter(
+            (EseServicoOferecido.local_id == empresa_id_alvo) |
+            (getattr(EseServicoOferecido, 'empresa_id', None) == empresa_id_alvo)
+        ).all()
+
         if not servicos_cadastrados:
             pendencias.append({
                 "titulo": "Catálogo de Serviços",
                 "desc": "É necessário cadastrar ao menos um serviço oferecido com seu respectivo preço."
             })
 
-        # 2. Valida colaboradores, escala e vínculo de serviços habilitados
+        # 2. Valida colaboradores, escala e vínculos de serviços
         colaboradores_cadastrados = ColaboradorContrato.query.filter_by(id_local=empresa_id_alvo).all()
         if not colaboradores_cadastrados:
             pendencias.append({
@@ -1535,9 +1515,8 @@ def dashboard_empresa():
         else:
             tem_colaborador_apto = False
             for colab in colaboradores_cadastrados:
-                # Valida se o colaborador tem escala cadastrada e serviços atrelados/habilitados
-                tem_escala = bool(getattr(colab, 'escalas', None))
-                tem_servicos_colab = bool(getattr(colab, 'servicos', None))
+                tem_escala = bool(getattr(colab, 'escalas', None) or getattr(colab, 'jornadas', None))
+                tem_servicos_colab = bool(getattr(colab, 'servicos', None) or getattr(colab, 'servicos_habilitados', None))
                 if tem_escala and tem_servicos_colab:
                     tem_colaborador_apto = True
                     break
@@ -1550,19 +1529,14 @@ def dashboard_empresa():
 
     pronto_para_operar = (len(pendencias) == 0)
 
-    # ---------------------------------------------------------------------
-    # 🚀 REGRAS DE ESTADO E PARÂMETROS PARA A VIEW INTERMEDIÁRIA
-    # ---------------------------------------------------------------------
+    # 5. RENDERIZAÇÃO
     base_empresa_pronta = (processo is None) or (processo.status_processo == 'concluido')
-    empresa_id_param = (ese_empresa.id if ese_empresa else real_local_id) or (processo.id if processo else None)
+    empresa_id_param = empresa_id_alvo
 
     current_app.logger.info(
         f"[DASHBOARD CENTRAL] Usuário '{user_core_id}' acessando o Portal Central da Empresa #{empresa_id_param}."
     )
 
-    # ---------------------------------------------------------------------
-    # 🎨 RENDERIZA A TELA INTERMEDIÁRIA DA CENTRAL DE COMANDO
-    # ---------------------------------------------------------------------
     return render_template(
         'empresa/dashboard_empresa.html',
         processo=processo,
