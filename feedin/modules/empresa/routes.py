@@ -2343,30 +2343,50 @@ def painel_empresa():
     todas_empresas = list(todas_empresas_dict.values())
 
     # -------------------------------------------------------------------------
-    # 3. BUSCA FALLBACK: PROCESSOS DE CLAIM EM ANDAMENTO
-    # Se NÃO possui empresa oficializada, checa se há Claim ativo pelo user_core_id
+    # 3. BUSCA FALLBACK: PROCESSOS DE CLAIM EM ANDAMENTO OU RECENTEMENTE APROVADOS
+    # Consistido para aceitar UUID/String (char(36)) e status de homologação
     # -------------------------------------------------------------------------
     if not todas_empresas and user_core_id:
+        from sqlalchemy import or_
+
+        criterios_usuario = [
+            EseProcessoClaim.usuario_solicitante_id == user_core_id,
+            EseProcessoClaim.usuario_solicitante_id == str(user_core_id)
+        ]
+        if current_user and hasattr(current_user, 'id'):
+            criterios_usuario.append(EseProcessoClaim.usuario_solicitante_id == str(current_user.id))
+
         estados_claim = [
             'iniciado', 'pendente', 'em_analise', 'rascunho',
-            'em_andamento', 'preenchimento_dados', 'simulacao_pendente'
+            'em_andamento', 'preenchimento_dados', 'simulacao_pendente',
+            'homologado', 'concluido'
         ]
 
         claim_ativo = EseProcessoClaim.query.filter(
-            EseProcessoClaim.usuario_solicitante_id == user_core_id,
+            or_(*criterios_usuario),
             EseProcessoClaim.status_processo.in_(estados_claim)
         ).order_by(EseProcessoClaim.data_inicio.desc()).first()
 
-        if claim_ativo:
+        if claim_ativo and claim_ativo.local_id:
             session['claim_id_atual'] = claim_ativo.id
             session['local_id_atual'] = claim_ativo.local_id
-
-            # Redireciona diretamente para o Hub de Ativação do estabelecimento
             return redirect(url_for('empresa.hub_ativacao', empresa_id=claim_ativo.local_id))
 
-        # Se não possui empresa oficializada nem claim em andamento
+        from feedin.modules.empresa.models import EseEmpresa
+        empresa_por_uuid = EseEmpresa.query.filter(
+            or_(
+                EseEmpresa.proprietario_id == str(user_core_id),
+                EseEmpresa.proprietario_id == str(getattr(current_user, 'id', ''))
+            )
+        ).first()
+
+        if empresa_por_uuid:
+            session['local_id_atual'] = empresa_por_uuid.id
+            return redirect(url_for('empresa.hub_ativacao', empresa_id=empresa_por_uuid.id))
+
         flash("Nenhum negócio associado ou processo de reivindicação encontrado.", "info")
         return render_template('empresa/selecionar_ambiente.html', empresas=[], current_user=current_user)
+
 
     # -------------------------------------------------------------------------
     # 4. TRATAMENTO PARA USUÁRIOS COM EMPRESAS OFICIALIZADAS
