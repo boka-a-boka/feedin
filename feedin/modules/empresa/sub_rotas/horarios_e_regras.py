@@ -191,6 +191,19 @@ def processar_solicitacao_degustacao(empresa_id, modulo_slug, ip_cliente):
                 detalhes=f"Licença Empresa PRO concedida temporariamente via Degustação do Módulo Agenda. Vínculo até {vencimento.strftime('%d/%m/%Y')}."
             ))
 
+        # ---------------------------------------------------------------------
+        # 3. SINCRONIZAÇÃO COM O STATUS DA EMPRESA (EseEmpresa)
+        # ---------------------------------------------------------------------
+        from feedin.modules.empresa.models import EseEmpresa
+        ese_empresa = EseEmpresa.query.filter(
+            (EseEmpresa.id == empresa_id) | (EseEmpresa.local_id == empresa_id)
+        ).first()
+
+        if ese_empresa:
+            # Garante que o status do estabelecimento permita acesso aos recursos da Fase 2
+            ese_empresa.status_homologacao = 'provisorio_beta'  # ou 'homologado' conforme sua regra
+            db.session.flush()
+
         db.session.commit()
         return True, "Módulo Agenda ativado em degustação! A licença Empresa PRO foi concedida temporariamente ao seu perfil."
 
