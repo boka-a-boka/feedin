@@ -2310,6 +2310,7 @@ def painel_empresa():
     2. Se não houver oficializadas, busca processos de Claim em andamento (EseProcessoClaim).
     3. Trata a seleção de empresa e REDIRECIONA para o Hub de Ativação oficial (hub_ativacao).
     """
+    from feedin.modules.empresa.models import EseEmpresa
     # -------------------------------------------------------------------------
     # 1. RESOLUÇÃO ESTRITA DOS IDS (CORE vs MÓDULO)
     # -------------------------------------------------------------------------
