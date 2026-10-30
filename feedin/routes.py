@@ -3451,7 +3451,7 @@ def tratar_pendencia_core(acao_id):
     parecer = request.form.get('parecer', '').strip()
 
     try:
-        # 1. TRATAMENTO ESPECÍFICO DO MÓDULO EMPRESA (HOMOLOGAÇÃO)
+        # 1. TRATAMENTO ESPECÍFICO DO MÓDULO EMPRESA (HOMOLOGAÇÃO & LICENCIAMENTO)
         if acao.modulo and acao.modulo.slug == 'empresa':
             empresa = EseEmpresa.query.get(acao.entidade_id)
             processo = None
@@ -3463,6 +3463,36 @@ def tratar_pendencia_core(acao_id):
             if decisao in ['aprovar', 'concluir']:
                 if empresa:
                     empresa.status_homologacao = 'homologado'
+
+                    # 🛡️ AMARRAÇÃO SOBERANA DA LICENÇA EMPRESA PRÓ / AGENDA
+                    from feedin.modules.empresa.models import ModEmpresaModulo
+                    from datetime import datetime, timezone
+
+                    mod_empresa = ModEmpresaModulo.query.filter_by(
+                        empresa_id=empresa.id
+                    ).filter(
+                        ModEmpresaModulo.modulo_slug.in_(['empresa_pro', 'empresa'])
+                    ).first()
+
+                    agora = datetime.now(timezone.utc)
+
+                    if mod_empresa:
+                        # 🔒 PROTEÇÃO: Preserva o tipo_plano original caso não seja degustação (plano pago/direto)
+                        mod_empresa.status_homologacao = 'homologado'
+                        mod_empresa.ativo = True
+                        database.session.add(mod_empresa)
+                    else:
+                        # Se não existia o registro inicial, cria como 'degustacao' ("carona" do processo/agenda)
+                        novo_mod_pro = ModEmpresaModulo(
+                            empresa_id=empresa.id,
+                            modulo_slug='empresa_pro',
+                            ativo=True,
+                            tipo_plano='degustacao',  # Marca explicitamente como degustação/carona
+                            status_homologacao='homologado',
+                            data_contratacao=agora
+                        )
+                        database.session.add(novo_mod_pro)
+
                 if processo:
                     processo.status_processo = 'concluido'
 
@@ -3473,9 +3503,11 @@ def tratar_pendencia_core(acao_id):
                     from feedin.modules.auth.models import ModVinculoModulo, ModCadastroCliente
                     from feedin.models import IdentidadeCivil
 
-                    usuario_solicitante = ModCadastroCliente.query.get(processo.usuario_solicitante_id)
+                    solicitante_id_str = str(processo.usuario_solicitante_id)
+                    usuario_solicitante = ModCadastroCliente.query.get(solicitante_id_str)
                     identidade = IdentidadeCivil.query.filter_by(
-                        usuario_id=processo.usuario_solicitante_id).first() if usuario_solicitante else None
+                        usuario_id=solicitante_id_str
+                    ).first() if usuario_solicitante else None
 
                     if identidade and identidade.cpf_hash:
                         vinculo_existente = ModVinculoModulo.query.filter_by(
@@ -3495,7 +3527,7 @@ def tratar_pendencia_core(acao_id):
                             database.session.add(novo_vinculo)
 
                 titulo_notif = f"Parabéns! Empresa Homologada: {empresa.nome if empresa else ''}"
-                desc_notif = f"A documentação enviada para o estabelecimento '{empresa.nome if empresa else ''}' foi aprovada. A gestão completa está liberada!"
+                desc_notif = f"A documentação enviada para o estabelecimento '{empresa.nome if empresa else ''}' foi aprovada. A gestão Pró e os recursos avançados estão liberados!"
                 flash(f"Empresa '{empresa.nome if empresa else 'N/A'}' homologada e liberada com sucesso.", "success")
 
             elif decisao == 'rejeitar':
@@ -3505,13 +3537,20 @@ def tratar_pendencia_core(acao_id):
 
                 if empresa:
                     empresa.status_homologacao = 'pendente_correcao'
+
+                    from feedin.modules.empresa.models import ModEmpresaModulo
+                    mod_empresa = ModEmpresaModulo.query.filter_by(empresa_id=empresa.id).first()
+                    if mod_empresa:
+                        mod_empresa.status_homologacao = 'pendente_correcao'
+                        database.session.add(mod_empresa)
+
                 if processo:
                     processo.status_processo = 'pendente_correcao'
 
                 acao.status = 'rejeitado'
                 titulo_notif = f"Ação Necessária: Correção de Documentos - {empresa.nome if empresa else ''}"
                 desc_notif = f"Inconsistências apontadas pela auditoria:\n{parecer}\nPor favor, envie os documentos corrigidos."
-                flash(f"Ação devolvida para correção.", "warning")
+                flash("Ação devolvida para correção.", "warning")
 
             # Disparo de notificação para o solicitante da empresa
             if processo and processo.usuario_solicitante_id:

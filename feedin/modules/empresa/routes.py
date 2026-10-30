@@ -346,6 +346,33 @@ def processar_claim_digital():
         db.session.add(config_padrao_agenda)
 
         # =====================================================================
+        # 🛡️ 2.2 INITIALIZATION SEED: MÓDULO EMPRESA E PERFIL PRO / DEGUSTAÇÃO
+        # =====================================================================
+        from feedin.modules.empresa.models import ModEmpresaModulo
+
+        # Recupera o módulo atual da sessão com segurança
+        modulo_slug_Sessao = session.get('modulo_slug_atual')
+
+        modulo_empresa_pro = ModEmpresaModulo.query.filter_by(
+            empresa_id=nova_empresa.id,
+            modulo_slug='empresa_pro'
+        ).first()
+
+        if not modulo_empresa_pro:
+            agora = datetime.now(timezone.utc)
+            tipo_plano_inicial = 'degustacao' if modulo_slug_Sessao == 'agenda' else 'padrao'
+
+            modulo_empresa_pro = ModEmpresaModulo(
+                empresa_id=nova_empresa.id,
+                modulo_slug='empresa_pro',
+                ativo=True,
+                tipo_plano=tipo_plano_inicial,
+                status_homologacao='homologado' if modulo_slug_Sessao == 'agenda' else 'pendente',
+                data_contratacao=agora
+            )
+            db.session.add(modulo_empresa_pro)
+
+        # =====================================================================
         # 🛰️ MÓDULO ADERENTE (EX: AGENDA)
         # =====================================================================
         modulo_atual = session.get('modulo_slug_atual')
@@ -2838,7 +2865,16 @@ def hub_ativacao(empresa_id):
         flash("Acesso não autorizado ou processo de reivindicação não localizado.", "danger")
         return redirect(url_for('empresa.dashboard_empresa'))
 
-    tem_acesso_pro = ese_empresa.possui_recurso_pro()
+    # 🛡️ VERIFICAÇÃO BLINDADA DE ACESSO PRO (Consulta direta ao banco + model)
+    from feedin.modules.empresa.models import ModEmpresaModulo
+    modulo_pro_db = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa_id_soberano,
+        ativo=True
+    ).filter(
+        ModEmpresaModulo.modulo_slug.in_(['empresa_pro', 'empresa', 'agenda'])
+    ).first()
+
+    tem_acesso_pro = bool(ese_empresa.possui_recurso_pro() or modulo_pro_db)
 
     # ---------------------------------------------------------------------
     # 📩 BUSCA DE CONTRATOS PENDENTES COM CONVITE ACEITO (Opcional/Colaboradores)
@@ -2895,8 +2931,12 @@ def hub_ativacao(empresa_id):
     # 4. CÁLCULO DE PROGRESSO (FASE 1 vs. FASE 2)
     empresa_homologada = (ese_empresa.status_homologacao == 'homologado')
 
-    # 🔑 AJUSTE PONTUAL: Considera liberado para Fase 2 se homologada OU em beta/provisório com acesso PRO ativo
-    liberado_fase_2 = empresa_homologada or (ese_empresa.status_homologacao == 'provisorio_beta' and tem_acesso_pro)
+    # 🔑 LIBERAÇÃO BLINDADA DA FASE 2: Homologado OU Beta/Provisório com acesso PRO
+    liberado_fase_2 = bool(
+        empresa_homologada or
+        (ese_empresa.status_homologacao in ['provisorio_beta', 'pendente'] and tem_acesso_pro) or
+        tem_acesso_pro
+    )
 
     modulos_concluidos = 0
 
@@ -2965,6 +3005,7 @@ def hub_ativacao(empresa_id):
         'empresa/hub_onboarding.html',
         processo=processo,
         tem_acesso_pro=tem_acesso_pro,
+        liberado_fase_2=liberado_fase_2,
         ese_empresa=ese_empresa,
         empresa_id=empresa_id_soberano,
         local_id=empresa_id_soberano,
