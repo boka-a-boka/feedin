@@ -99,7 +99,6 @@
                         {% set lim_empresa = grade_empresa_map.get(dia_id) %}
                         {% set empresa_abre = true if lim_empresa else false %}
 
-                        {# REGRA DIRETA: Só fica ativo se houver registro explícito salvo para o dia #}
                         {% set ativo = true if (registro and empresa_abre) else false %}
 
                         <div class="bloco-dia p-3 {% if not loop.last %}border-bottom{% endif %} {% if not empresa_abre %}bg-light opacity-75{% endif %}"
@@ -109,7 +108,7 @@
                              data-limite-min="{{ lim_empresa.abertura.strftime('%H:%M') if lim_empresa else '' }}"
                              data-limite-max="{{ lim_empresa.fechamento.strftime('%H:%M') if lim_empresa else '' }}">
 
-                            {# LINHA 1: Switch, Nome do Dia e Atalho de Replicação #}
+                            {# LINHA 1: Switch, Nome do Dia e Atalho de Propagação Individual #}
                             <div class="d-flex align-items-center justify-content-between mb-2">
                                 <div class="d-flex align-items-center">
                                     <div class="form-check form-switch me-2">
@@ -128,12 +127,13 @@
                                     {% endif %}
                                 </div>
 
-                                {# Atalho na Segunda-feira (dia_id = 1) #}
-                                {% if dia_id == 1 and empresa_abre %}
-                                    <button type="button" class="btn btn-link text-decoration-none p-0 text-primary"
-                                            id="btnReplicarSegunda"
-                                            style="font-size: 0.72rem; font-weight: 600;">
-                                        <i class="bi bi-copy me-1"></i>Replicar p/ Seg–Sex
+                                {# 🔄 Botão Propagar Abaixo disponível em cada dia útil (Segunda [1] a Quinta [4]) #}
+                                {% if dia_id in [1, 2, 3, 4] and empresa_abre %}
+                                    <button type="button" class="btn btn-link text-decoration-none p-0 text-primary btn-replicar-abaixo"
+                                            data-dia="{{ dia_id }}"
+                                            style="font-size: 0.7rem; font-weight: 600;"
+                                            title="Copia este horário para os dias úteis abaixo">
+                                        <i class="bi bi-arrow-down-square me-1"></i>Propagar abaixo
                                     </button>
                                 {% endif %}
                             </div>
@@ -227,7 +227,6 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-    // 1. Função de Validação (Teto da Empresa + Coerência de Horários Entrada/Saída)
     function validarDia(diaId) {
         const bloco = document.getElementById('bloco_dia_' + diaId);
         const switchDia = document.getElementById('switch_' + diaId);
@@ -250,7 +249,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         inputs.forEach(input => input.classList.remove('input-fora-limite'));
 
-        // Validação A: Teto Comercial da Empresa
         inputs.forEach(input => {
             const val = input.value;
             if (val) {
@@ -267,7 +265,6 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        // Validação B: Coerência de Entrada e Saída da Parte 1
         if (p1In && p1Out && p1In.value && p1Out.value && p1In.value >= p1Out.value) {
             p1In.classList.add('input-fora-limite');
             p1Out.classList.add('input-fora-limite');
@@ -275,7 +272,6 @@ document.addEventListener('DOMContentLoaded', function () {
             mensagem = 'A entrada da Parte 1 deve ser menor que a saída.';
         }
 
-        // Validação C: Coerência de Entrada e Saída da Parte 2
         if (p2In && p2Out && p2In.value && p2Out.value && p2In.value >= p2Out.value) {
             p2In.classList.add('input-fora-limite');
             p2Out.classList.add('input-fora-limite');
@@ -293,7 +289,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 2. Alternar visibilidade e ativação dos inputs ao ligar/desligar o Switch
     function atualizarEstadoDia(diaId) {
         const switchDia = document.getElementById('switch_' + diaId);
         const container = document.getElementById('inputs_dia_' + diaId);
@@ -318,7 +313,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 3. Ouvinte de eventos nos Switches de cada dia
     document.querySelectorAll('.switch-dia').forEach(sw => {
         sw.addEventListener('change', function () {
             const diaId = this.getAttribute('data-dia');
@@ -326,7 +320,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 4. Ouvinte de eventos nos Inputs de Hora
     document.querySelectorAll('.input-escala').forEach(inp => {
         ['input', 'change'].forEach(evt => {
             inp.addEventListener(evt, function () {
@@ -336,7 +329,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 5. Botões de Limpar Parte 1 / Parte 2
     document.querySelectorAll('.btn-limpar').forEach(btn => {
         btn.addEventListener('click', function () {
             const diaId = this.getAttribute('data-dia');
@@ -352,48 +344,52 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 6. Replicar Segunda-feira para Seg–Sex
-    const btnReplicar = document.getElementById('btnReplicarSegunda');
-    if (btnReplicar) {
-        btnReplicar.addEventListener('click', function () {
-            const switchSegunda = document.getElementById('switch_1');
-            if (!switchSegunda || !switchSegunda.checked) {
-                alert('Ative a Segunda-feira e informe os horários antes de replicar.');
+    // 🔄 Função universal para propagar horários de um dia específico para todos os dias úteis abaixo dele
+    document.querySelectorAll('.btn-replicar-abaixo').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const diaOrigemId = parseInt(this.getAttribute('data-dia'));
+            const switchOrigem = document.getElementById('switch_' + diaOrigemId);
+
+            if (!switchOrigem || !switchOrigem.checked) {
+                alert('Ative este dia e informe os horários antes de propagar.');
                 return;
             }
 
-            const p1In = document.getElementById('p1_entrada_1').value;
-            const p1Out = document.getElementById('p1_saida_1').value;
-            const p2In = document.getElementById('p2_entrada_1').value;
-            const p2Out = document.getElementById('p2_saida_1').value;
+            const p1In = document.getElementById('p1_entrada_' + diaOrigemId).value;
+            const p1Out = document.getElementById('p1_saida_' + diaOrigemId).value;
+            const p2In = document.getElementById('p2_entrada_' + diaOrigemId).value;
+            const p2Out = document.getElementById('p2_saida_' + diaOrigemId).value;
 
-            const diasUteis = [2, 3, 4, 5]; // Terça a Sexta
+            // Lista estritamente de dias úteis (1: Seg, 2: Ter, 3: Qua, 4: Qui, 5: Sex)
+            const diasUteis = [1, 2, 3, 4, 5];
+            const indexOrigem = diasUteis.indexOf(diaOrigemId);
 
-            diasUteis.forEach(diaId => {
-                const bloco = document.getElementById('bloco_dia_' + diaId);
-                if (!bloco) return;
+            // Pega apenas os dias úteis que estão abaixo do dia clicado
+            for (let i = indexOrigem + 1; i < diasUteis.length; i++) {
+                let diaAlvoId = diasUteis[i];
+                let blocoAlvo = document.getElementById('bloco_dia_' + diaAlvoId);
+                if (!blocoAlvo) continue;
 
-                const empresaAbre = bloco.getAttribute('data-empresa-abre') === '1';
+                let empresaAbre = blocoAlvo.getAttribute('data-empresa-abre') === '1';
 
                 if (empresaAbre) {
-                    const switchDia = document.getElementById('switch_' + diaId);
-                    if (!switchDia.checked) {
-                        switchDia.checked = true;
-                        atualizarEstadoDia(diaId);
+                    let switchAlvo = document.getElementById('switch_' + diaAlvoId);
+                    if (!switchAlvo.checked) {
+                        switchAlvo.checked = true;
+                        atualizarEstadoDia(diaAlvoId);
                     }
 
-                    document.getElementById('p1_entrada_' + diaId).value = p1In;
-                    document.getElementById('p1_saida_' + diaId).value = p1Out;
-                    document.getElementById('p2_entrada_' + diaId).value = p2In;
-                    document.getElementById('p2_saida_' + diaId).value = p2Out;
+                    document.getElementById('p1_entrada_' + diaAlvoId).value = p1In;
+                    document.getElementById('p1_saida_' + diaAlvoId).value = p1Out;
+                    document.getElementById('p2_entrada_' + diaAlvoId).value = p2In;
+                    document.getElementById('p2_saida_' + diaAlvoId).value = p2Out;
 
-                    validarDia(diaId);
+                    validarDia(diaAlvoId);
                 }
-            });
+            }
         });
-    }
+    });
 
-    // 7. Validação dinâmica de todos os blocos no submit do formulário
     const formEscala = document.getElementById('formEscala');
     if (formEscala) {
         formEscala.addEventListener('submit', function (e) {

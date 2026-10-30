@@ -1,44 +1,19 @@
 import os
-import uuid
 import json
-import socket
-import re
-import unicodedata
-import urllib.parse
-import hashlib
 import calendar
 import secrets
-import pytz
-import base64
-from io import BytesIO
-from werkzeug.datastructures import FileStorage
-from slugify import slugify
-from typing import Optional, Union, BinaryIO
 from weasyprint import HTML
-from decimal import Decimal, InvalidOperation
-from urllib.parse import urlparse
-from functools import wraps
-from collections import defaultdict
 import requests  # Para a busca de CEP (ViaCEP)
 from datetime import datetime, timezone, timedelta, time, date
 from feedin.modules.empresa.services.calendar_engine import popular_feriados_civis_dinamico, \
     processar_localidade_completa
-from sqlalchemy.orm import joinedload, selectinload
-from sqlalchemy import func, inspect
-from flask_login import current_user, login_required, logout_user
-from werkzeug.utils import secure_filename
+from sqlalchemy.orm import joinedload
+from flask_login import login_required
 
 # 1. METODOLOGIAS DO FLASK & EXTENSÕES
-from flask import current_app, request, jsonify, render_template, redirect, url_for, flash, session, Flask, abort
+from flask import current_app, Flask
 
 from flask_mail import Message
-from PIL import Image
-
-# 2. SEÇÃO DE FORMULÁRIOS (WTFORMS)
-from flask_wtf import FlaskForm
-from flask_wtf.file import FileField, FileRequired, FileAllowed
-from wtforms import StringField, PasswordField
-from wtforms.validators import DataRequired, Email, Length, EqualTo
 
 # 3. 🎯 ELOS DE CONEXÃO COM O CORE E OUTROS MÓDULOS
 from feedin import database as db, mail  # Objetos centrais do Core
@@ -51,7 +26,6 @@ from feedin.modules.empresa import empresa_bp
 from feedin.models import Local, IdentidadeCivil, Taxonomia, VinculoUsuarioLocal, ModulosSistema, Cargo, Usuario
 
 from feedin.modules.auth.models import ModVinculoModulo, ModCadastroCliente, AthAtribContexto, VinculoUsuarioEmpresa
-from flask import render_template, request, redirect, url_for, flash
 
 # Modelos específicos do próprio módulo Empresa (Higienizado sem duplicados)
 from feedin.modules.empresa.models import (
@@ -62,13 +36,6 @@ from feedin.modules.empresa.models import (
     ColaboradorDetalhesPessoais, EseConviteColaborador, EseServicoOferecido, EseServicoPreco, EseServicoPrecoHistorico,
     EseGrupoTabela, EseColaboradorServicoHabilidade, EseTipoExcecaoEnum, EseOrigemExcecaoEnum, EseExcecaoCalendario,
     ModEmpresaModulo,
-)
-
-from feedin.modules.estoque.models import ProdutoCatalogo, EntradaEstoqueItem
-from feedin.modules.estoque.services.estoque_service import (
-    validar_acesso_empresa,
-    registrar_entrada_estoque,
-    registrar_baixa_operacional
 )
 
 from feedin.utils import preparar_entrada_modulo, limpar_string, limpar_mascara, validar_unicidade_documento, \
@@ -1544,6 +1511,46 @@ def dashboard_empresa():
         return redirect(url_for('auth.login', modulo='empresa'))
 
     # ---------------------------------------------------------------------
+    # 🔍 VALIDAÇÃO DOS PRÉ-REQUISITOS OPERACIONAIS (Serviços, Colaboradores, Escala)
+    # ---------------------------------------------------------------------
+    empresa_id_alvo = (ese_empresa.id if ese_empresa else real_local_id) or (processo.id if processo else None)
+    pendencias = []
+
+    if empresa_id_alvo:
+        # 1. Valida se existem serviços cadastrados com preço
+        servicos_cadastrados = EseServicoOferecido.query.filter_by(empresa_id=empresa_id_alvo).all()
+        if not servicos_cadastrados:
+            pendencias.append({
+                "titulo": "Catálogo de Serviços",
+                "desc": "É necessário cadastrar ao menos um serviço oferecido com seu respectivo preço."
+            })
+
+        # 2. Valida colaboradores, escala e vínculo de serviços habilitados
+        colaboradores_cadastrados = ColaboradorContrato.query.filter_by(id_local=empresa_id_alvo).all()
+        if not colaboradores_cadastrados:
+            pendencias.append({
+                "titulo": "Colaboradores na Equipe",
+                "desc": "Cadastre pelo menos um profissional para a operação dos agendamentos."
+            })
+        else:
+            tem_colaborador_apto = False
+            for colab in colaboradores_cadastrados:
+                # Valida se o colaborador tem escala cadastrada e serviços atrelados/habilitados
+                tem_escala = bool(getattr(colab, 'escalas', None))
+                tem_servicos_colab = bool(getattr(colab, 'servicos', None))
+                if tem_escala and tem_servicos_colab:
+                    tem_colaborador_apto = True
+                    break
+
+            if not tem_colaborador_apto:
+                pendencias.append({
+                    "titulo": "Escala e Serviços do Colaborador",
+                    "desc": "O colaborador cadastrado precisa ter uma escala de trabalho definida e os serviços habilitados."
+                })
+
+    pronto_para_operar = (len(pendencias) == 0)
+
+    # ---------------------------------------------------------------------
     # 🚀 REGRAS DE ESTADO E PARÂMETROS PARA A VIEW INTERMEDIÁRIA
     # ---------------------------------------------------------------------
     base_empresa_pronta = (processo is None) or (processo.status_processo == 'concluido')
@@ -1561,7 +1568,9 @@ def dashboard_empresa():
         processo=processo,
         ese_empresa=ese_empresa,
         empresa_id=empresa_id_param,
-        base_empresa_pronta=base_empresa_pronta
+        base_empresa_pronta=base_empresa_pronta,
+        pendencias=pendencias,
+        pronto=pronto_para_operar
     )
 
 
@@ -3633,52 +3642,6 @@ def calcular_hash_contrato(contrato):
     )
     return hashlib.sha256(payload.encode('utf-8')).hexdigest().upper()
 
-
-def pode_gerenciar_empresa(empresa_id):
-    """
-    Verifica se o usuário atual (via current_user ou session) possui papel de gestão
-    (papel_nivel >= 666) e contrato ativo no local/empresa especificado.
-    """
-    # Se o usuário for super admin global do sistema, libera direto
-    if bool(getattr(current_user, 'is_admin', False)):
-        return True
-
-    # Identifica o UUID ou ID do usuário logado
-    cliente_uuid = getattr(current_user, 'id', None) or session.get('id_cliente')
-    usuario_id = getattr(current_user, 'id_usuario', None) or session.get('id_usuario')
-
-    if not cliente_uuid and not usuario_id:
-        return False
-
-    # Busca o contrato na empresa solicitada
-    query = ColaboradorContrato.query.filter(
-        ColaboradorContrato.id_local == empresa_id
-    )
-
-    # Filtra por UUID do cliente ou por ID do usuário legado
-    if cliente_uuid:
-        query = query.filter(
-            (ColaboradorContrato.id_cadastro_cliente == str(cliente_uuid)) |
-            (ColaboradorContrato.id_usuario == usuario_id)
-        )
-    else:
-        query = query.filter(ColaboradorContrato.id_usuario == usuario_id)
-
-    # 🔒 ORDENAÇÃO DE SEGURANÇA: Prioriza contratos com maior papel_nivel e que estejam ativos
-    contrato = query.order_by(ColaboradorContrato.papel_nivel.desc()).first()
-
-    if not contrato:
-        return False
-
-    # Verifica se o status profissional está ativo (evita que ex-gestores mantenham acesso)
-    if hasattr(contrato, 'status_profissional') and contrato.status_profissional != 'ativo':
-        return False
-
-    # Valida rigorosamente se o papel_nivel do contrato é maior ou igual a 666
-    nivel = contrato.papel_nivel if contrato.papel_nivel is not None else 0
-    return nivel >= 666
-
-
 @empresa_bp.route('/colaborador/admissao-concluida/<int:contrato_id>')
 @login_required
 def admissao_concluida_tela(contrato_id):
@@ -3706,117 +3669,6 @@ def admissao_concluida_tela(contrato_id):
         nome_colaborador=nome_colaborador,
         escalas=escalas,
     )
-
-
-@empresa_bp.route('/colaborador/comprovante-pdf/<int:contrato_id>', methods=['GET'])
-@login_required
-@login_required
-def baixar_comprovante_pdf(contrato_id):
-    """
-    Gera dinamicamente o comprovante em PDF e força o download (Content-Disposition: attachment)
-    ou visualização inline no navegador.
-    """
-    contrato = ColaboradorContrato.query.get_or_404(contrato_id)
-
-    # Permissão: O gestor da empresa ou o próprio colaborador vinculados ao contrato
-    usuario_uuid = getattr(current_user, 'id', None) or session.get('id_cliente')
-    e_dono_do_contrato = (contrato.id_cadastro_cliente and str(contrato.id_cadastro_cliente) == str(usuario_uuid))
-
-    if not e_dono_do_contrato and not pode_gerenciar_empresa(contrato.id_local):
-        abort(403)
-
-    # 1. Resolução do Nome da Empresa / Estabelecimento
-    empresa_obj = getattr(contrato, 'local_trabalho', None) or getattr(contrato, 'empresa', None) or getattr(contrato,
-                                                                                                             'local',
-                                                                                                             None)
-    nome_empresa = "Empresa"
-    if empresa_obj:
-        nome_empresa = (
-                getattr(empresa_obj, 'razao_social', None) or
-                getattr(empresa_obj, 'nome_fantasia', None) or
-                getattr(empresa_obj, 'nome', 'Empresa')
-        )
-
-    # 2. Resolução do Nome do Colaborador
-    nome_colaborador = getattr(contrato, 'nome', None) or "Colaborador"
-
-    # 3. Resolução do Nome do Cargo (Tabela 'cargos', coluna 'nome_cargo')
-    cargo_exibicao = "Não informado"
-    if hasattr(contrato, 'cargo') and contrato.cargo:
-        cargo_exibicao = getattr(contrato.cargo, 'nome_cargo', None) or getattr(contrato.cargo, 'nome', "Não informado")
-    elif getattr(contrato, 'id_cargo', None):
-        cargo_obj = Cargo.query.get(contrato.id_cargo)
-        if cargo_obj:
-            cargo_exibicao = getattr(cargo_obj, 'nome_cargo', 'Não informado')
-
-    # 4. Mapeamento dos Dias da Semana
-    DIAS_MAPA = {
-        0: 'Segunda-feira',
-        1: 'Terça-feira',
-        2: 'Quarta-feira',
-        3: 'Quinta-feira',
-        4: 'Sexta-feira',
-        5: 'Sábado',
-        6: 'Domingo'
-    }
-
-    hoje = date.today()
-
-    # 5. Busca as Escalas Vigentes na Tabela 'escala_trabalho_colaborador'
-    escalas_query = EscalaTrabalhoColaborador.query.filter(
-        EscalaTrabalhoColaborador.contrato_id == contrato.id,
-        EscalaTrabalhoColaborador.ativo.is_(True),
-        EscalaTrabalhoColaborador.data_inicio <= hoje,
-        EscalaTrabalhoColaborador.data_fim >= hoje
-    ).order_by(EscalaTrabalhoColaborador.dia_semana.asc()).all()
-
-    grade_horarios = []
-    for escala in escalas_query:
-        entrada = escala.inicio_expediente.strftime('%H:%M') if escala.inicio_expediente else '-'
-        saida = escala.fim_expediente.strftime('%H:%M') if escala.fim_expediente else '-'
-
-        if escala.inicio_intervalo and escala.fim_intervalo:
-            intervalo = f"{escala.inicio_intervalo.strftime('%H:%M')} às {escala.fim_intervalo.strftime('%H:%M')}"
-        elif escala.inicio_intervalo:
-            intervalo = f"Início às {escala.inicio_intervalo.strftime('%H:%M')}"
-        else:
-            intervalo = "Flexível / Não parametrizado"
-
-        grade_horarios.append({
-            'dia_nome': DIAS_MAPA.get(escala.dia_semana, f"Dia {escala.dia_semana}"),
-            'entrada': entrada,
-            'saida': saida,
-            'intervalo': intervalo,
-            'tipo_escala': escala.tipo_escala,
-            'observacao': escala.observacao
-        })
-
-    # Rastro Digital
-    hash_validacao = f"ADM-{contrato.id}-{contrato.id_local}-{int(datetime.now().timestamp())}"
-
-    # Renderiza o HTML do comprovante
-    html_string = render_template(
-        'pdf/comprovante_admissao.html',
-        contrato=contrato,
-        nome_colaborador=nome_colaborador,
-        nome_empresa=nome_empresa,
-        cargo_exibicao=cargo_exibicao,
-        grade_horarios=grade_horarios,
-        hash_validacao=hash_validacao,
-        data_emissao=datetime.now().strftime('%d/%m/%Y às %H:%M')
-    )
-
-    # Gera o PDF via WeasyPrint
-    pdf_bytes = HTML(string=html_string).write_pdf()
-
-    modo = request.args.get('modo', 'download')
-    disposition = 'inline' if modo == 'visualizar' else f'attachment; filename="Comprovante_Admissao_Contrato_{contrato.id}.pdf"'
-
-    response = make_response(pdf_bytes)
-    response.headers['Content-Type'] = 'application/pdf'
-    response.headers['Content-Disposition'] = disposition
-    return response
-
 
 @empresa_bp.route('/contrato/<int:contrato_id>/remanejar', methods=['GET', 'POST'])
 @login_required
@@ -4444,59 +4296,6 @@ def gerar_e_enviar_comprovante_admissao(
             f"Erro ao gerar/enviar comprovante PDF do contrato #{contrato.id}: {str(e)}"
         )
         return False
-
-
-@empresa_bp.route('/<int:empresa_id>/equipe-jornadas')
-@login_required
-def equipe_jornadas(empresa_id):
-    """
-    Painel Central de Gestão de Equipe e Jornadas de Trabalho.
-    Lista todos os contratos de colaboradores vinculados à empresa,
-    suas escalas ativas e exceções de calendário.
-    """
-    # 1. Valida existência da empresa
-    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
-
-    # 2. Parâmetros de busca e filtro (para busca dinâmica via Offcanvas/Query Params)
-    busca = request.args.get('q', '').strip()
-    status_filtro = request.args.get('status', 'ativo')
-    open_offcanvas_id = request.args.get('open_offcanvas', type=int)
-
-    # 3. Query base dos contratos da empresa
-    query = ColaboradorContrato.query.filter_by(id_local=ese_empresa.id)
-
-    if status_filtro != 'todos':
-        query = query.filter(ColaboradorContrato.status_profissional == status_filtro)
-
-    contratos = query.all()
-
-    # 4. Filtro em memória caso haja busca por nome (usando a property .nome)
-    if busca:
-        contratos = [
-            c for c in contratos
-            if busca.lower() in (c.nome or '').lower()
-        ]
-
-    # 5. Busca escalas de trabalho de todos os contratos ativos (se a model existir)
-    escalas_por_contrato = {}
-    if 'EscalaTrabalho' in globals():
-        contrato_ids = [c.id for c in contratos]
-        todas_escalas = EscalaTrabalhoColaborador.query.filter(
-            EscalaTrabalhoColaborador.contrato_id.in_(contrato_ids)).all()
-        for escala in todas_escalas:
-            escalas_por_contrato.setdefault(escala.contrato_id, []).append(escala)
-
-    return render_template(
-        'empresa/equipe_jornadas.html',  # Ou o template do seu painel de jornadas
-        ese_empresa=ese_empresa,
-        empresa=ese_empresa,
-        contratos=contratos,
-        escalas_por_contrato=escalas_por_contrato,
-        status_filtro=status_filtro,
-        busca=busca,
-        open_offcanvas_id=open_offcanvas_id
-    )
-
 
 def resolver_dados_iniciais_colaborador(contrato):
     """

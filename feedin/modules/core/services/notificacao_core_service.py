@@ -97,13 +97,13 @@ class CoreNotificacaoService:
 
                     # Disparo via WhatsApp (se cadastrado)
                     if membro.whatsapp:
-                        logger.info(f"📱 [CORE WHATSAPP] Enviando para {nome_membro} ({membro.whatsapp})")
+                        logger.info(f"[CORE WHATSAPP] Enviando para {nome_membro} ({membro.whatsapp})")
                         # _enviar_whatsapp_gateway(membro.whatsapp, mensagem_base)
 
                     # Disparo via E-mail (utilizando o e-mail profissional do staff ou do usuário)
                     email_destino = membro.email_profissional or (membro.usuario.email if membro.usuario else None)
                     if email_destino:
-                        logger.info(f"📧 [CORE E-MAIL] Enviando para {nome_membro} ({email_destino})")
+                        logger.info(f"[CORE E-MAIL] Enviando para {nome_membro} ({email_destino})")
                         # _enviar_email_smtp(email_destino, acao.titulo, mensagem_base)
 
                 except Exception as ex:

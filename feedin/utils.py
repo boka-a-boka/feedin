@@ -886,6 +886,8 @@ def requer_modulo(modulo_slug):
 
 from feedin import database as db
 from feedin.modules.empresa.models import ModEmpresaModulo
+
+
 def verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug):
     """
     Semáforo Mestre de Entrada:
@@ -904,16 +906,26 @@ def verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug):
 
     # 1. Se estiver marcado como ativo, validamos a linha do tempo
     if modulo.ativo:
-        if modulo.data_vencimento and agora > modulo.data_vencimento:
-            # 🚨 PROVOU EM CONTRÁRIO: Venceu! Muda para False automaticamente.
-            modulo.ativo = False
-            db.session.commit()
+        if modulo.data_vencimento:
+            # Compatibiliza as datas para evitar erro de offset-naive vs offset-aware
+            vencimento = modulo.data_vencimento
+            agora_comparacao = agora
 
-            # Opcional: Registrar no log que o módulo expirou por falta de renovação
-            print(
-                f"🔒 [VIGÊNCIA] Módulo '{modulo_slug}' da empresa {empresa_id} expirou e foi desativado automaticamente.")
+            if vencimento.tzinfo is None and agora_comparacao.tzinfo is not None:
+                agora_comparacao = agora_comparacao.replace(tzinfo=None)
+            elif vencimento.tzinfo is not None and agora_comparacao.tzinfo is None:
+                vencimento = vencimento.replace(tzinfo=timezone.utc)
 
-            return False, "Sua vigência expirou. Por favor, regularize sua assinatura para acessar o módulo."
+            if agora_comparacao > vencimento:
+                # 🚨 PROVOU EM CONTRÁRIO: Venceu! Muda para False automaticamente.
+                modulo.ativo = False
+                db.session.commit()
+
+                # Opcional: Registrar no log que o módulo expirou por falta de renovação
+                print(
+                    f"🔒 [VIGÊNCIA] Módulo '{modulo_slug}' da empresa {empresa_id} expirou e foi desativado automaticamente.")
+
+                return False, "Sua vigência expirou. Por favor, regularize sua assinatura para acessar o módulo."
 
         # Se está ativo e a data é válida: Luz Verde! 🟢
         return True, "Acesso autorizado"
@@ -943,8 +955,12 @@ def validar_limite_modulo(empresa_id, modulo_slug, tipo_recurso, contrato_id_atu
         return True, "Liberado"
 
     if modulo_contratado.tipo_plano == 'degustacao':
-        if modulo_contratado.data_vencimento and datetime.now(timezone.utc) > modulo_contratado.data_vencimento:
-            return False, "O período de degustação deste módulo expirou. Faça o upgrade para o plano Pro."
+        if modulo_contratado.data_vencimento:
+            vencimento = modulo_contratado.data_vencimento
+            if vencimento.tzinfo is None:
+                vencimento = vencimento.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > vencimento:
+             return False, "O período de degustação deste módulo expirou. Faça o upgrade para o plano Pro."
 
         if tipo_recurso == 'profissionais':
             # Constrói a query base de ativos
@@ -984,3 +1000,42 @@ def validar_limite_modulo(empresa_id, modulo_slug, tipo_recurso, contrato_id_atu
                 return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_clientes} clientes atendidos na base."
 
     return True, "Dentro dos limites"
+
+
+def verificar_prontitude_operacional(empresa_id):
+    """
+    Verifica se a empresa possui os requisitos mínimos para operar a agenda:
+    1. Pelo menos um serviço cadastrado com preço.
+    2. Pelo menos um colaborador cadastrado.
+    3. O colaborador possui escala de trabalho configurada.
+    4. O colaborador possui serviços habilitados vinculados.
+    """
+    # Importe seus models necessários (ex: Servico, Colaborador, EscalaColaborador, etc.)
+    from feedin.models import Servico, Colaborador  # Ajuste conforme seus imports
+
+    # 1. Verifica se existem serviços cadastrados
+    servicos = Servico.query.filter_by(empresa_id=empresa_id).all()
+    if not servicos:
+        return False, "Cadastre pelo menos um serviço no catálogo com preço para continuar."
+
+    # 2. Verifica se existe pelo menos um colaborador
+    colaboradores = Colaborador.query.filter_by(empresa_id=empresa_id).all()
+    if not colaboradores:
+        return False, "Cadastre ao menos um colaborador na equipe."
+
+    # 3 e 4. Valida se há colaboradores com escala e serviços habilitados
+    colaborador_apto = False
+    for colab in colaboradores:
+        # Checa se tem escala (exemplo de atributo ou relacionamento)
+        tem_escala = bool(colab.escalas)  # ou a sua lógica de verificação de escala
+        # Checa se o colaborador tem serviços atrelados
+        tem_servicos = bool(colab.servicos)  # ou tabela de associação
+
+        if tem_escala and tem_servicos:
+            colaborador_apto = True
+            break
+
+    if not colaborador_apto:
+        return False, "O colaborador precisa ter uma escala de trabalho definida e os serviços correspondentes habilitados."
+
+    return True, "Estabelecimento pronto para operar!"
