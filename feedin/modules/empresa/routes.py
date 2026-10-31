@@ -4191,7 +4191,6 @@ def concluir_ficha_colaborador(token):
         passo=passo
     )
 
-
 @empresa_bp.route('/<int:empresa_id>/equipe/convidar', methods=['GET', 'POST'])
 @login_required
 def gerar_link_cadastro_colaborador(empresa_id):

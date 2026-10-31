@@ -53,14 +53,14 @@
             <form method="POST" id="formHorarios">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
-                {# 📅 SEÇÃO A: DIAS ÚTEIS (Segunda a Sexta) #}
+                {# 📅 SEÇÃO A: DIAS ÚTEIS (Segunda [0] a Sexta [4]) #}
                 <div class="mb-4">
                     <div class="d-flex align-items-center mb-2 px-1">
                         <span class="text-secondary fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px; text-transform: uppercase;">Dias Úteis</span>
                     </div>
 
                     <div class="border rounded-4 overflow-hidden bg-white">
-                        {% for dia_id in [1, 2, 3, 4, 5] %}
+                        {% for dia_id in [0, 1, 2, 3, 4] %}
                             {% set dia_nome = DIAS_SEMANA.get(dia_id) %}
                             {% set registro = grade_map.get(dia_id) %}
                             {% set ativo = true if registro else false %}
@@ -102,20 +102,20 @@
                     </div>
                 </div>
 
-                {# 🏖️ SEÇÃO B: FIM DE SEMANA (Sábado [6] e Domingo [0] - Independentes) #}
+                {# 🏖️ SEÇÃO B: FIM DE SEMANA (Sábado [5] e Domingo [6] - Independentes) #}
                 <div class="mb-3">
                     <div class="d-flex align-items-center mb-2 px-1">
                         <span class="text-secondary fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px; text-transform: uppercase;">Fim de Semana</span>
                     </div>
 
                     <div class="border rounded-4 overflow-hidden bg-white">
-                        {% for dia_id in [6, 0] %}
+                        {% for dia_id in [5, 6] %}
                             {% set dia_nome = DIAS_SEMANA.get(dia_id) %}
                             {% set registro = grade_map.get(dia_id) %}
                             {% set ativo = true if registro else false %}
 
                             <div class="bloco-dia row align-items-center g-0 px-3 {% if not loop.last %}border-bottom{% endif %}">
-                                <!-- Switch e Nome do Dia (Sem propagação para garantir total independência) -->
+                                <!-- Switch e Nome do Dia -->
                                 <div class="col-5 d-flex align-items-center">
                                     <div class="form-check form-switch me-2">
                                         <input class="form-check-input" type="checkbox" role="switch"
@@ -166,9 +166,9 @@ function toggleInputs(diaId) {
     }
 }
 
-// 🔄 Função de Propagação restrita aos Dias Úteis ([1, 2, 3, 4, 5])
+// 🔄 Função de Propagação restrita aos Dias Úteis ([0, 1, 2, 3, 4])
 function replicarAbaixo(diaOrigemId) {
-    const diasUteis = [1, 2, 3, 4, 5];
+    const diasUteis = [0, 1, 2, 3, 4];
     const aberturaOrigem = document.getElementById('abertura_' + diaOrigemId).value;
     const fechamentoOrigem = document.getElementById('fechamento_' + diaOrigemId).value;
     const origemAtiva = document.getElementById('switch_' + diaOrigemId).checked;
@@ -180,7 +180,7 @@ function replicarAbaixo(diaOrigemId) {
 
     const indexOrigem = diasUteis.indexOf(parseInt(diaOrigemId));
 
-    // Propaga apenas para os dias úteis abaixo na lista (evita vazar para o sábado/domingo)
+    // Propaga apenas para os dias úteis abaixo na lista
     for (let i = indexOrigem + 1; i < diasUteis.length; i++) {
         let diaAlvoId = diasUteis[i];
         let switchAlvo = document.getElementById('switch_' + diaAlvoId);

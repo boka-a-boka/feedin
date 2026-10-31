@@ -259,9 +259,11 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
     passo_slot = timedelta(minutes=30)
 
     # --------------------------------------------------------------------------
-    # 3. JANELA DE FUNCIONAMENTO DA EMPRESA
+    # 3. JANELA DE FUNCIONAMENTO DA EMPRESA (ESTRITAMENTE CONFIGURADA)
     # --------------------------------------------------------------------------
     janelas_empresa = []
+
+    # Verifica se há exceção direta para a data
     excecao_empresa = EseExcecaoCalendario.query.filter(
         EseExcecaoCalendario.empresa_id == empresa_id,
         EseExcecaoCalendario.contrato_id.is_(None),
@@ -279,20 +281,23 @@ def obter_colaboradores_e_horarios_disponiveis(empresa_id, data_consulta, servic
                 datetime.combine(data_consulta_date, excecao_empresa.fim_expediente)
             ))
 
+    # Se não há exceção, busca estritamente o horário configurado para ESTE dia da semana
     if not janelas_empresa:
-        horarios_empresa = EseHorarioFuncionamento.query.filter(
-            EseHorarioFuncionamento.empresa_id == empresa_id,
-            EseHorarioFuncionamento.dia_semana == dia_semana_py
-        ).order_by(EseHorarioFuncionamento.horario_abertura).all()
+        horario_dia_empresa = EseHorarioFuncionamento.query.filter_by(
+            empresa_id=empresa_id,
+            dia_semana=dia_semana_py
+        ).first()
 
-        if not horarios_empresa:
+        # 🛑 REGRA DE OURO: Se o empresário não cadastrou nada para este dia, a empresa está FECHADA. Sem fallbacks!
+        if not horario_dia_empresa or not horario_dia_empresa.horario_abertura or not horario_dia_empresa.horario_fechamento:
+            print(
+                f"  ❌ [EMPRESA FECHADA] Nenhum horário comercial configurado explicitamente para o dia da semana {dia_semana_py}.")
             return [], {}
 
-        for h in horarios_empresa:
-            janelas_empresa.append((
-                datetime.combine(data_consulta_date, h.horario_abertura),
-                datetime.combine(data_consulta_date, h.horario_fechamento)
-            ))
+        janelas_empresa.append((
+            datetime.combine(data_consulta_date, horario_dia_empresa.horario_abertura),
+            datetime.combine(data_consulta_date, horario_dia_empresa.horario_fechamento)
+        ))
 
     # --------------------------------------------------------------------------
     # 4. CARREGAMENTO EM LOTE (BATCH LOADING EM MEMÓRIA)

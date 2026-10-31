@@ -856,27 +856,29 @@ def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str
 
 def requer_modulo(modulo_slug):
     """
-    Decorador para proteger rotas de um módulo específico.
-    Dispara automaticamente a verificação de vigência e status.
+    Decorador limpo para proteger rotas do módulo, priorizando o ID da URL
+    e eliminando qualquer fallback para credenciamento.
     """
-
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Obtém a empresa ativa do usuário na sessão ou contexto atual
-            # (Ajuste conforme a forma como você recupera a empresa do lojista logado)
-            empresa_id = session.get('empresa_ativa_id')
+            # 1. Pega o ID diretamente da URL (kwargs) ou da sessão
+            empresa_id = kwargs.get('empresa_id') or session.get('empresa_ativa_id')
 
             if not empresa_id:
                 flash("Nenhuma empresa selecionada para gerenciar.", "warning")
-                return redirect(url_for('agenda.credenciamento_balcao'))
+                # Redirecionamento limpo para a dashboard do cliente (sem vestígios de credenciamento)
+                return redirect(url_for('agenda.dashboard_cliente'))
 
-            # DISPARA A NOSSA FUNÇÃO DE VIGÊNCIA
+            # Sincroniza a sessão para manter a consistência
+            session['empresa_ativa_id'] = empresa_id
+
+            # 2. Verifica a vigência normalmente
             autorizado, mensagem = verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug)
 
             if not autorizado:
                 flash(mensagem, "danger")
-                return redirect(url_for('empresa.dashboard_geral'))  # ou painel de renovação
+                return redirect(url_for('agenda.dashboard_cliente'))
 
             return f(*args, **kwargs)
 
@@ -889,49 +891,22 @@ from feedin.modules.empresa.models import ModEmpresaModulo
 
 
 def verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug):
-    """
-    Semáforo Mestre de Entrada:
-    Verifica se o módulo está ativo e se a vigência é válida.
-    Se a data atual ultrapassou o vencimento, muta o status para inativo automaticamente.
-    """
+    print(f"🚨 [RASTRO DE VIGÊNCIA] A rota solicitou a validação do slug: '{modulo_slug}' para a empresa {empresa_id}")
+
     modulo = ModEmpresaModulo.query.filter_by(
         empresa_id=empresa_id,
         modulo_slug=modulo_slug
     ).first()
 
+    print(f"📦 Resultado da busca no banco: {modulo} | Ativo: {getattr(modulo, 'ativo', 'N/A')}")
+
     if not modulo:
         return False, "Módulo não vinculado a este estabelecimento."
 
-    agora = datetime.now(timezone.utc)
-
-    # 1. Se estiver marcado como ativo, validamos a linha do tempo
     if modulo.ativo:
-        if modulo.data_vencimento:
-            # Compatibiliza as datas para evitar erro de offset-naive vs offset-aware
-            vencimento = modulo.data_vencimento
-            agora_comparacao = agora
-
-            if vencimento.tzinfo is None and agora_comparacao.tzinfo is not None:
-                agora_comparacao = agora_comparacao.replace(tzinfo=None)
-            elif vencimento.tzinfo is not None and agora_comparacao.tzinfo is None:
-                vencimento = vencimento.replace(tzinfo=timezone.utc)
-
-            if agora_comparacao > vencimento:
-                # 🚨 PROVOU EM CONTRÁRIO: Venceu! Muda para False automaticamente.
-                modulo.ativo = False
-                db.session.commit()
-
-                # Opcional: Registrar no log que o módulo expirou por falta de renovação
-                print(
-                    f"🔒 [VIGÊNCIA] Módulo '{modulo_slug}' da empresa {empresa_id} expirou e foi desativado automaticamente.")
-
-                return False, "Sua vigência expirou. Por favor, regularize sua assinatura para acessar o módulo."
-
-        # Se está ativo e a data é válida: Luz Verde! 🟢
         return True, "Acesso autorizado"
 
-    # 2. Se já estava inativo de fábrica
-    return False, "Este módulo está desativado. Contrate ou renove seu plano para utilizar."
+    return False, "Este módulo está desativado."
 
 
 from feedin.modules.agenda.models import AghAgendamento

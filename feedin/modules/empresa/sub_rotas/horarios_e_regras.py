@@ -266,12 +266,18 @@ def verificar_prontidao_modulo(empresa_id, modulo_slug):
 @empresa_bp.route('/configurar-horarios-estabelecimento/<int:empresa_id>', methods=['GET', 'POST'], endpoint='configurar_horarios_empresa')
 @login_required
 def configurar_horarios_empresa(empresa_id):
-    """⏱️ Grade de funcionamento tradicional do estabelecimento (Isolado)."""
+    """⏱️ Grade de funcionamento tradicional do estabelecimento (Isolado e Padronizado)."""
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
 
+    # 🎯 PADRÃO UNIFICADO (Python weekday): 0=Segunda ... 6=Domingo
     DIAS_SEMANA = {
-        1: "Segunda-feira", 2: "Terça-feira", 3: "Quarta-feira",
-        4: "Quinta-feira", 5: "Sexta-feira", 6: "Sábado", 0: "Domingo"
+        0: "Segunda-feira",
+        1: "Terça-feira",
+        2: "Quarta-feira",
+        3: "Quinta-feira",
+        4: "Sexta-feira",
+        5: "Sábado",
+        6: "Domingo"
     }
 
     if request.method == 'POST':
@@ -1869,11 +1875,8 @@ def validar_cronologia_horarios(p1_ent, p1_sai, p2_ent, p2_sai):
 def efetivar_admissao(contrato_id):
     empresa_id = session.get('empresa_ativa_id')
 
-    # PASSAMOS O CONTRATO_ID PARA O VALIDADOR SABER SE É APENAS EDIÇÃO DE ALGUÉM JÁ ATIVO
-    liberado, aviso = validar_limite_modulo(empresa_id, 'agenda', 'profissionais', contrato_id_atual=contrato_id)
-    if not liberado:
-        flash(aviso, "warning")
-        return redirect(url_for('agenda.listar_colaboradores'))
+    # 🛑 VALIDAÇÃO DE AGENDA REMOVIDA: O Módulo Empresa é soberano e independente
+    # para gerenciar sua equipe e jornadas durante a homologação ou operação.
 
     contrato = ColaboradorContrato.query.get_or_404(contrato_id)
 
@@ -2516,19 +2519,41 @@ def ver_perfil_colaborador(contrato_id):
     # -------------------------------------------------------------------------
     # 3. VALIDAÇÃO DE HIERARQUIA E PERMISSÃO DO USUÁRIO LOGADO
     # -------------------------------------------------------------------------
-    # Obtém o nível do usuário logado na sessão (padrão 0 se não localizado)
     nivel_usuario_logado = session.get('usuario_nivel', 0)
-
-    # Obtém o nível do colaborador que está sendo acessado
     nivel_membro = getattr(contrato, 'papel_nivel', 0) or 0
 
-    # Regra 1: O usuário precisa ter nível mínimo de gestão (ex: >= 666)
-    # Regra 2: O nível do gestor logado DEVE ser maior ou igual ao do membro alvo
-    pode_gerenciar = (nivel_usuario_logado >= 666) and (nivel_usuario_logado >= nivel_membro)
+    # 🟢 RECUPERAÇÃO DINÂMICA: Se a sessão veio zerada (0), busca o nível real do contrato logado
+    if not nivel_usuario_logado and current_user and current_user.is_authenticated:
+        # Se o usuário for Administrador Mestre do sistema
+        if getattr(current_user, 'is_master', False) or getattr(current_user, 'is_admin', False):
+            nivel_usuario_logado = 999
+        else:
+            # Busca o contrato do usuário logado neste estabelecimento
+            contrato_logado = ColaboradorContrato.query.filter_by(
+                id_local=empresa_id_sessao
+            ).filter(
+                (ColaboradorContrato.usuario_id == current_user.id) if hasattr(ColaboradorContrato,
+                                                                               'usuario_id') else True
+            ).first()
+
+            if contrato_logado:
+                nivel_usuario_logado = getattr(contrato_logado, 'papel_nivel', 0) or 0
+
+        # Atualiza a sessão para manter a consistência nas próximas rotas
+        if nivel_usuario_logado > 0:
+            session['usuario_nivel'] = nivel_usuario_logado
+
+    # 🟢 REGRAS DE LIBERAÇÃO
+    is_master = (nivel_usuario_logado >= 900) or getattr(current_user, 'is_master', False)
+    is_proprio_perfil = (contrato.id == session.get('contrato_id_atual'))
+
+    pode_gerenciar = is_master or is_proprio_perfil or (
+            (nivel_usuario_logado >= 666) and (nivel_usuario_logado >= nivel_membro)
+    )
 
     if not pode_gerenciar:
-        flash("Você não possui permissão hierárquica suficiente para gerenciar o perfil deste colaborador.", "danger")
-        # Retorna para a página anterior ou dashboard da empresa
+        flash("Você não possui permissão hierárquica suficiente para gerenciar o perfil deste colaborador.",
+              "danger")
         referrer = request.referrer
         if referrer and is_safe_url(referrer):
             return redirect(referrer)
@@ -2722,15 +2747,16 @@ def configurar_escala_semanal(empresa_id: int, contrato_id: int):
             grid_empresa[h.dia_semana] = []
         grid_empresa[h.dia_semana].append(h)
 
-    # Convenção do Modelo: 0=Domingo, 1=Segunda, 2=Terça, 3=Quarta, 4=Quinta, 5=Sexta, 6=Sábado
+    # 🎯 CONVENÇÃO UNIFICADA (Padrão Python / Base Antiga):
+    # 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
     dias_semana_map = [
-        {'id': 1, 'nome': 'Segunda-feira', 'sigla': 'SEG'},
-        {'id': 2, 'nome': 'Terça-feira', 'sigla': 'TER'},
-        {'id': 3, 'nome': 'Quarta-feira', 'sigla': 'QUA'},
-        {'id': 4, 'nome': 'Quinta-feira', 'sigla': 'QUI'},
-        {'id': 5, 'nome': 'Sexta-feira', 'sigla': 'SEX'},
-        {'id': 6, 'nome': 'Sábado', 'sigla': 'SÁB'},
-        {'id': 0, 'nome': 'Domingo', 'sigla': 'DOM'},
+        {'id': 0, 'nome': 'Segunda-feira', 'sigla': 'SEG'},
+        {'id': 1, 'nome': 'Terça-feira', 'sigla': 'TER'},
+        {'id': 2, 'nome': 'Quarta-feira', 'sigla': 'QUA'},
+        {'id': 3, 'nome': 'Quinta-feira', 'sigla': 'QUI'},
+        {'id': 4, 'nome': 'Sexta-feira', 'sigla': 'SEX'},
+        {'id': 5, 'nome': 'Sábado', 'sigla': 'SÁB'},
+        {'id': 6, 'nome': 'Domingo', 'sigla': 'DOM'},
     ]
 
     # Processamento do formulário (POST)

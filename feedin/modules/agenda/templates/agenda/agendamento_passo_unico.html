@@ -427,6 +427,9 @@
       return;
     }
 
+    // 🛡️ BLINDAEM DE FUSO HORÁRIO: Garante a string exata YYYY-MM-DD selecionada no input local
+    const dataPuraStr = inputData.value.split('T')[0];
+
     container.innerHTML = `
       <div class="text-muted small py-2 w-100 text-center">
         <span class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -435,8 +438,8 @@
 
     const queryObj = {
       empresa_id: empresaIdConst,
-      data: inputData.value,
-      data_agendamento: inputData.value,
+      data: dataPuraStr,
+      data_agendamento: dataPuraStr,
       servico_ids: servicos,
       servico_id: servicos,
       colaborador_id: colaboradorId,
@@ -518,7 +521,7 @@
 
         container.innerHTML = `
           <div class="text-muted small py-2 w-100 text-center">
-            <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para a data selecionada.
+            <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para la data selecionada.
           </div>`;
       }
     } catch (error) {

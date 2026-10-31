@@ -243,11 +243,35 @@ agora = obter_hora_local()
 print(f"Data e Hora Atual: {agora.strftime('%Y-%m-%d %H:%M:%S')}")
 
 
+@agenda_bp.route('/colaboradores/listar', methods=['GET'])
+@agenda_bp.route('/empresa/<int:empresa_id>/colaboradores/listar', methods=['GET'])
+@login_required
+def listar_colaboradores(empresa_id=None):
+    """📌 Rota robusta que trata o ID ausente e redireciona para a gestão de equipe."""
+
+    # 1. Se o ID não veio na URL, tentamos resgatar da sessão ativa
+    if not empresa_id:
+        empresa_id = session.get('empresa_ativa_id')
+
+    # 2. Se ainda assim não tivermos um ID, buscamos o primeiro contrato válido do usuário logado
+    if not empresa_id and current_user.is_authenticated:
+        primeiro_contrato = ColaboradorContrato.query.filter_by(
+            usuario_id=current_user.id,
+            status_profissional='ativo'
+        ).first()
+        if primeiro_contrato:
+            empresa_id = primeiro_contrato.id_local
+
+    if not empresa_id:
+        flash("Nenhuma empresa selecionada para exibir os colaboradores.", "warning")
+        return redirect(url_for('empresa.dashboard_geral'))
+
+    # Redireciona diretamente para a tela de equipe e jornadas existente
+    return redirect(url_for('empresa.equipe_jornadas', empresa_id=empresa_id))
+
+
 # --------------------------------------------------------------------------
-# 🗓️ ROTA: /api/horarios-disponiveis (DELEGADA AO MOTOR OFICIAL)
-# --------------------------------------------------------------------------
-# --------------------------------------------------------------------------
-# 🗓️ ROTA: /api/horarios-disponiveis (BLINDADA PARA TESTE)
+# 🗓️ ROTA: /api/horarios-disponiveis (BLINDADA E CORRIGIDA)
 # --------------------------------------------------------------------------
 @agenda_bp.route('/api/horarios-disponiveis', methods=['GET'])
 def api_horarios_disponiveis():
@@ -273,7 +297,13 @@ def api_horarios_disponiveis():
         if not empresa_id or not data_str:
             return jsonify({'sucesso': False, 'mensagem': 'Empresa e Data são obrigatórias.'}), 400
 
-        data_consulta = datetime.strptime(data_str, '%Y-%m-%d').date()
+        # 🛡️ BLINDAEM DE DATA: Remove espaços e descarta qualquer parte de hora ISO (ex: '2026-11-01T00:00:00')
+        data_limpa = str(data_str).strip().split('T')[0]
+
+        try:
+            data_consulta = datetime.strptime(data_limpa, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'sucesso': False, 'mensagem': f'Formato de data inválido: {data_str}'}), 400
 
         print(f"🔍 [DEBUG] Chamando motor para empresa={empresa_id}, data={data_consulta}, servicos={servico_ids}")
 
@@ -289,7 +319,7 @@ def api_horarios_disponiveis():
         else:
             horarios_lista, colaboradores_por_servico = resultado_motor
 
-        print(f"📦 [API HORÁRIOS] Retornando {len(horarios_lista)} horários para o dia {data_str}")
+        print(f"📦 [API HORÁRIOS] Retornando {len(horarios_lista)} horários para o dia {data_limpa}")
 
         # Tratamento seguro para evitar quebra de atributo em 'c'
         colaboradores_seguro = {}
@@ -369,17 +399,17 @@ def agenda_balcao(empresa_id):
         metricas_hoje={'total': 0, 'pendentes': 0, 'concluidos': 0, 'cancelados': 0}
     )
 
-
-# =========================================================================
 # 2. ROTA DO BALCÃO (OPERAÇÃO / FRENTE DE LOJA)
 # =========================================================================
 @agenda_bp.route('/empresa/<int:empresa_id>/dashboard', methods=['GET'])
 @login_required
 @requer_modulo('agenda')
 def dashboard_empresa(empresa_id):
+    # =========================================================================
+    # =========================================================================
     """
-    📌 DASHBOARD OPERACIONAL DA EMPRESA (GRANULARIDADE POR ITEM COM SUPORTE A FOTOS DE COLABORADORES)
-    """
+        📌 DASHBOARD OPERACIONAL DA EMPRESA (GRANULARIDADE POR ITEM COM SUPORTE A FOTOS DE COLABORADORES)
+        """
     from feedin.modules.agenda import get_avatar_url
 
     empresa = EseEmpresa.query.get_or_404(empresa_id)
@@ -9576,3 +9606,5 @@ def resolver_contexto_usuario_agenda(cliente_modulo):
         'nivel': operacional.papel_nivel,
         'contrato': operacional
     }
+
+
