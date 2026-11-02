@@ -1250,11 +1250,10 @@ def editar_perfil():
             flash("Seus dados de perfil foram atualizados com sucesso! 🎉", "success")
 
         except Exception as e:
-            database.session.rollback()
-            print(f"❌ ERRO CRÍTICO AO SALVAR PERFIL: {e}")
             import traceback
-            traceback.print_exc()
-            flash(f"Erro técnico ao salvar alterações: {e}", "danger")
+            traceback.print_exc()  # Isso vai imprimir o erro completo no console do Gunicorn
+            current_app.logger.error(f"Erro ao processar imagem de perfil: {str(e)}")
+            return None
 
         return redirect(url_for('configuracoes', aba='perfil'))
 
