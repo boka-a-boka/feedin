@@ -549,16 +549,17 @@ def processar_pontualidade_checkin(agendamento, data_hora_chegada):
 
 
 def processar_solicitacao_reagendamento(
-    agendamento_atual: AghAgendamento,
-    nova_data_hora: datetime,
-    empresa,
-    justificativa: str = None,
-    is_colaborador: bool = False,
-    novo_profissional_id: int = None,
-    itens_servico: list = None
+        agendamento_atual: AghAgendamento,
+        nova_data_hora: datetime,
+        empresa,
+        justificativa: str = None,
+        is_colaborador: bool = False,
+        novo_profissional_id: int = None,
+        itens_servico: list = None
 ):
     """
-    Processa a solicitação de reagendamento respeitando as regras de expiração específicas.
+    Processa a solicitação de reagendamento garantindo atualização in-place para
+    atendimentos em aberto e preservação de histórico apenas para encerrados.
     """
     config = AghConfiguracaoAgenda.query.filter_by(empresa_id=empresa.id).first()
 
@@ -646,67 +647,133 @@ def processar_solicitacao_reagendamento(
                 else timedelta(minutes=30)
             )
 
-        agendamento_atual.status = 'reagendado'
-        agendamento_atual.data_solicitacao_reagendamento = agora_tz
+        nova_data_hora_fim = nova_data_hora + duracao
+        profissional_alvo = novo_profissional_id or agendamento_atual.profissional_id
 
-        novo_agendamento = AghAgendamento(
-            empresa_id=empresa.id,
-            cliente_id=agendamento_atual.cliente_id,
-            beneficiario_id=agendamento_atual.beneficiario_id,
-            profissional_id=novo_profissional_id or agendamento_atual.profissional_id,
-            valor_total=agendamento_atual.valor_total,
-            data_hora_inicio=nova_data_hora,
-            data_hora_fim=nova_data_hora + duracao,
-            agendamento_origem_id=agendamento_raiz.id,
-            qtd_reagendamentos=(getattr(agendamento_atual, 'qtd_reagendamentos', 0) or 0) + 1,
-            status='confirmado',
-            tipo_origem='online',
-            expira_em=data_expiracao,
-            data_solicitacao_reagendamento=agora_tz,
-            criado_em=agora_tz
+        # =========================================================================
+        # DIAGNÓSTICO E DEFINIÇÃO DE STATUS (LISTA NEGRA DE ENCERRADOS)
+        # =========================================================================
+        status_atual = str(agendamento_atual.status).strip().lower() if agendamento_atual.status else 'confirmado'
+        print(f"🔍 DEBUG REAGENDAMENTO [ID {agendamento_atual.id}] -> Status atual no banco: '{status_atual}'")
+
+        # APENAS estes status reais de fim de ciclo devem gerar novo registro e histórico
+        STATUS_ENCERRADOS = ['concluido', 'cancelado', 'finalizado', 'no_show_expirado', 'realizado']
+
+        # Se NÃO estiver na lista de encerrados, está em aberto (atualiza in-place)
+        esta_em_aberto = status_atual not in STATUS_ENCERRADOS
+
+        # =========================================================================
+        # VERIFICAÇÃO DE CONFLITO DE HORÁRIO (OVERLAP)
+        # =========================================================================
+        query_conflito = AghAgendamento.query.filter(
+            AghAgendamento.profissional_id == profissional_alvo,
+            ~AghAgendamento.status.in_(STATUS_ENCERRADOS),
+            AghAgendamento.data_hora_inicio < nova_data_hora_fim,
+            AghAgendamento.data_hora_fim > nova_data_hora
         )
-        db.session.add(novo_agendamento)
-        db.session.flush()
 
-        if itens_servico:
-            for idx, item in enumerate(itens_servico, start=1):
-                db.session.add(AghAgendamentoItem(
-                    agendamento_id=novo_agendamento.id,
-                    servico_id=item['servico_id'],
-                    profissional_id=item.get('colaborador_id') or novo_agendamento.profissional_id,
-                    preco_unitario=item['preco_unitario'],
-                    duracao_minutos=item['duracao_minutos'],
-                    ordem_execucao=idx
-                ))
-            novo_agendamento.recalcular_total()
-        elif agendamento_atual.itens:
-            for item_orig in agendamento_atual.itens:
-                db.session.add(AghAgendamentoItem(
-                    agendamento_id=novo_agendamento.id,
-                    servico_id=item_orig.servico_id,
-                    profissional_id=item_orig.profissional_id or novo_agendamento.profissional_id,
-                    preco_unitario=item_orig.preco_unitario,
-                    duracao_minutos=item_orig.duracao_minutos,
-                    ordem_execucao=item_orig.ordem_execucao
-                ))
+        if esta_em_aberto:
+            query_conflito = query_conflito.filter(AghAgendamento.id != agendamento_atual.id)
 
-        solicitacao_historico = AghSolicitacaoReagendamento(
-            agendamento_id=agendamento_atual.id,
-            novo_agendamento_id=novo_agendamento.id,
-            nova_data=nova_data_hora.date(),
-            novo_horario=nova_data_hora.time(),
-            novo_profissional_id=novo_agendamento.profissional_id,
-            justificativa=justificativa or ('Ajuste Operacional' if is_colaborador else 'Reagendamento no prazo.'),
-            origem='colaborador' if is_colaborador else 'cliente',
-            fora_do_prazo=(minutos_restantes < minutos_antecedencia_empresa),
-            status_solicitacao='aprovada',
-            analisado_em=agora_tz,
-            created_at=agora_tz
-        )
-        db.session.add(solicitacao_historico)
+        conflito_existente = query_conflito.first()
 
-        db.session.commit()
-        return True, 'Agendamento reagendado com sucesso!', 'reagendado'
+        if conflito_existente:
+            return False, f'O profissional já possui um atendimento agendado neste horário ({conflito_existente.data_hora_inicio.strftime("%d/%m/%Y às %H:%M")}). Escolha outro horário.', 'horario_ocupado'
+
+        # =========================================================================
+        # REGRA 1: SE EM ABERTO -> ATUALIZA IN-PLACE (SEM DUPLICAR)
+        # =========================================================================
+        if esta_em_aberto:
+            agendamento_atual.data_hora_inicio = nova_data_hora
+            agendamento_atual.data_hora_fim = nova_data_hora_fim
+            if novo_profissional_id:
+                agendamento_atual.profissional_id = novo_profissional_id
+
+            if itens_servico:
+                for item_antigo in list(agendamento_atual.itens):
+                    db.session.delete(item_antigo)
+                db.session.flush()
+
+                for idx, item in enumerate(itens_servico, start=1):
+                    db.session.add(AghAgendamentoItem(
+                        agendamento_id=agendamento_atual.id,
+                        servico_id=item['servico_id'],
+                        profissional_id=item.get('colaborador_id') or agendamento_atual.profissional_id,
+                        preco_unitario=item['preco_unitario'],
+                        duracao_minutos=item['duracao_minutos'],
+                        ordem_execucao=idx
+                    ))
+                agendamento_atual.recalcular_total()
+
+            db.session.add(agendamento_atual)
+            db.session.commit()
+            return True, 'Agendamento atualizado com sucesso!', 'atualizado'
+
+        # =========================================================================
+        # REGRA 2: SE ENCERRADO/FINALIZADO -> CRIA NOVO REGISTRO E HISTÓRICO
+        # =========================================================================
+        else:
+            agendamento_atual.status = 'reagendado'
+            agendamento_atual.data_solicitacao_reagendamento = agora_tz
+
+            novo_agendamento = AghAgendamento(
+                empresa_id=empresa.id,
+                cliente_id=agendamento_atual.cliente_id,
+                beneficiario_id=agendamento_atual.beneficiario_id,
+                profissional_id=profissional_alvo,
+                valor_total=agendamento_atual.valor_total,
+                data_hora_inicio=nova_data_hora,
+                data_hora_fim=nova_data_hora_fim,
+                agendamento_origem_id=agendamento_raiz.id,
+                qtd_reagendamentos=(getattr(agendamento_atual, 'qtd_reagendamentos', 0) or 0) + 1,
+                status='confirmado',
+                tipo_origem='online',
+                expira_em=data_expiracao,
+                data_solicitacao_reagendamento=agora_tz,
+                criado_em=agora_tz
+            )
+            db.session.add(novo_agendamento)
+            db.session.flush()
+
+            if itens_servico:
+                for idx, item in enumerate(itens_servico, start=1):
+                    db.session.add(AghAgendamentoItem(
+                        agendamento_id=novo_agendamento.id,
+                        servico_id=item['servico_id'],
+                        profissional_id=item.get('colaborador_id') or novo_agendamento.profissional_id,
+                        preco_unitario=item['preco_unitario'],
+                        duracao_minutos=item['duracao_minutos'],
+                        ordem_execucao=idx
+                    ))
+                novo_agendamento.recalcular_total()
+            elif agendamento_atual.itens:
+                for item_orig in agendamento_atual.itens:
+                    db.session.add(AghAgendamentoItem(
+                        agendamento_id=novo_agendamento.id,
+                        servico_id=item_orig.servico_id,
+                        profissional_id=item_orig.profissional_id or novo_agendamento.profissional_id,
+                        preco_unitario=item_orig.preco_unitario,
+                        duracao_minutos=item_orig.duracao_minutos,
+                        ordem_execucao=item_orig.ordem_execucao
+                    ))
+
+            solicitacao_historico = AghSolicitacaoReagendamento(
+                agendamento_id=agendamento_atual.id,
+                novo_agendamento_id=novo_agendamento.id,
+                nova_data=nova_data_hora.date(),
+                novo_horario=nova_data_hora.time(),
+                novo_profissional_id=novo_agendamento.profissional_id,
+                justificativa=justificativa or ('Ajuste Operacional' if is_colaborador else 'Reagendamento no prazo.'),
+                origem='colaborador' if is_colaborador else 'cliente',
+                fora_do_prazo=(minutos_restantes < minutos_antecedencia_empresa),
+                status_solicitacao='aprovada',
+                analisado_em=agora_tz,
+                created_at=agora_tz
+            )
+            db.session.add(solicitacao_historico)
+
+            db.session.commit()
+            return True, 'Atendimento anterior encerrado. Um novo agendamento foi criado com sucesso!', 'reagendado'
 
     except Exception as e:
         db.session.rollback()

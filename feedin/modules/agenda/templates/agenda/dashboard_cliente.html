@@ -916,31 +916,29 @@
             </div>
         </div>
 
-        {# 9. HISTÓRICO: ÚLTIMAS VISITAS #}
-        <div class="accordion mb-3" id="accordionHistorico">
-            <div class="accordion-item border border-secondary-subtle rounded-4 overflow-hidden shadow-sm">
-                <h2 class="accordion-header" id="headingHistorico">
-                    <button class="accordion-button collapsed bg-secondary-subtle text-secondary-emphasis fw-bold py-2 px-3"
-                            type="button"
-                            data-bs-toggle="collapse"
-                            data-bs-target="#collapseHistorico"
-                            aria-expanded="false"
-                            aria-controls="collapseHistorico"
-                            style="font-size: 0.85rem;">
+        {# 9. HISTÓRICO: ÚLTIMAS VISITAS (Versão Blindada com JS Próprio) #}
+        <div class="mb-3">
+            <div class="border border-secondary-subtle rounded-4 overflow-hidden shadow-sm bg-white">
+                <button type="button"
+                        id="btnToggleHistorico"
+                        class="w-100 d-flex align-items-center justify-content-between bg-secondary-subtle text-secondary-emphasis fw-bold py-2 px-3 border-0"
+                        style="font-size: 0.85rem; cursor: pointer;">
+                    <span class="d-flex align-items-center">
                         <i class="bi bi-clock-history me-2 text-secondary"></i>
                         Últimas Visitas
+                    </span>
+                    <div class="d-flex align-items-center gap-2">
                         {% if ultimos_agendamentos %}
-                            <span class="badge bg-secondary text-white rounded-pill ms-auto me-2" style="font-size: 0.7rem;">
+                            <span class="badge bg-secondary text-white rounded-pill" style="font-size: 0.7rem;">
                                 {{ ultimos_agendamentos|length }}
                             </span>
                         {% endif %}
-                    </button>
-                </h2>
-                <div id="collapseHistorico"
-                     class="accordion-collapse collapse"
-                     aria-labelledby="headingHistorico"
-                     data-bs-parent="#accordionHistorico">
-                    <div class="accordion-body bg-light-subtle d-flex flex-column gap-2 p-2" style="max-height: 380px; overflow-y: auto;">
+                        <i class="bi bi-chevron-down" id="iconeSetaHistorico" style="font-size: 0.75rem; transition: transform 0.25s ease;"></i>
+                    </div>
+                </button>
+
+                <div id="corpoHistorico" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out;" class="bg-light-subtle">
+                    <div class="d-flex flex-column gap-2 p-2" style="max-height: 380px; overflow-y: auto;">
                         {% if ultimos_agendamentos %}
                             {% for agendamento in ultimos_agendamentos %}
                                 <div class="bg-white p-2 rounded-3 border d-flex align-items-center justify-content-between">
@@ -950,7 +948,7 @@
                                             <strong class="d-block text-dark small">{{ agendamento.empresa.nome if agendamento.empresa else 'Estabelecimento' }}</strong>
                                             <small class="text-muted" style="font-size: 0.7rem;">{{ agendamento.data_hora_inicio.strftime('%d/%m/%Y') if agendamento.data_hora_inicio else '' }}</small>
                                         </div>
-                                        <span class="badge bg-light text-dark border" style="font-size: 0.7rem;">{{ agendamento.status }}</span>
+                                        <span class="badge bg-light text-dark border ms-2" style="font-size: 0.7rem;">{{ agendamento.status }}</span>
                                     </div>
                                 </div>
                             {% endfor %}
@@ -1844,12 +1842,12 @@ async function enviarAvaliacoesMultiplasDoModal(agendamentoId) {
     }
 }
 
-// 4. GARANTE O ENCERRAMENTO DA CÂMERA AO FECHAR O MODAL (CORREÇÃO DE VAZAMENTO NO iOS)
+// 4. GARANTE O ENCERRAMENTO DA CÂMERA AO FECHAR O MODAL E CONTROLE DO HISTÓRICO
 document.addEventListener('DOMContentLoaded', function() {
+    // Gerenciamento de fechamento de câmera no modal (Prevenção de vazamento no iOS)
     const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
     if (modalItemColab) {
         modalItemColab.addEventListener('hidden.bs.modal', function () {
-            // Procura por tags <video> ou instâncias ativas de stream dentro do modal e as encerra
             const videos = modalItemColab.querySelectorAll('video');
             videos.forEach(video => {
                 if (video.srcObject) {
@@ -1860,9 +1858,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            // Se você estiver usando alguma variável global para a câmera (ex: html5QrCode ou similar), chame o stop dela aqui:
             if (window.html5QrCodeScanner && typeof window.html5QrCodeScanner.clear === 'function') {
                 window.html5QrCodeScanner.clear().catch(err => console.error("Erro ao limpar leitor:", err));
+            }
+        });
+    }
+
+    // Controle do Acordeão de Últimas Visitas (Histórico)
+    const btn = document.getElementById('btnToggleHistorico');
+    const corpo = document.getElementById('corpoHistorico');
+    const seta = document.getElementById('iconeSetaHistorico');
+
+    if (btn && corpo) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (corpo.style.maxHeight && corpo.style.maxHeight !== '0px') {
+                corpo.style.maxHeight = '0px';
+                if (seta) seta.style.transform = 'rotate(0deg)';
+            } else {
+                corpo.style.maxHeight = corpo.scrollHeight + 'px';
+                if (seta) seta.style.transform = 'rotate(180deg)';
             }
         });
     }

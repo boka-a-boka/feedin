@@ -4632,43 +4632,76 @@ def _processar_post_agendamento(empresa, cliente_id, session_token, agendamento_
         )
     )
 
-    # Transação no Banco de Dados
+    # Transação no Banco de Dados com Verificação In-Place Blindada
     profissionais_notificar_ids = set()
     try:
         colab_item_0 = itens_planejados[0].get('colaborador_id') if itens_planejados else None
         profissional_titular_id = _normalizar_uuid_colaborador(colab_item_0) or profissional_pretendido_id
-
-        if agendamento_original:
-            agendamento_original.status = 'reagendado'
 
         target_cliente_id = cliente_id or (agendamento_original.cliente_id if agendamento_original else None)
         target_beneficiario_id = beneficiario_id_validado if beneficiario_id_validado is not None else (
             agendamento_original.beneficiario_id if agendamento_original else None
         )
 
-        # 📌 GARANTIA DE EMPRESA_ID EXATA DO ESTABELECIMENTO E BENEFICIÁRIO VALIDADO
-        agendamento = AghAgendamento(
-            empresa_id=empresa.id,
-            cliente_id=target_cliente_id,
-            beneficiario_id=target_beneficiario_id,
-            valor_total=valor_final_agendamento,
-            data_hora_inicio=inicio_dt,
-            data_hora_fim=fim_dt,
-            status='confirmado',
-            tipo_origem='online',
-            session_token=session_token,
-            expira_em=expira_em_dt,
-            criado_em=agora_sp
-        )
+        # 📌 BLINDAGEM: Busca o status real direto do banco para evitar dessincronização do ORM
+        status_real = 'confirmado'
+        if agendamento_original:
+            db.session.refresh(agendamento_original)
+            status_real = str(
+                agendamento_original.status).strip().lower() if agendamento_original.status else 'confirmado'
 
-        if hasattr(agendamento, 'cliente_beneficiario_id'):
-            agendamento.cliente_beneficiario_id = target_beneficiario_id
+        STATUS_ENCERRADOS = ['concluido', 'cancelado', 'finalizado', 'no_show_expirado', 'realizado']
+        esta_em_aberto = agendamento_original and (status_real not in STATUS_ENCERRADOS)
 
-        db.session.add(agendamento)
-        db.session.flush()
+        print(
+            f"🔍 [DEBUG FINAL] Agendamento ID: {agendamento_original.id if agendamento_original else 'Novo'} | Status Real BD: '{status_real}' | Está em aberto? {esta_em_aberto}")
+
+        if agendamento_original and esta_em_aberto:
+            # 🔄 REGRA 1: Atualiza o registro existente IN-PLACE (Sem duplicar nunca)
+            agendamento_original.data_hora_inicio = inicio_dt
+            agendamento_original.data_hora_fim = fim_dt
+            agendamento_original.valor_total = valor_final_agendamento
+            agendamento_original.beneficiario_id = target_beneficiario_id
+            if hasattr(agendamento_original, 'cliente_beneficiario_id'):
+                agendamento_original.cliente_beneficiario_id = target_beneficiario_id
+            agendamento_original.status = 'confirmado'
+            agendamento_original.expira_em = expira_em_dt
+
+            # Remove os itens antigos para recalcular com os novos
+            for item_antigo in list(agendamento_original.itens):
+                db.session.delete(item_antigo)
+            db.session.flush()
+
+            agendamento = agendamento_original
+            print(f"✅ [SUCESSO IN-PLACE] Atualizado ID {agendamento.id} sem criar novas linhas.")
+        else:
+            # 🆕 REGRA 2: Cria um novo registro apenas se estivesse encerrado
+            if agendamento_original:
+                agendamento_original.status = 'reagendado'
+
+            agendamento = AghAgendamento(
+                empresa_id=empresa.id,
+                cliente_id=target_cliente_id,
+                beneficiario_id=target_beneficiario_id,
+                valor_total=valor_final_agendamento,
+                data_hora_inicio=inicio_dt,
+                data_hora_fim=fim_dt,
+                status='confirmado',
+                tipo_origem='online',
+                session_token=session_token,
+                expira_em=expira_em_dt,
+                criado_em=agora_sp
+            )
+
+            if hasattr(agendamento, 'cliente_beneficiario_id'):
+                agendamento.cliente_beneficiario_id = target_beneficiario_id
+
+            db.session.add(agendamento)
+            db.session.flush()
+            print(f"⚠️ [NOVO REGISTRO CRIADO] Gerado ID {agendamento.id} a partir do anterior.")
 
         # Registro de Reagendamento / Ocorrência
-        if agendamento_original:
+        if agendamento_original and not esta_em_aberto:
             eh_fora_do_prazo = (horas_antecedencia < 2.0) if horas_antecedencia is not None else False
 
             if eh_fora_do_prazo:
@@ -6427,6 +6460,11 @@ def obter_modal_reagendamento(agendamento_id):
 
 @agenda_bp.route("/api/agendamento/<int:agendamento_id>/reagendar", methods=["POST"])
 def api_reagendar_agendamento(agendamento_id):
+    print("\n" + "="*70)
+    print(f"🚀 [DEBUG ROTA] Requisição recebida para reagendar o ID: {agendamento_id}")
+    print(f"📥 [DEBUG ROTA] Payload JSON: {request.get_json()}")
+    print(f"👤 [DEBUG ROTA] Sessão -> Tipo: {session.get('user_tipo')}, ID: {session.get('user_id')}")
+
     data = request.get_json() or {}
 
     nova_data_str = data.get('data')       # Ex: "2026-08-28"
@@ -6437,16 +6475,21 @@ def api_reagendar_agendamento(agendamento_id):
     is_colaborador = session.get('user_tipo') in ['colaborador', 'admin', 'gestor'] or data.get('is_colaborador', False)
 
     agendamento = AghAgendamento.query.get_or_404(agendamento_id)
+    print(f"📋 [DEBUG ROTA] Agendamento no BD -> ID: {agendamento.id} | Status: '{agendamento.status}' | Início atual: {agendamento.data_hora_inicio}")
 
     if not nova_data_str or not novo_horario_str:
+        print("❌ [DEBUG ROTA] Erro: Data e horário não informados.")
         return jsonify({'erro': 'Data e horário são obrigatórios para realizar o reagendamento.'}), 400
 
     try:
         nova_data_hora = datetime.strptime(f"{nova_data_str} {novo_horario_str}", '%Y-%m-%d %H:%M')
     except ValueError:
+        print("❌ [DEBUG ROTA] Erro: Falha ao converter string de data/hora.")
         return jsonify({'erro': 'Formato de data ou horário inválido.'}), 400
 
-    # Delega a inteligência de negócios e genealogia para a função unificada
+    print(f"🎯 [DEBUG ROTA] Repassando para processar_solicitacao_reagendamento com alvo: {nova_data_hora}")
+
+    # Delega a inteligência de negócios para a função unificada
     sucesso, mensagem, status_retorno = processar_solicitacao_reagendamento(
         agendamento_atual=agendamento,
         nova_data_hora=nova_data_hora,
@@ -6455,6 +6498,9 @@ def api_reagendar_agendamento(agendamento_id):
         is_colaborador=is_colaborador,
         novo_profissional_id=novo_profissional_id
     )
+
+    print(f"🏁 [DEBUG ROTA] Resultado -> Sucesso: {sucesso} | Status Retorno: '{status_retorno}' | Mensagem: {mensagem}")
+    print("="*70 + "\n")
 
     if not sucesso:
         code = 422 if status_retorno == 'requer_justificativa' else 400
