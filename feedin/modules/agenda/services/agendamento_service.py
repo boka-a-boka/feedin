@@ -32,7 +32,7 @@ def _encontrar_colaborador_apto(empresa_id, servico_id, inicio_slot, fim_slot, i
                                 profissional_id_forcado=None):
     """
     Encontra um colaborador apto e disponível para o serviço no intervalo especificado,
-    com normalização rigorosa de timezone para evitar conflitos naive/aware.
+    permitindo que o término ultrapasse o encerramento do expediente (atendimento com portas fechadas).
     """
     # 🛡️ Normalização estrita de timezone (remove tzinfo para padronizar as comparações)
     if inicio_slot and inicio_slot.tzinfo:
@@ -97,7 +97,8 @@ def _encontrar_colaborador_apto(empresa_id, servico_id, inicio_slot, fim_slot, i
         inicio_colab = datetime.combine(data_consulta_date, escala.inicio_expediente)
         fim_colab = datetime.combine(data_consulta_date, escala.fim_expediente)
 
-        if inicio_slot < inicio_colab or fim_slot > fim_colab:
+        # 🎯 AJUSTE APLICADO: Apenas o INÍCIO precisa respeitar o expediente do turno
+        if inicio_slot < inicio_colab or inicio_slot >= fim_colab:
             continue
 
         if escala.inicio_intervalo and escala.fim_intervalo:

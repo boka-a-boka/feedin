@@ -1515,6 +1515,18 @@ def dashboard_empresa():
         flash("Não há empresas habilitadas ou em processo de ativação para a sua conta.", "warning")
         return redirect(url_for('auth.login', modulo='empresa'))
 
+
+    # 🔑 RESGATE DA ADESÃO DO MÓDULO (Para exibir o plano e limites reais no painel)
+    adesao_modulo = ModEmpresaModulo.query.filter_by(
+        empresa_id=ese_empresa.id,
+        modulo_slug='agenda'
+    ).first()
+
+    tipo_plano = adesao_modulo.tipo_plano if adesao_modulo else 'degustacao'
+    limite_profissionais = adesao_modulo.limite_profissionais if (
+                adesao_modulo and adesao_modulo.limite_profissionais) else 3
+    limite_clientes = adesao_modulo.limite_clientes if (adesao_modulo and adesao_modulo.limite_clientes) else 12
+
     # 4. 🔍 VALIDAÇÃO DOS PRÉ-REQUISITOS OPERACIONAIS (Serviços, Colaboradores, Escala)
     empresa_id_alvo = (ese_empresa.id if ese_empresa else real_local_id) or (processo.id if processo else None)
     pendencias = []
@@ -1570,7 +1582,11 @@ def dashboard_empresa():
         empresa_id=empresa_id_param,
         base_empresa_pronta=base_empresa_pronta,
         pendencias=pendencias,
-        pronto=pronto_para_operar
+        pronto=pronto_para_operar,
+        tipo_plano=tipo_plano,
+        limite_profissionais=limite_profissionais,
+        limite_clientes=limite_clientes,
+        adesao_modulo=adesao_modulo
     )
 
 
@@ -2011,17 +2027,10 @@ from flask import render_template, redirect, url_for, flash, request, jsonify, c
 def painel_configuracao_empresa():
     """
     🎛️ PAINEL GERENCIAL E CONTROLE DE CONFIGURAÇÃO DA EMPRESA
-    --------------------------------------------------------------------------------------
-    Centraliza as abas de compliance e dados cadastrais. Localiza a empresa a partir
-    do fato gerador (EseProcessoClaim) para garantir homogeneidade identitária entre
-    contas do Core e Módulos. Barra acessos divergentes na hora.
     """
-    from feedin.modules.empresa.models import EseProcessoClaim
-
     modulo_info = ModulosSistema.query.filter_by(slug='empresa', ativo=True).first()
 
     # 1. 🛰️ BUSCA PELO FATO GERADOR (A ORIGEM DA VERDADE)
-    # Localiza o processo de claim que está correndo em nome do usuário logado
     claim = EseProcessoClaim.query.filter_by(
         usuario_solicitante_id=current_user.id,
         status_processo='em_andamento'
@@ -2030,16 +2039,11 @@ def painel_configuracao_empresa():
     # 2. LOCALIZAÇÃO DA EMPRESA VIA VÍNCULO GEOGRÁFICO DO CLAIM
     empresa = None
     if claim:
-        # Se há um processo, a empresa DEVE estar amarrada ao local desse processo
         empresa = EseEmpresa.query.filter_by(local_id=claim.local_id).first()
 
-    # Fallback seguro: se não achar pelo claim, tenta buscar onde ele é dono direto
     if not empresa:
         empresa = EseEmpresa.query.filter_by(proprietario_id=current_user.id).first()
 
-    # 🚨 BARREIRA INTRANSCRONÍVEL: PORTA NA CARA
-    # Se não tem claim e não tem empresa, tchau.
-    # Se achou a empresa, mas o proprietário gravado nela divergir do usuário logado: TRAVA.
     if not empresa:
         flash("Nenhum processo de homologação ou empresa ativa cadastrada para sua conta.", "warning")
         return redirect(url_for('dashboard'))
@@ -2060,12 +2064,19 @@ def painel_configuracao_empresa():
     # Busca os dados de auditoria do motor de compliance
     compliance = ModHomologacaoEmpresa.query.filter_by(id_local=empresa.local_id).first()
 
+    # 🔑 RESGATE DA ADESÃO REAL DO MÓDULO (Para exibir limites e plano corretos)
+    adesao_modulo = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa.id,
+        modulo_slug='empresa'
+    ).first()
+
     return render_template(
         'empresa/painel_gerencial.html',
         empresa=empresa,
         claim=claim,
         compliance=compliance,
-        modulos_sistema=modulo_info
+        modulos_sistema=modulo_info,
+        adesao_modulo=adesao_modulo  # 👈 Passado ao Jinja2 (contém tipo_plano, limites, etc.)
     )
 
 

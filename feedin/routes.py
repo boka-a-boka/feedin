@@ -1810,7 +1810,6 @@ def finalizar_onboarding_local():
 @current_app.route("/finalizar-onboarding_gostos", methods=['POST'])
 @login_required
 def finalizar_onboarding_gostos():
-
     # 1. Captura os dados brutos do formulário (enviados pelo seu JS)
     ids_existentes = request.form.get('preferencias_ids')  # Ex: "1,4,12"
     nomes_novos = request.form.get('novos_termos')  # Ex: "Samba, TI, Churrasco"
@@ -1866,32 +1865,42 @@ def finalizar_onboarding_gostos():
 
             perfil.gostos.append(pref_para_vincular)
 
-        # GATILHO UNIFICADO: Registra o acesso nativo ao Core na tabela universal
-
+        # GATILHO UNIFICADO: Registra o acesso nativo ao Core na tabela universal e consolida órfãos
         identidade = IdentidadeCivil.query.filter_by(usuario_id=usuario.id).first()
 
         if identidade and identidade.cpf_hash:
             hash_do_usuario = identidade.cpf_hash
 
-            # 2️⃣ VERIFICA SE O VÍNCULO JÁ EXISTE: Para evitar duplicidade se ele refizer o onboarding
+            # 1️⃣ VARREDURA E CONSOLIDAÇÃO DE VÍNCULOS PRÉ-EXISTENTES (Módulos externos acessados antes)
+            vinculos_existentes = ModVinculoModulo.query.filter_by(cpf_hash=hash_do_usuario).all()
+
+            if vinculos_existentes:
+                for vinculo in vinculos_existentes:
+                    if not vinculo.email_customizado:
+                        vinculo.email_customizado = usuario.email
+                    print(
+                        f"🔗 [UNIFICAÇÃO] Vínculo do módulo '{vinculo.modulo_slug}' consolidado para o usuário Core ID: {usuario.id}")
+
+            # 2️⃣ VERIFICA SE O VÍNCULO NATIVO DO CORE JÁ EXISTE
             vinculo_core_existente = ModVinculoModulo.query.filter_by(
                 cpf_hash=hash_do_usuario,
                 modulo_slug='core'
             ).first()
 
-            # 3️⃣ CRIA O VÍNCULO NATIVO: Se não existir, insere na tabela universal
+            # 3️⃣ CRIA O VÍNCULO NATIVO DO CORE: Se não existir, insere na tabela universal
             if not vinculo_core_existente:
                 novo_vinculo = ModVinculoModulo(
                     cpf_hash=hash_do_usuario,
                     modulo_slug='core',
                     local_id=None,  # Core é global
-                    email_customizado=usuario.email,  # Usa o e-mail principal do cadastro do Core
+                    email_customizado=usuario.email,
                     ativo=True
                 )
                 database.session.add(novo_vinculo)
-                database.session.commit()
                 print(
                     f"✅ [ONBOARDING] Sucesso! Vínculo unificado ao 'core' registrado para o CPF Hash: {hash_do_usuario[:8]}")
+
+            database.session.commit()
         else:
             print(
                 f"⚠️ [ONBOARDING] Alerta: Usuário {usuario.id} concluiu o onboarding, mas nenhum registro de Identidade Civil foi encontrado!")

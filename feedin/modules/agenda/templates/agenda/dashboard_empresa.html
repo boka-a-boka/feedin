@@ -2188,8 +2188,6 @@ window.confirmarEGravarEncerramento = async function() {
                 if (instance) instance.hide();
             }
 
-            // Exibe notificação de sucesso e recarrega a grade
-            alert("Comanda liquidada com sucesso! O consumo foi encerrado e a baixa de estoque processada.");
             window.location.reload();
         } else {
             alert(data.mensagem || "Erro ao encerrar comanda.");

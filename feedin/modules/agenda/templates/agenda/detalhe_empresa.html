@@ -413,14 +413,37 @@
               {% endif %}
             </div>
 
-            {% set rating_info = empresa.get_rating_data() if empresa.get_rating_data is defined else {'media': 0, 'total': 0} %}
+            {% set rating_info = empresa.get_rating_data() if (empresa and empresa.get_rating_data is defined) else None %}
+
+            {# Calcula a média em estrelas (dividindo por 2 caso a origem do NPS seja 0 a 10) #}
+            {% if rating_info and rating_info.total and rating_info.total > 0 %}
+              {% set media_estrelas = (rating_info.media / 2) if rating_info.media > 5 else rating_info.media %}
+            {% else %}
+              {% set media_estrelas = 0 %}
+            {% endif %}
+
             <div class="d-flex align-items-center gap-2 mt-1 small opacity-90 text-truncate">
-              <span class="text-warning fw-bold"><i class="bi bi-star-fill"></i> {{ rating_info.media }}</span>
-              <span>({{ rating_info.total }} avaliações)</span>
-              {% if empresa.data_cadastro %}
-                <span class="d-none d-sm-inline">• Desde {{ empresa.data_cadastro.strftime('%Y') }}</span>
+
+              {# Exibe o bloco de estrelas e nota APENAS se houver avaliações reais (> 0) #}
+              {% if rating_info and rating_info.total and rating_info.total > 0 %}
+                <span class="text-warning fw-bold">
+                  <i class="bi bi-star-fill"></i> {{ "%.1f"|format(media_estrelas) }}
+                </span>
+                <span>({{ rating_info.total }} {{ 'avaliação' if rating_info.total == 1 else 'avaliações' }})</span>
+
+                {# Separador visual discreto caso haja data de cadastro na sequência #}
+                {% if empresa.data_cadastro %}
+                  <span class="text-muted">•</span>
+                {% endif %}
               {% endif %}
+
+              {# Data de cadastro (mantida e limpa do artefato do Git) #}
+              {% if empresa.data_cadastro %}
+                <span class="d-none d-sm-inline">Desde {{ empresa.data_cadastro.strftime('%Y') }}</span>
+              {% endif %}
+
             </div>
+
           </div>
 
         </div>
@@ -490,25 +513,45 @@
           {% endif %}
         </div>
 
-        {# --- 3. HORÁRIOS DE FUNCIONAMENTO --- #}
+        {# --- 3. HORÁRIOS DE FUNCIONAMENTO (Dinamizado com grade_semanal) --- #}
         <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
           <h6 class="fw-bold text-dark mb-3 border-bottom pb-2 d-flex align-items-center gap-1">
             <i class="bi bi-clock-history text-primary"></i> Horários de Funcionamento
           </h6>
-          <div class="row row-cols-2 row-cols-sm-4 row-cols-md-7 g-2 text-center">
-            {% set dias_semana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] %}
-            {% for i in range(7) %}
-              <div class="p-2 rounded-3 bg-light border">
-                <span class="d-block text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">{{ dias_semana[i] }}</span>
-                <span class="d-block fw-semibold text-dark mt-1" style="font-size: 0.78rem;">08:00</span>
-                <span class="d-block text-muted" style="font-size: 0.65rem;">às</span>
-                <span class="d-block fw-semibold text-dark mb-1" style="font-size: 0.78rem;">18:00</span>
+
+          <div class="row row-cols-1 row-cols-sm-2 row-cols-md-7 g-2 text-center">
+            {% if grade_semanal %}
+              {% for dia in grade_semanal %}
+                <div class="p-2 rounded-3 {% if dia.eh_hoje %}bg-primary-subtle border-primary{% else %}bg-light border{% endif %} d-flex flex-column justify-content-between">
+                  <span class="d-block text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
+                    {{ dia.nome_dia[:3] }} {% if dia.eh_hoje %}<span class="text-primary">(Hoje)</span>{% endif %}
+                  </span>
+
+                  <div class="my-1">
+                    {% if dia.turnos %}
+                      {% for turno in dia.turnos %}
+                        <div class="small fw-semibold text-dark" style="font-size: 0.75rem;">
+                          {# Uso correto dos campos do model EseHorarioFuncionamento #}
+                          {{ turno.horario_abertura.strftime('%H:%M') if turno.horario_abertura else '08:00' }}
+                          às
+                          {{ turno.horario_fechamento.strftime('%H:%M') if turno.horario_fechamento else '18:00' }}
+                        </div>
+                      {% endfor %}
+                    {% else %}
+                      <span class="badge bg-secondary-subtle text-secondary border rounded-pill" style="font-size: 0.65rem;">Fechado</span>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="col-12 text-center py-2 text-muted small">
+                Nenhum horário cadastrado para este estabelecimento.
               </div>
-            {% endfor %}
+            {% endif %}
           </div>
         </div>
 
-        {# --- 4. CATÁLOGO DE SERVIÇOS --- #}
+        {# --- 4. CATÁLOGO DE SERVIÇOS (Removida a exibição de pontos de fidelidade opcionais) --- #}
         <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
           <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
             <h6 class="fw-bold text-dark m-0 d-flex align-items-center gap-1">
@@ -530,11 +573,7 @@
                   </div>
                   <div class="d-flex align-items-center gap-2 flex-shrink-0">
                     <span class="badge bg-light text-muted border font-monospace"><i class="bi bi-hourglass-split me-1"></i>{{ s.tempo_duracao }}</span>
-                    {% if s.pontos_fidelidade and (s.pontos_fidelidade | int) > 0 %}
-                      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
-                        ★ +{{ s.pontos_fidelidade | int }} pts
-                      </span>
-                    {% endif %}
+                    <!-- A tag de pontos de fidelidade foi removida para evitar poluição visual quando o recurso estiver desativado -->
                   </div>
                 </div>
               {% endfor %}
@@ -774,68 +813,67 @@
   };
 
   /**
- * ⭐️ Alterna o status de favorito de um estabelecimento
- * @param {number|string} empresaId - ID da empresa
- */
-async function toggleFavorito(empresaId) {
-    if (!empresaId) return;
+   * ⭐️ Alterna o status de favorito de um estabelecimento
+   * @param {number|string} empresaId ID da empresa
+   */
+  async function toggleFavorito(empresaId) {
+      if (!empresaId) return;
 
-    const btn = document.getElementById('btnFavoritarHeader');
-    const icone = document.getElementById('iconeFavoritoHeader');
-    const texto = document.getElementById('textoFavoritoHeader');
+      const btn = document.getElementById('btnFavoritarHeader');
+      const icone = document.getElementById('iconeFavoritoHeader');
+      const texto = document.getElementById('textoFavoritoHeader');
 
-    // Obtém o CSRF token do meta tag da página
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      // Obtém o CSRF token do meta tag da página
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-    // Efeito de feedback visual imediato no botão (desabilita momentaneamente)
-    if (btn) btn.disabled = true;
+      // Efeito de feedback visual imediato no botão (desabilita momentaneamente)
+      if (btn) btn.disabled = true;
 
-    try {
-        const response = await fetch(`/agenda/empresas/${empresaId}/favoritar`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
+      try {
+          const response = await fetch(`/agenda/empresas/${empresaId}/favoritar`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': csrfToken,
+                  'X-Requested-With': 'XMLHttpRequest'
+              }
+          });
 
-        const data = await response.json();
+          const data = await response.json();
 
-        if (response.ok && data.sucesso) {
-            // Se virou favorita
-            if (data.eh_favorita) {
-                if (icone) {
-                    icone.className = 'bi bi-star-fill text-warning fs-6';
-                }
-                if (texto) {
-                    texto.textContent = 'Favorita';
-                }
-            } else {
-                // Se deixou de ser favorita
-                if (icone) {
-                    icone.className = 'bi bi-star text-secondary fs-6';
-                }
-                if (texto) {
-                    texto.textContent = 'Favoritar';
-                }
-            }
+          if (response.ok && data.sucesso) {
+              // Se virou favorita
+              if (data.eh_favorita) {
+                  if (icone) {
+                      icone.className = 'bi bi-star-fill text-warning fs-6';
+                  }
+                  if (texto) {
+                      texto.textContent = 'Favorita';
+                  }
+              } else {
+                  // Se deixou de ser favorita
+                  if (icone) {
+                      icone.className = 'bi bi-star text-secondary fs-6';
+                  }
+                  if (texto) {
+                      texto.textContent = 'Favoritar';
+                  }
+              }
 
-            // Exibe notificação Toast se a função existir no seu ambiente
-            if (typeof exibirToast === 'function') {
-                exibirToast('Sucesso', data.mensagem || 'Favoritos atualizados!', 'success');
-            }
-        } else {
-            alert(data.mensagem || 'Não foi possível alterar os favoritos.');
-        }
-    } catch (erro) {
-        console.error('Erro ao alternar favorito:', erro);
-        alert('Ocorreu um erro ao processar sua solicitação. Tente novamente.');
-    } finally {
-        if (btn) btn.disabled = false;
-    }
-}
-
+              // Exibe notificação Toast se a função existir no seu ambiente
+              if (typeof exibirToast === 'function') {
+                  exibirToast('Sucesso', data.mensagem || 'Favoritos atualizados!', 'success');
+              }
+          } else {
+              alert(data.mensagem || 'Não foi possível alterar os favoritos.');
+          }
+      } catch (erro) {
+          console.error('Erro ao alternar favorito:', erro);
+          alert('Ocorreu um erro ao processar sua solicitação. Tente novamente.');
+      } finally {
+          if (btn) btn.disabled = false;
+      }
+  }
 </script>
 
 {% endblock %}

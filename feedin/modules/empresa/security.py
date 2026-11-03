@@ -59,37 +59,3 @@ def verificar_acesso_modulo(modulo_slug):
 
     return decorator
 
-def verificar_e_atualizar_vigencia_modulo(empresa_id, modulo_slug):
-    """
-    Semáforo Mestre de Entrada:
-    Verifica se o módulo está ativo e se a vigência é válida.
-    Se a data atual ultrapassou o vencimento, muta o status para inativo automaticamente.
-    """
-    modulo = ModEmpresaModulo.query.filter_by(
-        empresa_id=empresa_id,
-        modulo_slug=modulo_slug
-    ).first()
-
-    if not modulo:
-        return False, "Módulo não vinculado a este estabelecimento."
-
-    agora = datetime.now(timezone.utc)
-
-    # 1. Se estiver marcado como ativo, validamos a linha do tempo
-    if modulo.ativo:
-        if modulo.data_vencimento and agora > modulo.data_vencimento:
-            # 🚨 PROVOU EM CONTRÁRIO: Venceu! Muda para False automaticamente.
-            modulo.ativo = False
-            db.session.commit()
-
-            # Opcional: Registrar no log que o módulo expirou por falta de renovação
-            print(
-                f"🔒 [VIGÊNCIA] Módulo '{modulo_slug}' da empresa {empresa_id} expirou e foi desativado automaticamente.")
-
-            return False, "Sua vigência expirou. Por favor, regularize sua assinatura para acessar o módulo."
-
-        # Se está ativo e a data é válida: Luz Verde! 🟢
-        return True, "Acesso autorizado"
-
-    # 2. Se já estava inativo de fábrica
-    return False, "Este módulo está desativado. Contrate ou renove seu plano para utilizar."

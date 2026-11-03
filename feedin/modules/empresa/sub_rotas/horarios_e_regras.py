@@ -3135,3 +3135,75 @@ def suporte_empreendedor(empresa_id):
         ese_empresa=ese_empresa,
         departamentos=departamentos
     )
+
+
+def garantir_acesso_vip_tilyns(empresa_id: int):
+    """
+    📌 BLINDAGEM VIP: Garante plano PRO vitalício e sem limites para a Tilyns Cabeleireiros (ID 576)
+    Tanto no Módulo Empresa quanto no Módulo Agenda.
+    """
+    IDS_VIP = [576]  # ID da Tilyns Cabeleireiros
+
+    if empresa_id not in IDS_VIP:
+        return
+
+    # 1. Liberação no Módulo Empresa
+    adesao_empresa = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa_id,
+        modulo_slug='empresa'
+    ).first()
+
+    if adesao_empresa:
+        adesao_empresa.tipo_plano = 'pro_vitalicio'
+        adesao_empresa.ativo = True
+        adesao_empresa.data_vencimento = None
+        if hasattr(adesao_empresa, 'limite_profissionais'):
+            adesao_empresa.limite_profissionais = 999
+        if hasattr(adesao_empresa, 'limite_clientes'):
+            adesao_empresa.limite_clientes = 9999
+    else:
+        # Se porventura não existir o registro, cria-se o vínculo PRO vitalício
+        novo_vip_empresa = ModEmpresaModulo(
+            empresa_id=empresa_id,
+            modulo_slug='empresa',
+            tipo_plano='pro_vitalicio',
+            ativo=True,
+            data_vencimento=None,
+            criado_em=datetime.now(timezone.utc)
+        )
+        db.session.add(novo_vip_empresa)
+
+    # 2. Liberação no Módulo Agenda (Extensão)
+    adesao_agenda = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa_id,
+        modulo_slug='agenda'
+    ).first()
+
+    if adesao_agenda:
+        adesao_agenda.tipo_plano = 'pro_vitalicio'
+        adesao_agenda.ativo = True
+        adesao_agenda.data_vencimento = None
+    else:
+        novo_vip_agenda = ModEmpresaModulo(
+            empresa_id=empresa_id,
+            modulo_slug='agenda',
+            tipo_plano='pro_vitalicio',
+            ativo=True,
+            data_vencimento=None,
+            criado_em=datetime.now(timezone.utc)
+        )
+        db.session.add(novo_vip_agenda)
+
+    try:
+        db.session.commit()
+        print("👑 [VIP BLINDADO] Tilyns Cabeleireiros (576) liberada com sucesso no Empresa e Agenda!")
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ [ERRO VIP] Falha ao aplicar blindagem VIP na Tilyns: {e}")
+
+
+@empresa_bp.route('/empresa/garantir-vip-tilyns', methods=['GET'])
+def rota_garantir_vip_tilyns():
+    """Rota provisória para aplicar a blindagem VIP via navegador"""
+    garantir_acesso_vip_tilyns(576)
+    return "<h3>Blindagem VIP aplicada com sucesso para a Tilyns Cabeleireiros (576)!</h3>"

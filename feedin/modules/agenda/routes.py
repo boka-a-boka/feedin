@@ -1113,7 +1113,6 @@ from feedin.modules.agenda import agenda_bp
 from feedin.modules.empresa.models import ColaboradorContrato, EseEmpresa
 
 
-@agenda_bp.route('/painel-gerencial', methods=['GET'], endpoint='painel_gerencial_raiz')
 @agenda_bp.route('/<int:empresa_id>/painel-gerencial', methods=['GET'], endpoint='painel_agenda')
 @login_required
 def painel_agenda(empresa_id=None):
@@ -1127,7 +1126,7 @@ def painel_agenda(empresa_id=None):
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
     agora_utc = datetime.now(timezone.utc)
 
-    # 1. Dados do Plano e Limites (Via ModEmpresaModulo)
+    # 1. Leitura estrita da tabela de módulos (A Fonte da Verdade)
     modulo_agenda = ModEmpresaModulo.query.filter_by(
         empresa_id=ese_empresa.id,
         modulo_slug='agenda'
@@ -1141,17 +1140,17 @@ def painel_agenda(empresa_id=None):
 
     limite_profissionais = modulo_agenda.limite_profissionais if modulo_agenda else 3
     limite_clientes = modulo_agenda.limite_clientes if modulo_agenda else 12
-    tipo_plano = modulo_agenda.tipo_plano if modulo_agenda else 'vitrine'
+    tipo_plano = modulo_agenda.tipo_plano if modulo_agenda else 'degustacao'
     data_vencimento = modulo_agenda.data_vencimento if modulo_agenda else None
 
-    # Tratativa segura para a data de vencimento (evita erro de fuso)
+    # Tratativa segura para a data de vencimento
     dias_restantes = 'Vitalício/Ilimitado'
     if data_vencimento:
         if data_vencimento.tzinfo is None:
             data_vencimento = data_vencimento.replace(tzinfo=timezone.utc)
         dias_restantes = (data_vencimento - agora_utc).days
 
-    # 2. Checklist de Prontidão (Calculado ANTES de ser usado)
+    # 2. Checklist de Prontidão
     tem_servicos = EseServicoOferecido.query.filter_by(empresa_id=ese_empresa.id).count() > 0
     tem_profissionais = total_profissionais > 0
     tem_horarios = True
@@ -1165,10 +1164,8 @@ def painel_agenda(empresa_id=None):
          "detalhe": "Parâmetros de abertura e fechamento configurados."}
     ]
 
-    # 🎯 Variável calculada com sucesso aqui
     pronto_para_uso = all(c['atendido'] for c in checklist)
 
-    # 3. Link seguro para o painel principal da agenda
     link_publico = url_for('agenda.dashboard_empresa', empresa_id=ese_empresa.id,
                            _external=True) if pronto_para_uso else ""
 
@@ -1730,12 +1727,11 @@ def detalhe_empresa(empresa_id):
     ).order_by(EseHorarioFuncionamento.dia_semana.asc(), EseHorarioFuncionamento.periodo_id.asc()).all()
 
     dias_semana_map = [
-        (0, 'Domingo'), (1, 'Segunda-feira'), (2, 'Terça-feira'),
-        (3, 'Quarta-feira'), (4, 'Quinta-feira'), (5, 'Sexta-feira'), (6, 'Sábado')
+        (0, 'Segunda-feira'), (1, 'Terça-feira'), (2, 'Quarta-feira'),
+        (3, 'Quinta-feira'), (4, 'Sexta-feira'), (5, 'Sábado'), (6, 'Domingo')
     ]
 
-    hoje_python = datetime.now().weekday()
-    hoje_bd = (hoje_python + 1) % 7
+    hoje_bd = datetime.now().weekday()
 
     grade_semanal = []
     for dia_idx, nome_dia in dias_semana_map:
@@ -6757,16 +6753,9 @@ from sqlalchemy import asc
 # @login_required # Ative se usar Flask-Login
 def visualizar_agenda():
     # -------------------------------------------------------------------------
-    # 1. AUTENTICAÇÃO REAL (Substituindo get_usuario_logado)
+    # 1. AUTENTICAÇÃO REAL
     # -------------------------------------------------------------------------
-    # Se estiver usando Flask-Login:
     usuario_atual = current_user
-
-    # SE ESTIVER USANDO SESSÃO MANUAL (descomente as linhas abaixo se for o caso):
-    # usuario_id = session.get('usuario_id')
-    # usuario_atual = Usuario.query.get(usuario_id)
-
-    # Identifica a empresa do usuário logado
     empresa_id_atual = getattr(usuario_atual, 'empresa_id', 1)
 
     # Verificação de Administrador (Nível 999 ou flag e_admin)
@@ -6786,83 +6775,96 @@ def visualizar_agenda():
         data_filtro = date.today()
 
     # -------------------------------------------------------------------------
-    # 3. CONSULTA DOS AGENDAMENTOS NO BANCO
+    # 3. CONSULTA DOS AGENDAMENTOS (COM JOIN MULTI-PROFISSIONAL)
     # -------------------------------------------------------------------------
+    inicio_do_dia = datetime.combine(data_filtro, time.min)
+    fim_do_dia = datetime.combine(data_filtro, time.max)
+
     query = AghAgendamento.query.filter(
         AghAgendamento.empresa_id == empresa_id_atual,
-        AghAgendamento.data == data_filtro,
+        AghAgendamento.data_hora_inicio >= inicio_do_dia,
+        AghAgendamento.data_hora_inicio <= fim_do_dia,
     )
 
-    # Se NÃO for Admin (Nível 999), restringe os agendamentos ao profissional logado
+    # Se NÃO for Admin, restringe usando o campo correto: colaborador_id_contrato nos itens
     if not e_admin:
-        # Pega o ID de profissional vinculado ao usuário logado
-        prof_id_logado = getattr(usuario_atual, 'profissional_id', None)
-        query = query.filter(AghAgendamento.profissional_id == prof_id_logado)
+        # Pega o ID do contrato/profissional vinculado ao usuário logado
+        prof_id_logado = getattr(usuario_atual, 'profissional_id', None) or getattr(usuario_atual,
+                                                                                    'colaborador_id_contrato', None)
 
-    # Ordenação Cronológica pura por horário de início
-    agendamentos_raw = query.order_by(asc(AghAgendamento.hora_inicio)).all()
+        query = query.join(AghAgendamento.itens).filter(
+            AghAgendamentoItem.colaborador_id_contrato == prof_id_logado
+        ).distinct()  # Evita duplicatas caso o agendamento tenha múltiplos itens do mesmo profissional
+
+    # Ordenação cronológica pura por data_hora_inicio
+    agendamentos_raw = query.order_by(asc(AghAgendamento.data_hora_inicio)).all()
 
     # -------------------------------------------------------------------------
-    # 4. MONTAGEM DA GRADE PARA O JINJA
+    # 4. MONTAGEM DA GRADE PARA O JINJA (TRATANDO MULTI-PROFISSIONAIS E ITENS)
     # -------------------------------------------------------------------------
     grade_slots = []
     for agend in agendamentos_raw:
-        # Busca segura do nome do profissional
-        prof_nome = 'Não especificado'
-        if agend.profissional:
-            if hasattr(agend.profissional, 'nome') and agend.profissional.nome:
-                prof_nome = agend.profissional.nome
-            elif (
-                hasattr(agend.profissional, 'usuario')
-                and agend.profissional.usuario
-            ):
-                prof_nome = agend.profissional.usuario.nome
-            else:
-                prof_nome = f'Profissional #{agend.profissional_id}'
+        prof_nomes = []
+        prof_ids = []
+        servicos_nomes = []
 
-        servico_nome = (
-            agend.servico.nome
-            if getattr(agend, 'servico', None)
-            else 'Serviço não especificado'
+        # Varre os itens do agendamento para extrair os profissionais e serviços reais
+        itens_lista = getattr(agend, 'itens', [])
+        for item in itens_lista:
+            # Extração segura do nome do profissional a partir do item
+            colab = getattr(item, 'colaborador_contrato', None) or getattr(item, 'colaborador', None)
+            if colab:
+                nome_colab = getattr(colab, 'nome', None)
+                if not nome_colab and hasattr(colab, 'usuario') and colab.usuario:
+                    nome_colab = colab.usuario.nome
+                if nome_colab and nome_colab not in prof_nomes:
+                    prof_nomes.append(nome_colab)
+
+            if item.colaborador_id_contrato and str(item.colaborador_id_contrato) not in prof_ids:
+                prof_ids.append(str(item.colaborador_id_contrato))
+
+            # Extração segura do nome do serviço do item
+            srv_nome = getattr(item, 'nome_servico', None) or (
+                item.servico.nome if getattr(item, 'servico', None) else None)
+            if srv_nome and srv_nome not in servicos_nomes:
+                servicos_nomes.append(srv_nome)
+
+        prof_nome_str = ", ".join(prof_nomes) if prof_nomes else 'Não especificado'
+        prof_id_str = prof_ids[0] if prof_ids else ''
+        servico_nome_str = " + ".join(servicos_nomes) if servicos_nomes else 'Serviço não especificado'
+
+        hora_inicio_str = (
+            agend.data_hora_inicio.strftime('%H:%M')
+            if agend.data_hora_inicio
+            else '--:--'
         )
 
         grade_slots.append({
             'id': str(agend.id),
-            'hora_inicio': (
-                agend.hora_inicio.strftime('%H:%M')
-                if agend.hora_inicio
-                else '--:--'
-            ),
-            'cliente_nome': agend.cliente_nome or 'Cliente não informado',
-            'servico_nome': servico_nome,
-            'status_slug': agend.status_slug,
-            'profissional_id': (
-                str(agend.profissional_id).lower()
-                if agend.profissional_id
-                else ''
-            ),
-            'profissional_nome': prof_nome,
+            'hora_inicio': hora_inicio_str,
+            'cliente_nome': getattr(agend, 'cliente_nome', None) or 'Cliente não informado',
+            'servico_nome': servico_nome_str,
+            'status_slug': getattr(agend, 'status_slug', 'agendado'),
+            'profissional_id': prof_id_str,
+            'profissional_nome': prof_nome_str,
         })
 
     # -------------------------------------------------------------------------
-    # 5. LISTA REAL DE PROFISSIONAIS (Substituindo obter_lista_profissionais)
+    # 5. LISTA REAL DE PROFISSIONAIS PARA O FILTRO DA TELA
     # -------------------------------------------------------------------------
     profissionais_filtro = []
     if e_admin:
-        # Busca direto na tabela/Model de Profissionais da empresa atual
-        # (Ajuste 'AghProfissional' para o nome exato da sua model de profissionais)
         profissionais_db = ColaboradorContrato.query.filter_by(
             empresa_id=empresa_id_atual, ativo=True
         ).all()
 
         for prof in profissionais_db:
-            # Obtém o nome vindo do próprio cadastro ou da relação com o Usuário
             nome = getattr(prof, 'nome', None)
             if not nome and hasattr(prof, 'usuario') and prof.usuario:
                 nome = prof.usuario.nome
 
             profissionais_filtro.append({
-                'id': str(prof.id).lower(),  # UUID/ID garantido como String minúscula
+                'id': str(prof.id).lower(),
                 'nome': nome or f'Profissional #{prof.id}',
             })
 
@@ -6870,16 +6872,13 @@ def visualizar_agenda():
     # 6. RENDERIZAÇÃO
     # -------------------------------------------------------------------------
     return render_template(
-        'agenda/grade.html',
+        'agenda/dashboard_empresa.html',
         grade=grade_slots,
         e_admin=e_admin,
         profissionais=profissionais_filtro,
         data_selecionada=data_filtro.strftime('%Y-%m-%d'),
         cor_empresa='#0d6efd',
     )
-
-
-from feedin.modules.auth.models import ModVinculoModulo  # Importe o modelo de vínculo
 
 from feedin.modules.auth.models import ModVinculoModulo  # Importe o modelo de vínculo
 
@@ -8950,83 +8949,6 @@ def painel_indicadores_desempenho(empresa_id):
         concluidos=concluidos,
         saldo_minutos_total=saldo_minutos_total,
         itens_realizados=itens_processados
-    )
-
-
-@agenda_bp.route('/empresa/<int:empresa_id>/painel/indicadores-desempenho/pdf', methods=['GET'])
-@login_required
-def relatorio_desempenho_pdf(empresa_id):
-    usuario_uuid = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
-    is_super_admin = bool(getattr(current_user, 'is_admin', False))
-
-    # Busca o contrato do colaborador logado
-    contrato_colaborador = ColaboradorContrato.query.filter(
-        ColaboradorContrato.id_local == empresa_id,
-        (ColaboradorContrato.id_cadastro_cliente == usuario_uuid) |
-        (ColaboradorContrato.id_cadastro_cliente == str(current_user.id))
-    ).filter_by(status_profissional='ativo').first()
-
-    papel_nivel = contrato_colaborador.papel_nivel if (
-                contrato_colaborador and contrato_colaborador.papel_nivel is not None) else 0
-    pode_gerenciar = (papel_nivel >= 600) or is_super_admin
-
-    if not pode_gerenciar and not contrato_colaborador:
-        flash("Você não tem permissão para gerar este relatório.", "warning")
-        return redirect(url_for('cliente.dashboard'))
-
-    meu_contrato_id = contrato_colaborador.id if contrato_colaborador else None
-
-    # Parâmetros de data e filtro
-    data_inicio_str = request.args.get('data_inicio', datetime.now().strftime('%Y-%m-%d'))
-    data_fim_str = request.args.get('data_fim', datetime.now().strftime('%Y-%m-%d'))
-
-    try:
-        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
-        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
-    except ValueError:
-        data_inicio = data_fim = datetime.now().date()
-
-    inicio_dt = datetime.combine(data_inicio, time.min)
-    fim_dt = datetime.combine(data_fim, time.max)
-
-    # Definição rigorosa de escopo (Gestor vs Colaborador)
-    profissional_id_filtro = request.args.get('profissional_id', type=int)
-    if not pode_gerenciar:
-        profissional_id_filtro = meu_contrato_id  # Trava estritamente no ID do colaborador
-
-    # Consulta dos dados (mesma lógica do painel)
-    query_itens = db.session.query(AghAgendamentoItem).join(
-        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
-    ).filter(
-        AghAgendamento.empresa_id == empresa_id,
-        AghAgendamento.status != 'cancelado',
-        AghAgendamentoItem.data_hora_inicio >= inicio_dt,
-        AghAgendamentoItem.data_hora_inicio <= fim_dt
-    )
-
-    if not pode_gerenciar and meu_contrato_id:
-        query_itens = query_itens.filter(
-            (AghAgendamentoItem.colaborador_id_contrato == str(meu_contrato_id)) |
-            (AghAgendamentoItem.colaborador_id_contrato == meu_contrato_id)
-        )
-    elif profissional_id_filtro:
-        query_itens = query_itens.filter(
-            (AghAgendamentoItem.colaborador_id_contrato == str(profissional_id_filtro)) |
-            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro)
-        )
-
-    itens_brutos = query_itens.all()
-
-    # Processamento de métricas...
-    # (Você pode renderizar um template HTML dedicado para impressão em PDF ou usar WeasyPrint/PdfKit se já tiver configurado no projeto)
-
-    return render_template(
-        'agenda/relatorio_desempenho_print.html',
-        empresa=EseEmpresa.query.get(empresa_id),
-        data_inicio=data_inicio_str,
-        data_fim=data_fim_str,
-        pode_gerenciar=pode_gerenciar,
-        itens=itens_brutos
     )
 
 
