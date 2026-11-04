@@ -1527,6 +1527,10 @@ def dashboard_empresa():
                 adesao_modulo and adesao_modulo.limite_profissionais) else 3
     limite_clientes = adesao_modulo.limite_clientes if (adesao_modulo and adesao_modulo.limite_clientes) else 12
 
+    # 🛡️ GRAVA NA SESSÃO SE O USUÁRIO É COLABORADOR ATIVO (Para uso global em offcanvases/menus)
+    session['colaborador_ativo'] = len(contratos_ativos) > 0
+    session['total_contratos_ativos'] = len(contratos_ativos)
+
     # 4. 🔍 VALIDAÇÃO DOS PRÉ-REQUISITOS OPERACIONAIS (Serviços, Colaboradores, Escala)
     empresa_id_alvo = (ese_empresa.id if ese_empresa else real_local_id) or (processo.id if processo else None)
     pendencias = []
@@ -1586,7 +1590,8 @@ def dashboard_empresa():
         tipo_plano=tipo_plano,
         limite_profissionais=limite_profissionais,
         limite_clientes=limite_clientes,
-        adesao_modulo=adesao_modulo
+        adesao_modulo=adesao_modulo,
+        colaborador_ativo=len(contratos_ativos) > 0
     )
 
 

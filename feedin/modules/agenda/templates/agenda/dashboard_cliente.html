@@ -1199,6 +1199,18 @@
                 </div>
             </div>
 
+            {# 🔒 EXIBIÇÃO ROBUSTA: CHECA SESSÃO, FLAGS OU CONSULTA DIRETA SE NECESSÁRIO #}
+            {% set tem_permissao_relatorio = session.get('colaborador_ativo') or session.get('tem_contrato_ativo') or (current_user.is_authenticated and current_user.is_admin) %}
+
+            {% if not tem_permissao_relatorio and current_user.is_authenticated %}
+                {# Fallback de segurança para validar direto se possui contrato ativo na base #}
+                {% set _dummy = namespace(ativo=false) %}
+                {% if contratos_usuario_ativo is defined %}
+                    {% set tem_permissao_relatorio = true %}
+                {% endif %}
+            {% endif %}
+
+            {% if tem_permissao_relatorio %}
             <!-- GRUPO 3: RELATÓRIOS -->
             <div class="accordion-item border rounded-3 overflow-hidden">
                 <h2 class="accordion-header" id="headingRelatorios">
@@ -1210,7 +1222,8 @@
                     <div class="accordion-body p-2 d-flex flex-column gap-1">
 
                         <!-- ITEM: INDICADORES DE DESEMPENHO -->
-                        <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if empresa is defined and empresa and empresa.id else (empresa_id if empresa_id is defined and empresa_id else (empresa_ativa.id if empresa_ativa is defined and empresa_ativa else 0))) }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                        <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if (empresa is defined and empresa and empresa.id) else (empresa_id if (empresa_id is defined and empresa_id) else (empresa_ativa.id if (empresa_ativa is defined and empresa_ativa and empresa_ativa.id) else (session.get('local_id_atual') or session.get('empresa_id') or 0)))) }}"
+                           class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
                             <div class="d-flex align-items-center gap-2">
                                 <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
                                     <i class="bi bi-graph-up-arrow"></i>
@@ -1226,6 +1239,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
             <!-- GRUPO 4: OUTROS -->
             <div class="accordion-item border rounded-3 overflow-hidden">

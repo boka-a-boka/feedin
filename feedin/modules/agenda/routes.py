@@ -445,7 +445,7 @@ def dashboard_empresa(empresa_id):
 
     if not e_gestor and not e_colaborador:
         flash("Você não tem permissão para acessar a área operacional desta empresa.", "warning")
-        return redirect(url_for('cliente.dashboard'))
+        return redirect(url_for('agenda.dashboard_cliente'))
 
     pode_gerenciar = e_gestor
 
@@ -2625,6 +2625,24 @@ def dashboard_cliente():
         except Exception as err:
             print(f"[Dashboard Cliente] Erro ao buscar ficha pendente: {err}")
 
+    # ==================================================================================
+    # 🔒 VALIDAÇÃO ROBUSTA DE COLABORADOR ATIVO (PARA EXIBIÇÃO DE RELATÓRIOS/INDICADORES)
+    # ==================================================================================
+    cliente_uuid_str = str(getattr(cliente, 'id', '')).strip()
+    contratos_ativos_usuario = []
+    if cliente_uuid_str:
+        try:
+            contratos_ativos_usuario = ColaboradorContrato.query.filter_by(
+                id_cadastro_cliente=cliente_uuid_str,
+                status_profissional='ativo'
+            ).all()
+        except Exception as err:
+            print(f"[Dashboard Cliente] Erro ao checar contratos ativos do usuário: {err}")
+
+    # Define a flag global na sessão e na variável de contexto
+    colaborador_ativo = len(contratos_ativos_usuario) > 0
+    session['colaborador_ativo'] = colaborador_ativo
+
     # ----------------------------------------------------------------------------------
     # 2. BRANDING DA EMPRESA (CONTEXTO ATIVO) E BUSCA DE COLABORADORES
     # ----------------------------------------------------------------------------------
@@ -2803,7 +2821,6 @@ def dashboard_cliente():
     # ----------------------------------------------------------------------------------
     beneficiarios_cliente = []
     try:
-        cliente_uuid_str = str(getattr(cliente, 'id', '')).strip()
         if cliente_uuid_str:
             beneficiarios_cliente = ClienteBeneficiario.query.filter_by(
                 cliente_id=cliente_uuid_str,
@@ -2912,7 +2929,6 @@ def dashboard_cliente():
     cobranca_ativa = None
 
     agendamento_ativo = agendamentos_ativos[0] if agendamentos_ativos else None
-    cliente_uuid_str = str(cliente.id).strip() if getattr(cliente, 'id', None) else None
 
     # 1. Busca direta: Cobrança aberta por cliente_id
     if cliente_uuid_str and empresa_ativa:
@@ -3002,7 +3018,8 @@ def dashboard_cliente():
         id_atendido_uuid=id_atendido_uuid,
         inicial_atendido=inicial_atendido,
         whatsapp_cliente=whatsapp_cliente,
-        beneficiarios_cliente=beneficiarios_cliente,  # 🎯 INJETADO COM SUCESSO AQUI!
+        beneficiarios_cliente=beneficiarios_cliente,
+        colaborador_ativo=colaborador_ativo,  # 🎯 INJETADO PARA EXIBIR O GRUPO DE RELATÓRIOS CORRETAMENTE!
     )
 
 # Mapeamento de prioridade da EscalaTrabalhoColaborador
@@ -8809,28 +8826,57 @@ def salvar_avaliacoes_atendimento_multiplo(agendamento_id):
         return jsonify({'sucesso': False, 'mensagem': f'Erro interno: {str(e)}'}), 500
 
 
-@agenda_bp.route('/empresa/<int:empresa_id>/painel/indicadores-desempenho', methods=['GET'])
+@agenda_bp.route('/indicadores-desempenho/<int:empresa_id>', methods=['GET'])
 @login_required
 def painel_indicadores_desempenho(empresa_id):
+    # Se o template enviou 0 ou não identificou o local na URL:
+    if empresa_id == 0:
+        local_sessao = session.get('local_id_atual')
+        if local_sessao:
+            empresa_id = local_sessao
+        else:
+            # Busca o primeiro contrato ativo do usuário para descobrir o local
+            contrato = ColaboradorContrato.query.filter_by(
+                id_cadastro_cliente=str(current_user.id),
+                status_profissional='ativo'
+            ).first()
+            if contrato:
+                empresa_id = contrato.id_local
+
+    if not empresa_id:
+        flash("Empresa não identificada para exibição dos relatórios.", "warning")
+        return redirect(url_for('agenda.dashboard_cliente'))
+
+    # Busca a empresa para checar a soberania do proprietário
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+
     usuario_uuid = str(getattr(current_user, 'id', getattr(current_user, 'uuid', ''))).strip().lower()
+    user_id_candidatos = [usuario_uuid, str(getattr(current_user, 'id', '')),
+                          str(getattr(current_user, 'usuario_id', ''))]
+    user_id_candidatos = [val for val in user_id_candidatos if val]
+
     is_super_admin = bool(getattr(current_user, 'is_admin', False))
 
-    # Busca o contrato do colaborador logado nesta empresa
+    # 👑 Verificação de Soberania (Proprietário Direto cadastrado na EseEmpresa ou Admin Global)
+    proprietario_empresa_id = str(getattr(ese_empresa, 'proprietario_id', ''))
+    eh_proprietario_direto = proprietario_empresa_id in user_id_candidatos
+
+    # Busca o contrato do colaborador logado nesta empresa (caso exista)
     contrato_colaborador = ColaboradorContrato.query.filter(
         ColaboradorContrato.id_local == empresa_id,
-        (ColaboradorContrato.id_cadastro_cliente == usuario_uuid) |
-        (ColaboradorContrato.id_cadastro_cliente == str(current_user.id))
+        ColaboradorContrato.id_cadastro_cliente.in_(user_id_candidatos)
     ).filter_by(status_profissional='ativo').first()
 
-    papel_nivel = contrato_colaborador.papel_nivel if (contrato_colaborador and contrato_colaborador.papel_nivel is not None) else 0
+    papel_nivel = contrato_colaborador.papel_nivel if (
+                contrato_colaborador and contrato_colaborador.papel_nivel is not None) else 0
 
-    # 🔒 Regra isolada e estrita para este painel
-    pode_gerenciar = (papel_nivel >= 600) or is_super_admin
+    # 🔒 Regra isolada e estrita para este painel (Soberano 999 / Dono / Admin / Nível >= 600)
+    pode_gerenciar = eh_proprietario_direto or is_super_admin or (papel_nivel >= 600)
 
-    # Se não for gestor nem tiver contrato ativo, bloqueia
+    # Se não for gestor soberano nem tiver contrato ativo, bloqueia
     if not pode_gerenciar and not contrato_colaborador:
         flash("Você não tem permissão para acessar este painel nesta empresa.", "warning")
-        return redirect(url_for('cliente.dashboard'))
+        return redirect(url_for('agenda.dashboard_cliente'))
 
     meu_contrato_id = contrato_colaborador.id if contrato_colaborador else None
 
@@ -8938,7 +8984,7 @@ def painel_indicadores_desempenho(empresa_id):
     return render_template(
         'agenda/painel_indicadores_desempenho.html',
         empresa_id=empresa_id,
-        empresa=EseEmpresa.query.get(empresa_id),
+        empresa=ese_empresa,
         pode_gerenciar=pode_gerenciar,
         meu_contrato_id=meu_contrato_id,
         lista_colaboradores=lista_colaboradores,
@@ -9080,20 +9126,15 @@ def salvar_beneficiario():
             beneficiario.data_nascimento_ou_ano = None
 
     # =========================================================================
-    # 📸 UPLOAD DA FOTO DO BENEFICIÁRIO (MÓDULO AGENDA)
+    # 📸 UPLOAD E OTIMIZAÇÃO DA FOTO DO BENEFICIÁRIO (PADRÃO WEBP 800x800)
     # =========================================================================
     arquivo_foto = request.files.get('foto_perfil')
 
     if arquivo_foto and arquivo_foto.filename:
-        upload_folder = os.path.join(current_app.root_path, 'modules', 'agenda', 'static', 'uploads', 'beneficiarios')
-        os.makedirs(upload_folder, exist_ok=True)
-
-        extensao = os.path.splitext(arquivo_foto.filename)[1].lower() or '.jpg'
-        nome_seguro = f"beneficiario_{uuid.uuid4().hex[:8]}{extensao}"
-        caminho_completo = os.path.join(upload_folder, nome_seguro)
-
-        arquivo_foto.save(caminho_completo)
-        beneficiario.foto_perfil = f"uploads/beneficiarios/{nome_seguro}"
+        # Substitui o save cru pela função isolada de otimização
+        caminho_relativo = salvar_imagem_beneficiario(arquivo_foto)
+        if caminho_relativo:
+            beneficiario.foto_perfil = caminho_relativo
     else:
         if not beneficiario_id_raw:
             beneficiario.foto_perfil = None
@@ -9576,3 +9617,77 @@ def resolver_contexto_usuario_agenda(cliente_modulo):
     }
 
 
+import os
+import secrets
+from flask import current_app
+from PIL import Image, ImageOps
+
+def salvar_imagem_beneficiario(foto):
+    """
+    Processa e otimiza exclusivamente as fotos de beneficiários (dependentes, pets, veículos),
+    convertendo para WEBP com crop 1:1 e resolução 800x800 de forma isolada.
+    """
+    if not foto or not hasattr(foto, 'filename') or not foto.filename:
+        return None
+
+    codigo = secrets.token_hex(8)
+    nome_arquivo = f"beneficiario_{codigo}.webp"
+
+    # Pasta dedicada e isolada para beneficiários
+    pasta_destino = os.path.join(
+        current_app.root_path,
+        'modules',
+        'agenda',
+        'static',
+        'uploads',
+        'beneficiarios'
+    )
+    os.makedirs(pasta_destino, exist_ok=True)
+
+    caminho_completo = os.path.join(pasta_destino, nome_arquivo)
+
+    try:
+        img = Image.open(foto)
+        img.load()
+
+        # 1. Corrige orientação EXIF (fotos de celular)
+        img = ImageOps.exif_transpose(img)
+
+        # 2. Tratamento de transparência e conversão para RGB
+        if img.mode in ('RGBA', 'LA'):
+            fundo = Image.new('RGB', img.size, (255, 255, 255))
+            fundo.paste(img, mask=img.getchannel('A'))
+            img = fundo
+        elif img.mode == 'P':
+            img = img.convert('RGBA')
+            fundo = Image.new('RGB', img.size, (255, 255, 255))
+            fundo.paste(img, mask=img.getchannel('A'))
+            img = fundo
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        # 3. Crop central 1:1
+        largura, altura = img.size
+        if largura > altura:
+            esquerda = (largura - altura) // 2
+            img = img.crop((esquerda, 0, esquerda + altura, altura))
+        elif altura > largura:
+            topo = (altura - largura) // 2
+            img = img.crop((0, topo, largura, topo + largura))
+
+        # 4. Redimensionar para 800x800
+        img = img.resize((800, 800), Image.Resampling.LANCZOS)
+
+        # 5. Salvar em WEBP otimizado
+        img.save(caminho_completo, format='WEBP', quality=85, method=6)
+
+        return f"uploads/beneficiarios/{nome_arquivo}"
+
+    except Exception as e:
+        current_app.logger.exception(f"Erro ao processar imagem de beneficiário: {e}")
+        try:
+            if os.path.exists(caminho_completo):
+                os.remove(caminho_completo)
+        except Exception:
+            pass
+        return None

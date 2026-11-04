@@ -135,196 +135,209 @@
                 </p>
             </a>
 
-        {% for contrato in contratos_equipe %}
-            {# 🧠 DETERMINAÇÃO PRECISA DO ESTADO E DADOS DO CONTRATO #}
-            {% set eh_dono = (contrato.papel_nivel == 999) or (contrato.papel_nome == 'proprietario') %}
-            {% set eh_desligado = contrato.status_profissional in ['desligado', 'inativo'] %}
-            {% set eh_ausente = contrato.status_profissional == 'ausente' or contrato.em_recesso %}
-            {% set eh_pendente = (contrato.status_profissional == 'pendente' or not contrato.cadastro_modulo) and not eh_dono %}
+            {% for contrato in contratos_equipe %}
+                {# 🧠 DETERMINAÇÃO PRECISA DO ESTADO E DADOS DO CONTRATO #}
+                {% set eh_dono = (contrato.papel_nivel == 999) or (contrato.papel_nome == 'proprietario') %}
+                {% set eh_desligado = contrato.status_profissional in ['desligado', 'inativo', 'encerrado'] %}
+                {% set eh_ausente = contrato.status_profissional == 'ausente' or contrato.em_recesso %}
+                {% set eh_pendente = (contrato.status_profissional == 'pendente' or not contrato.cadastro_modulo) and not eh_dono %}
 
-            {# 🔑 USA A PERMISSÃO CALCULADA DIRETAMENTE NA ROTA PYTHON #}
-            {% set pode_gerenciar = contrato.pode_gerenciar if contrato.pode_gerenciar is defined else False %}
+                {# 🔑 USA A PERMISSÃO CALCULADA DIRETAMENTE NA ROTA PYTHON #}
+                {% set pode_gerenciar = contrato.pode_gerenciar if contrato.pode_gerenciar is defined else False %}
 
-            {% if eh_desligado %}
-                {% set filtro_estado = 'inativo' %}
-            {% elif eh_pendente %}
-                {% set filtro_estado = 'pendente' %}
-            {% elif eh_ausente %}
-                {% set filtro_estado = 'ausente' %}
-            {% else %}
-                {% set filtro_estado = 'ativo' %}
-            {% endif %}
+                {% if eh_desligado %}
+                    {% set filtro_estado = 'inativo' %}
+                {% elif eh_pendente %}
+                    {% set filtro_estado = 'pendente' %}
+                {% elif eh_ausente %}
+                    {% set filtro_estado = 'ausente' %}
+                {% else %}
+                    {% set filtro_estado = 'ativo' %}
+                {% endif %}
 
-            {# URL de retorno com parâmetro para reabrir este offcanvas ao voltar #}
-            {% set url_retorno_offcanvas = request.path ~ '?open_offcanvas=' ~ contrato.id %}
+                {# URL de retorno com parâmetro para reabrir este offcanvas ao voltar #}
+                {% set url_retorno_offcanvas = request.path ~ '?open_offcanvas=' ~ contrato.id %}
 
-            <div class="card card-membro border border-2 border-gray-300 shadow-sm rounded-4 p-3 bg-white text-center colaborador-item cursor-pointer"
-                 data-contrato-id="{{ contrato.id }}"
-                 data-estado="{{ filtro_estado }}"
-                 data-bs-toggle="offcanvas"
-                 data-bs-target="#actionsColaborador{{ contrato.id }}">
+                <div class="card card-membro border border-2 border-gray-300 shadow-sm rounded-4 p-3 bg-white text-center colaborador-item cursor-pointer"
+                     data-contrato-id="{{ contrato.id }}"
+                     data-estado="{{ filtro_estado }}"
+                     data-bs-toggle="offcanvas"
+                     data-bs-target="#actionsColaborador{{ contrato.id }}">
 
-                <!-- 🖼️ ÁREA DE FOTO 3x4 RETANGULAR -->
-                <div class="d-flex justify-content-center mb-2">
-                    <div class="avatar-wrapper position-relative flex-shrink-0" style="width: 60px; height: 80px; aspect-ratio: 3/4;">
-                        {% if contrato.foto_profissional %}
-                            <img src="{{ media_url('empresa', contrato.foto_profissional) }}"
-                                 alt="{{ contrato.nome }}"
-                                 class="rounded-3 shadow-sm w-100 h-100 object-fit-cover border border-1 border-light">
-                        {% else %}
-                            <div class="bg-dark text-white rounded-3 d-flex align-items-center justify-content-center fw-bold shadow-sm w-100 h-100 fs-4">
-                                {{ contrato.nome[0] | upper if contrato.nome else '?' }}
-                            </div>
-                        {% endif %}
-
-                        {# BADGE DE STATUS NO AVATAR #}
-                        {% if filtro_estado == 'inativo' %}
-                            <span class="status-badge-dot rounded-circle bg-danger border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Inativo / Desligado"></span>
-                        {% elif filtro_estado == 'pendente' %}
-                            <span class="status-badge-dot rounded-circle bg-warning border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Ficha Cadastral Pendente"></span>
-                        {% elif filtro_estado == 'ausente' %}
-                            <span class="status-badge-dot rounded-circle bg-info border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Ausente (Férias/Recesso)"></span>
-                        {% else %}
-                            <span class="status-badge-dot rounded-circle bg-success border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Disponível / Ativo"></span>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <h6 class="fw-bold text-dark m-0 text-truncate px-1" style="font-size: 0.82rem;">
-                    {{ contrato.nome.split(' ')[0] if contrato.nome else 'Aguardando Ficha' }}
-                </h6>
-                <p class="text-muted m-0 text-truncate small" style="font-size: 0.68rem;">
-                    {{ contrato.cargo.nome_cargo if contrato.cargo else ('Proprietário' if eh_dono else 'Sem Cargo') }}
-                </p>
-
-                <div class="d-flex gap-1 justify-content-center mt-1.5 mx-auto flex-wrap">
-                    {% if eh_dono %}
-                        <span class="badge bg-dark-subtle text-dark rounded-pill" style="font-size: 0.55rem;">Dono</span>
-                    {% endif %}
-                    {% if pode_gerenciar %}
-                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.55rem;">Gerenciável</span>
-                    {% else %}
-                        <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size: 0.55rem;">Restrito</span>
-                    {% endif %}
-                    {% if filtro_estado == 'inativo' %}
-                        <span class="badge bg-danger-subtle text-danger rounded-pill" style="font-size: 0.55rem;">Inativo</span>
-                    {% elif filtro_estado == 'pendente' %}
-                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.55rem;">Pendente</span>
-                    {% elif filtro_estado == 'ausente' %}
-                        <span class="badge bg-info-subtle text-info rounded-pill" style="font-size: 0.55rem;">Ausente</span>
-                    {% endif %}
-                </div>
-            </div>
-
-            {# 📋 MENU CONTEXTUAL (OFFCANVAS) #}
-            <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="actionsColaborador{{ contrato.id }}" aria-labelledby="actionsColaboradorLabel{{ contrato.id }}">
-                <div class="offcanvas-header pb-2 border-bottom">
-                    <div class="d-flex align-items-center gap-3">
-                        <div style="width: 42px; height: 56px; aspect-ratio: 3/4;" class="flex-shrink-0">
-                            {% if contrato.foto_perfil or contrato.foto_profissional %}
-                                <img src="{{ contrato.foto_perfil if contrato.foto_perfil else media_url('empresa', contrato.foto_profissional) }}" class="rounded-3 object-fit-cover w-100 h-100 shadow-sm border" alt="{{ contrato.nome }}">
+                    <!-- 🖼️ ÁREA DE FOTO 3x4 RETANGULAR -->
+                    <div class="d-flex justify-content-center mb-2">
+                        <div class="avatar-wrapper position-relative flex-shrink-0" style="width: 60px; height: 80px; aspect-ratio: 3/4;">
+                            {% if contrato.foto_profissional %}
+                                <img src="{{ media_url('empresa', contrato.foto_profissional) }}"
+                                     alt="{{ contrato.nome }}"
+                                     class="rounded-3 shadow-sm w-100 h-100 object-fit-cover border border-1 border-light">
                             {% else %}
-                                <div class="rounded-3 bg-light d-flex align-items-center justify-content-center text-secondary fw-bold w-100 h-100 border" style="font-size: 1.1rem;">
-                                    {{ contrato.nome[:2].upper() if contrato.nome else 'CO' }}
+                                <div class="bg-dark text-white rounded-3 d-flex align-items-center justify-content-center fw-bold shadow-sm w-100 h-100 fs-4">
+                                    {{ contrato.nome[0] | upper if contrato.nome else '?' }}
                                 </div>
                             {% endif %}
-                        </div>
-                        <div>
-                            <h6 class="mb-0 fw-bold text-dark">{{ contrato.nome or 'Colaborador Pendente' }}</h6>
-                            <small class="text-muted d-block">{{ contrato.cargo.nome_cargo if contrato.cargo else ('Proprietário' if eh_dono else 'Cargo não atribuído') }}</small>
+
+                            {# BADGE DE STATUS NO AVATAR #}
+                            {% if filtro_estado == 'inativo' %}
+                                <span class="status-badge-dot rounded-circle bg-danger border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Inativo / Desligado"></span>
+                            {% elif filtro_estado == 'pendente' %}
+                                <span class="status-badge-dot rounded-circle bg-warning border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Ficha Cadastral Pendente"></span>
+                            {% elif filtro_estado == 'ausente' %}
+                                <span class="status-badge-dot rounded-circle bg-info border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Ausente (Férias/Recesso)"></span>
+                            {% else %}
+                                <span class="status-badge-dot rounded-circle bg-success border border-1 border-white position-absolute bottom-0 end-0 translate-middle-y me-1 mb-1" style="width: 12px; height: 12px;" title="Disponível / Ativo"></span>
+                            {% endif %}
                         </div>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+
+                    <h6 class="fw-bold text-dark m-0 text-truncate px-1" style="font-size: 0.82rem;">
+                        {{ contrato.nome.split(' ')[0] if contrato.nome else 'Aguardando Ficha' }}
+                    </h6>
+                    <p class="text-muted m-0 text-truncate small" style="font-size: 0.68rem;">
+                        {{ contrato.cargo.nome_cargo if contrato.cargo else ('Proprietário' if eh_dono else 'Sem Cargo') }}
+                    </p>
+
+                    <div class="d-flex gap-1 justify-content-center mt-1.5 mx-auto flex-wrap">
+                        {% if eh_dono %}
+                            <span class="badge bg-dark-subtle text-dark rounded-pill" style="font-size: 0.55rem;">Dono</span>
+                        {% endif %}
+                        {% if pode_gerenciar %}
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.55rem;">Gerenciável</span>
+                        {% else %}
+                            <span class="badge bg-secondary-subtle text-secondary rounded-pill" style="font-size: 0.55rem;">Restrito</span>
+                        {% endif %}
+                        {% if filtro_estado == 'inativo' %}
+                            <span class="badge bg-danger-subtle text-danger rounded-pill" style="font-size: 0.55rem;">Inativo</span>
+                        {% elif filtro_estado == 'pendente' %}
+                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.55rem;">Pendente</span>
+                        {% elif filtro_estado == 'ausente' %}
+                            <span class="badge bg-info-subtle text-info rounded-pill" style="font-size: 0.55rem;">Ausente</span>
+                        {% endif %}
+                    </div>
                 </div>
 
-                <div class="offcanvas-body pt-3 pb-4">
-
-                    {# 🔒 SE O USUÁRIO NÃO POSSUIR PERMISSÃO SOBRE ESTE INTEGRANTE #}
-                    {% if not pode_gerenciar %}
-                        <div class="alert alert-secondary border-secondary-subtle py-2.5 px-3 rounded-3 mb-2 d-flex align-items-center gap-2" style="font-size: 0.78rem;">
-                            <i class="bi bi-shield-lock-fill fs-5 text-secondary flex-shrink-0"></i>
+                {# 📋 MENU CONTEXTUAL (OFFCANVAS) #}
+                <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="actionsColaborador{{ contrato.id }}" aria-labelledby="actionsColaboradorLabel{{ contrato.id }}">
+                    <div class="offcanvas-header pb-2 border-bottom">
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width: 42px; height: 56px; aspect-ratio: 3/4;" class="flex-shrink-0">
+                                {% if contrato.foto_perfil or contrato.foto_profissional %}
+                                    <img src="{{ contrato.foto_perfil if contrato.foto_perfil else media_url('empresa', contrato.foto_profissional) }}" class="rounded-3 object-fit-cover w-100 h-100 shadow-sm border" alt="{{ contrato.nome }}">
+                                {% else %}
+                                    <div class="rounded-3 bg-light d-flex align-items-center justify-content-center text-secondary fw-bold w-100 h-100 border" style="font-size: 1.1rem;">
+                                        {{ contrato.nome[:2].upper() if contrato.nome else 'CO' }}
+                                    </div>
+                                {% endif %}
+                            </div>
                             <div>
-                                <strong class="text-dark">Acesso Restrito ao Perfil</strong><br>
-                                Você não possui privilégios de hierarquia suficientes para alterar as configurações deste integrante.
+                                <h6 class="mb-0 fw-bold text-dark">{{ contrato.nome or 'Colaborador Pendente' }}</h6>
+                                <small class="text-muted d-block">{{ contrato.cargo.nome_cargo if contrato.cargo else ('Proprietário' if eh_dono else 'Cargo não atribuído') }}</small>
                             </div>
                         </div>
-                    {% else %}
+                        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                    </div>
 
-                        {# 🟡 ALERTA SE O STATUS FOR PENDENTE #}
-                        {% if filtro_estado == 'pendente' %}
-                        <div class="alert alert-warning border-warning-subtle py-2.5 px-3 rounded-3 mb-3 d-flex align-items-center gap-2" style="font-size: 0.78rem;">
-                            <i class="bi bi-person-clock fs-4 text-warning flex-shrink-0"></i>
-                            <div>
-                                <strong class="text-warning-emphasis">Ficha Preenchida • Aguardando Ativação</strong><br>
-                                Ajuste os dados, cargo e escala abaixo para liberar o acesso e ativar este colaborador na equipe.
+                    <div class="offcanvas-body pt-3 pb-4">
+
+                        {# 🔒 SE O USUÁRIO NÃO POSSUIR PERMISSÃO SOBRE ESTE INTEGRANTE #}
+                        {% if not pode_gerenciar %}
+                            <div class="alert alert-secondary border-secondary-subtle py-2.5 px-3 rounded-3 mb-2 d-flex align-items-center gap-2" style="font-size: 0.78rem;">
+                                <i class="bi bi-shield-lock-fill fs-5 text-secondary flex-shrink-0"></i>
+                                <div>
+                                    <strong class="text-dark">Acesso Restrito ao Perfil</strong><br>
+                                    Você não possui privilégios de hierarquia suficientes para alterar as configurações deste integrante.
+                                </div>
                             </div>
-                        </div>
+                        {% else %}
+
+                            {# 🟡 ALERTA SE O STATUS FOR PENDENTE #}
+                            {% if filtro_estado == 'pendente' %}
+                            <div class="alert alert-warning border-warning-subtle py-2.5 px-3 rounded-3 mb-3 d-flex align-items-center gap-2" style="font-size: 0.78rem;">
+                                <i class="bi bi-person-clock fs-4 text-warning flex-shrink-0"></i>
+                                <div>
+                                    <strong class="text-warning-emphasis">Ficha Preenchida • Aguardando Ativação</strong><br>
+                                    Ajuste os dados, cargo e escala abaixo para liberar o acesso e ativar este colaborador na equipe.
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <div class="d-flex flex-column gap-2">
+
+                                {# 📸 FOTO #}
+                                <button type="button" onclick="abrirCapturaFoto('{{ contrato.id }}', '{{ contrato.nome }}')"
+                                        class="btn btn-white border border-dark-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-white" style="font-size: 0.85rem;">
+                                    <span class="fw-bold text-dark">
+                                        <i class="bi bi-camera me-2 text-dark fs-6"></i> Atualizar Foto do Perfil
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </button>
+
+                                {# 📄 FICHA CADASTRAL #}
+                                <a href="{{ url_for('empresa.ver_perfil_colaborador', contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
+                                   class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span class="fw-semibold text-dark">
+                                        <i class="bi bi-person-vcard me-2 text-secondary fs-6"></i> Ficha Cadastral e Dados
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                <hr class="my-1 text-muted opacity-25">
+
+                                {# 1️⃣ PASSO: CARGO & HABILIDADES #}
+                                <a href="{{ url_for('empresa.configurar_cargo_habilidades', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
+                                   class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span class="fw-semibold text-dark">
+                                        <i class="bi bi-scissors me-2 text-secondary"></i> 1. Cargo e Serviços
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                {# 2️⃣ PASSO: CONFIGURAR ESCALA SEMANAL #}
+                                <a href="{{ url_for('empresa.configurar_escala_semanal', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
+                                   class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span class="fw-semibold text-dark">
+                                        <i class="bi bi-calendar-week me-2 text-secondary"></i> 2. Configurar Escala Semanal
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                {# 3️⃣ PASSO: EXCEÇÕES E RECESSOS #}
+                                <a href="{{ url_for('empresa.excecoes_colaborador', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
+                                   class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span class="fw-semibold text-dark">
+                                        <i class="bi bi-calendar2-check me-2 text-secondary"></i> 3. Exceções e Recessos
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                {# 4️⃣ PASSO: PERMISSÕES #}
+                                <a href="javascript:void(0);" onclick="alert('Módulo de permissões em breve.');"
+                                   class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
+                                    <span class="fw-semibold text-dark">
+                                        <i class="bi bi-shield-lock me-2 text-secondary"></i> 4. Permissões do Sistema
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                <hr class="my-1 text-muted opacity-25">
+
+                                {# 🔴 OPÇÃO DE ENCERRAMENTO DE CONTRATO (APENAS SE ATIVO) #}
+                                {% if not eh_desligado and not eh_dono %}
+                                <button type="button" onclick="confirmarEncerramentoContrato('{{ contrato.id }}', '{{ contrato.nome | escape }}', '{{ empresa.id }}')"
+                                        class="btn btn-white border border-danger-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-white text-danger" style="font-size: 0.85rem;">
+                                    <span class="fw-bold">
+                                        <i class="bi bi-person-dash me-2 text-danger fs-6"></i> Encerrar Contrato
+                                    </span>
+                                    <i class="bi bi-chevron-right small text-danger opacity-75"></i>
+                                </button>
+                                {% endif %}
+
+                            </div>
                         {% endif %}
 
-                        <div class="d-flex flex-column gap-2">
-
-                            {# 📸 FOTO #}
-                            <button type="button" onclick="abrirCapturaFoto('{{ contrato.id }}', '{{ contrato.nome }}')"
-                                    class="btn btn-white border border-dark-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-white" style="font-size: 0.85rem;">
-                                <span class="fw-bold text-dark">
-                                    <i class="bi bi-camera me-2 text-dark fs-6"></i> Atualizar Foto do Perfil
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </button>
-
-                            {# 📄 FICHA CADASTRAL #}
-                            <a href="{{ url_for('empresa.ver_perfil_colaborador', contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
-                               class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
-                                <span class="fw-semibold text-dark">
-                                    <i class="bi bi-person-vcard me-2 text-secondary fs-6"></i> Ficha Cadastral e Dados
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </a>
-
-                            <hr class="my-1 text-muted opacity-25">
-
-                            {# 1️⃣ PASSO: CARGO & HABILIDADES #}
-                            <a href="{{ url_for('empresa.configurar_cargo_habilidades', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
-                               class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
-                                <span class="fw-semibold text-dark">
-                                    <i class="bi bi-scissors me-2 text-secondary"></i> 1. Cargo e Serviços
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </a>
-
-                            {# 2️⃣ PASSO: CONFIGURAR ESCALA SEMANAL #}
-                            <a href="{{ url_for('empresa.configurar_escala_semanal', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
-                               class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
-                                <span class="fw-semibold text-dark">
-                                    <i class="bi bi-calendar-week me-2 text-secondary"></i> 2. Configurar Escala Semanal
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </a>
-
-                            {# 3️⃣ PASSO: EXCEÇÕES E RECESSOS #}
-                            <a href="{{ url_for('empresa.excecoes_colaborador', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
-                               class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
-                                <span class="fw-semibold text-dark">
-                                    <i class="bi bi-calendar2-check me-2 text-secondary"></i> 3. Exceções e Recessos
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </a>
-
-                            {# 4️⃣ PASSO: PERMISSÕES #}
-                            <a href="javascript:void(0);" onclick="alert('Módulo de permissões em breve.');"
-                               class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
-                                <span class="fw-semibold text-dark">
-                                    <i class="bi bi-shield-lock me-2 text-secondary"></i> 4. Permissões do Sistema
-                                </span>
-                                <i class="bi bi-chevron-right small text-muted"></i>
-                            </a>
-
-                        </div>
-                    {% endif %}
-
+                    </div>
                 </div>
-            </div>
-        {% endfor %}
+            {% endfor %}
 
         {# ⚠️ ESTADO VAZIO CASO NENHUM INTEGRANTE BATA COM O FILTRO SELECIONADO #}
         <div id="emptyState" class="text-center py-4 bg-white rounded-4 border border-2 border-gray-300 w-100 d-none" style="grid-column: 1 / -1;">
@@ -685,6 +698,26 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 });
+
+function confirmarEncerramentoContrato(contratoId, nomeColaborador, empresaId) {
+    if (confirm(`Deseja realmente encerrar o contrato de "${nomeColaborador}"? Esta ação mudará o status profissional para encerrado.`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/${empresaId}/contrato/${contratoId}/encerrar`;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        if (csrfToken) {
+            const inputCsrf = document.createElement('input');
+            inputCsrf.type = 'hidden';
+            inputCsrf.name = 'csrf_token';
+            inputCsrf.value = csrfToken.getAttribute('content');
+            form.appendChild(inputCsrf);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
 </script>
 
 {% endblock %}
