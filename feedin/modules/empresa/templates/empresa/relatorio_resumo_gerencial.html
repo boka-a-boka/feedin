@@ -61,7 +61,8 @@
                     <select name="profissional_id" class="form-select form-select-sm rounded-3">
                         <option value="todos">Todos os Profissionais</option>
                         {% for colab in lista_colaboradores %}
-                            <option value="{{ colab.id_cadastro_cliente }}" {% if profissional_id_filtro == colab.id_cadastro_cliente|string %}selected{% endif %}>
+                            {% set colab_val = colab.id_cadastro_cliente | string if colab.id_cadastro_cliente else colab.id | string %}
+                            <option value="{{ colab_val }}" {% if profissional_id_filtro == colab_val %}selected{% endif %}>
                                 {{ colab.nome }}
                             </option>
                         {% endfor %}

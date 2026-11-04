@@ -3203,12 +3203,13 @@ def encerrar_contrato_colaborador(empresa_id, contrato_id):
     return redirect(url_for('empresa.configurar_jornadas_tela', empresa_id=empresa_id))
 
 
-@empresa_bp.route('/empresa/<int:empresa_id>/relatorios/resumo-gerencial', methods=['GET'], endpoint='relatorio_resumo_gerencial')
+@empresa_bp.route('/empresa/<int:empresa_id>/relatorios/resumo-gerencial', methods=['GET'],
+                  endpoint='relatorio_resumo_gerencial')
 @login_required
 def relatorio_resumo_gerencial(empresa_id):
     """
     Relatório Resumo Gerencial de Fechamento (Financeiro / Operacional).
-    Consolida dados reais da tabela AghAgendamentoEncerramento.
+    Consolida dados reais e trata discrepâncias de IDs (Inteiro vs UUID String) e filtros.
     """
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
 
@@ -3265,22 +3266,36 @@ def relatorio_resumo_gerencial(empresa_id):
     if servico_id_filtro:
         query = query.filter(AghAgendamentoItem.servico_id == servico_id_filtro)
 
-    if profissional_id_filtro and profissional_id_filtro != 'todos':
-        query = query.filter(
-            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro) |
-            (AghAgendamentoEncerramento.colaborador_contrato_id == profissional_id_filtro)
-        )
-
     resultados_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
 
-    # 📌 3. Processamento e Consolidação do Fechamento
+    # 📌 3. Processamento e Filtro Flexível de Profissional em Memória
     fechamento_por_pagamento = {}
     valor_total_geral = 0.0
-    quantidade_total_geral = len(resultados_brutos)
-
     lista_registros_processados = []
 
+    prof_filtro_limpo = str(profissional_id_filtro).strip() if profissional_id_filtro else 'todos'
+
     for item, encerramento in resultados_brutos:
+        # Recupera os IDs associados ao item e ao encerramento
+        colab_id_item = str(getattr(item, 'colaborador_id_contrato', '')).strip()
+        colab_id_enc = str(getattr(encerramento, 'colaborador_contrato_id', '')).strip() if encerramento else ''
+
+        # Obtém o objeto contrato do profissional via property da model
+        contrato_obj = item._obter_contrato_profissional
+        contrato_id_str = str(getattr(contrato_obj, 'id', '')).strip() if contrato_obj else ''
+        contrato_cliente_id_str = str(getattr(contrato_obj, 'id_cadastro_cliente', '')).strip() if contrato_obj else ''
+
+        # Validação rigorosa do filtro de profissional
+        if prof_filtro_limpo != 'todos':
+            atendeu_filtro = (
+                    prof_filtro_limpo == colab_id_item or
+                    prof_filtro_limpo == colab_id_enc or
+                    prof_filtro_limpo == contrato_id_str or
+                    prof_filtro_limpo == contrato_cliente_id_str
+            )
+            if not atendeu_filtro:
+                continue
+
         agendamento = item.agendamento
 
         # Resolução do Nome do Cliente / Beneficiario
@@ -3292,26 +3307,21 @@ def relatorio_resumo_gerencial(empresa_id):
             nome_cliente = getattr(cliente_obj, 'nome', None) or getattr(cliente_obj, 'razao_social',
                                                                          None) or "Titular / Cliente"
 
-        # Serviço e Profissional
+        # Serviço e Nome do Profissional
         servico_nome = item.nome_servico
         prof_nome = item.nome_profissional
 
-        # Valores (Prioriza o valor final cobrado no encerramento, senão usa o preço unitário do item)
+        # Valores
         valor_pago = float(
             getattr(encerramento, 'valor_final_cobrado', None) or getattr(item, 'preco_unitario', 0.0) or 0.0)
         valor_total_geral += valor_pago
 
-        # Forma de Pagamento real da tabela de encerramentos
+        # Forma de Pagamento
         forma_pgto = (
                 getattr(encerramento, 'forma_pagamento', None) or
                 getattr(agendamento, 'forma_pagamento', None) or
                 'Não Informado'
         ).strip()
-
-        if forma_pgto:
-            forma_pgto = str(forma_pgto).strip()
-        else:
-            forma_pgto = 'Não Informado'
 
         if forma_pagamento_filtro != 'todos' and forma_pgto.lower() != forma_pagamento_filtro.lower():
             continue
@@ -3329,7 +3339,7 @@ def relatorio_resumo_gerencial(empresa_id):
         }
         lista_registros_processados.append(registro)
 
-        # Consolidado para as linhas de fechamento por forma de pagamento
+        # Consolidado para o fechamento por forma de pagamento
         chave_pgto_lower = forma_pgto.lower() if forma_pgto else 'não informado'
         if chave_pgto_lower not in fechamento_por_pagamento:
             fechamento_por_pagamento[chave_pgto_lower] = {
@@ -3341,7 +3351,7 @@ def relatorio_resumo_gerencial(empresa_id):
         fechamento_por_pagamento[chave_pgto_lower]['quantidade'] += 1
         fechamento_por_pagamento[chave_pgto_lower]['valor'] += valor_pago
 
-    # Lista de profissionais para o filtro
+    # Lista de profissionais para o select do filtro
     lista_colaboradores = ColaboradorContrato.query.filter_by(
         id_local=empresa_id,
         status_profissional='ativo'
