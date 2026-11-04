@@ -41,7 +41,7 @@ from feedin.models import  Local, Cargo, Taxonomia, ModulosSistema, CoreDepartam
 
 from feedin.modules.auth.models import ModCadastroCliente, VinculoUsuarioEmpresa, ModVinculoModulo
 
-from feedin.modules.agenda.models import AghAgendamento, AghAgendamentoItem
+from feedin.modules.agenda.models import AghAgendamento, AghAgendamentoItem, AghAgendamentoEncerramento
 
 from feedin.modules.estoque.services.estoque_service import (
     validar_acesso_empresa,
@@ -3208,16 +3208,15 @@ def encerrar_contrato_colaborador(empresa_id, contrato_id):
 def relatorio_resumo_gerencial(empresa_id):
     """
     Relatório Resumo Gerencial de Fechamento (Financeiro / Operacional).
-    Exclusivo para administradores e profissionais com permissão delegada (nível >= 600 ou proprietário).
+    Consolida dados reais da tabela AghAgendamentoEncerramento.
     """
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 🔒 Validação de Permissão (Administrador, Proprietário ou Nível Hierárquico >= 600)
+    # 🔒 Validação de Permissão
     user_id_str = str(current_user.id)
     is_admin = bool(getattr(current_user, 'is_admin', False))
     eh_proprietario = str(getattr(ese_empresa, 'proprietario_id', '')) == user_id_str
 
-    # Checa se é colaborador com nível de gestão na empresa
     contrato_colab = ColaboradorContrato.query.filter_by(
         id_local=empresa_id,
         id_cadastro_cliente=user_id_str,
@@ -3227,16 +3226,15 @@ def relatorio_resumo_gerencial(empresa_id):
 
     if not is_admin and not eh_proprietario and papel_nivel < 600:
         flash("Acesso restrito a administradores e gestores da empresa.", "danger")
-        return redirect(url_for('empresa.dashboard_empresa', empresa_id=empresa_id))
+        return redirect(url_for('empresa.hub_ativacao', empresa_id=empresa_id))
 
-    # 📌 1. Parâmetros e Filtros Padrão (Dia Atual e Horário de Funcionamento)
+    # 📌 1. Parâmetros e Filtros Padrão
     hoje_str = datetime.now().strftime('%Y-%m-%d')
     data_inicio_str = request.args.get('data_inicio', hoje_str)
     data_fim_str = request.args.get('data_fim', hoje_str)
 
-    # Horários padrão (Abertura e Fechamento da empresa ou 00:00 até 23:59)
-    hora_abertura = getattr(ese_empresa, 'hora_abertura', time(8, 0)) or time(8, 0)
-    hora_fechamento = getattr(ese_empresa, 'hora_fechamento', time(18, 0)) or time(18, 0)
+    hora_abertura = time(0, 0)
+    hora_fechamento = time(23, 59)
 
     try:
         data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
@@ -3249,13 +3247,14 @@ def relatorio_resumo_gerencial(empresa_id):
     fim_dt = datetime.combine(data_fim, hora_fechamento)
 
     servico_id_filtro = request.args.get('servico_id', type=int)
-    profissional_id_filtro = request.args.get('profissional_id', type=int)
+    profissional_id_filtro = request.args.get('profissional_id', type=str)
     forma_pagamento_filtro = request.args.get('forma_pagamento', 'todos')
-    agrupar_por = request.args.get('agrupar_por', 'nenhum')  # 'servico', 'profissional', 'forma_pagamento'
 
-    # 📌 2. Query de Atendimentos Concluídos da Empresa
-    query = db.session.query(AghAgendamentoItem).join(
+    # 📌 2. Query Base unindo Item com Encerramento e Agendamento
+    query = db.session.query(AghAgendamentoItem, AghAgendamentoEncerramento).join(
         AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).outerjoin(
+        AghAgendamentoEncerramento, AghAgendamentoEncerramento.agendamento_item_id == AghAgendamentoItem.id
     ).filter(
         AghAgendamento.empresa_id == empresa_id,
         AghAgendamento.status == 'concluido',
@@ -3265,52 +3264,59 @@ def relatorio_resumo_gerencial(empresa_id):
 
     if servico_id_filtro:
         query = query.filter(AghAgendamentoItem.servico_id == servico_id_filtro)
-    if profissional_id_filtro:
+
+    if profissional_id_filtro and profissional_id_filtro != 'todos':
         query = query.filter(
-            (AghAgendamentoItem.colaborador_id_contrato == str(profissional_id_filtro)) |
-            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro)
+            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro) |
+            (AghAgendamentoEncerramento.colaborador_contrato_id == profissional_id_filtro)
         )
 
-    itens_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
+    resultados_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
 
-    # 📌 3. Processamento de Fechamento e Totais por Forma de Pagamento
+    # 📌 3. Processamento e Consolidação do Fechamento
     fechamento_por_pagamento = {}
     valor_total_geral = 0.0
-    quantidade_total_geral = len(itens_brutos)
+    quantidade_total_geral = len(resultados_brutos)
 
     lista_registros_processados = []
 
-    for item in itens_brutos:
+    for item, encerramento in resultados_brutos:
         agendamento = item.agendamento
 
-        # Cliente (Titular ou Beneficiário)
+        # Resolução do Nome do Cliente / Beneficiario
         beneficiario = getattr(agendamento, 'beneficiario', None)
-        nome_cliente = beneficiario.nome if beneficiario else (
-            getattr(agendamento.cliente, 'nome', 'Cliente') if hasattr(agendamento, 'cliente') else 'Cliente')
+        if beneficiario and getattr(beneficiario, 'nome', None):
+            nome_cliente = f"{beneficiario.nome} (Dependente)"
+        else:
+            cliente_obj = getattr(agendamento, 'cliente', None)
+            nome_cliente = getattr(cliente_obj, 'nome', None) or getattr(cliente_obj, 'razao_social',
+                                                                         None) or "Titular / Cliente"
 
         # Serviço e Profissional
-        servico_nome = getattr(item, 'nome_servico', None) or (
-            item.servico.nome if hasattr(item, 'servico') and item.servico else f"Serviço #{item.servico_id}")
-        prof_nome = getattr(item, 'nome_prof_exibicao', None) or 'Profissional'
+        servico_nome = item.nome_servico
+        prof_nome = item.nome_profissional
 
-        # Valores, Forma de Pagamento e Tempo
-        valor_pago = float(getattr(item, 'preco_unitario', 0.0) or getattr(item, 'valor_total', 0.0) or 0.0)
+        # Valores (Prioriza o valor final cobrado no encerramento, senão usa o preço unitário do item)
+        valor_pago = float(
+            getattr(encerramento, 'valor_final_cobrado', None) or getattr(item, 'preco_unitario', 0.0) or 0.0)
         valor_total_geral += valor_pago
 
-        # Resolução da forma de pagamento (capturada do agendamento ou cobrança vinculada)
-        forma_pgto = getattr(agendamento, 'forma_pagamento', None) or getattr(item, 'forma_pagamento',
-                                                                              None) or 'Não Informado'
+        # Forma de Pagamento real da tabela de encerramentos
+        forma_pgto = (
+                getattr(encerramento, 'forma_pagamento', None) or
+                getattr(agendamento, 'forma_pagamento', None) or
+                'Não Informado'
+        ).strip()
+
+        if forma_pgto:
+            forma_pgto = str(forma_pgto).strip()
+        else:
+            forma_pgto = 'Não Informado'
 
         if forma_pagamento_filtro != 'todos' and forma_pgto.lower() != forma_pagamento_filtro.lower():
-            continue  # Pula se filtrado por outra forma de pagamento
+            continue
 
-        # Cálculo do tempo de execução em minutos
         dt_inicio = item.data_hora_inicio
-        dt_fim = getattr(item, 'data_hora_fim_real', None) or getattr(item, 'data_hora_fim', None)
-        tempo_execucao_str = "--"
-        if dt_inicio and dt_fim:
-            diff_min = int((dt_fim - dt_inicio).total_seconds() / 60)
-            tempo_execucao_str = f"{diff_min} min"
 
         registro = {
             'data': dt_inicio.strftime('%d/%m/%Y') if dt_inicio else '--/--/----',
@@ -3318,18 +3324,28 @@ def relatorio_resumo_gerencial(empresa_id):
             'cliente': nome_cliente,
             'servico': servico_nome,
             'profissional': prof_nome,
-            'valor': valor_pago,
-            'tempo_execucao': tempo_execucao_str,
-            'forma_pagamento': forma_pgto
+            'forma_pagamento': forma_pgto if forma_pgto else 'Não Informado',
+            'valor': valor_pago
         }
         lista_registros_processados.append(registro)
 
-        # Consolidado para as linhas finais de fechamento por forma de pagamento
-        if forma_pgto not in fechamento_por_pagamento:
-            fechamento_por_pagamento[forma_pgto] = {'quantidade': 0, 'valor': 0.0}
+        # Consolidado para as linhas de fechamento por forma de pagamento
+        chave_pgto_lower = forma_pgto.lower() if forma_pgto else 'não informado'
+        if chave_pgto_lower not in fechamento_por_pagamento:
+            fechamento_por_pagamento[chave_pgto_lower] = {
+                'titulo_original': forma_pgto.capitalize() if forma_pgto else 'Não Informado',
+                'quantidade': 0,
+                'valor': 0.0
+            }
 
-        fechamento_por_pagamento[forma_pgto]['quantidade'] += 1
-        fechamento_por_pagamento[forma_pgto]['valor'] += valor_pago
+        fechamento_por_pagamento[chave_pgto_lower]['quantidade'] += 1
+        fechamento_por_pagamento[chave_pgto_lower]['valor'] += valor_pago
+
+    # Lista de profissionais para o filtro
+    lista_colaboradores = ColaboradorContrato.query.filter_by(
+        id_local=empresa_id,
+        status_profissional='ativo'
+    ).all()
 
     return render_template(
         'empresa/relatorio_resumo_gerencial.html',
@@ -3337,8 +3353,10 @@ def relatorio_resumo_gerencial(empresa_id):
         registros=lista_registros_processados,
         fechamento_por_pagamento=fechamento_por_pagamento,
         valor_total_geral=valor_total_geral,
-        quantidade_total_geral=quantidade_total_geral,
+        quantidade_total_geral=len(lista_registros_processados),
         data_inicio=data_inicio_str,
         data_fim=data_fim_str,
-        agrupar_por=agrupar_por
+        lista_colaboradores=lista_colaboradores,
+        profissional_id_filtro=profissional_id_filtro,
+        forma_pagamento_filtro=forma_pagamento_filtro
     )

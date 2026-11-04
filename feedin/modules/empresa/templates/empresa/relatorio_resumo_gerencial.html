@@ -4,7 +4,6 @@
 
 {% block content %}
 <style>
-    /* 🖨️ ESTILOS DEDICADOS PARA IMPRESSÃO / SALVAR EM PDF */
     @media print {
         .btn, form, header, footer, .offcanvas, .no-print {
             display: none !important;
@@ -27,8 +26,8 @@
     }
 </style>
 
-<div class="container py-4" style="max-width: 1000px;">
-    
+<div class="container py-4" style="max-width: 1050px;">
+
     <!-- CABEÇALHO DO RELATÓRIO -->
     <div class="d-flex align-items-center justify-content-between mb-4">
         <div>
@@ -58,25 +57,36 @@
                     <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm rounded-3">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Forma de Pagamento</label>
-                    <select name="forma_pagamento" class="form-select form-select-sm rounded-3">
-                        <option value="todos">Todas as Formas</option>
-                        <option value="dinheiro">Dinheiro</option>
-                        <option value="pix">Pix</option>
-                        <option value="cartao_credito">Cartão de Crédito</option>
-                        <option value="cartao_debito">Cartão de Débito</option>
+                    <label class="form-label small fw-semibold">Profissional</label>
+                    <select name="profissional_id" class="form-select form-select-sm rounded-3">
+                        <option value="todos">Todos os Profissionais</option>
+                        {% for colab in lista_colaboradores %}
+                            <option value="{{ colab.id_cadastro_cliente }}" {% if profissional_id_filtro == colab.id_cadastro_cliente|string %}selected{% endif %}>
+                                {{ colab.nome }}
+                            </option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <button type="submit" class="btn btn-sm btn-primary w-100 rounded-pill fw-bold shadow-sm py-2">
-                        <i class="bi bi-filter me-1"></i> Gerar Fechamento
+                    <label class="form-label small fw-semibold">Forma de Pagamento</label>
+                    <select name="forma_pagamento" class="form-select form-select-sm rounded-3">
+                        <option value="todos" {% if forma_pagamento_filtro == 'todos' %}selected{% endif %}>Todas as Formas</option>
+                        <option value="dinheiro" {% if forma_pagamento_filtro == 'dinheiro' %}selected{% endif %}>Dinheiro</option>
+                        <option value="pix" {% if forma_pagamento_filtro == 'pix' %}selected{% endif %}>Pix</option>
+                        <option value="cartao_credito" {% if forma_pagamento_filtro == 'cartao_credito' %}selected{% endif %}>Cartão de Crédito</option>
+                        <option value="cartao_debito" {% if forma_pagamento_filtro == 'cartao_debito' %}selected{% endif %}>Cartão de Débito</option>
+                    </select>
+                </div>
+                <div class="col-md-12 text-end">
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill fw-bold shadow-sm px-4 py-2">
+                        <i class="bi bi-filter me-1"></i> Atualizar Fechamento
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- CARDS DE RESUMO (KPIS OPERACIONAIS) -->
+    <!-- CARDS DE RESUMO (KPIS) -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">
             <div class="card border-0 shadow-sm rounded-4 bg-dark text-white p-3">
@@ -106,7 +116,7 @@
         </div>
     </div>
 
-    <!-- TABELA 1: DETALHAMENTO ANALÍTICO DOS SERVIÇOS EXECUTADOS -->
+    <!-- TABELA 1: EXTRATO ANALÍTICO -->
     <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mb-4">
         <div class="card-header bg-light py-3 px-4">
             <h6 class="fw-bold text-dark m-0"><i class="bi bi-list-nested me-2 text-primary"></i>Extrato Analítico do Período</h6>
@@ -121,7 +131,6 @@
                                 <th class="py-2.5">Cliente (Titular / Dependente)</th>
                                 <th class="py-2.5">Serviço Executado</th>
                                 <th class="py-2.5">Profissional</th>
-                                <th class="py-2.5">Duração</th>
                                 <th class="py-2.5">Forma Pgto</th>
                                 <th class="py-2.5 text-end pe-3">Valor Pago</th>
                             </tr>
@@ -140,13 +149,16 @@
                                     <span class="text-dark">{{ reg.servico }}</span>
                                 </td>
                                 <td>
-                                    <span class="text-secondary">{{ reg.profissional }}</span>
+                                    <span class="text-secondary fw-semibold">{{ reg.profissional }}</span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-light text-dark border">{{ reg.tempo_execucao }}</span>
-                                </td>
-                                <td>
-                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ reg.forma_pagamento | capitalize }}</span>
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                                        {% if reg.forma_pagamento == 'dinheiro' %}Dinheiro
+                                        {% elif reg.forma_pagamento == 'pix' %}Pix
+                                        {% elif reg.forma_pagamento == 'cartao_credito' %}Cartão de Crédito
+                                        {% elif reg.forma_pagamento == 'cartao_debito' %}Cartão de Débito
+                                        {% else %}{{ reg.forma_pagamento | title }}{% endif %}
+                                    </span>
                                 </td>
                                 <td class="text-end pe-3 fw-bold text-success">
                                     R$ {{ "%.2f"|format(reg.valor)|replace('.', ',') }}
@@ -159,13 +171,13 @@
             {% else %}
                 <div class="text-center py-5 text-muted">
                     <i class="bi bi-search fs-1 d-block mb-2 text-secondary opacity-50"></i>
-                    <p class="small mb-0">Nenhum atendimento concluído encontrado para este período.</p>
+                    <p class="small mb-0">Nenhum atendimento concluído encontrado para este período e filtros.</p>
                 </div>
             {% endif %}
         </div>
     </div>
 
-    <!-- TABELA 2: FECHAMENTO FINANCEIRO / OPERACIONAL (POR FORMA DE PAGAMENTO) -->
+    <!-- TABELA 2: FECHAMENTO POR FORMA DE PAGAMENTO -->
     <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden border-top border-4 border-success">
         <div class="card-header bg-success bg-opacity-10 py-3 px-4">
             <h6 class="fw-bold text-success m-0"><i class="bi bi-safe me-2"></i>Fechamento por Forma de Pagamento & Total Geral</h6>
@@ -182,10 +194,15 @@
                     </thead>
                     <tbody>
                         {% if fechamento_por_pagamento %}
-                            {% for forma, dados in fechamento_por_pagamento.items() %}
+                            {% for chave, dados in fechamento_por_pagamento.items() %}
                             <tr>
                                 <td class="ps-4 fw-semibold text-dark">
-                                    <i class="bi bi-wallet2 text-muted me-2"></i> {{ forma | upper }}
+                                    <i class="bi bi-wallet2 text-muted me-2"></i>
+                                    {% if chave == 'dinheiro' %}Dinheiro
+                                    {% elif chave == 'pix' %}Pix
+                                    {% elif chave == 'cartao_credito' %}Cartão de Crédito
+                                    {% elif chave == 'cartao_debito' %}Cartão de Débito
+                                    {% else %}{{ dados.titulo_original }}{% endif %}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge bg-dark text-white rounded-pill px-3">{{ dados.quantidade }}</span>
