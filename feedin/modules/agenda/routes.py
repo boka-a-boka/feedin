@@ -9691,3 +9691,140 @@ def salvar_imagem_beneficiario(foto):
         except Exception:
             pass
         return None
+
+
+@agenda_bp.route('/relatorios/dashboard-clientes', methods=['GET'])
+@login_required
+def relatorio_dashboard_clientes():
+    """
+    Painel de Relatório Analítico e Dashboard para Clientes/Gestores.
+    Lista agendamentos concluídos com filtros por período, empresa, serviço e dependentes.
+    """
+    cliente_id_str = str(current_user.id)
+
+    # 📌 1. Captura de Filtros da Requisição (Query Params)
+    hoje_str = datetime.now().strftime('%Y-%m-%d')
+    data_inicio_str = request.args.get('data_inicio', hoje_str)
+    data_fim_str = request.args.get('data_fim', hoje_str)
+    empresa_id_filtro = request.args.get('empresa_id', type=int)
+    servico_id_filtro = request.args.get('servico_id', type=int)
+    beneficiario_id_filtro = request.args.get('beneficiario_id', 'todos')  # 'todos', 'titular', ou UUID do dependente
+    agrupar_por = request.args.get('agrupar_por', 'empresa')  # 'empresa', 'servico', 'beneficiario'
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        data_inicio = datetime.now().date()
+        data_fim = datetime.now().date()
+
+    inicio_dt = datetime.combine(data_inicio, time.min)
+    fim_dt = datetime.combine(data_fim, time.max)
+
+    # 📌 2. Construção da Query Base (Apenas Agendamentos Concluídos do Cliente Logado)
+    query = db.session.query(AghAgendamentoItem).join(
+        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).filter(
+        AghAgendamento.cliente_id == current_user.id,
+        AghAgendamento.status == 'concluido',
+        AghAgendamentoItem.data_hora_inicio >= inicio_dt,
+        AghAgendamentoItem.data_hora_inicio <= fim_dt
+    )
+
+    # Aplicação de filtros opcionais
+    if empresa_id_filtro:
+        query = query.filter(AghAgendamento.empresa_id == empresa_id_filtro)
+
+    if servico_id_filtro:
+        query = query.filter(AghAgendamentoItem.servico_id == servico_id_filtro)
+
+    # Filtro específico por beneficiário / dependente
+    if beneficiario_id_filtro == 'titular':
+        query = query.filter(AghAgendamento.beneficiario_id.is_(None))
+    elif beneficiario_id_filtro != 'todos':
+        query = query.filter(AghAgendamento.beneficiario_id == beneficiario_id_filtro)
+
+    itens_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
+
+    # 📌 3. Processamento, Agrupamento e Sub-totais
+    dados_agrupados = {}
+    valor_total_geral = 0.0
+    total_atendimentos_geral = len(itens_brutos)
+
+    for item in itens_brutos:
+        agendamento = item.agendamento
+        empresa_obj = getattr(agendamento, 'empresa', None)
+        empresa_nome = empresa_obj.nome if empresa_obj else 'Empresa Geral'
+
+        servico_nome = getattr(item, 'nome_servico', None) or (
+            item.servico.nome if hasattr(item, 'servico') and item.servico else f"Serviço #{item.servico_id}")
+        prof_nome = getattr(item, 'nome_prof_exibicao', None) or 'Profissional'
+
+        # Identificação do Beneficiário (Titular vs Dependente)
+        beneficiario_obj = getattr(agendamento, 'beneficiario', None)
+        nome_beneficiario = beneficiario_obj.nome if beneficiario_obj else 'Titular (Eu mesmo)'
+
+        valor_pago = float(getattr(item, 'preco_unitario', 0.0) or getattr(item, 'valor_total', 0.0) or 0.0)
+        valor_total_geral += valor_pago
+
+        dt_inicio = item.data_hora_inicio
+        dt_fim = getattr(item, 'data_hora_fim_real', None) or getattr(item, 'data_hora_fim', None)
+
+        registro = {
+            'data_formatada': dt_inicio.strftime('%d/%m/%Y') if dt_inicio else '--/--/----',
+            'hora_inicio': dt_inicio.strftime('%H:%M') if dt_inicio else '--:--',
+            'hora_fim': dt_fim.strftime('%H:%M') if dt_fim else '--:--',
+            'servico': servico_nome,
+            'empresa': empresa_nome,
+            'profissional': prof_nome,
+            'beneficiario': nome_beneficiario,
+            'valor': valor_pago
+        }
+
+        # Chave de agrupamento dinâmica
+        if agrupar_por == 'empresa':
+            chave_grupo = empresa_nome
+        elif agrupar_por == 'servico':
+            chave_grupo = servico_nome
+        else:  # 'beneficiario'
+            chave_grupo = f"Beneficiário: {nome_beneficiario}"
+
+        if chave_grupo not in dados_agrupados:
+            dados_agrupados[chave_grupo] = {
+                'itens': [],
+                'subtotal_valor': 0.0,
+                'subtotal_quantidade': 0
+            }
+
+        dados_agrupados[chave_grupo]['itens'].append(registro)
+        dados_agrupados[chave_grupo]['subtotal_valor'] += valor_pago
+        dados_agrupados[chave_grupo]['subtotal_quantidade'] += 1
+
+    # 📌 4. Dados para o Gráfico
+    labels_grafico = list(dados_agrupados.keys())
+    valores_grafico = [grupo['subtotal_valor'] for grupo in dados_agrupados.values()]
+
+    # Listas auxiliares para preencher os selects do filtro na tela
+    empresas_disponiveis = EseEmpresa.query.all()
+
+    # Busca os beneficiários cadastrados deste cliente para popular o filtro
+    beneficiarios_usuario = ClienteBeneficiario.query.filter_by(
+        cliente_id=cliente_id_str,
+        ativo=True
+    ).all()
+
+    return render_template(
+        'agenda/relatorio_dashboard.html',
+        dados_agrupados=dados_agrupados,
+        valor_total_geral=valor_total_geral,
+        total_atendimentos_geral=total_atendimentos_geral,
+        labels_grafico=labels_grafico,
+        valores_grafico=valores_grafico,
+        empresas=empresas_disponiveis,
+        beneficiarios=beneficiarios_usuario,
+        data_inicio=data_inicio_str,
+        data_fim=data_fim_str,
+        empresa_id_filtro=empresa_id_filtro,
+        beneficiario_id_filtro=beneficiario_id_filtro,
+        agrupar_por=agrupar_por
+    )

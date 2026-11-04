@@ -1,0 +1,294 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Relatório & Dashboard Analítico{% endblock %}
+
+{% block content %}
+<style>
+    /* 🖨️ ESTILOS DEDICADOS PARA IMPRESSÃO / SALVAR EM PDF */
+    @media print {
+        /* Esconde elementos de navegação e botões */
+        .btn, form, header, footer, .offcanvas, .no-print {
+            display: none !important;
+        }
+
+        /* Ajusta o contêiner para ocupar toda a folha A4 */
+        .container {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        .card {
+            border: 1px solid #ccc !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+        }
+
+        body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+    }
+
+    /* Legenda de valores para PWA */
+    .legenda-item-pwa {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 12px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        font-size: 0.8rem;
+    }
+</style>
+
+<div class="container py-4" style="max-width: 950px;">
+
+    <!-- CABEÇALHO COM BOTÕES DE AÇÃO -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h4 class="fw-bold text-dark m-0"><i class="bi bi-pie-chart-fill text-warning me-2"></i>Dashboard de Atendimentos & Manutenção</h4>
+            <small class="text-muted">Extrato consolidado do titular e dependentes (familiares, pets e veículos).</small>
+        </div>
+        <div class="d-flex align-items-center gap-2 no-print">
+            <!-- 🖨️ BOTÃO DE IMPRIMIR / SALVAR PDF -->
+            <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark rounded-pill px-3 fw-semibold">
+                <i class="bi bi-printer me-1"></i> Imprimir / PDF
+            </button>
+            <a href="{{ url_for('agenda.dashboard_cliente') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- PAINEL DE FILTROS AVANÇADOS -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white no-print">
+        <div class="card-body p-3">
+            <form method="GET" action="{{ url_for('agenda.relatorio_dashboard_clientes') }}" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Data Inicial</label>
+                    <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm rounded-3">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Data Final</label>
+                    <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm rounded-3">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Titular / Dependente</label>
+                    <select name="beneficiario_id" class="form-select form-select-sm rounded-3">
+                        <option value="todos" {% if beneficiario_id_filtro == 'todos' %}selected{% endif %}>Todos (Titular + Dependentes)</option>
+                        <option value="titular" {% if beneficiario_id_filtro == 'titular' %}selected{% endif %}>Apenas Titular (Eu mesmo)</option>
+                        {% for b in beneficiarios %}
+                            <option value="{{ b.id }}" {% if beneficiario_id_filtro == b.id|string %}selected{% endif %}>{{ b.nome }} ({{ b.tipo_persona | capitalize }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Agrupar por</label>
+                    <select name="agrupar_por" class="form-select form-select-sm rounded-3">
+                        <option value="empresa" {% if agrupar_por == 'empresa' %}selected{% endif %}>Empresa Prestadora</option>
+                        <option value="servico" {% if agrupar_por == 'servico' %}selected{% endif %}>Serviço Executado</option>
+                        <option value="beneficiario" {% if agrupar_por == 'beneficiario' %}selected{% endif %}>Beneficiário / Dependente</option>
+                    </select>
+                </div>
+                <div class="col-md-12 text-end">
+                    <button type="submit" class="btn btn-sm btn-primary rounded-pill fw-bold shadow-sm px-4 py-2">
+                        <i class="bi bi-filter me-1"></i> Aplicar Filtros & Atualizar Dashboard
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CARDS DE RESUMO (KPIs) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 bg-dark text-white p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="text-white-50 text-uppercase fw-semibold" style="font-size: 0.7rem;">Custo / Valor Total Consolidado</small>
+                        <h3 class="fw-bold mb-0 text-success mt-1">R$ {{ "%.2f"|format(valor_total_geral)|replace('.', ',') }}</h3>
+                    </div>
+                    <div class="bg-white bg-opacity-10 p-3 rounded-circle text-success">
+                        <i class="bi bi-wallet2 fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 bg-white text-dark p-3 border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem;">Total de Serviços / Manutenções</small>
+                        <h3 class="fw-bold mb-0 text-dark mt-1">{{ total_atendimentos_geral }}</h3>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle text-warning">
+                        <i class="bi bi-check2-circle fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GRÁFICO DE DISTRIBUIÇÃO COM VALORES VISÍVEIS (PWA FRIENDLY) -->
+    {% if labels_grafico and labels_grafico|length > 0 %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+        <div class="card-header bg-transparent border-0 pt-3 px-4">
+            <h6 class="fw-bold text-dark m-0"><i class="bi bi-pie-chart me-2 text-primary"></i>Distribuição de Custos por Grupo</h6>
+        </div>
+        <div class="card-body px-4 pb-4">
+            <div class="row align-items-center g-4">
+                <!-- CANVA DO GRÁFICO -->
+                <div class="col-12 col-md-6 text-center">
+                    <div style="max-width: 280px; margin: 0 auto;">
+                        <canvas id="chartFaturamento"></canvas>
+                    </div>
+                </div>
+                <!-- LEGENDA EXPLICITANDO VALORES E PORCENTAGENS (PARA MOBILE/PWA) -->
+                <div class="col-12 col-md-6">
+                    <div class="d-flex flex-column gap-2" id="legendaValoresPwa">
+                        <!-- O JavaScript preencherá os valores formatados aqui -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- TABELA ANALÍTICA COM SUB-TOTAIS -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+        <div class="card-header bg-light py-3 px-4">
+            <h6 class="fw-bold text-dark m-0"><i class="bi bi-list-nested me-2 text-primary"></i>Extrato Analítico Detalhado</h6>
+        </div>
+        <div class="card-body p-0">
+            {% if dados_agrupados %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-dark text-uppercase" style="font-size: 0.7rem;">
+                            <tr>
+                                <th class="py-2.5 ps-3">Data / Horários</th>
+                                <th class="py-2.5">Serviço / Atendido</th>
+                                <th class="py-2.5">Estabelecimento</th>
+                                <th class="py-2.5 text-end pe-3">Valor Pago</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for grupo_nome, dados in dados_agrupados.items() %}
+                                <!-- QUEBRA / SUB-TOTAL DO GRUPO -->
+                                <tr class="table-secondary fw-bold">
+                                    <td colspan="3" class="ps-3 text-dark">
+                                        <i class="bi bi-folder2-open text-warning me-1"></i> {{ grupo_nome }}
+                                        <span class="badge bg-dark text-white rounded-pill ms-2" style="font-size: 0.65rem;">{{ dados.subtotal_quantidade }} item(ns)</span>
+                                    </td>
+                                    <td class="text-end pe-3 text-dark">
+                                        Subtotal: R$ {{ "%.2f"|format(dados.subtotal_valor)|replace('.', ',') }}
+                                    </td>
+                                </tr>
+
+                                <!-- ITENS DO GRUPO -->
+                                {% for item in dados.itens %}
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="fw-semibold d-block text-dark">{{ item.data_formatada }}</span>
+                                        <small class="text-muted"><i class="bi bi-clock me-1"></i>{{ item.hora_inicio }} às {{ item.hora_fim }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="fw-bold text-dark d-block">{{ item.servico }}</span>
+                                        <small class="text-primary d-block fw-semibold"><i class="bi bi-person-heart me-1"></i>Atendido: {{ item.beneficiario }}</small>
+                                        <small class="text-muted">Prof: {{ item.profissional }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="text-secondary small fw-semibold">{{ item.empresa }}</span>
+                                    </td>
+                                    <td class="text-end pe-3 fw-bold text-success">
+                                        R$ {{ "%.2f"|format(item.valor)|replace('.', ',') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="table-light border-top">
+                            <tr>
+                                <td colspan="3" class="ps-3 py-3 fw-bold text-dark text-uppercase" style="font-size: 0.8rem;">
+                                    Total Geral Consolidado:
+                                </td>
+                                <td class="text-end pe-3 py-3 fw-bold text-success fs-6">
+                                    R$ {{ "%.2f"|format(valor_total_geral)|replace('.', ',') }}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-search fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                    <p class="small mb-0">Nenhum atendimento concluído encontrado com os filtros selecionados.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- CHART.JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const canvasEl = document.getElementById('chartFaturamento');
+        if (canvasEl) {
+            const labels = {{ labels_grafico | tojson }};
+            const dataValues = {{ valores_grafico | tojson }};
+            const totalGeral = {{ valor_total_geral | tojson }};
+
+            const cores = [
+                '#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'
+            ];
+
+            const ctx = canvasEl.getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataValues,
+                        backgroundColor: cores.slice(0, labels.length),
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false // Oculta a legenda nativa para usar o painel PWA em texto
+                        }
+                    }
+                }
+            });
+
+            // 📱 GERA A LEGENDA TEXTUAL COM VALORES FORMATADOS PARA PWA / MOBILE
+            const containerLegenda = document.getElementById('legendaValoresPwa');
+            if (containerLegenda) {
+                containerLegenda.innerHTML = '';
+                labels.forEach((label, index) => {
+                    const val = dataValues[index] || 0;
+                    const pct = totalGeral > 0 ? ((val / totalGeral) * 100).toFixed(1) : 0;
+                    const cor = cores[index % cores.length];
+
+                    const itemHtml = `
+                        <div class="legenda-item-pwa border-start border-4" style="border-color: ${cor} !important;">
+                            <div>
+                                <strong class="d-block text-dark">${label}</strong>
+                                <small class="text-muted">${pct}% do total</small>
+                            </div>
+                            <span class="fw-bold text-dark">R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                    `;
+                    containerLegenda.insertAdjacentHTML('beforeend', itemHtml);
+                });
+            }
+        }
+    });
+</script>
+{% endblock %}

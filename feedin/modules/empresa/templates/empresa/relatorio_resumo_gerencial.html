@@ -1,0 +1,223 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn | Resumo Gerencial de Fechamento{% endblock %}
+
+{% block content %}
+<style>
+    /* 🖨️ ESTILOS DEDICADOS PARA IMPRESSÃO / SALVAR EM PDF */
+    @media print {
+        .btn, form, header, footer, .offcanvas, .no-print {
+            display: none !important;
+        }
+        .container {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        .card {
+            border: 1px solid #ddd !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+        }
+        body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+    }
+</style>
+
+<div class="container py-4" style="max-width: 1000px;">
+    
+    <!-- CABEÇALHO DO RELATÓRIO -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h4 class="fw-bold text-dark m-0"><i class="bi bi-receipt-cutoff text-warning me-2"></i>Resumo Gerencial de Fechamento</h4>
+            <small class="text-muted">Estabelecimento: <strong>{{ empresa.nome }}</strong></small>
+        </div>
+        <div class="d-flex align-items-center gap-2 no-print">
+            <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark rounded-pill px-3 fw-semibold">
+                <i class="bi bi-printer me-1"></i> Imprimir / PDF
+            </button>
+            <a href="{{ url_for('empresa.hub_ativacao', empresa_id=empresa.id) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Voltar ao Hub
+            </a>
+        </div>
+    </div>
+
+    <!-- PAINEL DE FILTROS E PARÂMETROS -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white no-print">
+        <div class="card-body p-3">
+            <form method="GET" action="{{ url_for('empresa.relatorio_resumo_gerencial', empresa_id=empresa.id) }}" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Data Inicial</label>
+                    <input type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control form-control-sm rounded-3">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Data Final</label>
+                    <input type="date" name="data_fim" value="{{ data_fim }}" class="form-control form-control-sm rounded-3">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Forma de Pagamento</label>
+                    <select name="forma_pagamento" class="form-select form-select-sm rounded-3">
+                        <option value="todos">Todas as Formas</option>
+                        <option value="dinheiro">Dinheiro</option>
+                        <option value="pix">Pix</option>
+                        <option value="cartao_credito">Cartão de Crédito</option>
+                        <option value="cartao_debito">Cartão de Débito</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-sm btn-primary w-100 rounded-pill fw-bold shadow-sm py-2">
+                        <i class="bi bi-filter me-1"></i> Gerar Fechamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CARDS DE RESUMO (KPIS OPERACIONAIS) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 bg-dark text-white p-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="text-white-50 text-uppercase fw-semibold" style="font-size: 0.7rem;">Valor Total Apurado</small>
+                        <h3 class="fw-bold mb-0 text-success mt-1">R$ {{ "%.2f"|format(valor_total_geral)|replace('.', ',') }}</h3>
+                    </div>
+                    <div class="bg-white bg-opacity-10 p-3 rounded-circle text-success">
+                        <i class="bi bi-currency-dollar fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 bg-white text-dark p-3 border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.7rem;">Total de Serviços Executados</small>
+                        <h3 class="fw-bold mb-0 text-dark mt-1">{{ quantidade_total_geral }}</h3>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded-circle text-warning">
+                        <i class="bi bi-check2-circle fs-3"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABELA 1: DETALHAMENTO ANALÍTICO DOS SERVIÇOS EXECUTADOS -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mb-4">
+        <div class="card-header bg-light py-3 px-4">
+            <h6 class="fw-bold text-dark m-0"><i class="bi bi-list-nested me-2 text-primary"></i>Extrato Analítico do Período</h6>
+        </div>
+        <div class="card-body p-0">
+            {% if registros %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                        <thead class="table-dark text-uppercase" style="font-size: 0.68rem;">
+                            <tr>
+                                <th class="py-2.5 ps-3">Data / Início</th>
+                                <th class="py-2.5">Cliente (Titular / Dependente)</th>
+                                <th class="py-2.5">Serviço Executado</th>
+                                <th class="py-2.5">Profissional</th>
+                                <th class="py-2.5">Duração</th>
+                                <th class="py-2.5">Forma Pgto</th>
+                                <th class="py-2.5 text-end pe-3">Valor Pago</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in registros %}
+                            <tr>
+                                <td class="ps-3">
+                                    <span class="fw-semibold text-dark d-block">{{ reg.data }}</span>
+                                    <small class="text-muted">{{ reg.hora_inicio }}</small>
+                                </td>
+                                <td>
+                                    <span class="fw-bold text-dark">{{ reg.cliente }}</span>
+                                </td>
+                                <td>
+                                    <span class="text-dark">{{ reg.servico }}</span>
+                                </td>
+                                <td>
+                                    <span class="text-secondary">{{ reg.profissional }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">{{ reg.tempo_execucao }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis">{{ reg.forma_pagamento | capitalize }}</span>
+                                </td>
+                                <td class="text-end pe-3 fw-bold text-success">
+                                    R$ {{ "%.2f"|format(reg.valor)|replace('.', ',') }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-search fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                    <p class="small mb-0">Nenhum atendimento concluído encontrado para este período.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- TABELA 2: FECHAMENTO FINANCEIRO / OPERACIONAL (POR FORMA DE PAGAMENTO) -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden border-top border-4 border-success">
+        <div class="card-header bg-success bg-opacity-10 py-3 px-4">
+            <h6 class="fw-bold text-success m-0"><i class="bi bi-safe me-2"></i>Fechamento por Forma de Pagamento & Total Geral</h6>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-light text-uppercase" style="font-size: 0.7rem;">
+                        <tr>
+                            <th class="py-3 ps-4">Forma de Pagamento</th>
+                            <th class="py-3 text-center">Quantidade de Serviços</th>
+                            <th class="py-3 text-end pe-4">Valor Apurado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if fechamento_por_pagamento %}
+                            {% for forma, dados in fechamento_por_pagamento.items() %}
+                            <tr>
+                                <td class="ps-4 fw-semibold text-dark">
+                                    <i class="bi bi-wallet2 text-muted me-2"></i> {{ forma | upper }}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-dark text-white rounded-pill px-3">{{ dados.quantidade }}</span>
+                                </td>
+                                <td class="text-end pe-4 fw-bold text-dark">
+                                    R$ {{ "%.2f"|format(dados.valor)|replace('.', ',') }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center py-3 text-muted">Nenhum lançamento financeiro no período.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                    <tfoot class="table-dark">
+                        <tr>
+                            <td class="ps-4 py-3 fw-bold text-uppercase" style="font-size: 0.8rem;">
+                                Total Geral Consolidado:
+                            </td>
+                            <td class="text-center py-3 fw-bold fs-6">
+                                {{ quantidade_total_geral }} item(ns)
+                            </td>
+                            <td class="text-end pe-4 py-3 fw-bold text-success fs-5">
+                                R$ {{ "%.2f"|format(valor_total_geral)|replace('.', ',') }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

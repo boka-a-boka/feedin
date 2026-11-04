@@ -1199,19 +1199,7 @@
                 </div>
             </div>
 
-            {# 🔒 EXIBIÇÃO ROBUSTA: CHECA SESSÃO, FLAGS OU CONSULTA DIRETA SE NECESSÁRIO #}
-            {% set tem_permissao_relatorio = session.get('colaborador_ativo') or session.get('tem_contrato_ativo') or (current_user.is_authenticated and current_user.is_admin) %}
-
-            {% if not tem_permissao_relatorio and current_user.is_authenticated %}
-                {# Fallback de segurança para validar direto se possui contrato ativo na base #}
-                {% set _dummy = namespace(ativo=false) %}
-                {% if contratos_usuario_ativo is defined %}
-                    {% set tem_permissao_relatorio = true %}
-                {% endif %}
-            {% endif %}
-
-            {% if tem_permissao_relatorio %}
-            <!-- GRUPO 3: RELATÓRIOS -->
+            <!-- GRUPO 3: RELATÓRIOS & COMPROVANTES -->
             <div class="accordion-item border rounded-3 overflow-hidden">
                 <h2 class="accordion-header" id="headingRelatorios">
                     <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRelatorios" aria-expanded="false" aria-controls="collapseRelatorios" style="font-size: 0.85rem;">
@@ -1221,25 +1209,41 @@
                 <div id="collapseRelatorios" class="accordion-collapse collapse" aria-labelledby="headingRelatorios" data-bs-parent="#accordionFerramentas">
                     <div class="accordion-body p-2 d-flex flex-column gap-1">
 
-                        <!-- ITEM: INDICADORES DE DESEMPENHO -->
+                        <!-- 📊 ITEM GERAL: DISPONÍVEL PARA TODOS OS CLIENTES (Dashboard de Atendimentos & Dependentes) -->
+                        <a href="{{ url_for('agenda.relatorio_dashboard_clientes') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                    <i class="bi bi-pie-chart-fill"></i>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meu Dashboard de Atendimentos</strong>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato, custos e histórico de dependentes</small>
+                                </div>
+                            </div>
+                            <i class="bi bi-chevron-right text-muted small"></i>
+                        </a>
+
+                        <!-- 🔒 ITEM RESTRITO: INDICADORES DE DESEMPENHO (Profissionais / Gestores / Admins) -->
+                        {% set eh_colaborador_ativo = colaborador_ativo or session.get('colaborador_ativo') or session.get('tem_contrato_ativo') or tem_permissao_relatorio or (current_user.is_authenticated and current_user.is_admin) %}
+                        {% if eh_colaborador_ativo %}
                         <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if (empresa is defined and empresa and empresa.id) else (empresa_id if (empresa_id is defined and empresa_id) else (empresa_ativa.id if (empresa_ativa is defined and empresa_ativa and empresa_ativa.id) else (session.get('local_id_atual') or session.get('empresa_id') or 0)))) }}"
-                           class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                           class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light border-top mt-1 pt-2">
                             <div class="d-flex align-items-center gap-2">
                                 <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
                                     <i class="bi bi-graph-up-arrow"></i>
                                 </div>
                                 <div>
                                     <strong class="d-block text-dark small" style="font-size: 0.8rem;">Indicadores de Desempenho</strong>
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato de atendimentos e produtividade</small>
+                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato profissional e produtividade</small>
                                 </div>
                             </div>
                             <i class="bi bi-chevron-right text-muted small"></i>
                         </a>
+                        {% endif %}
 
                     </div>
                 </div>
             </div>
-            {% endif %}
 
             <!-- GRUPO 4: OUTROS -->
             <div class="accordion-item border rounded-3 overflow-hidden">

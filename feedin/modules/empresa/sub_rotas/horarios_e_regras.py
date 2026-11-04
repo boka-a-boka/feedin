@@ -41,7 +41,7 @@ from feedin.models import  Local, Cargo, Taxonomia, ModulosSistema, CoreDepartam
 
 from feedin.modules.auth.models import ModCadastroCliente, VinculoUsuarioEmpresa, ModVinculoModulo
 
-from feedin.modules.agenda.models import AghAgendamento
+from feedin.modules.agenda.models import AghAgendamento, AghAgendamentoItem
 
 from feedin.modules.estoque.services.estoque_service import (
     validar_acesso_empresa,
@@ -3201,3 +3201,144 @@ def encerrar_contrato_colaborador(empresa_id, contrato_id):
         flash("Erro ao processar o encerramento do contrato no banco de dados.", "danger")
 
     return redirect(url_for('empresa.configurar_jornadas_tela', empresa_id=empresa_id))
+
+
+@empresa_bp.route('/empresa/<int:empresa_id>/relatorios/resumo-gerencial', methods=['GET'], endpoint='relatorio_resumo_gerencial')
+@login_required
+def relatorio_resumo_gerencial(empresa_id):
+    """
+    Relatório Resumo Gerencial de Fechamento (Financeiro / Operacional).
+    Exclusivo para administradores e profissionais com permissão delegada (nível >= 600 ou proprietário).
+    """
+    ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    # 🔒 Validação de Permissão (Administrador, Proprietário ou Nível Hierárquico >= 600)
+    user_id_str = str(current_user.id)
+    is_admin = bool(getattr(current_user, 'is_admin', False))
+    eh_proprietario = str(getattr(ese_empresa, 'proprietario_id', '')) == user_id_str
+
+    # Checa se é colaborador com nível de gestão na empresa
+    contrato_colab = ColaboradorContrato.query.filter_by(
+        id_local=empresa_id,
+        id_cadastro_cliente=user_id_str,
+        status_profissional='ativo'
+    ).first()
+    papel_nivel = contrato_colab.papel_nivel if contrato_colab else 0
+
+    if not is_admin and not eh_proprietario and papel_nivel < 600:
+        flash("Acesso restrito a administradores e gestores da empresa.", "danger")
+        return redirect(url_for('empresa.dashboard_empresa', empresa_id=empresa_id))
+
+    # 📌 1. Parâmetros e Filtros Padrão (Dia Atual e Horário de Funcionamento)
+    hoje_str = datetime.now().strftime('%Y-%m-%d')
+    data_inicio_str = request.args.get('data_inicio', hoje_str)
+    data_fim_str = request.args.get('data_fim', hoje_str)
+
+    # Horários padrão (Abertura e Fechamento da empresa ou 00:00 até 23:59)
+    hora_abertura = getattr(ese_empresa, 'hora_abertura', time(8, 0)) or time(8, 0)
+    hora_fechamento = getattr(ese_empresa, 'hora_fechamento', time(18, 0)) or time(18, 0)
+
+    try:
+        data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
+        data_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').date()
+    except ValueError:
+        data_inicio = datetime.now().date()
+        data_fim = datetime.now().date()
+
+    inicio_dt = datetime.combine(data_inicio, hora_abertura)
+    fim_dt = datetime.combine(data_fim, hora_fechamento)
+
+    servico_id_filtro = request.args.get('servico_id', type=int)
+    profissional_id_filtro = request.args.get('profissional_id', type=int)
+    forma_pagamento_filtro = request.args.get('forma_pagamento', 'todos')
+    agrupar_por = request.args.get('agrupar_por', 'nenhum')  # 'servico', 'profissional', 'forma_pagamento'
+
+    # 📌 2. Query de Atendimentos Concluídos da Empresa
+    query = db.session.query(AghAgendamentoItem).join(
+        AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).filter(
+        AghAgendamento.empresa_id == empresa_id,
+        AghAgendamento.status == 'concluido',
+        AghAgendamentoItem.data_hora_inicio >= inicio_dt,
+        AghAgendamentoItem.data_hora_inicio <= fim_dt
+    )
+
+    if servico_id_filtro:
+        query = query.filter(AghAgendamentoItem.servico_id == servico_id_filtro)
+    if profissional_id_filtro:
+        query = query.filter(
+            (AghAgendamentoItem.colaborador_id_contrato == str(profissional_id_filtro)) |
+            (AghAgendamentoItem.colaborador_id_contrato == profissional_id_filtro)
+        )
+
+    itens_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
+
+    # 📌 3. Processamento de Fechamento e Totais por Forma de Pagamento
+    fechamento_por_pagamento = {}
+    valor_total_geral = 0.0
+    quantidade_total_geral = len(itens_brutos)
+
+    lista_registros_processados = []
+
+    for item in itens_brutos:
+        agendamento = item.agendamento
+
+        # Cliente (Titular ou Beneficiário)
+        beneficiario = getattr(agendamento, 'beneficiario', None)
+        nome_cliente = beneficiario.nome if beneficiario else (
+            getattr(agendamento.cliente, 'nome', 'Cliente') if hasattr(agendamento, 'cliente') else 'Cliente')
+
+        # Serviço e Profissional
+        servico_nome = getattr(item, 'nome_servico', None) or (
+            item.servico.nome if hasattr(item, 'servico') and item.servico else f"Serviço #{item.servico_id}")
+        prof_nome = getattr(item, 'nome_prof_exibicao', None) or 'Profissional'
+
+        # Valores, Forma de Pagamento e Tempo
+        valor_pago = float(getattr(item, 'preco_unitario', 0.0) or getattr(item, 'valor_total', 0.0) or 0.0)
+        valor_total_geral += valor_pago
+
+        # Resolução da forma de pagamento (capturada do agendamento ou cobrança vinculada)
+        forma_pgto = getattr(agendamento, 'forma_pagamento', None) or getattr(item, 'forma_pagamento',
+                                                                              None) or 'Não Informado'
+
+        if forma_pagamento_filtro != 'todos' and forma_pgto.lower() != forma_pagamento_filtro.lower():
+            continue  # Pula se filtrado por outra forma de pagamento
+
+        # Cálculo do tempo de execução em minutos
+        dt_inicio = item.data_hora_inicio
+        dt_fim = getattr(item, 'data_hora_fim_real', None) or getattr(item, 'data_hora_fim', None)
+        tempo_execucao_str = "--"
+        if dt_inicio and dt_fim:
+            diff_min = int((dt_fim - dt_inicio).total_seconds() / 60)
+            tempo_execucao_str = f"{diff_min} min"
+
+        registro = {
+            'data': dt_inicio.strftime('%d/%m/%Y') if dt_inicio else '--/--/----',
+            'hora_inicio': dt_inicio.strftime('%H:%M') if dt_inicio else '--:--',
+            'cliente': nome_cliente,
+            'servico': servico_nome,
+            'profissional': prof_nome,
+            'valor': valor_pago,
+            'tempo_execucao': tempo_execucao_str,
+            'forma_pagamento': forma_pgto
+        }
+        lista_registros_processados.append(registro)
+
+        # Consolidado para as linhas finais de fechamento por forma de pagamento
+        if forma_pgto not in fechamento_por_pagamento:
+            fechamento_por_pagamento[forma_pgto] = {'quantidade': 0, 'valor': 0.0}
+
+        fechamento_por_pagamento[forma_pgto]['quantidade'] += 1
+        fechamento_por_pagamento[forma_pgto]['valor'] += valor_pago
+
+    return render_template(
+        'empresa/relatorio_resumo_gerencial.html',
+        empresa=ese_empresa,
+        registros=lista_registros_processados,
+        fechamento_por_pagamento=fechamento_por_pagamento,
+        valor_total_geral=valor_total_geral,
+        quantidade_total_geral=quantidade_total_geral,
+        data_inicio=data_inicio_str,
+        data_fim=data_fim_str,
+        agrupar_por=agrupar_por
+    )
