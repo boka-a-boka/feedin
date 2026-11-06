@@ -75,7 +75,7 @@ def create_app():
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
     app.config['SESSION_PROTECTION'] = 'strong'
     app.config["PASTA_FOTOS"] = "fotos_perfil"
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limite máximo de upload no Flask
 
     # --- CHAVEAMENTO DE AMBIENTE: LOCALHOST vs VPS / HOMOLOGAÇÃO ---
     is_production = os.environ.get('FLASK_ENV') == 'production' or os.name != 'nt'
@@ -148,7 +148,7 @@ def create_app():
             # Pastas exatas do seu projeto
             pasta_agenda_uploads = os.path.join(base_dir, 'modules', 'agenda', 'static', 'uploads')
             pasta_empresa_uploads = os.path.join(base_dir, 'modules', 'empresa', 'static', 'uploads')
-            pasta_estoque_uploads = os.path.join(base_dir, 'modules', 'estoque', 'static', 'uploads')  # <--- NOVO
+            pasta_estoque_uploads = os.path.join(base_dir, 'modules', 'estoque', 'static', 'uploads')
 
             # Teste 1: Busca direta na Empresa
             caminho_empresa = os.path.join(pasta_empresa_uploads, filename_limpo)
@@ -160,7 +160,7 @@ def create_app():
             if os.path.isfile(caminho_agenda):
                 return send_from_directory(os.path.dirname(caminho_agenda), os.path.basename(caminho_agenda))
 
-            # Teste 3: Busca direta no Estoque <--- NOVO
+            # Teste 3: Busca direta no Estoque
             caminho_estoque = os.path.join(pasta_estoque_uploads, filename_limpo)
             if os.path.isfile(caminho_estoque):
                 return send_from_directory(os.path.dirname(caminho_estoque), os.path.basename(caminho_estoque))
@@ -205,7 +205,7 @@ def create_app():
         from feedin.modules.auth import auth_bp
         from feedin.modules.billing import billing_bp
         from feedin.modules.estoque import estoque_bp
-        from feedin.utils import media_bp  # <--- Já estava sendo importado aqui
+        from feedin.utils import media_bp
         from feedin.modules.pdv import pdv_bp
         from feedin.modules.rating import rating_bp
         from feedin.modules.publicidade import publicidade_bp
@@ -220,7 +220,6 @@ def create_app():
         app.register_blueprint(rating_bp, url_prefix='/rating')
         app.register_blueprint(publicidade_bp, url_prefix='/publicidade')
 
-        # 💡 ADICIONE ESTA LINHA ABAIXO PARA REGISTRAR O BLUEPRINT DE MÍDIA:
         app.register_blueprint(media_bp)
 
     # 5. 🔐 PROVEDOR UNIFICADO DE CARREGAMENTO DE USUÁRIO (DESACOPLADO)
