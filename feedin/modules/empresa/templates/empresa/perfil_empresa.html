@@ -60,13 +60,12 @@
 
     @media (max-width: 768px) {
         .empresa-hero { align-items: center; justify-content: center; text-align: center; padding: 25px; min-height: 350px; }
-        .empresa-info-overlay .d-flex { flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 20px !important; }
-        .empresa-info-overlay .text-end { text-align: center !important; }
+        .empresa-info-overlay .row { flex-direction: column !important; }
         .empresa-hero h1 { font-size: 2rem; }
     }
 </style>
 
-{# --- SEÇÃO HERO CORPORATIVA COM BOTÃO VOLTAR FLUTUANTE --- #}
+{# --- SEÇÃO HERO CORPORATIVA COM RESPIRO VERTICAL REFINADO --- #}
 <section class="empresa-hero shadow">
     {% if empresa.fachada %}
         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.55); z-index: 1; border-radius: 0 0 35px 35px;"></div>
@@ -77,47 +76,159 @@
     </a>
 
     <div class="empresa-info-overlay">
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3">
+        <div class="row align-items-end g-4">
 
-            <div class="d-flex align-items-center gap-3 flex-wrap flex-md-nowrap">
-                {% if empresa.logomarca %}
-                    <div class="bg-white p-1 rounded-4 shadow-sm border overflow-hidden flex-shrink-0" style="width: 90px; height: 90px;">
-                        <img src="{{ empresa.url_logomarca }}" alt="{{ empresa.nome }}" style="object-fit: cover; width: 100%; height: 100%; border-radius: 12px;">
+            {# COLUNA ESQUERDA DO HERO: LOGO, NOME, ENDEREÇO, BADGES E BOTÃO SEGUIR #}
+            <div class="col-lg-7 col-md-6">
+                <div class="d-flex align-items-center gap-3 flex-wrap flex-md-nowrap mb-3">
+                    {% if empresa.logomarca %}
+                        <div class="bg-white p-1 rounded-4 shadow-sm border overflow-hidden flex-shrink-0" style="width: 90px; height: 90px;">
+                            <img src="{{ empresa.url_logomarca }}" alt="{{ empresa.nome }}" style="object-fit: cover; width: 100%; height: 100%; border-radius: 12px;">
+                        </div>
+                    {% endif %}
+
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1 justify-content-center justify-content-md-start">
+                            <h1 class="display-6 mb-0 fw-bold text-white">{{ empresa.nome }}</h1>
+                        </div>
+
+                        <p class="lead mb-2" style="font-size: 0.95rem; opacity: 0.95; color: #f8f9fa;">
+                            <i class="fas fa-map-marker-alt me-2 text-warning"></i>
+                            {{ empresa.logradouro }}{% if empresa.numero %}, {{ empresa.numero }}{% endif %} — {{ empresa.bairro }} / {{ empresa.cidade }}
+                        </p>
+
+                        <div class="d-flex gap-2 align-items-center justify-content-center justify-content-md-start flex-wrap">
+                            <span class="badge bg-success rounded-pill px-3 py-1 shadow-sm">
+                                <i class="bi bi-patch-check-fill me-1"></i> Empresa Verificada
+                            </span>
+                            <span class="badge bg-light text-dark rounded-pill px-3 py-1 fw-semibold">
+                                🏷️ Plano: {{ plano_ativo|upper }}
+                            </span>
+                        </div>
                     </div>
+                </div>
+
+                {# 🔵 BOTÃO DE SEGUIR COM BOM RESPIRO VERTICAL #}
+                {% set ns_segue = namespace(flag=usuario_segue if usuario_segue is defined else false) %}
+                {% if not ns_segue.flag and current_user.is_authenticated and vinculos_core %}
+                    {% for v in vinculos_core %}
+                        {% if v.usuario_id == current_user.id %}
+                            {% set ns_segue.flag = true %}
+                        {% endif %}
+                    {% endfor %}
                 {% endif %}
 
-                <div>
-                    <div class="d-flex align-items-center gap-2 mb-1 justify-content-center justify-content-md-start">
-                        <h1 class="display-6 mb-0 fw-bold text-white">{{ empresa.nome }}</h1>
-                    </div>
-
-                    <p class="lead mb-2" style="font-size: 0.95rem; opacity: 0.95; color: #f8f9fa;">
-                        <i class="fas fa-map-marker-alt me-2 text-warning"></i>
-                        {{ empresa.logradouro }}{% if empresa.numero %}, {{ empresa.numero }}{% endif %} — {{ empresa.bairro }} / {{ empresa.cidade }}
-                    </p>
-
-                    <div class="d-flex gap-2 align-items-center justify-content-center justify-content-md-start">
-                        <span class="badge bg-success rounded-pill px-3 py-1 shadow-sm">
-                            <i class="bi bi-patch-check-fill me-1"></i> Empresa Verificada
-                        </span>
-                        <span class="badge bg-light text-dark rounded-pill px-3 py-1 fw-semibold">
-                            🏷️ Plano: {{ plano_ativo|upper }}
-                        </span>
-                    </div>
+                <div class="text-center text-md-start mt-3 pt-1">
+                    {% if not ns_segue.flag %}
+                        <button type="button"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modalEscolherEpocas"
+                                class="btn btn-light rounded-pill px-4 py-2 fw-bold shadow-sm d-inline-flex align-items-center gap-2"
+                                style="color: var(--cor-primaria); font-size: 0.88rem;">
+                            <i class="fas fa-plus text-primary"></i> Seguir Estabelecimento
+                        </button>
+                    {% else %}
+                        <button type="button"
+                                onclick="prepararSeguirDireto('{{ empresa.local_id if empresa.local_id else empresa.id }}', true)"
+                                class="btn btn-outline-light rounded-pill px-4 py-2 fw-bold shadow-sm d-inline-flex align-items-center gap-2"
+                                style="font-size: 0.88rem;">
+                            <i class="fas fa-check text-success"></i> Seguindo
+                        </button>
+                    {% endif %}
                 </div>
             </div>
 
-            {# AÇÃO PRINCIPAL / AGENDAR #}
-            <div class="text-end w-100 w-md-auto text-center mt-3 mt-md-0">
-                {% if plano_ativo == 'pro' %}
-                    <a href="https://feedin.boka-a-boka.com.br/agenda/..." target="_blank" class="btn btn-warning btn-lg rounded-pill px-5 fw-bold shadow text-dark w-100 w-md-auto py-3 fs-5" style="border: 2px solid rgba(255,255,255,0.4);">
-                        <i class="bi bi-calendar-check-fill me-2"></i> Agendar Horário
-                    </a>
-                {% else %}
-                    <button class="btn btn-outline-light btn-lg rounded-pill px-4 fw-semibold w-100 w-md-auto" disabled>
-                        <i class="bi bi-shield-check me-2"></i> Perfil Oficial Ativo
-                    </button>
-                {% endif %}
+            {# COLUNA DIREITA DO HERO: WIDGET DE HORÁRIO + BOTÃO AGENDAR COM ESPAÇAMENTO EQUILIBRADO #}
+            <div class="col-lg-5 col-md-6 text-center text-md-end">
+                <div class="d-flex flex-column align-items-center align-items-md-end gap-3">
+
+                    {# 🌟 WIDGET COMPACTO DE HORÁRIO #}
+                    <div class="w-100" style="max-width: 320px;">
+                        <div class="card bg-dark bg-opacity-75 border-light border-opacity-25 rounded-4 shadow-sm p-2.5 text-start">
+
+                            <a data-bs-toggle="collapse" href="#collapseGradeHero" role="button" aria-expanded="false" aria-controls="collapseGradeHero"
+                               class="text-decoration-none d-flex justify-content-between align-items-center text-white p-0">
+                                <div class="d-flex align-items-center gap-3 overflow-hidden">
+                                    <div class="bg-warning bg-opacity-20 p-2 rounded-3 text-warning d-flex align-items-center justify-content-center flex-shrink-0" style="width: 38px; height: 38px;">
+                                        <i class="bi bi-clock-fill fs-5"></i>
+                                    </div>
+                                    <div class="overflow-hidden">
+                                        <div class="d-flex align-items-center gap-2 mb-0.5">
+                                            <span style="font-size: 0.68rem; opacity: 0.85; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Hoje</span>
+                                            {% if status_funcionamento %}
+                                                <span class="badge {% if status_funcionamento.aberto %}bg-success text-white{% else %}bg-danger text-white{% endif %} px-2 py-0.5" style="font-size: 0.58rem; font-weight: 600;">
+                                                    {{ "Aberto" if status_funcionamento.aberto else "Fechado" }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="fw-bold text-truncate" style="font-size: 0.82rem; color: #f8f9fa;">
+                                            {% if grade_semanal %}
+                                                {% for dia in grade_semanal %}
+                                                    {% if dia.eh_hoje %}
+                                                        {% set ns = namespace(str_turnos=[]) %}
+                                                        {% for t in dia.turnos %}
+                                                            {% if t.horario_abertura and t.horario_fechamento %}
+                                                                {% set _ = ns.str_turnos.append(t.horario_abertura.strftime('%H:%M') ~ ' às ' ~ t.horario_fechamento.strftime('%H:%M')) %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {{ ns.str_turnos | join(' / ') if ns.str_turnos else 'Fechado hoje' }}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% else %}
+                                                Horários não informados
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-white-50 ps-2 d-flex align-items-center" style="font-size: 0.8rem;" title="Ver grade semanal">
+                                    <i class="bi bi-chevron-down"></i>
+                                </div>
+                            </a>
+
+                            <div class="collapse mt-2.5 pt-2 border-top border-light border-opacity-10" id="collapseGradeHero">
+                                {% if grade_semanal %}
+                                    <div class="d-flex flex-column gap-1.5 text-white" style="font-size: 0.78rem;">
+                                        {% for dia in grade_semanal %}
+                                            <div class="d-flex justify-content-between align-items-center px-2 py-1 rounded {% if dia.eh_hoje %}bg-warning bg-opacity-25 fw-bold text-warning border border-warning border-opacity-25{% endif %}">
+                                                <span>{{ dia.nome_dia }}</span>
+                                                <span>
+                                                    {% if dia.turnos %}
+                                                        {% set turnos_str = [] %}
+                                                        {% for t in dia.turnos %}
+                                                            {% if t.horario_abertura and t.horario_fechamento %}
+                                                                {% set _ = turnos_str.append(t.horario_abertura.strftime('%H:%M') ~ '-' ~ t.horario_fechamento.strftime('%H:%M')) %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {{ turnos_str | join(' / ') if turnos_str else 'Fechado' }}
+                                                    {% else %}
+                                                        Fechado
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <p class="text-white-50 small mb-0 px-2">Horários não informados.</p>
+                                {% endif %}
+                            </div>
+
+                        </div>
+                    </div>
+
+                    {# AÇÃO PRINCIPAL / AGENDAR #}
+                    <div class="w-100" style="max-width: 320px;">
+                        {% if plano_ativo == 'pro' %}
+                            <a href="https://feedin.boka-a-boka.com.br/agenda/..." target="_blank" class="btn btn-warning btn-lg rounded-pill px-4 fw-bold shadow text-dark w-100 py-2.5 fs-6" style="border: 2px solid rgba(255,255,255,0.4);">
+                                <i class="bi bi-calendar-check-fill me-2"></i> Agendar Horário
+                            </a>
+                        {% else %}
+                            <button class="btn btn-outline-light btn-lg rounded-pill px-4 fw-semibold w-100 py-2 fs-6" disabled>
+                                <i class="bi bi-shield-check me-2"></i> Perfil Oficial Ativo
+                            </button>
+                        {% endif %}
+                    </div>
+
+                </div>
             </div>
 
         </div>
@@ -284,25 +395,6 @@
                     </div>
                 </div>
 
-                {# 🌟 1.5. GRADE DE HORÁRIOS DE FUNCIONAMENTO #}
-                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 fundo-acetinado">
-                    <h6 class="text-uppercase fw-bold text-secondary small mb-3 border-bottom pb-2">
-                        <i class="bi bi-clock-fill me-2 text-primary"></i> Horário de Atendimento
-                    </h6>
-
-                    {% if empresa.horarios_funcionamento %}
-                        <ul class="list-unstyled mb-0 small text-dark d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
-                            {{ empresa.horarios_funcionamento | safe }}
-                        </ul>
-                    {% elif local and local.horarios %}
-                        <ul class="list-unstyled mb-0 small text-dark d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
-                            {{ local.horarios | safe }}
-                        </ul>
-                    {% else %}
-                        <p class="text-muted small mb-0">Horários não informados.</p>
-                    {% endif %}
-                </div>
-
                 {# 🌟 2. ATENDIMENTO COMERCIAL (WHATSAPP) #}
                 <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 fundo-acetinado">
                     <h6 class="text-uppercase fw-bold text-muted small mb-3">Atendimento Comercial</h6>
@@ -332,7 +424,7 @@
                         </span>
                     </h6>
 
-{% if vinculos_core %}
+                    {% if vinculos_core %}
                         <div class="d-flex flex-column gap-2" style="max-height: 340px; overflow-y: auto; padding-right: 4px;">
                             {% for vinculo in vinculos_core %}
                                 {% set usuario = vinculo.usuario %}
@@ -372,7 +464,7 @@
                                             </div>
                                         </div>
 
-{# 🎯 AÇÃO SOCIAL DE CONEXÃO VIA HTMX #}
+                                        {# 🎯 AÇÃO SOCIAL DE CONEXÃO VIA HTMX #}
                                         {% if current_user.is_authenticated and not is_proprio_usuario %}
                                             {% set status_conexao = status_conexoes_usuario.get(usuario.id) if status_conexoes_usuario else None %}
                                             <div id="conexao-container-{{ usuario.id }}">
@@ -441,6 +533,47 @@
     </div>
 </div>
 
+{# 🌟 MODAL DE SELEÇÃO DE ÉPOCAS (GRAFO ESPAÇO-TEMPORAL DO CORE) #}
+<div class="modal fade" id="modalEscolherEpocas" tabindex="-1" aria-labelledby="modalEscolherEpocasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-secondary" id="modalEscolherEpocasLabel">Em que épocas frequenta?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">Selecione os períodos em que você viveu ou vive histórias no **{{ empresa.nome }}** para construir seu painel de memórias.</p>
+
+                <form id="formEscolherEpocas">
+                    <div class="d-flex flex-column gap-2">
+                        {% if epocas_todas %}
+                            {% for ep in epocas_todas %}
+                                <div class="form-check p-2 rounded border bg-light d-flex align-items-center justify-content-between" style="padding-left: 2.5rem !important;">
+                                    <div>
+                                        <input class="form-check-input checkbox-epoca-item" type="checkbox" name="epocas[]" value="{{ ep.id }}" id="epoca_{{ ep.id }}" {% if ep.eh_vigente %}checked{% endif %}>
+                                        <label class="form-check-label fw-bold small text-dark" for="epoca_{{ ep.id }}">
+                                            {{ ep.nome_exibicao }}
+                                        </label>
+                                    </div>
+                                    {% if ep.eh_vigente %}
+                                        <span class="badge bg-primary rounded-pill" style="font-size: 0.6rem;">Atual</span>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="small text-danger text-center">Nenhum período cronológico encontrado.</p>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-0 pt-0 d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" onclick="prepararSeguirDireto('{{ empresa.local_id if empresa.local_id else empresa.id }}', false)" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" style="background-color: var(--cor-primaria); border-color: var(--cor-primaria);">Confirmar e Seguir</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const estrelas = document.querySelectorAll('#rating-container i');
@@ -451,12 +584,12 @@ document.addEventListener('DOMContentLoaded', function() {
     estrelas.forEach((estrela, index) => {
         estrela.addEventListener('click', function() {
             if (!podeAvaliar) {
-                alert('Você precisa estar logado ou vinculado para avaliar.');
+                alert('Você precisa estar logado para avaliar.');
                 return;
             }
 
             const valorNota = this.getAttribute('data-value');
-            inputNota.value = valorNota;
+            if (inputNota) inputNota.value = valorNota;
 
             estrelas.forEach((s, i) => {
                 if (i <= index) {
@@ -468,14 +601,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
 
-            feedbackContainer.classList.remove('d-none');
+            if (feedbackContainer) feedbackContainer.classList.remove('d-none');
         });
     });
 });
 
 function cancelarAvaliacao() {
     const feedbackContainer = document.getElementById('feedback-container');
-    feedbackContainer.classList.add('d-none');
+    if (feedbackContainer) feedbackContainer.classList.add('d-none');
+}
+
+/* 🌟 FUNÇÃO DE SEGUIR / DEIXAR DE SEGUIR COM ÉPOCAS */
+function prepararSeguirDireto(localId, jaSegue) {
+    if (jaSegue) {
+        if (confirm('Deseja realmente deixar de seguir este estabelecimento?')) {
+            window.location.href = `/empresa/seguir/${localId}`;
+        }
+        return;
+    }
+
+    const checkboxes = document.querySelectorAll('.checkbox-epoca-item:checked');
+    const epocasIds = Array.from(checkboxes).map(cb => cb.value);
+
+    const formData = new FormData();
+    epocasIds.forEach(id => formData.append('epocas[]', id));
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    fetch(`/empresa/seguir/${localId}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken || ''
+        },
+        body: formData
+    })
+    .then(response => {
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            window.location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        window.location.reload();
+    });
 }
 
 /* 🛡️ CONFIGURAÇÃO GLOBAL DO CSRF TOKEN PARA O HTMX */
