@@ -36,7 +36,8 @@ def create_app():
     app.config['PROPAGATE_EXCEPTIONS'] = True
 
     # --- CONFIGURAÇÃO PARA PROXY REVERSO (NGINX / VPS) ---
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
 
     # --- CONFIGURAÇÃO DE LOGS ---
     if not os.path.exists('logs'):
