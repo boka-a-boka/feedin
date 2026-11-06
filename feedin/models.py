@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from flask_login import UserMixin
+from zoneinfo import ZoneInfo
 from sqlalchemy.orm import foreign
 # 💡 IMPORTANTE: Remova o 'login_manager' daqui de cima se ele for inicializado no __init__.py.
 # Deixamos apenas o UserMixin que é uma classe pura.
@@ -9,6 +10,7 @@ from sqlalchemy import func
 # 🔥 QUEBRA DE VÍNCULO CIRCULAR: Importando de forma que o Python entenda o escopo
 from . import database
 
+TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
 
 # --- TABELA DE CONEXÕES (O Grafo de Confiança) ---
 class Conexoes(database.Model):

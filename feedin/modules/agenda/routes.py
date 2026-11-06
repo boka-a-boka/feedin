@@ -89,7 +89,7 @@ from feedin.modules.empresa.models import (
     EseNotificacaoCliente, EseServicoOferecido, EseServicoPreco, EseColaboradorServicoHabilidade,
     EseHorarioFuncionamento, EmpresaCalendarioExcecao, EscalaTrabalhoColaborador, EseProcessoClaim,
     EseConviteColaborador, ClienteBeneficiario, ClienteContato, ClienteEndereco, EseNotificacao,
-    EseRegraPontuacao, ModClientePontos, EseLogMensagemAutomatica, ModEmpresaModulo
+    EseRegraPontuacao, ModClientePontos, EseLogMensagemAutomatica, ModEmpresaModulo, EseRelacionamentoClienteEmpresa
 )
 
 from weasyprint import HTML
@@ -4832,6 +4832,27 @@ def agendar(slug_empresa: str):
 
     empresa = EseEmpresa.query.filter_by(slug=slug_empresa).first_or_404()
     cliente_id, session_token = _obter_ou_criar_sessao_cliente()
+
+    # 🔗 GARANTIA DE VÍNCULO NA PRIMEIRA INTERAÇÃO (AGENDA) - CHAR(36)
+    if cliente_id:
+        try:
+            cliente_obj = ModCadastroCliente.query.get(cliente_id)
+            if cliente_obj and cliente_obj.cpf_hash:
+                vinculo_existente = EseRelacionamentoClienteEmpresa.query.filter_by(
+                    empresa_id=str(empresa.id),
+                    cpf_hash=cliente_obj.cpf_hash
+                ).first()
+
+                if not vinculo_existente:
+                    novo_vinculo = EseRelacionamentoClienteEmpresa(
+                        empresa_id=str(empresa.id),
+                        cpf_hash=cliente_obj.cpf_hash,
+                        origem_criacao='agenda'
+                    )
+                    db.session.add(novo_vinculo)
+                    db.session.commit()
+        except Exception as e:
+            print(f"⚠️ [AGENDAR] Erro ao registrar EseRelacionamentoClienteEmpresa: {e}")
 
     # =========================================================================
     # 🚦 SEMÁFORO DE LIMITE DE CLIENTES NA DEGUSTAÇÃO

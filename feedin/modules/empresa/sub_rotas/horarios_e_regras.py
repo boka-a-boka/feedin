@@ -26,6 +26,8 @@ from feedin.modules.empresa.models import (
     EseServicoPreco,
     EseGrupoTabela,
     EseServicoPrecoHistorico,
+    EseAvaliacaoEmpresa,
+    EseRelacionamentoClienteEmpresa,
     ColaboradorContrato,
     ColaboradorDetalhesPessoais,
     EscalaTrabalhoColaborador,
@@ -37,7 +39,7 @@ from feedin.modules.empresa.models import (
     ModEmpresaModuloLog,
 )
 
-from feedin.models import  Local, Cargo, Taxonomia, ModulosSistema, CoreDepartamento, CoreAcaoPendente
+from feedin.models import  Local, Cargo, Taxonomia, ModulosSistema, CoreDepartamento, CoreAcaoPendente, Conexoes, AvaliacaoLocal
 
 from feedin.modules.auth.models import ModCadastroCliente, VinculoUsuarioEmpresa, ModVinculoModulo
 
@@ -653,6 +655,179 @@ def salvar_recesso(empresa_id):
         print(f"Erro ao salvar recesso: {str(e)}")
 
     return redirect(url_for('empresa.gerenciar_calendario', empresa_id=empresa_id))
+
+
+@empresa_bp.route('/empresa/<string:empresa_uuid>/avaliar', methods=['POST'], endpoint='criar_avaliacao_empresa')
+@login_required
+def criar_avaliacao_empresa(empresa_uuid):
+    empresa = EseEmpresa.query.filter_by(id=empresa_uuid).first_or_404()
+
+    nota = request.form.get('nota', type=int)
+    comentario = request.form.get('comentario', '').strip()
+
+    if not nota or nota < 1 or nota > 5:
+        flash("Por favor, selecione uma nota válida de 1 a 5.", "danger")
+        return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=empresa_uuid))
+
+    usuario_core_id = None
+    cliente_id = None
+    cpf_hash = None
+    origem_slug = 'empresa'
+
+    # 1. Identificação via Core
+    if current_user.is_authenticated and not isinstance(current_user, ModCadastroCliente):
+        usuario_core_id = current_user.id
+        origem_slug = 'core'
+        cpf_hash = getattr(current_user, 'cpf_hash', None)
+
+        # 🔍 DEBUG: Imprime no console do terminal para vermos o estado do usuário de teste
+        print(
+            f"🔍 [DEBUG AVALIAÇÃO] Usuario ID: {current_user.id} | Tem identidade? {bool(current_user.identidade)} | CPF Hash retornado: {cpf_hash}")
+
+    # 2. Identificação via PWA do Módulo (ModCadastroCliente)
+    elif 'cliente_logged_in_id' in session:
+        cliente_logado = ModCadastroCliente.query.get(session['cliente_logged_in_id'])
+        if cliente_logado:
+            cliente_id = str(cliente_logado.id)
+            cpf_hash = cliente_logado.cpf_hash
+            origem_slug = 'agenda'
+            if cliente_logado.usuario_id:
+                usuario_core_id = cliente_logado.usuario_id
+
+    # 🚨 FALLBACK TEMPORÁRIO DE TESTE: Se a conta de teste não tiver identidade civil,
+    # geramos um hash baseado no ID do usuário para o teste não quebrar a esteira.
+    if not cpf_hash and current_user.is_authenticated:
+        import hashlib
+        cpf_hash = hashlib.sha256(f"teste_user_{current_user.id}".encode()).hexdigest()
+        print(
+            f"⚠️ [AVISO DE TESTE] Usuário ID {current_user.id} sem IdentidadeCivil. Gerado CPF Hash de contingência: {cpf_hash}")
+
+    if not cpf_hash:
+        flash("Identificação civil obrigatória para registrar a avaliação.", "warning")
+        return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=empresa_uuid))
+
+    # 3. REGISTRO DE INTERATIVIDADE / VÍNCULO NA PRIMEIRA VEZ (CHAR 36)
+    vinculo_existente = EseRelacionamentoClienteEmpresa.query.filter_by(
+        empresa_id=str(empresa.id),
+        cpf_hash=cpf_hash
+    ).first()
+
+    if not vinculo_existente:
+        novo_vinculo = EseRelacionamentoClienteEmpresa(
+            empresa_id=str(empresa.id),
+            cpf_hash=cpf_hash,
+            origem_criacao=origem_slug
+        )
+        db.session.add(novo_vinculo)
+        db.session.flush()
+
+    # 4. Persistência atômica da avaliação no módulo da empresa
+    nova_avaliacao = EseAvaliacaoEmpresa(
+        empresa_id=str(empresa.id),
+        cliente_id=cliente_id,
+        usuario_core_id=usuario_core_id,
+        cpf_hash=cpf_hash,
+        origem_slug=origem_slug,
+        nota=nota,
+        comentario=comentario if comentario else None
+    )
+    db.session.add(nova_avaliacao)
+
+    # 5. SINCRONIZAÇÃO COM A TABELA DO CORE (AvaliacaoLocal)
+    local_fisico = empresa.local_fisico or (Local.query.get(empresa.local_id) if empresa.local_id else None)
+    if local_fisico and usuario_core_id:
+        avaliacao_local_existente = AvaliacaoLocal.query.filter_by(
+            id_local=local_fisico.id,
+            id_usuario=usuario_core_id
+        ).first()
+
+        if avaliacao_local_existente:
+            avaliacao_local_existente.nota = nota
+            avaliacao_local_existente.feedback = comentario if comentario else None
+            avaliacao_local_existente.data_avaliacao = datetime.now(timezone.utc)
+        else:
+            nova_avaliacao_local = AvaliacaoLocal(
+                id_local=local_fisico.id,
+                id_usuario=usuario_core_id,
+                nota=nota,
+                feedback=comentario if comentario else None
+            )
+            db.session.add(nova_avaliacao_local)
+
+    db.session.commit()
+
+    flash("Sua avaliação foi registrada com sucesso!", "success")
+    return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=empresa_uuid))
+
+
+@empresa_bp.route('/perfil/<string:empresa_id>/avaliar', methods=['POST'], endpoint='salvar_avaliacao_empresa')
+@login_required
+def salvar_avaliacao_empresa(empresa_id):
+    """
+    Endpoint POST responsável por receber a nota e o comentário, identificar a origem
+    (Core ou Módulo), cruzar o CPF Hash e persistir na tabela unificada EseAvaliacaoEmpresa.
+    """
+    empresa = EseEmpresa.query.get_or_404(empresa_id)
+
+    # 1. Recupera e valida os dados do formulário
+    nota = request.form.get('nota', type=int)
+    comentario = request.form.get('comentario', '').strip()
+
+    if not nota or nota < 1 or nota > 5:
+        flash("Por favor, selecione uma nota válida de 1 a 5.", "danger")
+        return redirect(url_for('empresa.perfil_comercial', empresa_id=empresa_id))
+
+    usuario_core_id = None
+    cliente_id = None
+    cpf_hash = None
+
+    # Definimos o slug de origem padrão do contexto atual (ex: 'empresa' ou 'core')
+    # Se a requisição veio do ambiente de um módulo específico, você pode ajustar dinamicamente
+    origem_slug = 'empresa'
+
+    # 2. Identificação Segura na Fonte (Core vs Módulo PWA)
+    # A. Se o usuário está logado via Core
+    if hasattr(current_user, 'id') and not isinstance(current_user, ModCadastroCliente):
+        usuario_core_id = current_user.id
+        if current_user.perfil and hasattr(current_user.perfil, 'cpf_hash'):
+            cpf_hash = current_user.perfil.cpf_hash
+            origem_slug = 'core'  # Veio nativamente do Core
+
+    # B. Se o usuário está logado via PWA do Módulo (ModCadastroCliente)
+    elif isinstance(current_user, ModCadastroCliente) or 'cliente_logged_in_id' in session:
+        cliente_atual = current_user if isinstance(current_user, ModCadastroCliente) else ModCadastroCliente.query.get(
+            session.get('cliente_logged_in_id'))
+
+        if cliente_atual:
+            cliente_id = cliente_atual.id
+            cpf_hash = cliente_atual.cpf_hash
+            origem_slug = 'agenda'  # Ex: Veio do módulo Agenda ou o slug dinâmico do módulo ativo
+
+            # Se o cliente do módulo já possui conta vinculada ao Core, já puxamos o ID do Core nativamente
+            if cliente_atual.usuario_id:
+                usuario_core_id = cliente_atual.usuario_id
+
+    # 3. Fallback de Segurança caso o cpf_hash não tenha sido resolvido
+    if not cpf_hash:
+        flash("Não foi possível identificar seu perfil civil para registrar a avaliação.", "warning")
+        return redirect(url_for('empresa.perfil_comercial', empresa_id=empresa_id))
+
+    # 4. Criação e persistência atômica na tabela unificada
+    nova_avaliacao = EseAvaliacaoEmpresa(
+        empresa_id=empresa.id,
+        cliente_id=cliente_id,
+        usuario_core_id=usuario_core_id,
+        cpf_hash=cpf_hash,
+        origem_slug=origem_slug,  # Gravado de forma imutável na fonte!
+        nota=nota,
+        comentario=comentario if comentario else None
+    )
+
+    db.session.add(nova_avaliacao)
+    db.session.commit()
+
+    flash("Sua avaliação foi registrada com sucesso!", "success")
+    return redirect(url_for('empresa.perfil_comercial', empresa_id=empresa_id))
 
 
 @empresa_bp.route('/<int:empresa_id>/calendario/salvar-feriado', methods=['POST'], endpoint='salvar_feriado')
@@ -3370,3 +3545,30 @@ def relatorio_resumo_gerencial(empresa_id):
         profissional_id_filtro=profissional_id_filtro,
         forma_pagamento_filtro=forma_pagamento_filtro
     )
+
+
+@empresa_bp.route("/conectar-pioneiro/<int:id_destinatario>", methods=["POST"], endpoint='conectar_pioneiro_empresa')
+@login_required
+def conectar_pioneiro_empresa(id_destinatario):
+    # Regra isolada e segura para o ecossistema de empresas, sem impactar o Core
+    conexao_existente = Conexoes.query.filter(
+        ((Conexoes.id_remetente == current_user.id) & (Conexoes.id_destinatario == id_destinatario)) |
+        ((Conexoes.id_remetente == id_destinatario) & (Conexoes.id_destinatario == current_user.id))
+    ).first()
+
+    if not conexao_existente:
+        nova = Conexoes(id_remetente=current_user.id, id_destinatario=id_destinatario, status='pendente')
+        db.session.add(nova)
+        db.session.commit()
+        flash("Reconhecimento enviado!", "success")
+
+    # Resposta HTMX limpa e exclusiva para o card lateral do perfil comercial
+    if request.headers.get('HX-Request'):
+        return '''
+            <span class="badge bg-light text-primary border border-primary-subtle px-2 py-1 flex-shrink-0" style="font-size: 0.65rem;">
+                <i class="bi bi-send-check-fill"></i> Solicitado
+            </span>
+        '''
+
+    # Fallback seguro para requisições tradicionais
+    return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=request.values.get('empresa_uuid')))

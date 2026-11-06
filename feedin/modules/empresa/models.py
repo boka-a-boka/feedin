@@ -279,6 +279,52 @@ class EseEmpresa(db.Model):
     def email(self):
         return self.local_fisico.email if self.local_fisico else None
 
+    # Em feedin/modules/empresa/models.py (classe EseEmpresa)
+
+    def get_rating_data(self):
+        """
+        Retorna a reputação comercial da empresa baseada unicamente
+        nas avaliações recebidas pelos Módulos (EseAvaliacaoEmpresa).
+        """
+        avaliacoes = self.avaliacoes_empresas  # Relacionamento backref
+
+        if not avaliacoes:
+            return {'media': 0.0, 'total': 0, 'lista': [], 'por_usuario': {}}
+
+        soma = sum(a.nota for a in avaliacoes)
+        media = round(soma / len(avaliacoes), 1)
+
+        lista_formatada = []
+        comentarios_por_usuario = {}
+
+        for a in avaliacoes:
+            # Resolve o autor vinculado (seja via usuario_core_id ou cliente_id)
+            autor_obj = None
+            if a.usuario_core_id:
+                from feedin.models import Usuario
+                autor_obj = Usuario.query.get(a.usuario_core_id)
+
+            # Monta o dicionário estruturado para a rota processar sem erros
+            item_dict = {
+                'nota': a.nota,
+                'comentario': a.comentario,
+                'data': a.data_criacao,
+                'autor': autor_obj
+            }
+            lista_formatada.append(item_dict)
+
+            # Preenche o mapa rápido por ID
+            if a.usuario_core_id and a.comentario:
+                comentarios_por_usuario[a.usuario_core_id] = a.comentario
+
+        return {
+            'media': media,
+            'total': len(avaliacoes),
+            'lista': lista_formatada,
+            'por_usuario': comentarios_por_usuario
+        }
+
+
 class EseTipoExcecaoEnum(enum.Enum):
     """
     Enumeração para os tipos de exceção no calendário.
@@ -809,6 +855,26 @@ class EscalaTrabalhoColaborador(db.Model):
             if self.inicio_intervalo > fim_intervalo:
                 raise ValueError("O fim do intervalo não pode ser menor que o início do intervalo.")
         return fim_intervalo
+
+
+class EseAvaliacaoEmpresa(db.Model):
+    __tablename__ = 'ese_avaliacao_empresa'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    empresa_id = db.Column(db.String(36), db.ForeignKey('ese_empresa.id'), nullable=False)
+
+    cliente_id = db.Column(db.String(36), nullable=True)  # UUID do ModCadastroCliente
+    usuario_core_id = db.Column(db.Integer, nullable=True)  # ID inteiro do Core
+    cpf_hash = db.Column(db.String(64), nullable=False, index=True)
+
+    # 🎯 PADRONIZAÇÃO ABSOLUTA: Sempre grava o slug de origem ('core', 'agenda', 'cardapio', etc.)
+    origem_slug = db.Column(db.String(30), nullable=False, default='core')
+
+    nota = db.Column(db.Integer, nullable=False)
+    comentario = db.Column(db.Text, nullable=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    empresa = db.relationship('EseEmpresa', backref=db.backref('avaliacoes_empresas', cascade='all, delete-orphan'))
 
 
 class CalendarioSazonalComercial(db.Model):
@@ -1822,3 +1888,26 @@ class EseNotificacaoService:
             db.session.rollback()
             logger.error(f"[ERRO EseNotificacaoService]: Falha ao registrar notificação da Empresa - {str(e)}")
             return None
+
+class EseRelacionamentoClienteEmpresa(db.Model):
+    __tablename__ = 'ese_relacionamento_cliente_empresa'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    # Vínculos estritos via CHAR(36) e CPF Hash universal
+    empresa_id = db.Column(db.String(36), db.ForeignKey('ese_empresa.id'), nullable=False, index=True)
+    cpf_hash = db.Column(db.String(64), nullable=False, index=True)
+
+    # Origem que gerou o primeiro vínculo ('core', 'agenda', 'pdv', etc.)
+    origem_criacao = db.Column(db.String(30), nullable=False, default='core')
+
+    # Auditoria de quando ocorreu a primeira interação/vínculo
+    primeira_interacao_em = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Garante que a mesma pessoa física (via cpf_hash) tenha apenas um registro de relacionamento por empresa
+    __table_args__ = (
+        db.UniqueConstraint('empresa_id', 'cpf_hash', name='uq_empresa_cpf_vinculo'),
+    )
+
+    def __repr__(self):
+        return f"<EseRelacionamentoClienteEmpresa Empresa: {self.empresa_id} | CPF Hash: {self.cpf_hash[:8]}...>"

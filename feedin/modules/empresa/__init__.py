@@ -20,5 +20,6 @@ empresa_bp.UPLOAD_BASE_DIR = os.path.join(MODULO_RAIZ, 'static', 'uploads')
 os.makedirs(empresa_bp.UPLOAD_BASE_DIR, exist_ok=True)
 
 from . import routes
+
 # IMPORTANTE: Importa o arquivo isolado para registrar as rotas no Flask
-from feedin.modules.empresa.sub_rotas import horarios_e_regras
+from feedin.modules.empresa.sub_rotas import horarios_e_regras, perfil_comercial

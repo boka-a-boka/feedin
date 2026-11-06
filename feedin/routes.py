@@ -70,8 +70,8 @@ from feedin.models import (
     Cargo, Epoca, UsuarioLocalEpoca, Selo, ConquistaSelo, ModulosSistema, CoreAcaoPendente, CoreStaff, CoreDepartamento,
     CoreStaffDepartamento,
 )
-from feedin.modules.empresa.models import ModHomologacaoEmpresa, CadastroFeriado, EseEmpresa, EseProcessoClaim
-from feedin.modules.auth.models import VinculoUsuarioEmpresa, ModVinculoModulo
+from feedin.modules.empresa.models import ModHomologacaoEmpresa, CadastroFeriado, EseEmpresa, EseProcessoClaim, EseAvaliacaoEmpresa
+from feedin.modules.auth.models import VinculoUsuarioEmpresa, ModVinculoModulo, ModCadastroCliente
 
 # 8. UTILITÁRIOS E FERRAMENTAS DE MANUTENÇÃO
 import feedin.utils as utils
@@ -182,25 +182,22 @@ def perfil_local(local_id):
 
     import random
     from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, Taxonomia, Postagem, postagem_tags, Epoca
-    from feedin.modules.empresa.models import EseProcessoClaim
+    from feedin.modules.empresa.models import EseProcessoClaim, EseEmpresa
     from sqlalchemy.orm import joinedload
+
 
     # OTIMIZAÇÃO: Traz o local e já carrega os relacionamentos
     local = Local.query.get_or_404(local_id)
 
     # Telemetria do Local
     print(f"\n[TELEMETRIA] Carregando perfil para o Local ID recebido da rota: {local_id} (Tipo: {type(local_id)})")
-
-    print(
-        f"[TELEMETRIA] Dados do Banco -> Local.id: {local.id} | Nome: {local.nome} | id_empreendedor: {local.id_empreendedor} | status_operacional: {local.status_operacional}")
+    print(f"[TELEMETRIA] Dados do Banco -> Local.id: {local.id} | Nome: {local.nome} | id_empreendedor: {local.id_empreendedor} | status_operacional: {local.status_operacional}")
 
     todos_claims = EseProcessoClaim.query.filter_by(local_id=local_id).all()
-    print(
-        f"[TELEMETRIA] Total de registros encontrados na tabela ese_processo_claim para este local: {len(todos_claims)}")
+    print(f"[TELEMETRIA] Total de registros encontrados na tabela ese_processo_claim para este local: {len(todos_claims)}")
 
     for c in todos_claims:
-        print(
-            f"   |- Claim ID: {c.id} | local_id no banco: {c.local_id} (Tipo: {type(c.local_id)}) | status_processo: '{c.status_processo}' | token: {c.token_validacao[:8] if c.token_validacao else 'N/A'}...")
+        print(f"   |- Claim ID: {c.id} | local_id no banco: {c.local_id} (Tipo: {type(c.local_id)}) | status_processo: '{c.status_processo}' | token: {c.token_validacao[:8] if c.token_validacao else 'N/A'}...")
 
     # Executa a consulta oficial de filtragem
     ultimo_processo = EseProcessoClaim.query.filter(
@@ -213,8 +210,15 @@ def perfil_local(local_id):
         status_atual = ultimo_processo.status_processo
         print(f"[TELEMETRIA] Capturado processo ativo com sucesso! Status selecionado: '{status_atual}'")
     else:
-        print(
-            "[TELEMETRIA] Nenhum processo ativo ('em_andamento', 'concluido') foi capturado no filtro oficial. Forçando status: 'livre'")
+        print("[TELEMETRIA] Nenhum processo ativo ('em_andamento', 'concluido') foi capturado no filtro oficial. Forçando status: 'livre'")
+
+    # 🌟 0. VERIFICAÇÃO INTELIGENTE DE EMPRESA HOMOLOGADA (NOVA PONTE COMERCIAL)
+    # Se o status do claim for concluído, buscamos a empresa instalada neste local
+    if status_atual == 'concluido':
+        empresa_vinculada = EseEmpresa.query.filter_by(local_id=local.id).first()
+        if empresa_vinculada:
+            print(f"[TELEMETRIA] 🏢 Empresa homologada encontrada (ID: {empresa_vinculada.id}). Redirecionando para o Perfil Comercial!")
+            return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=empresa_vinculada.id))
 
     print(f"[TELEMETRIA] Injetando no Jinja2 -> status_claim='{status_atual}'\n")
 
@@ -321,7 +325,7 @@ def perfil_local(local_id):
 
     atividades = sorted(atividades_formatadas, key=lambda x: x['data_criacao'], reverse=True)
 
-    # 5. RENDERIZAÇÃO NO TEMPLATE
+    # 5. RENDERIZAÇÃO NO TEMPLATE TRADICIONAL (Caso não seja empresa homologada)
     return render_template('locais/perfil_local.html',
                            local=local,
                            atividades=atividades,
@@ -6911,21 +6915,27 @@ def criar_conexao(id_remetente, id_destinatario):
     return False
 
 
-@current_app.route('/hub', methods=['GET'])  # Ou @main_bp.route / conforme estruturado no feedin/routes.py
+@current_app.route('/hub', methods=['GET'])  # Ou @empresa_bp.route / @main_bp.route conforme seu app
 @login_required
 def central_hub():
     """
     🏢 CENTRAL DE MÓDULOS ECOSSISTÊMICA (HUB DINÂMICO)
     --------------------------------------------------------------------------------------
-    Varre estritamente os vínculos do CPF logado na tabela ModVinculoModulo e
-    monta a lista de cards dinâmicos sem acoplamentos a blueprints inexistentes.
+    Varre estritamente os vínculos do CPF logado na tabela ModVinculoModulo,
+    executa o gatilho de sincronização híbrida (Core + Módulos) e monta os cards.
     """
-    from feedin.modules.auth.models import ModVinculoModulo
+
+    # 🛡️ GATILHO DE UNIFICAÇÃO HÍBRIDA (Ponto X estabelecido)
+    # Sempre que o usuário entra no Hub, o sistema consolida avaliações e vínculos pendentes dos módulos ao Core
+    try:
+        sincronizar_perfil_modulos_com_core(current_user)
+    except Exception as e:
+        print(f"[ERRO DE SINCRONIZAÇÃO HÍBRIDA NO HUB]: {e}")
 
     # 1. Sinaliza o ambiente HUB na sessão para controle de retorno flutuante
     session['navegacao_via_hub'] = True
 
-    # 2. Resgata o CPF Hash da entidade autenticada (ModCadastroCliente)
+    # 2. Resgata o CPF Hash da entidade autenticada
     cliente_cpf_hash = getattr(current_user, 'cpf_hash', None)
 
     if not cliente_cpf_hash:
@@ -6970,11 +6980,43 @@ def central_hub():
                 'url': url_destino
             })
 
-    # 🎯 CORREÇÃO CRUCIAL: Aponta para 'central_hub.html' diretamente na pasta de templates
+    # 🎯 Renderização direta para o template do Hub
     return render_template(
         'hub_concentrador.html',
         modulos=modulos_cards
     )
+
+
+def sincronizar_perfil_modulos_com_core(usuario_core):
+    """
+    Varre o ecossistema de módulos utilizando o cpf_hash do usuário do Core,
+    vinculando ModCadastroCliente, EseAvaliacaoEmpresa e consolidando identidades.
+    """
+    cpf_hash_core = None
+    if usuario_core.perfil and hasattr(usuario_core.perfil, 'cpf_hash'):
+        cpf_hash_core = usuario_core.perfil.cpf_hash
+
+    if not cpf_hash_core:
+        return
+
+    # 1. Localiza registros em ModCadastroCliente que possuem o mesmo cpf_hash mas estão órfãos de usuario_id
+
+    clientes_modulos = ModCadastroCliente.query.filter_by(
+        cpf_hash=cpf_hash_core,
+        usuario_id=None
+    ).all()
+
+    for cliente_mod in clientes_modulos:
+        # A. Vincula o cliente do módulo ao usuário oficial do Core
+        cliente_mod.usuario_id = usuario_core.id
+
+        # B. Atualiza as avaliações da empresa (EseAvaliacaoEmpresa) que estavam ligadas ao ID do módulo
+        avaliacoes = EseAvaliacaoEmpresa.query.filter_by(cliente_id=cliente_mod.id, usuario_core_id=None).all()
+        for av in avaliacoes:
+            av.usuario_core_id = usuario_core.id
+            av.cpf_hash = cpf_hash_core
+
+    database.session.commit()
 
 
 @current_app.context_processor

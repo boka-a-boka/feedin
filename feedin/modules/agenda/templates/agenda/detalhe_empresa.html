@@ -513,42 +513,58 @@
           {% endif %}
         </div>
 
-        {# --- 3. HORÁRIOS DE FUNCIONAMENTO (Dinamizado com grade_semanal) --- #}
-        <div class="card border-0 rounded-4 shadow-sm p-3 bg-white">
-          <h6 class="fw-bold text-dark mb-3 border-bottom pb-2 d-flex align-items-center gap-1">
-            <i class="bi bi-clock-history text-primary"></i> Horários de Funcionamento
-          </h6>
+        {# 🌟 CARD RETRÁTIL DE HORÁRIO DE ATENDIMENTO (COM STATUS EM TEMPO REAL) #}
+        <div class="card border-0 shadow-sm rounded-4 p-3 mb-4 fundo-acetinado">
+            <div class="d-flex align-items-center justify-content-between cursor-pointer"
+                 data-bs-toggle="collapse"
+                 data-bs-target="#collapseHorarios"
+                 aria-expanded="false"
+                 aria-controls="collapseHorarios"
+                 style="cursor: pointer;">
 
-          <div class="row row-cols-1 row-cols-sm-2 row-cols-md-7 g-2 text-center">
-            {% if grade_semanal %}
-              {% for dia in grade_semanal %}
-                <div class="p-2 rounded-3 {% if dia.eh_hoje %}bg-primary-subtle border-primary{% else %}bg-light border{% endif %} d-flex flex-column justify-content-between">
-                  <span class="d-block text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
-                    {{ dia.nome_dia[:3] }} {% if dia.eh_hoje %}<span class="text-primary">(Hoje)</span>{% endif %}
-                  </span>
-
-                  <div class="my-1">
-                    {% if dia.turnos %}
-                      {% for turno in dia.turnos %}
-                        <div class="small fw-semibold text-dark" style="font-size: 0.75rem;">
-                          {# Uso correto dos campos do model EseHorarioFuncionamento #}
-                          {{ turno.horario_abertura.strftime('%H:%M') if turno.horario_abertura else '08:00' }}
-                          às
-                          {{ turno.horario_fechamento.strftime('%H:%M') if turno.horario_fechamento else '18:00' }}
-                        </div>
-                      {% endfor %}
-                    {% else %}
-                      <span class="badge bg-secondary-subtle text-secondary border rounded-pill" style="font-size: 0.65rem;">Fechado</span>
-                    {% endif %}
-                  </div>
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-primary fs-5"></i>
+                    <div>
+                        <h6 class="text-uppercase fw-bold text-secondary small mb-0">Horário de Atendimento</h6>
+                        <span class="badge {% if status_funcionamento.aberto %}bg-success-subtle text-success border border-success-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} rounded-pill px-2 py-0.5 mt-1" style="font-size: 0.65rem; font-weight: 600;">
+                            <span class="spinner-grow spinner-grow-sm me-1" style="width: 0.4rem; height: 0.4rem;" role="status"></span>
+                            {{ status_funcionamento.texto }}
+                        </span>
+                    </div>
                 </div>
-              {% endfor %}
-            {% else %}
-              <div class="col-12 text-center py-2 text-muted small">
-                Nenhum horário cadastrado para este estabelecimento.
-              </div>
-            {% endif %}
-          </div>
+
+                <i class="bi bi-chevron-down text-muted small transition-all"></i>
+            </div>
+
+            {# Grade semanal expandível #}
+            <div class="collapse mt-3 pt-3 border-top border-light-subtle" id="collapseHorarios">
+                <div class="d-flex flex-column gap-2" style="font-size: 0.78rem;">
+                    {% if grade_semanal %}
+                        {% for dia in grade_semanal %}
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 {% if dia.eh_hoje %}bg-primary-subtle border border-primary-subtle fw-bold text-primary{% else %}bg-white border-0 text-dark{% endif %} shadow-sm">
+                                <span>
+                                    {{ dia.nome_dia }} {% if dia.eh_hoje %}<span class="badge bg-primary text-white ms-1" style="font-size: 0.55rem;">Hoje</span>{% endif %}
+                                </span>
+                                <div class="text-end">
+                                    {% if dia.turnos %}
+                                        {% for turno in dia.turnos %}
+                                            <div>
+                                                {{ turno.horario_abertura.strftime('%H:%M') if turno.horario_abertura else '' }}
+                                                {% if turno.horario_abertura and turno.horario_fechamento %} às {% endif %}
+                                                {{ turno.horario_fechamento.strftime('%H:%M') if turno.horario_fechamento else '' }}
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">Fechado</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted small text-center mb-0">Horários não informados.</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         {# --- 4. CATÁLOGO DE SERVIÇOS (Removida a exibição de pontos de fidelidade opcionais) --- #}
