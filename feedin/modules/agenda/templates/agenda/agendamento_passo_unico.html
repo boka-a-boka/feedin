@@ -56,6 +56,48 @@
     border-color: {{ cor_empresa }} !important;
     color: #ffffff !important;
   }
+
+/* 🌟 ESTILOS DA MODAL DE PÓS-AGENDAMENTO (PWA / RETRATO 5:7) */
+#modalSucessoAgendamento {
+    backdrop-filter: blur(8px) saturate(180%);
+    -webkit-backdrop-filter: blur(8px) saturate(180%);
+    background-color: rgba(0, 0, 0, 0.65);
+}
+
+.style-modal-ads {
+    background: #111827;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* PROPORÇÃO EXATA 5X7 PARA MÓBILE / PWA */
+.container-ads-5x7 {
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    position: relative;
+    overflow: hidden;
+    background-color: #000;
+}
+
+.img-ads-5x7 {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.group-ads:hover .img-ads-5x7 {
+    transform: scale(1.03);
+}
+
+/* OVERLAY SUTIL COM GRADIENTE PARA A LEITURA DO TEXTO */
+.ads-overlay-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(0deg, rgba(17,24,39,0.95) 0%, rgba(17,24,39,0.7) 70%, rgba(17,24,39,0) 100%);
+    backdrop-filter: blur(3px);
+}
 </style>
 
 <div class="container py-3 mb-5" style="max-width: 680px; font-family: system-ui, -apple-system, sans-serif;">
@@ -353,7 +395,7 @@
       </div>
     </div>
 
-    <!-- BOTÃO DE CONFIRMAÇÃO -->
+    <!-- BOTÃO DE CONFIRMAÇÃO (Único botão de ação final do fluxo) -->
     <button type="submit"
             id="btnConfirmarAgendamento"
             class="btn text-white btn-lg rounded-pill w-100 fw-bold shadow-sm py-3"
@@ -362,6 +404,66 @@
       <i class="bi bi-check-circle-fill me-1"></i> Confirmar Agendamento
     </button>
   </form>
+</div>
+
+<!-- 🌟 MODAL PWA DE CONCLUSÃO DE AGENDAMENTO COM PUBLICIDADE NATIVA -->
+{% set url_login_core = 'https://boka-a-boka.com.br/login' if not config.get('DEBUG') else 'http://127.0.0.1:8000/login' %}
+
+<div class="modal fade" id="modalSucessoAgendamento" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 rounded-4 shadow-lg overflow-hidden style-modal-ads">
+
+            <!-- CABEÇALHO COM CONTADOR E STATUS -->
+            <div class="modal-header border-0 bg-dark text-white p-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success rounded-circle p-1.5 d-flex align-items-center justify-content-center">
+                        <i class="bi bi-check-lg text-white fs-6"></i>
+                    </span>
+                    <div>
+                        <h6 class="modal-title fw-bold text-white mb-0" style="font-size: 0.9rem;">Agendamento Concluído!</h6>
+                        <small class="text-white-50" style="font-size: 0.68rem;">Horário reservado com sucesso</small>
+                    </div>
+                </div>
+
+                <!-- CONTADOR REGRESSIVO DE 10 SEGUNDOS -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-white bg-opacity-20 rounded-pill px-2 py-1 text-warning fw-bold" id="timerAgendamento" style="font-size: 0.72rem;">
+                        10s
+                    </span>
+                    <button type="button" class="btn-close btn-close-white small shadow-none" onclick="fecharModalAgendamento()" aria-label="Fechar"></button>
+                </div>
+            </div>
+
+            <!-- CORPO / ÁREA DA PUBLICIDADE 5X7 -->
+            <div class="modal-body p-0 position-relative bg-black">
+                <a href="{{ url_login_core }}" target="_blank" rel="noopener noreferrer" class="d-block text-decoration-none position-relative overflow-hidden group-ads">
+
+                    <!-- IMAGEM COM PROPORÇÃO ASPECT-RATIO 5/7 (Usando o asset correto) -->
+                    <div class="container-ads-5x7">
+                        <img src="{{ url_for('publicidade.static', filename='uploads/Publicidade-Feedin.jpg') }}"
+                             alt="Conheça a Comunidade FeedIn"
+                             class="img-ads-5x7"
+                             onerror="this.src='https://via.placeholder.com/500x700/111827/FFFFFF?text=FeedIn+Core';">
+                    </div>
+
+                    <!-- FOOTER FLUTUANTE COM CALL TO ACTION -->
+                    <div class="ads-overlay-footer p-3 text-white">
+                        <span class="badge bg-warning text-dark px-2 py-0.5 mb-1 text-uppercase fw-bold" style="font-size: 0.58rem;">
+                            Comunidade & Memórias
+                        </span>
+                        <h6 class="fw-bold mb-1 text-white" style="font-size: 0.95rem;">Você já faz parte do FeedIn Core?</h6>
+                        <p class="small mb-2 text-white-50 lh-sm" style="font-size: 0.75rem;">
+                            Descubra as histórias e conexões do seu bairro em nossa linha do tempo unificada.
+                        </p>
+                        <div class="btn btn-warning btn-sm rounded-pill w-100 fw-bold text-dark shadow-sm py-1.5" style="font-size: 0.8rem;">
+                            Explorar a Comunidade Agora <i class="bi bi-arrow-right ms-1"></i>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+    </div>
 </div>
 
 <script>
@@ -427,7 +529,6 @@
       return;
     }
 
-    // 🛡️ BLINDAEM DE FUSO HORÁRIO: Garante a string exata YYYY-MM-DD selecionada no input local
     const dataPuraStr = inputData.value.split('T')[0];
 
     container.innerHTML = `
@@ -471,7 +572,6 @@
 
       if (listaHorarios.length > 0) {
         let elementoParaAutoSelecionar = null;
-        let selecionadoAindaExiste = false;
 
         listaHorarios.forEach(item => {
           const horarioStr = typeof item === 'object' ? (item.horario || item.hora || item.hora_inicio) : item;
@@ -502,7 +602,6 @@
 
           if (horarioPreSelecionado && horarioStr.startsWith(horarioPreSelecionado)) {
             elementoParaAutoSelecionar = btn;
-            selecionadoAindaExiste = true;
           }
         });
 
@@ -521,7 +620,7 @@
 
         container.innerHTML = `
           <div class="text-muted small py-2 w-100 text-center">
-            <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para la data selecionada.
+            <i class="bi bi-calendar-x me-1"></i> Sem horários disponíveis para a data selecionada.
           </div>`;
       }
     } catch (error) {
@@ -535,23 +634,110 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const inputData = document.getElementById('data_agendamento');
+  // 🌟 CONTROLE DO TIMER E MODAL DE SUCESSO DE AGENDAMENTO
+// 🌟 CONTROLE DO TIMER E MODAL DE SUCESSO DE AGENDAMENTO
+  let tempoRestanteAds = 10;
+  let intervaloTimerAds = null;
 
-    if (inputData) {
-      inputData.addEventListener('change', atualizarHorariosDisponiveis);
-    }
+  function dispararModalPosAgendamento() {
+      const modalElement = document.getElementById('modalSucessoAgendamento');
+      if (!modalElement) return;
 
-    document.addEventListener('change', (event) => {
-      if (event.target && event.target.name === 'profissional_id') {
+      const myModal = new bootstrap.Modal(modalElement);
+
+      tempoRestanteAds = 10;
+      atualizarDisplayTimer(tempoRestanteAds);
+
+      myModal.show();
+
+      intervaloTimerAds = setInterval(() => {
+          tempoRestanteAds--;
+          atualizarDisplayTimer(tempoRestanteAds);
+
+          if (tempoRestanteAds <= 0) {
+              fecharModalAgendamento();
+          }
+      }, 1000);
+  }
+
+  function atualizarDisplayTimer(segundos) {
+      const el = document.getElementById('timerAgendamento');
+      if (el) {
+          el.innerText = `${segundos}s`;
+      }
+  }
+
+  function fecharModalAgendamento() {
+      if (intervaloTimerAds) {
+          clearInterval(intervaloTimerAds);
+      }
+      const modalElement = document.getElementById('modalSucessoAgendamento');
+      const modalInstance = bootstrap.Modal.getInstance(modalElement);
+      if (modalInstance) {
+          modalInstance.hide();
+      }
+
+      window.location.href = "{{ url_for('agenda.dashboard_cliente') }}";
+  }
+
+  // 🚀 INTERCEPTAÇÃO EXCLUSIVA DO BOTÃO "CONFIRMAR AGENDAMENTO"
+  document.addEventListener('DOMContentLoaded', function() {
+      const inputData = document.getElementById('data_agendamento');
+
+      if (inputData) {
+        inputData.addEventListener('change', atualizarHorariosDisponiveis);
+      }
+
+      document.addEventListener('change', (event) => {
+        if (event.target && event.target.name === 'profissional_id') {
+          atualizarHorariosDisponiveis();
+        }
+      });
+
+      const container = document.getElementById('container-slots-horario');
+      if (!container || !container.querySelector('.btn-slot-horario')) {
         atualizarHorariosDisponiveis();
       }
-    });
 
-    const container = document.getElementById('container-slots-horario');
-    if (!container || !container.querySelector('.btn-slot-horario')) {
-      atualizarHorariosDisponiveis();
-    }
+      // Tratamento estrito do envio definitivo pelo botão de confirmação
+      const formAgendamento = document.getElementById('formAgendamento');
+
+      if (formAgendamento) {
+          formAgendamento.addEventListener('submit', async function(e) {
+              e.preventDefault(); // Evita o redirecionamento imediato
+
+              const btnSubmit = document.getElementById('btnConfirmarAgendamento');
+              if (btnSubmit) {
+                  btnSubmit.disabled = true;
+                  btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status"></span>Processando Agendamento...`;
+              }
+
+              try {
+                  const formData = new FormData(formAgendamento);
+                  const response = await fetch(formAgendamento.action, {
+                      method: 'POST',
+                      body: formData,
+                      headers: {
+                          'X-Requested-With': 'XMLHttpRequest'
+                      }
+                  });
+
+                  if (response.ok) {
+                      // ✅ AGORA SIM: O servidor confirmou o salvamento. A modal só abre aqui!
+                      dispararModalPosAgendamento();
+                  } else {
+                      throw new Error('Erro ao salvar agendamento.');
+                  }
+              } catch (error) {
+                  console.error('Erro:', error);
+                  alert('Não foi possível concluir o agendamento. Tente novamente.');
+                  if (btnSubmit) {
+                      btnSubmit.disabled = false;
+                      btnSubmit.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Confirmar Agendamento`;
+                  }
+              }
+          });
+      }
   });
 </script>
 {% endblock %}

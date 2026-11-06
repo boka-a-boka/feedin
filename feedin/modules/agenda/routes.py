@@ -5142,7 +5142,8 @@ def agendar(slug_empresa: str):
         data_limite_maxima=data_expiracao_calculada.strftime('%Y-%m-%d') if data_expiracao_calculada else None,
         modo_edicao=agendamento_original is not None,
         atendimentos_nao_realizados=atendimentos_nao_realizados,
-        agendamento_original=agendamento_original
+        agendamento_original=agendamento_original,
+        agendamento_sucesso=True
     )
 
 
