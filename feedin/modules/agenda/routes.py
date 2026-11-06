@@ -1821,6 +1821,7 @@ def detalhe_empresa(empresa_id):
         is_colaborador=is_colaborador,
         nivel_neste_local=nivel_neste_local,
         status_func=status_func,
+        status_funcionamento=status_func,
         eh_favorita=eh_favorita,
         exibir_switch_operacional=exibir_switch_operacional,
         beneficiarios=beneficiarios,
