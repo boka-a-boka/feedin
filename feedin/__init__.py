@@ -205,9 +205,9 @@ def create_app():
         from feedin.modules.auth import auth_bp
         from feedin.modules.billing import billing_bp
         from feedin.modules.estoque import estoque_bp
-        from feedin.utils import media_bp
+        from feedin.utils import media_bp  # <--- Já estava sendo importado aqui
         from feedin.modules.pdv import pdv_bp
-        from feedin.modules.rating import rating_bp  # <--- Novo Módulo de Rating/Avaliações
+        from feedin.modules.rating import rating_bp
         from feedin.modules.publicidade import publicidade_bp
 
         # Registrar definindo o prefixo de cada URL:
@@ -217,8 +217,11 @@ def create_app():
         app.register_blueprint(billing_bp, url_prefix='/billing')
         app.register_blueprint(estoque_bp, url_prefix='/estoque')
         app.register_blueprint(pdv_bp, url_prefix='/pdv')
-        app.register_blueprint(rating_bp, url_prefix='/rating')  # <--- Registrando o rating
+        app.register_blueprint(rating_bp, url_prefix='/rating')
         app.register_blueprint(publicidade_bp, url_prefix='/publicidade')
+
+        # 💡 ADICIONE ESTA LINHA ABAIXO PARA REGISTRAR O BLUEPRINT DE MÍDIA:
+        app.register_blueprint(media_bp)
 
     # 5. 🔐 PROVEDOR UNIFICADO DE CARREGAMENTO DE USUÁRIO (DESACOPLADO)
     @login_manager.user_loader

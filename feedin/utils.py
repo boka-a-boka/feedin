@@ -11,7 +11,7 @@ from functools import wraps
 from unicodedata import normalize
 from sqlalchemy import func
 
-from flask import current_app, redirect, render_template, request, session, flash, send_from_directory
+from flask import current_app, redirect, render_template, request, session, flash, send_from_directory, Blueprint
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
@@ -66,6 +66,7 @@ MESES_PTBR = {
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
 }
 
+media_bp = Blueprint('media_global', __name__)
 
 def formatar_data_extenso(dt):
     """
@@ -786,23 +787,22 @@ def salvar_imagem_modulo(
 
 
 # 2. Define a rota de entrega de arquivos dos módulos
+@media_bp.route('/media/<modulo>/<path:filename>')
 def servir_midia_modulo(modulo, filename):
     """
     Entrega imagens salvas pela salvar_imagem_modulo()
-    buscando na pasta 'static' do módulo correspondente.
+    buscando na pasta 'static' do módulo correspondente com proteção contra Path Traversal.
     """
     pasta_modulo = os.path.join(current_app.root_path, 'modules', modulo, 'static')
-    caminho_arquivo = os.path.join(pasta_modulo, filename)
 
-    # Se o arquivo não existir fisicamente, evita erro 500 e entrega o avatar padrão
-    if not os.path.exists(caminho_arquivo):
+    # send_from_directory já protege nativamente contra Path Traversal (ex: tentativas de usar ../)
+    if not os.path.exists(os.path.join(pasta_modulo, filename)):
         return send_from_directory(
             os.path.join(current_app.root_path, 'static', 'img'),
             'avatar-default.png'
         )
 
     return send_from_directory(pasta_modulo, filename)
-
 
 from flask import url_for
 
