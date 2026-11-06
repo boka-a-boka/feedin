@@ -11,7 +11,7 @@ from functools import wraps
 from unicodedata import normalize
 from sqlalchemy import func
 
-from flask import current_app, redirect, render_template, request, session, url_for, jsonify, flash
+from flask import current_app, redirect, render_template, request, session, flash, send_from_directory
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
@@ -711,9 +711,8 @@ def salvar_imagem_modulo(
 ) -> Optional[str]:
     """
     Processador Unificado de Imagens Modular.
-
     - Converte rigorosamente TODAS as imagens para .webp
-    - Respeita a estrutura isolada de pastas de cada Blueprint
+    - Redimensiona mantendo a proporção para um limite máximo de 1024x768px
     - Retorna o caminho relativo apropriado para persistência no Banco de Dados
     """
     if not arquivo or not getattr(arquivo, 'filename', None):
@@ -734,23 +733,22 @@ def salvar_imagem_modulo(
 
         # 2. Tratamento Inteligente de Transparência
         if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-            # Preserva o canal Alpha para manter fundos vazados/transparentes no WebP
             img = img.convert('RGBA')
         elif img.mode != 'RGB':
-            # Mantém em RGB apenas imagens opacas (JPEGs, etc.) para otimizar tamanho
             img = img.convert('RGB')
 
-        # 3. Otimização de Tamanho
-        img.thumbnail(config['tamanho'], Image.Resampling.LANCZOS)
+        # 3. Otimização de Tamanho (Máximo de 1024x768 mantendo aspect ratio)
+        # Se preferir usar o config do tipo_midia, você pode garantir que o config tenha o limite,
+        # mas aqui forçamos diretamente 1024x768 conforme solicitado.
+        tamanho_maximo = (1024, 768)
+        img.thumbnail(tamanho_maximo, Image.Resampling.LANCZOS)
 
         # 4. Resolução da Pasta Física por Blueprint
         modulo_alvo = config['modulo_alvo']
         subpasta_template = config['subpasta']
 
-        # Formata subpasta dinamicamente se houver empresa_id
         subpasta_relativa = subpasta_template.format(empresa_id=str(empresa_id or ''))
 
-        # Monta caminho físico do módulo correspondente
         caminho_base_modulo = os.path.join(
             current_app.root_path,
             'modules',
@@ -766,8 +764,9 @@ def salvar_imagem_modulo(
         nome_arquivo = f"{tipo_midia}_{identificador}_{codigo_hash}.webp"
         caminho_completo = os.path.join(diretorio_destino, nome_arquivo)
 
-        # 6. Salvar em WebP (preserva RGBA se for transparente, ou RGB se for opaco)
-        img.save(caminho_completo, 'WEBP', quality=config['qualidade'], optimize=True)
+        # 6. Salvar em WebP com otimização de qualidade (padrão de qualidade 80-85 reduz drasticamente o peso)
+        qualidade_webp = config.get('qualidade', 82)
+        img.save(caminho_completo, 'WEBP', quality=qualidade_webp, optimize=True)
 
         # 7. Limpeza de Versões Antigas do Mesmo Item
         padrao_busca = os.path.join(diretorio_destino, f"{tipo_midia}_{identificador}_*.webp")
@@ -778,8 +777,6 @@ def salvar_imagem_modulo(
                 except OSError:
                     pass
 
-        # Retorna o caminho relativo a partir do 'static' do módulo
-        # Exemplo: "Uploads/empresas/12/empresa_logo_12_a1b2c3d4.webp"
         caminho_relativo_db = os.path.join(subpasta_relativa, nome_arquivo).replace('\\', '/')
         return caminho_relativo_db
 
@@ -788,15 +785,7 @@ def salvar_imagem_modulo(
         return None
 
 
-from flask import Blueprint, current_app, send_from_directory, url_for
-import os
-
-# 1. Instancia o Blueprint
-media_bp = Blueprint('media_global', __name__)
-
-
 # 2. Define a rota de entrega de arquivos dos módulos
-@media_bp.route('/media/<modulo>/<path:filename>')
 def servir_midia_modulo(modulo, filename):
     """
     Entrega imagens salvas pela salvar_imagem_modulo()
@@ -986,15 +975,15 @@ def verificar_prontitude_operacional(empresa_id):
     4. O colaborador possui serviços habilitados vinculados.
     """
     # Importe seus models necessários (ex: Servico, Colaborador, EscalaColaborador, etc.)
-    from feedin.models import Servico, Colaborador  # Ajuste conforme seus imports
+    from feedin.modules.empresa.models import EseServicoOferecido, ColaboradorContrato  # Ajuste conforme seus imports
 
     # 1. Verifica se existem serviços cadastrados
-    servicos = Servico.query.filter_by(empresa_id=empresa_id).all()
+    servicos = EseServicoOferecido.query.filter_by(empresa_id=empresa_id).all()
     if not servicos:
         return False, "Cadastre pelo menos um serviço no catálogo com preço para continuar."
 
     # 2. Verifica se existe pelo menos um colaborador
-    colaboradores = Colaborador.query.filter_by(empresa_id=empresa_id).all()
+    colaboradores = ColaboradorContrato.query.filter_by(empresa_id=empresa_id).all()
     if not colaboradores:
         return False, "Cadastre ao menos um colaborador na equipe."
 
