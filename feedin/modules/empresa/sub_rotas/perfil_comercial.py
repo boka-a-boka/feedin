@@ -86,60 +86,58 @@ def perfil_comercial(empresa_uuid):
             outro_id = c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente
             status_conexoes_usuario[outro_id] = c.status
 
-        # 🌟 PROCESSAMENTO DA GRADE SEMANAL E STATUS EM TEMPO REAL DE HORÁRIOS
-        dias_semana_nomes = [
-            ("Segunda", 0),
-            ("Terça", 1),
-            ("Quarta", 2),
-            ("Quinta", 3),
-            ("Sexta", 4),
-            ("Sábado", 5),
-            ("Domingo", 6)
-        ]
+    # 🌟 PROCESSAMENTO DA GRADE SEMANAL E STATUS EM TEMPO REAL DE HORÁRIOS (GLOBAL/ANÔNIMO)
+    dias_semana_nomes = [
+        ("Segunda", 0),
+        ("Terça", 1),
+        ("Quarta", 2),
+        ("Quinta", 3),
+        ("Sexta", 4),
+        ("Sábado", 5),
+        ("Domingo", 6)
+    ]
 
-        dia_atual_index = datetime.datetime.now().weekday()
-        grade_semanal = []
+    dia_atual_index = datetime.datetime.now().weekday()
+    grade_semanal = []
 
-        # Busca limpa e direta utilizando o ID oficial unificado da empresa
-        horarios_cadastrados = EseHorarioFuncionamento.query.filter_by(empresa_id=empresa.id).all()
+    horarios_cadastrados = EseHorarioFuncionamento.query.filter_by(empresa_id=empresa.id).all()
 
-        horarios_por_dia = {}
-        for h in horarios_cadastrados:
-            dia_num = getattr(h, 'dia_semana', 0)
-            if dia_num not in horarios_por_dia:
-                horarios_por_dia[dia_num] = []
-            horarios_por_dia[dia_num].append(h)
+    horarios_por_dia = {}
+    for h in horarios_cadastrados:
+        dia_num = getattr(h, 'dia_semana', 0)
+        if dia_num not in horarios_por_dia:
+            horarios_por_dia[dia_num] = []
+        horarios_por_dia[dia_num].append(h)
 
-        for nome_dia, index in dias_semana_nomes:
-            turnos_do_dia = horarios_por_dia.get(index, [])
-            grade_semanal.append({
-                'nome_dia': nome_dia,
-                'eh_hoje': (index == dia_atual_index),
-                'turnos': turnos_do_dia
-            })
+    for nome_dia, index in dias_semana_nomes:
+        turnos_do_dia = horarios_por_dia.get(index, [])
+        grade_semanal.append({
+            'nome_dia': nome_dia,
+            'eh_hoje': (index == dia_atual_index),
+            'turnos': turnos_do_dia
+        })
 
-        # Função auxiliar de status em tempo real
-        def verificar_status_aberto_agora(turnos_hoje):
-            if not turnos_hoje:
-                return {"aberto": False, "texto": "Fechado hoje"}
+    def verificar_status_aberto_agora(turnos_hoje):
+        if not turnos_hoje:
+            return {"aberto": False, "texto": "Fechado hoje"}
 
-            agora = datetime.datetime.now()
-            hora_atual_minutos = agora.hour * 60 + agora.minute
+        agora = datetime.datetime.now()
+        hora_atual_minutos = agora.hour * 60 + agora.minute
 
-            for turno in turnos_hoje:
-                if turno.horario_abertura and turno.horario_fechamento:
-                    abertura_minutos = turno.horario_abertura.hour * 60 + turno.horario_abertura.minute
-                    fechamento_minutos = turno.horario_fechamento.hour * 60 + turno.horario_fechamento.minute
+        for turno in turnos_hoje:
+            if turno.horario_abertura and turno.horario_fechamento:
+                abertura_minutos = turno.horario_abertura.hour * 60 + turno.horario_abertura.minute
+                fechamento_minutos = turno.horario_fechamento.hour * 60 + turno.horario_fechamento.minute
 
-                    if abertura_minutos <= hora_atual_minutos <= fechamento_minutos:
-                        return {
-                            "aberto": True,
-                            "texto": f"Aberto agora • Fecha às {turno.horario_fechamento.strftime('%H:%M')}"
-                        }
+                if abertura_minutos <= hora_atual_minutos <= fechamento_minutos:
+                    return {
+                        "aberto": True,
+                        "texto": f"Aberto agora • Fecha às {turno.horario_fechamento.strftime('%H:%M')}"
+                    }
 
-            return {"aberto": False, "texto": "Fechado no momento"}
+        return {"aberto": False, "texto": "Fechado no momento"}
 
-        status_funcionamento = verificar_status_aberto_agora(horarios_por_dia.get(dia_atual_index, []))
+    status_funcionamento = verificar_status_aberto_agora(horarios_por_dia.get(dia_atual_index, []))
 
     # 4. Busca os CPFs que possuem relacionamento comercial
     cpfs_clientes_empresa = {
@@ -161,10 +159,12 @@ def perfil_comercial(empresa_uuid):
             if hasattr(autor, 'cpf_hash') and autor.cpf_hash:
                 avaliacoes_por_cpf[autor.cpf_hash] = comentario
 
-    if getattr(empresa, 'status_homologacao', None) not in ['concluido', 'provisorio_beta', 'homologado']:
-        if empresa.local_id:
-            return redirect(url_for('perfil_local', local_id=empresa.local_id))
-        abort(404)
+    # 🛡️ TRAVA CONTRA LOOP INFINITO: Não faz redirect de volta para perfil_local!
+    status_atual = getattr(empresa, 'status_homologacao', None)
+    if status_atual not in ['concluido', 'provisorio_beta', 'homologado', 'verificado']:
+        # Se a empresa não estiver liberada e não houver local, aborta 404 de forma limpa
+        if not empresa.local_id:
+            abort(404)
 
     tem_pro = empresa.possui_recurso_pro()
     plano_ativo = 'pro' if tem_pro else 'free'
