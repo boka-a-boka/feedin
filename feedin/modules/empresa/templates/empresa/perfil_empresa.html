@@ -215,11 +215,11 @@
                         </div>
                     </div>
 
-                    {# AÇÃO PRINCIPAL / AGENDAR #}
+                    {# 🌟 AÇÃO PRINCIPAL DINÂMICA (FORNECIDA PELO MÓDULO/BLUEPRINT) #}
                     <div class="w-100" style="max-width: 320px;">
-                        {% if plano_ativo == 'pro' %}
-                            <a href="https://feedin.boka-a-boka.com.br/agenda" target="_blank" class="btn btn-warning btn-lg rounded-pill px-4 fw-bold shadow text-dark w-100 py-2.5 fs-6" style="border: 2px solid rgba(255,255,255,0.4);">
-                                <i class="bi bi-calendar-check-fill me-2"></i> Agendar Horário
+                        {% if plano_ativo == 'pro' and acao_principal %}
+                            <a href="{{ acao_principal.url }}" target="{{ acao_principal.target }}" class="btn btn-{{ acao_principal.cor }} btn-lg rounded-pill px-4 fw-bold shadow text-dark w-100 py-2.5 fs-6" style="border: 2px solid rgba(255,255,255,0.4);">
+                                <i class="bi {{ acao_principal.icone }} me-2"></i> {{ acao_principal.texto }}
                             </a>
                         {% else %}
                             <button class="btn btn-outline-light btn-lg rounded-pill px-4 fw-semibold w-100 py-2 fs-6" disabled>

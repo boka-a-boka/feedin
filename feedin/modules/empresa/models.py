@@ -574,12 +574,23 @@ class ColaboradorContrato(db.Model):
     # -------------------------------------------------------------------------
     @property
     def data_admissao(self):
-        """Redireciona 'data_admissao' para o campo 'data_contratacao' da tabela."""
-        return self.data_contratacao
+        """Retorna apenas a data (YYYY-MM-DD) para exibição e inputs do tipo date."""
+        if self.data_contratacao:
+            if hasattr(self.data_contratacao, 'date'):
+                return self.data_contratacao.date()
+            return self.data_contratacao
+        return None
 
     @data_admissao.setter
     def data_admissao(self, value):
-        self.data_contratacao = value
+        """Permite atribuir uma string de data (YYYY-MM-DD) ou objeto date diretamente no campo data_contratacao."""
+        if isinstance(value, str) and value.strip():
+            try:
+                self.data_contratacao = datetime.strptime(value.strip(), '%Y-%m-%d')
+            except ValueError:
+                pass
+        elif isinstance(value, (date, datetime)):
+            self.data_contratacao = value
 
     # -------------------------------------------------------------------------
     # DEMAIS PROPERTIES

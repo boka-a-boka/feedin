@@ -272,13 +272,22 @@
                                     <i class="bi bi-chevron-right small text-muted"></i>
                                 </button>
 
-                                {# 📄 FICHA CADASTRAL #}
+                                {# 📄 FICHA CADASTRAL (VISUALIZAÇÃO / EDIÇÃO DO COLABORADOR) #}
                                 <a href="{{ url_for('empresa.ver_perfil_colaborador', contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
                                    class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
                                     <span class="fw-semibold text-dark">
                                         <i class="bi bi-person-vcard me-2 text-secondary fs-6"></i> Ficha Cadastral e Dados
                                     </span>
                                     <i class="bi bi-chevron-right small text-muted"></i>
+                                </a>
+
+                                {# ⚙️ NOVO: HOMOLOGAÇÃO DE CONTRATO E AJUSTE DE ADMISSÃO (PARA O EMPREENDEDOR) #}
+                                <a href="{{ url_for('empresa.editar_contrato_colaborador', contrato_id=contrato.id) }}"
+                                   class="btn btn-white border border-primary-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-primary bg-opacity-10 text-primary" style="font-size: 0.85rem;">
+                                    <span class="fw-bold">
+                                        <i class="bi bi-calendar-check me-2 fs-6"></i> Homologar / Ajustar Admissão
+                                    </span>
+                                    <i class="bi bi-chevron-right small"></i>
                                 </a>
 
                                 <hr class="my-1 text-muted opacity-25">

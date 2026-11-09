@@ -3572,3 +3572,56 @@ def conectar_pioneiro_empresa(id_destinatario):
 
     # Fallback seguro para requisições tradicionais
     return redirect(url_for('empresa.perfil_comercial_empresa', empresa_uuid=request.values.get('empresa_uuid')))
+
+
+from datetime import datetime
+from flask import render_template, request, redirect, url_for, flash
+from flask_login import login_required
+
+
+@empresa_bp.route('/colaboradores/editar/<string:contrato_id>', methods=['GET', 'POST'])
+@login_required
+def editar_contrato_colaborador(contrato_id):
+    """
+    Painel do Empreendedor: Edição, homologação e ajuste de dados contratuais
+    (incluindo a chancela da data de admissão real salva em data_contratacao).
+    """
+    contrato = ColaboradorContrato.query.get_or_404(contrato_id)
+
+    if request.method == 'POST':
+        try:
+            status_novo = request.form.get('status_profissional')
+            cargo_id_novo = request.form.get('id_cargo')
+            data_admissao_str = request.form.get('data_admissao')
+
+            print(f"🔍 [DEBUG EDITAR CONTRATO] ID: {contrato_id} | Data recebida: {data_admissao_str}")
+
+            # 📅 Atualiza a data real de admissão acionando o setter
+            if data_admissao_str:
+                contrato.data_admissao = data_admissao_str
+
+            if status_novo:
+                contrato.status_profissional = status_novo
+
+            if cargo_id_novo is not None:
+                contrato.id_cargo = int(cargo_id_novo) if cargo_id_novo != '' else None
+
+            db.session.commit()
+            print("✅ [DEBUG EDITAR CONTRATO]: Commit realizado com sucesso!")
+
+            flash("Dados contratuais e data de admissão atualizados com sucesso!", "success")
+            return redirect(url_for('empresa.equipe_jornadas', empresa_id=contrato.id_local))
+
+        except Exception as e:
+            # Se o commit já passou, o rollback não afeta o sucesso, mas pegamos a exceção exata
+            print(f"🚨 [ERRO CRÍTICO EDITAR CONTRATO]: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+            flash("Ocorreu um erro ao atualizar os dados do contrato. Tente novamente.", "danger")
+            return redirect(url_for('empresa.equipe_jornadas', empresa_id=contrato.id_local))
+
+    return render_template(
+        'empresa/editar_contrato.html',
+        contrato=contrato
+    )

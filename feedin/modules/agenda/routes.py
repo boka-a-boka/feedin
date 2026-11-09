@@ -9716,23 +9716,26 @@ def salvar_imagem_beneficiario(foto):
         return None
 
 
-@agenda_bp.route('/relatorios/dashboard-clientes', methods=['GET'])
+from datetime import datetime, time, date
+
+@agenda_bp.route('/relatorios/dashboard-clientes', methods=['GET', 'POST'])
 @login_required
 def relatorio_dashboard_clientes():
     """
     Painel de Relatório Analítico e Dashboard para Clientes/Gestores.
     Lista agendamentos concluídos com filtros por período, empresa, serviço e dependentes.
     """
-    cliente_id_str = str(current_user.id)
+    usuario_core_id = current_user.id
+    cliente_id_str = str(usuario_core_id)
 
-    # 📌 1. Captura de Filtros da Requisição (Query Params)
+    # 📌 1. Captura de Filtros da Requisição (Query Params / Form)
     hoje_str = datetime.now().strftime('%Y-%m-%d')
-    data_inicio_str = request.args.get('data_inicio', hoje_str)
-    data_fim_str = request.args.get('data_fim', hoje_str)
-    empresa_id_filtro = request.args.get('empresa_id', type=int)
-    servico_id_filtro = request.args.get('servico_id', type=int)
-    beneficiario_id_filtro = request.args.get('beneficiario_id', 'todos')  # 'todos', 'titular', ou UUID do dependente
-    agrupar_por = request.args.get('agrupar_por', 'empresa')  # 'empresa', 'servico', 'beneficiario'
+    data_inicio_str = request.values.get('data_inicio', hoje_str)
+    data_fim_str = request.values.get('data_fim', hoje_str)
+    empresa_id_filtro = request.values.get('empresa_id', type=int)
+    servico_id_filtro = request.values.get('servico_id', type=int)
+    beneficiario_id_filtro = request.values.get('beneficiario_id', 'todos')
+    agrupar_por = request.values.get('agrupar_por', 'empresa')
 
     try:
         data_inicio = datetime.strptime(data_inicio_str, '%Y-%m-%d').date()
@@ -9744,11 +9747,17 @@ def relatorio_dashboard_clientes():
     inicio_dt = datetime.combine(data_inicio, time.min)
     fim_dt = datetime.combine(data_fim, time.max)
 
-    # 📌 2. Construção da Query Base (Apenas Agendamentos Concluídos do Cliente Logado)
-    query = db.session.query(AghAgendamentoItem).join(
+    # 📌 2. Construção da Query Base com LEFT JOIN em ColaboradorContrato
+    query = db.session.query(
+        AghAgendamentoItem,
+        AghAgendamento,
+        ColaboradorContrato
+    ).join(
         AghAgendamento, AghAgendamentoItem.agendamento_id == AghAgendamento.id
+    ).outerjoin(
+        ColaboradorContrato, AghAgendamentoItem.colaborador_id_contrato == ColaboradorContrato.id
     ).filter(
-        AghAgendamento.cliente_id == current_user.id,
+        AghAgendamento.cliente_id == usuario_core_id,
         AghAgendamento.status == 'concluido',
         AghAgendamentoItem.data_hora_inicio >= inicio_dt,
         AghAgendamentoItem.data_hora_inicio <= fim_dt
@@ -9761,27 +9770,44 @@ def relatorio_dashboard_clientes():
     if servico_id_filtro:
         query = query.filter(AghAgendamentoItem.servico_id == servico_id_filtro)
 
-    # Filtro específico por beneficiário / dependente
     if beneficiario_id_filtro == 'titular':
         query = query.filter(AghAgendamento.beneficiario_id.is_(None))
     elif beneficiario_id_filtro != 'todos':
         query = query.filter(AghAgendamento.beneficiario_id == beneficiario_id_filtro)
 
-    itens_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
+    resultados_brutos = query.order_by(AghAgendamentoItem.data_hora_inicio.asc()).all()
 
     # 📌 3. Processamento, Agrupamento e Sub-totais
     dados_agrupados = {}
     valor_total_geral = 0.0
-    total_atendimentos_geral = len(itens_brutos)
+    total_atendimentos_geral = len(resultados_brutos)
 
-    for item in itens_brutos:
-        agendamento = item.agendamento
+    for item, agendamento, contrato_prof in resultados_brutos:
         empresa_obj = getattr(agendamento, 'empresa', None)
         empresa_nome = empresa_obj.nome if empresa_obj else 'Empresa Geral'
 
         servico_nome = getattr(item, 'nome_servico', None) or (
             item.servico.nome if hasattr(item, 'servico') and item.servico else f"Serviço #{item.servico_id}")
-        prof_nome = getattr(item, 'nome_prof_exibicao', None) or 'Profissional'
+
+        # Resolução do nome do profissional via contrato ou fallback seguro
+        prof_nome = None
+
+        if contrato_prof:
+            prof_nome = getattr(contrato_prof, 'nome', None)
+
+        if not prof_nome:
+            id_contrato_direto = getattr(item, 'colaborador_id_contrato', None) or getattr(agendamento, 'colaborador_id_contrato', None)
+            if id_contrato_direto:
+                c_obj = ColaboradorContrato.query.get(id_contrato_direto)
+                if c_obj:
+                    prof_nome = getattr(c_obj, 'nome', None)
+
+        if not prof_nome:
+            prof_nome = (
+                getattr(item, 'nome_prof_exibicao', None) or
+                getattr(agendamento, 'nome_prof_exibicao', None) or
+                'Especialista Responsável'
+            )
 
         # Identificação do Beneficiário (Titular vs Dependente)
         beneficiario_obj = getattr(agendamento, 'beneficiario', None)
@@ -9809,7 +9835,7 @@ def relatorio_dashboard_clientes():
             chave_grupo = empresa_nome
         elif agrupar_por == 'servico':
             chave_grupo = servico_nome
-        else:  # 'beneficiario'
+        else:
             chave_grupo = f"Beneficiário: {nome_beneficiario}"
 
         if chave_grupo not in dados_agrupados:
@@ -9827,13 +9853,12 @@ def relatorio_dashboard_clientes():
     labels_grafico = list(dados_agrupados.keys())
     valores_grafico = [grupo['subtotal_valor'] for grupo in dados_agrupados.values()]
 
-    # Listas auxiliares para preencher os selects do filtro na tela
     empresas_disponiveis = EseEmpresa.query.all()
 
-    # Busca os beneficiários cadastrados deste cliente para popular o filtro
-    beneficiarios_usuario = ClienteBeneficiario.query.filter_by(
-        cliente_id=cliente_id_str,
-        ativo=True
+    beneficiarios_usuario = ClienteBeneficiario.query.filter(
+        (ClienteBeneficiario.cliente_id == cliente_id_str) |
+        (ClienteBeneficiario.cliente_id == usuario_core_id),
+        ClienteBeneficiario.ativo == True
     ).all()
 
     return render_template(

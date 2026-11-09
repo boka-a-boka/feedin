@@ -1,6 +1,6 @@
 import datetime
 from flask_login import current_user
-from flask import render_template, abort, redirect, url_for, current_app
+from flask import render_template, abort, redirect, url_for, current_app, session
 from feedin.models import database as db, Local, Epoca, Postagem, VinculoUsuarioLocal, Usuario, Conexoes
 from feedin.modules.empresa.models import EseEmpresa, ModEmpresaModulo, EseServicoOferecido, ColaboradorContrato, \
     EseAvaliacaoEmpresa, EseRelacionamentoClienteEmpresa, EseHorarioFuncionamento
@@ -8,6 +8,8 @@ from feedin.modules.empresa.models import EseEmpresa, ModEmpresaModulo, EseServi
 # Importamos o blueprint do módulo empresa a partir do pacote pai ou passamos a rota decorada nele
 from feedin.modules.empresa import empresa_bp
 from sqlalchemy.orm import joinedload
+
+from feedin.modules.registry_acoes import MODULOS_ACOES_REGISTRY
 
 
 @empresa_bp.route('/perfil/<string:empresa_uuid>', methods=['GET'], endpoint='perfil_comercial_empresa')
@@ -26,6 +28,30 @@ def perfil_comercial(empresa_uuid):
 
     # 1. Identifica o local_id vinculado à empresa
     local_id_alvo = empresa.local_id if hasattr(empresa, 'local_id') and empresa.local_id else None
+
+    # 🎯 1. Identifica o módulo principal vigente da empresa (com fallback seguro para 'agenda')
+    modulo_ativo_slug = getattr(empresa, 'modulo_principal_slug', None) or session.get('modulo_slug_atual') or 'agenda'
+
+    # 🎯 2. Resgata a configuração padrão atrelada ao blueprint do módulo
+    config_acao = MODULOS_ACOES_REGISTRY.get(modulo_ativo_slug, MODULOS_ACOES_REGISTRY['agenda'])
+
+    # 🎯 3. Constrói o dicionário de CTA (Call to Action) dinâmico
+    acao_principal = {}
+    try:
+        # Tenta gerar a URL dinamicamente baseada no endpoint do módulo
+        # Passando o ID da empresa para garantir o escopo correto
+        url_gerada = url_for(config_acao['endpoint'], empresa_id=empresa.id)
+    except Exception:
+        # Fallback de segurança caso o endpoint exija outros parâmetros ou não esteja mapeado
+        url_gerada = f"https://feedin.boka-a-boka.com.br/{modulo_ativo_slug}"
+
+    acao_principal = {
+        'texto': config_acao['texto'],
+        'icone': config_acao['icone'],
+        'url': url_gerada,
+        'cor': config_acao['cor'],
+        'target': '_blank'
+    }
 
     # 1. Busca os vínculos tradicionais do Core (seguidores do local físico)
     vinculos_core = []
@@ -215,6 +241,7 @@ def perfil_comercial(empresa_uuid):
         contexto_modulo_atual=contexto_modulo_atual,
         local=local,
         plano_ativo=plano_ativo,
+        acao_principal=acao_principal,
         servicos=servicos,
         colaboradores=colaboradores,
         atividades=atividades,

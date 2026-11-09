@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from flask_login import login_required
 
 # 1. METODOLOGIAS DO FLASK & EXTENSÕES
-from flask import current_app, Flask
+from flask import current_app, Flask, session, redirect, url_for
 
 from flask_mail import Message
 
@@ -40,7 +40,6 @@ from feedin.modules.empresa.models import (
 
 from feedin.utils import preparar_entrada_modulo, limpar_string, limpar_mascara, validar_unicidade_documento, \
     salvar_imagem_modulo
-from feedin.modules.empresa.services.ese_calendario_service import obter_escala_padrao, subtrair_intervalo_horario
 
 # 6. 📌 CONSTANTES ESTRUTURAIS AUTÔNOMAS DO MÓDULO
 # O diretório de auditoria agora nasce de forma limpa dentro da static do próprio módulo
@@ -4035,11 +4034,17 @@ def concluir_ficha_colaborador(token):
             def clean_mask(val):
                 return ''.join(filter(str.isalnum, val)) if val else None
 
-            # 2. Busca da Grade do Estabelecimento para Carga da Jornada Padrão
+            # 2. Busca da Grade do Estabelecimento (Resiliente: Tenta segunda (0), senão pega o primeiro dia disponível)
             horario_empresa = EseHorarioFuncionamento.query.filter_by(
                 empresa_id=convite.estabelecimento_id,
-                dia_semana=1
+                dia_semana=0  # 0 = Segunda-feira
             ).order_by(EseHorarioFuncionamento.periodo_id.asc()).first()
+
+            if not horario_empresa:
+                # Fallback: Pega qualquer dia cadastrado da empresa para não travar o onboarding
+                horario_empresa = EseHorarioFuncionamento.query.filter_by(
+                    empresa_id=convite.estabelecimento_id
+                ).order_by(EseHorarioFuncionamento.dia_semana.asc(), EseHorarioFuncionamento.periodo_id.asc()).first()
 
             if not horario_empresa:
                 flash(
@@ -4093,22 +4098,17 @@ def concluir_ficha_colaborador(token):
 
             # ------------------------------------------------------------------
             # 4. RESOLUÇÃO DA CHAVE id_cadastro_cliente (UUID String 36)
-            #    Considerando Empresa, Módulo e eliminando dependência do Usuario ID
             # ------------------------------------------------------------------
             cliente_id_resolvido = None
-
-            # Identificadores do contexto
             empresa_id = convite.estabelecimento_id
-            modulo_slug = 'agenda'  # Defina o slug do módulo correspondente à admissão/equipe
+            modulo_slug = 'agenda'  # Slug padrão do módulo
 
-            # A) Obtém o CPF limpo trazido do formulário e calcula o Hash de comparação
             cpf_form_limpo = clean_mask(request.form.get('cpf'))
             hash_cpf_alvo = (
                 EseConviteColaborador.gerar_hash_cpf(cpf_form_limpo)
                 if cpf_form_limpo else convite.cpf_hash
             )
 
-            # B) Busca o cadastro do cliente centralizado pelo Hash do CPF
             cadastro_cliente = ModCadastroCliente.query.filter_by(
                 cpf_hash=hash_cpf_alvo
             ).first()
@@ -4116,7 +4116,6 @@ def concluir_ficha_colaborador(token):
             if cadastro_cliente:
                 cliente_id_resolvido = str(cadastro_cliente.id)
 
-                # C) Garante a existência do vínculo relacional do cliente com a Empresa e o Módulo
                 vinculo_existente = ModVinculoModulo.query.filter_by(
                     cpf_hash=hash_cpf_alvo,
                     modulo_slug=modulo_slug,
@@ -4133,7 +4132,6 @@ def concluir_ficha_colaborador(token):
                     db.session.add(novo_vinculo)
                     db.session.flush()
 
-            # D) Log e diagnóstico de consistência
             if not cliente_id_resolvido:
                 print(
                     f"⚠️ [ALERTA ADMISSÃO]: Nenhum registro em 'ModCadastroCliente' "
@@ -4146,36 +4144,33 @@ def concluir_ficha_colaborador(token):
                 )
 
             # ------------------------------------------------------------------
-            # 5. GERAÇÃO DO CONTRATO PROFISSIONAL
+            # 5. GERAÇÃO DO CONTRATO PROFISSIONAL (COM DATA REAL DE ADMISSÃO)
             # ------------------------------------------------------------------
+
+            # Tenta capturar a data de admissão informada no form (caso o input exista na UI).
+            # Se não vier preenchida, assume a data atual (ou pode herdar de uma data informada no convite pelo gestor).
+            data_admissao_str = request.form.get('data_admissao')
+            if data_admissao_str:
+                try:
+                    data_admissao_real = datetime.strptime(data_admissao_str, '%Y-%m-%d').date()
+                except ValueError:
+                    data_admissao_real = datetime.now(timezone.utc).date()
+            else:
+                data_admissao_real = datetime.now(timezone.utc).date()
+
             novo_contrato = ColaboradorContrato(
                 id_cadastro_cliente=cliente_id_resolvido,  # String(36) UUID
                 id_local=empresa_id,
                 id_cargo=getattr(convite, 'cargo_id', None),
-                status_profissional='pendente',
-                data_contratacao=datetime.now(timezone.utc),
+                status_profissional='pendente',  # Fica pendente de validação gerencial final
+                data_criacao_sistema=datetime.now(timezone.utc),  # Auditoria tecnológica
+                data_admissao=data_admissao_real,  # Sugerida pelo colaborador, auditável pelo empreendedor
                 hora_inicio_expediente=horario_empresa.horario_abertura,
                 hora_fim_expediente=horario_empresa.horario_fechamento
             )
 
-            db.session.add(novo_contrato)
-            db.session.flush()  # Garante a criação e geração da Primary Key (ID) do contrato
-
-            # Amarra o ID do novo contrato à ficha do colaborador
-            ficha.contrato_id = novo_contrato.id
-
-            # 6. Transição de Estado da Alfândega/Convite
-            convite.status = 'aceito'
-
-            db.session.commit()
-
-            flash("Ficha cadastral enviada com sucesso!", "success")
-
-            # Passa a responsabilidade para a fronteira de identidade
-            return redirect(url_for('auth.processar_identidade'))
-
             # ------------------------------------------------------------------
-            # 6. TRANSIÇÃO DE ESTADO DA ALFÂNDEGA / CONVITE
+            # 6. TRANSIÇÃO DE ESTADO DA ALFÂNDEGA / CONVITE & REDIRECIONAMENTO SEGURO
             # ------------------------------------------------------------------
             convite.status = 'aceito'
 
@@ -4183,16 +4178,14 @@ def concluir_ficha_colaborador(token):
 
             flash("Ficha cadastral enviada com sucesso!", "success")
 
-            # Resgate da URL de destino (prioridade: form > query string > fallback padrão)
+            # Resgate unificado e seguro da URL de destino pós-admissão
             next_url = (
-                    request.form.get('next')
-                    or request.args.get('next')
-                    or session.pop('return_after_admissao', None)
-                    or url_for('agenda.index')  # Fallback dinâmico para o módulo padrão (ex: agenda)
+                request.form.get('next')
+                or request.args.get('next')
+                or session.pop('return_after_admissao', None)
+                or url_for('auth.processar_identidade')
             )
 
-            # Garante que a URL é segura para evitar Open Redirects externos
-            # (ou redireciona direto para a rota de origem resgatada)
             return redirect(next_url)
 
         except Exception as e:
@@ -4204,7 +4197,8 @@ def concluir_ficha_colaborador(token):
         'empresa/ficha_admissao_notificacao.html',
         convite=convite,
         empresa=convite.empresa,
-        passo=passo
+        passo=passo,
+        novo_contrato=novo_contrato
     )
 
 @empresa_bp.route('/<int:empresa_id>/equipe/convidar', methods=['GET', 'POST'])

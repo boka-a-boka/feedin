@@ -1,0 +1,70 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Gestão de Contrato e Admissão{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 700px;">
+    
+    <!-- CABEÇALHO -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h4 class="fw-bold text-dark m-0">
+                <i class="bi bi-person-gear text-primary me-2"></i>Homologação de Contrato
+            </h4>
+            <small class="text-muted">Ajuste de vínculos, cargos e chancela da data de admissão real.</small>
+        </div>
+        <div>
+            <a href="{{ url_for('empresa.equipe_jornadas', empresa_id=contrato.id_local) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- CARD DE FORMULÁRIO -->
+    <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+        <div class="card-body p-4 p-md-5">
+            <form method="POST" class="row g-3">
+                
+                {% if csrf_token %}
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                {% endif %}
+
+                <!-- INFO DO COLABORADOR -->
+                <div class="alert alert-light border border-light-subtle rounded-3 p-3 mb-2">
+                    <span class="text-uppercase text-secondary fw-semibold small d-block mb-1">Colaborador / Profissional</span>
+                    <h5 class="fw-bold text-dark m-0">
+                        {{ contrato.nome }}
+                    </h5>
+                </div>
+
+                <!-- DATA DE ADMISSÃO REAL (A PALAVRA DO EMPREENDEDOR) -->
+                <div class="col-12 col-md-6">
+                    <label class="form-label small fw-bold text-secondary">Data de Admissão Real (Início na Empresa) *</label>
+                    <input type="date" name="data_admissao" class="form-control rounded-3"
+                           value="{{ contrato.data_admissao.strftime('%Y-%m-%d') if contrato.data_admissao else '' }}" required>
+                    <small class="text-muted" style="font-size: 0.75rem;">Chancela oficial para relatórios de tempo de casa e D.P.</small>
+                </div>
+
+                <!-- STATUS PROFISSIONAL -->
+                <div class="col-12 col-md-6">
+                    <label class="form-label small fw-bold text-secondary">Status do Vínculo *</label>
+                    <select name="status_profissional" class="form-select rounded-3">
+                        <option value="pendente" {% if contrato.status_profissional == 'pendente' %}selected{% endif %}>Pendente (Em Revisão)</option>
+                        <option value="ativo" {% if contrato.status_profissional == 'ativo' %}selected{% endif %}>Ativo (Homologado)</option>
+                        <option value="inativo" {% if contrato.status_profissional == 'inativo' %}selected{% endif %}>Inativo / Desligado</option>
+                    </select>
+                </div>
+
+                <!-- BOTÃO DE SALVAR -->
+                <div class="col-12 pt-3 text-end">
+                    <button type="submit" class="btn btn-primary rounded-pill fw-bold px-4 py-2 shadow-sm">
+                        <i class="bi bi-check2-circle me-1"></i> Salvar e Homologar Alterações
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
