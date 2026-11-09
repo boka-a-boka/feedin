@@ -1003,3 +1003,34 @@ def verificar_prontitude_operacional(empresa_id):
         return False, "O colaborador precisa ter uma escala de trabalho definida e os serviços correspondentes habilitados."
 
     return True, "Estabelecimento pronto para operar!"
+
+
+import re
+
+
+def sanitizar_whatsapp(whatsapp_raw: str | None) -> str | None:
+    """
+    Sanitiza e padroniza o número de WhatsApp/Telefone para formato E.164.
+
+    - Remove caracteres não numéricos.
+    - Adiciona DDI 55 (Brasil) automaticamente se o usuário digitar apenas DDD + número (10 ou 11 dígitos).
+    - Retorna None se a entrada for vazia ou inválida (fora do padrão numérico aceitável).
+    """
+    if not whatsapp_raw:
+        return None
+
+    # Mantém apenas os dígitos numéricos
+    numeros = re.sub(r'\D', '', whatsapp_raw)
+
+    if not numeros:
+        return None
+
+    # Trata números no padrão brasileiro: DDD + Número (ex: 19999999999 -> 11 dígitos ou 1934000000 -> 10 dígitos)
+    if len(numeros) in (10, 11):
+        numeros = f"55{numeros}"
+
+    # Valida tamanho padrão E.164 com DDI (Ex: 5519999999999 -> 12 ou 13 dígitos)
+    if len(numeros) < 12 or len(numeros) > 15:
+        return None
+
+    return numeros

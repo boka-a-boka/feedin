@@ -1,0 +1,117 @@
+{% extends "base.html" %} <!-- Ajuste o extends conforme o layout base do seu projeto -->
+
+{% block content %}
+<div class="container py-4" style="max-width: 600px;">
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header bg-white border-bottom py-3 px-4 rounded-top-4">
+            <h4 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+                <i class="bi bi-person-vcard text-primary"></i> Editar Meu Perfil
+            </h4>
+            <small class="text-muted">Atualize seus dados cadastrais e canais de comunicação</small>
+        </div>
+
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('auth.editar_perfil') }}" class="needs-validation" novalidate>
+                <!-- CAMINHO DO CSRF TOKEN -->
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <!-- 🎯 CAMINHO OCULTO DO NEXT_URL PARA PRESERVAR A ORIGEM NO POST -->
+                <input type="hidden" name="next_url" value="{{ next_url }}">
+
+                <!-- NOME COMPLETO -->
+                <div class="mb-3">
+                    <label for="nome_real" class="form-label fw-semibold small text-secondary">Nome Completo</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-person"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="nome_real" name="nome_real"
+                               value="{{ perfil.nome_completo if perfil else (cliente_local.nome if cliente_local else '') }}" required>
+                    </div>
+                </div>
+
+                <!-- DATA DE NASCIMENTO -->
+                <div class="mb-3">
+                    <label for="data_nascimento" class="form-label fw-semibold small text-secondary">Data de Nascimento</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-calendar-event"></i></span>
+                        <input type="date" class="form-control border-start-0 ps-0" id="data_nascimento" name="data_nascimento"
+                               value="{{ perfil.data_nascimento.strftime('%Y-%m-%d') if perfil and perfil.data_nascimento else (cliente_local.data_nascimento.strftime('%Y-%m-%d') if cliente_local and cliente_local.data_nascimento else '') }}" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- GÊNERO DINÂMICO -->
+                    <div class="col-md-6 mb-3">
+                        <label for="genero" class="form-label fw-semibold small text-secondary">Gênero</label>
+                        <select class="form-select" id="genero" name="genero">
+                            <option value="" disabled {% if not (perfil and perfil.genero) and not (cliente_local and cliente_local.genero) %}selected{% endif %}>Selecione...</option>
+
+                            {% set genero_atual = (cliente_local.genero if cliente_local and cliente_local.genero is not none else (perfil.genero if perfil else none)) | string %}
+
+                            {% for g in lista_generos %}
+                                <option value="{{ g.id }}" {% if genero_atual == (g.id | string) %}selected{% endif %}>
+                                    {{ g.genero }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- ESTADO CIVIL DINÂMICO -->
+                    <div class="col-md-6 mb-3">
+                        <label for="estado_civil" class="form-label fw-semibold small text-secondary">Estado Civil</label>
+                        <select class="form-select" id="estado_civil" name="estado_civil">
+                            <option value="" disabled {% if not (cliente_local and cliente_local.estado_civil) %}selected{% endif %}>Selecione...</option>
+
+                            {% set estado_civil_atual = (cliente_local.estado_civil if cliente_local and cliente_local.estado_civil is not none else none) | string %}
+
+                            {% for ec in lista_estado_civil %}
+                                <option value="{{ ec.id }}" {% if estado_civil_atual == (ec.id | string) %}selected{% endif %}>
+                                    {{ ec.estado_civil }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- SEÇÃO: CANAIS DE COMUNICAÇÃO -->
+                <hr class="my-4 text-muted opacity-25">
+                <h6 class="fw-bold text-dark mb-3">
+                    <i class="bi bi-whatsapp text-success me-1"></i> Canais de Comunicação
+                </h6>
+
+                <!-- WHATSAPP -->
+                <div class="mb-3">
+                    <label for="whatsapp" class="form-label fw-semibold small text-secondary">WhatsApp Principal</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-success border-end-0"><i class="bi bi-whatsapp"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="whatsapp" name="whatsapp"
+                               value="{{ cliente_local.whatsapp if cliente_local else '' }}" placeholder="(19) 99999-9999">
+                    </div>
+                    <small class="text-muted" style="font-size: 0.75rem;">Utilizado para envio de lembretes e confirmações de agendamento.</small>
+                </div>
+
+                <!-- E-MAIL (Somente leitura para segurança de vínculo) -->
+                <div class="mb-4">
+                    <label for="email_display" class="form-label fw-semibold small text-secondary">E-mail de Acesso</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light text-muted border-end-0"><i class="bi bi-envelope"></i></span>
+                        <input type="email" class="form-control border-start-0 ps-0 bg-light text-muted" id="email_display"
+                               value="{{ cliente_local.email if cliente_local else current_user.email }}" disabled>
+                    </div>
+                    <small class="text-muted" style="font-size: 0.75rem;">O e-mail principal é a credencial de segurança e não pode ser alterado diretamente aqui.</small>
+                </div>
+
+                <!-- BOTÕES DE AÇÃO -->
+                <div class="d-flex justify-content-end gap-2 pt-2">
+                    <a href="{{ next_url if next_url else (request.referrer if request.referrer else url_for('agenda.dashboard')) }}" class="btn btn-outline-secondary px-4 rounded-3">
+                        Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3 fw-semibold shadow-sm">
+                        <i class="bi bi-check-lg me-1"></i> Salvar Alterações
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -216,48 +216,105 @@
             </form>
         </div>
 
-        {# 2. OFFCANVAS DA CENTRAL DA CONTA DO CLIENTE #}
-        <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasPerfilCliente" aria-labelledby="offcanvasPerfilClienteLabel">
-            <div class="offcanvas-header border-bottom">
-                <h5 class="offcanvas-title fw-bold" id="offcanvasPerfilClienteLabel">
-                    <i class="bi bi-person-gear me-2 text-primary"></i>Minha Conta - Agenda
+        {# 2. OFFCANVAS UNIFICADO DA CENTRAL DA CONTA DO CLIENTE / RECURSOS #}
+        <div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasPerfilCliente" aria-labelledby="offcanvasPerfilClienteLabel" style="max-height: 85vh;">
+            <div class="offcanvas-header border-bottom py-3">
+                <h5 class="offcanvas-title fw-bold fs-6 d-flex align-items-center gap-2" id="offcanvasPerfilClienteLabel">
+                    <i class="bi bi-person-gear text-primary"></i> Minha Conta & Recursos
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
             </div>
-            <div class="offcanvas-body p-3">
-                <div class="list-group list-group-flush">
-                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                        <div class="d-flex align-items-center gap-3">
-                            <i class="bi bi-person-vcard fs-5 text-primary"></i>
-                            <div>
-                                <strong class="d-block text-dark">Editar Perfil</strong>
-                                <small class="text-muted">Seus dados de contato e identificação</small>
-                            </div>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted"></i>
-                    </a>
 
-                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                        <div class="d-flex align-items-center gap-3">
-                            <i class="bi bi-clock-history fs-5 text-success"></i>
-                            <div>
-                                <strong class="d-block text-dark">Histórico & Relatórios</strong>
-                                <small class="text-muted">Atendimentos passados e consumos</small>
-                            </div>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted"></i>
-                    </a>
+            <div class="offcanvas-body p-3 overflow-y-auto">
+                <div class="list-group list-group-flush d-flex flex-column gap-2">
 
-                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 border-0 rounded-3 mb-1 bg-light">
-                        <div class="d-flex align-items-center gap-3">
-                            <i class="bi bi-sliders fs-5 text-warning"></i>
-                            <div>
-                                <strong class="d-block text-dark">Preferências de Notificação</strong>
-                                <small class="text-muted">Canais de recebimento (WhatsApp / E-mail)</small>
+                    <!-- BLOCO 1: ACESSO RÁPIDO AO PERFIL E PREFERÊNCIAS -->
+                    <div class="d-flex flex-column gap-1 mb-2">
+                        <a href="{{ url_for('auth.editar_perfil', next_url=request.path) }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between py-3 px-3 border-0 rounded-3 bg-light">
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="bi bi-person-vcard fs-5 text-primary"></i>
+                                <div>
+                                    <strong class="d-block text-dark small" style="font-size: 0.85rem;">Editar Perfil</strong>
+                                    <small class="text-muted" style="font-size: 0.75rem;">Seus dados de contato, nascimento e identificação</small>
+                                </div>
+                            </div>
+                            <i class="bi bi-chevron-right text-muted small"></i>
+                        </a>
+
+                    </div>
+
+                    <!-- BLOCO 2: ACORDEON DE RECURSOS AVANÇADOS (Antiga Caixa de Ferramentas) -->
+                    <div class="accordion accordion-flush d-flex flex-column gap-2" id="accordionPerfilRecursos">
+
+                        <!-- GRUPO: CADASTROS & PERSONAS -->
+                        <div class="accordion-item border rounded-3 overflow-hidden">
+                            <h2 class="accordion-header" id="headingPerfilCadastros">
+                                <button class="accordion-button py-2.5 px-3 fw-bold text-dark bg-light collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePerfilCadastros" aria-expanded="false" aria-controls="collapsePerfilCadastros" style="font-size: 0.85rem;">
+                                    <i class="bi bi-folder-plus text-primary me-2 fs-6"></i> Cadastros & Personas
+                                </button>
+                            </h2>
+                            <div id="collapsePerfilCadastros" class="accordion-collapse collapse" aria-labelledby="headingPerfilCadastros" data-bs-parent="#accordionPerfilRecursos">
+                                <div class="accordion-body p-2 d-flex flex-column gap-1">
+                                    <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                                <i class="bi bi-people-fill"></i>
+                                            </div>
+                                            <div>
+                                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meus Beneficiários / Personas</strong>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">Cadastrar dependentes, pets ou veículos</small>
+                                            </div>
+                                        </div>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                    </a>
+                                </div>
                             </div>
                         </div>
-                        <i class="bi bi-chevron-right text-muted"></i>
-                    </a>
+
+                        <!-- GRUPO: RELATÓRIOS & GESTÃO -->
+                        <div class="accordion-item border rounded-3 overflow-hidden">
+                            <h2 class="accordion-header" id="headingPerfilRelatorios">
+                                <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePerfilRelatorios" aria-expanded="false" aria-controls="collapsePerfilRelatorios" style="font-size: 0.85rem;">
+                                    <i class="bi bi-file-earmark-bar-graph text-warning me-2 fs-6"></i> Relatórios & Comprovantes
+                                </button>
+                            </h2>
+                            <div id="collapsePerfilRelatorios" class="accordion-collapse collapse" aria-labelledby="headingPerfilRelatorios" data-bs-parent="#accordionPerfilRecursos">
+                                <div class="accordion-body p-2 d-flex flex-column gap-1">
+                                    <a href="{{ url_for('agenda.relatorio_dashboard_clientes') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                                <i class="bi bi-pie-chart-fill"></i>
+                                            </div>
+                                            <div>
+                                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meu Dashboard de Atendimentos</strong>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato, custos e histórico de dependentes</small>
+                                            </div>
+                                        </div>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                    </a>
+
+                                    {% set eh_colaborador_ativo = colaborador_ativo or session.get('colaborador_ativo') or session.get('tem_contrato_ativo') or tem_permissao_relatorio or (current_user.is_authenticated and current_user.is_admin) %}
+                                    {% if eh_colaborador_ativo %}
+                                    <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if (empresa is defined and empresa and empresa.id) else (empresa_id if (empresa_id is defined and empresa_id) else (empresa_ativa.id if (empresa_ativa is defined and empresa_ativa and empresa_ativa.id) else (session.get('local_id_atual') or session.get('empresa_id') or 0)))) }}"
+                                       class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light border-top mt-1 pt-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
+                                                <i class="bi bi-graph-up-arrow"></i>
+                                            </div>
+                                            <div>
+                                                <strong class="d-block text-dark small" style="font-size: 0.8rem;">Indicadores de Desempenho</strong>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato profissional e produtividade</small>
+                                            </div>
+                                        </div>
+                                        <i class="bi bi-chevron-right text-muted small"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -323,16 +380,6 @@
                             <a href="{{ url_for('agenda.catalogo_servicos') }}" class="btn btn-warning text-dark rounded-pill fw-bold shadow-sm px-3 flex-grow-1 text-center text-truncate" style="font-size: 0.78rem;">
                                 <i class="bi bi-binoculars-fill me-1"></i> Explorar Catálogo
                             </a>
-
-                            <!-- 🧰 BOTÃO CAIXA DE FERRAMENTAS (HARMONIZADO COM O VIZINHO E COM MARGEM) -->
-                            <button type="button"
-                                    class="btn btn-warning text-dark rounded-circle shadow-sm flex-shrink-0 d-flex align-items-center justify-content-center p-0 me-1"
-                                    style="width: 36px; height: 36px;"
-                                    data-bs-toggle="offcanvas"
-                                    data-bs-target="#offcanvasCaixaFerramentas"
-                                    title="Ferramentas e Recursos">
-                                <i class="bi bi-tools" style="font-size: 0.9rem;"></i>
-                            </button>
                         </div>
                     </div>
                     <div class="col-4 text-end">
@@ -1125,141 +1172,6 @@
                 <p class="small mb-0">Você não possui notificações no momento.</p>
             </div>
         {% endif %}
-    </div>
-</div>
-
-{# OFFCANVAS DA CAIXA DE FERRAMENTAS & RECURSOS DO CLIENTE #}
-<div class="offcanvas offcanvas-bottom rounded-top-4 h-auto" tabindex="-1" id="offcanvasCaixaFerramentas" aria-labelledby="offcanvasCaixaFerramentasLabel" style="max-height: 85vh;">
-    <div class="offcanvas-header border-bottom py-3">
-        <h5 class="offcanvas-title fw-bold fs-6 d-flex align-items-center gap-2" id="offcanvasCaixaFerramentasLabel">
-            <i class="bi bi-tools text-warning"></i> Caixa de Ferramentas
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-    </div>
-
-    <div class="offcanvas-body p-3 overflow-y-auto">
-
-        <!-- ACORDION GRUPAL DE RECURSOS -->
-        <div class="accordion accordion-flush d-flex flex-column gap-2" id="accordionFerramentas">
-
-            <!-- GRUPO 1: CADASTROS -->
-            <div class="accordion-item border rounded-3 overflow-hidden">
-                <h2 class="accordion-header" id="headingCadastros">
-                    <button class="accordion-button py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCadastros" aria-expanded="true" aria-controls="collapseCadastros" style="font-size: 0.85rem;">
-                        <i class="bi bi-folder-plus text-primary me-2 fs-6"></i> Cadastros & Personas
-                    </button>
-                </h2>
-
-                <div id="collapseCadastros" class="accordion-collapse collapse show" aria-labelledby="headingCadastros" data-bs-parent="#accordionFerramentas">
-                    <div class="accordion-body p-2 d-flex flex-column gap-1">
-
-                        <!-- ITEM: GERENCIAR BENEFICIÁRIOS -->
-                        <a href="{{ url_for('agenda.listar_beneficiarios') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                    <i class="bi bi-people-fill"></i>
-                                </div>
-                                <div>
-                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meus Beneficiários / Personas</strong>
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Cadastrar dependentes, pets ou veículos</small>
-                                </div>
-                            </div>
-                            <i class="bi bi-chevron-right text-muted small"></i>
-                        </a>
-
-                        <!-- ITEM: CANAIS DE COMUNICAÇÃO -->
-                        <a href="{{ url_for('agenda.listar_contatos_cliente') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                    <i class="bi bi-whatsapp"></i>
-                                </div>
-                                <div>
-                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Canais de Comunicação</strong>
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Definir WhatsApp, e-mail e canal preferencial</small>
-                                </div>
-                            </div>
-                            <i class="bi bi-chevron-right text-muted small"></i>
-                        </a>
-
-                    </div>
-                </div>
-            </div>
-
-            <!-- GRUPO 2: PESQUISAS -->
-            <div class="accordion-item border rounded-3 overflow-hidden">
-                <h2 class="accordion-header" id="headingPesquisas">
-                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapsePesquisas" aria-expanded="false" aria-controls="collapsePesquisas" style="font-size: 0.85rem;">
-                        <i class="bi bi-clipboard-data text-success me-2 fs-6"></i> Pesquisas & Opinião
-                    </button>
-                </h2>
-                <div id="collapsePesquisas" class="accordion-collapse collapse" aria-labelledby="headingPesquisas" data-bs-parent="#accordionFerramentas">
-                    <div class="accordion-body p-2 text-muted small">
-                        Nenhuma pesquisa pendente no momento.
-                    </div>
-                </div>
-            </div>
-
-            <!-- GRUPO 3: RELATÓRIOS & COMPROVANTES -->
-            <div class="accordion-item border rounded-3 overflow-hidden">
-                <h2 class="accordion-header" id="headingRelatorios">
-                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRelatorios" aria-expanded="false" aria-controls="collapseRelatorios" style="font-size: 0.85rem;">
-                        <i class="bi bi-file-earmark-bar-graph text-warning me-2 fs-6"></i> Relatórios & Comprovantes
-                    </button>
-                </h2>
-                <div id="collapseRelatorios" class="accordion-collapse collapse" aria-labelledby="headingRelatorios" data-bs-parent="#accordionFerramentas">
-                    <div class="accordion-body p-2 d-flex flex-column gap-1">
-
-                        <!-- 📊 ITEM GERAL: DISPONÍVEL PARA TODOS OS CLIENTES (Dashboard de Atendimentos & Dependentes) -->
-                        <a href="{{ url_for('agenda.relatorio_dashboard_clientes') }}" class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                    <i class="bi bi-pie-chart-fill"></i>
-                                </div>
-                                <div>
-                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Meu Dashboard de Atendimentos</strong>
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato, custos e histórico de dependentes</small>
-                                </div>
-                            </div>
-                            <i class="bi bi-chevron-right text-muted small"></i>
-                        </a>
-
-                        <!-- 🔒 ITEM RESTRITO: INDICADORES DE DESEMPENHO (Profissionais / Gestores / Admins) -->
-                        {% set eh_colaborador_ativo = colaborador_ativo or session.get('colaborador_ativo') or session.get('tem_contrato_ativo') or tem_permissao_relatorio or (current_user.is_authenticated and current_user.is_admin) %}
-                        {% if eh_colaborador_ativo %}
-                        <a href="{{ url_for('agenda.painel_indicadores_desempenho', empresa_id=empresa.id if (empresa is defined and empresa and empresa.id) else (empresa_id if (empresa_id is defined and empresa_id) else (empresa_ativa.id if (empresa_ativa is defined and empresa_ativa and empresa_ativa.id) else (session.get('local_id_atual') or session.get('empresa_id') or 0)))) }}"
-                           class="list-group-item list-group-item-action border-0 rounded-3 p-2 d-flex align-items-center justify-content-between hover-bg-light border-top mt-1 pt-2">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; min-width: 36px;">
-                                    <i class="bi bi-graph-up-arrow"></i>
-                                </div>
-                                <div>
-                                    <strong class="d-block text-dark small" style="font-size: 0.8rem;">Indicadores de Desempenho</strong>
-                                    <small class="text-muted d-block" style="font-size: 0.7rem;">Extrato profissional e produtividade</small>
-                                </div>
-                            </div>
-                            <i class="bi bi-chevron-right text-muted small"></i>
-                        </a>
-                        {% endif %}
-
-                    </div>
-                </div>
-            </div>
-
-            <!-- GRUPO 4: OUTROS -->
-            <div class="accordion-item border rounded-3 overflow-hidden">
-                <h2 class="accordion-header" id="headingOutros">
-                    <button class="accordion-button collapsed py-2.5 px-3 fw-bold text-dark bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOutros" aria-expanded="false" aria-controls="collapseOutros" style="font-size: 0.85rem;">
-                        <i class="bi bi-gear-wide-connected text-secondary me-2 fs-6"></i> Outros Recursos
-                    </button>
-                </h2>
-                <div id="collapseOutros" class="accordion-collapse collapse" aria-labelledby="headingOutros" data-bs-parent="#accordionFerramentas">
-                    <div class="accordion-body p-2 text-muted small">
-                        Configurações adicionais e integração.
-                    </div>
-                </div>
-            </div>
-
-        </div>
     </div>
 </div>
 

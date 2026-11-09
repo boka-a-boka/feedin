@@ -536,7 +536,7 @@
                 <i class="bi bi-chevron-down text-muted small transition-all"></i>
             </div>
 
-            {# Grade semanal expandível #}
+{# Grade semanal expandível #}
             <div class="collapse mt-3 pt-3 border-top border-light-subtle" id="collapseHorarios">
                 <div class="d-flex flex-column gap-2" style="font-size: 0.78rem;">
                     {% if grade_semanal %}
@@ -546,12 +546,20 @@
                                     {{ dia.nome_dia }} {% if dia.eh_hoje %}<span class="badge bg-primary text-white ms-1" style="font-size: 0.55rem;">Hoje</span>{% endif %}
                                 </span>
                                 <div class="text-end">
-                                    {% if dia.turnos %}
-                                        {% for turno in dia.turnos %}
+                                    {% set turnos_validos = dia.turnos | selectattr('horario_abertura') | list if dia.turnos is iterable else [] %}
+                                    {% if turnos_validos %}
+                                        {% for turno in turnos_validos %}
                                             <div>
-                                                {{ turno.horario_abertura.strftime('%H:%M') if turno.horario_abertura else '' }}
-                                                {% if turno.horario_abertura and turno.horario_fechamento %} às {% endif %}
-                                                {{ turno.horario_fechamento.strftime('%H:%M') if turno.horario_fechamento else '' }}
+                                                {% set abertura = turno.horario_abertura %}
+                                                {% set fechamento = turno.horario_fechamento %}
+
+                                                {# Renderiza abertura (tratando se é objeto com strftime ou string pura) #}
+                                                {{ abertura.strftime('%H:%M') if abertura and abertura.strftime else (abertura | string)[:5] if abertura else '' }}
+
+                                                {% if abertura and fechamento %} às {% endif %}
+
+                                                {# Renderiza fechamento #}
+                                                {{ fechamento.strftime('%H:%M') if fechamento and fechamento.strftime else (fechamento | string)[:5] if fechamento else '' }}
                                             </div>
                                         {% endfor %}
                                     {% else %}

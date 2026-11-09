@@ -21,7 +21,7 @@ from feedin.modules.auth.forms import FormLoginUniversal
 
 # 5. 🗄️ PERSISTÊNCIA: MODELOS DO BANCO DE DADOS
 # Modelos da Estrutura Base (Core)
-from feedin.models import Usuario, IdentidadeCivil, Perfil, Generos, LocalMidia, Local, ModulosSistema
+from feedin.models import Usuario, IdentidadeCivil, Perfil, Generos, LocalMidia, Local, ModulosSistema, EstadoCivil
 
 # Modelos do próprio módulo Auth
 from feedin.modules.auth.models import (ModCadastroCliente, ModFilaAtivacaoCliente, ModVinculoModulo, VinculoUsuarioEmpresa,
@@ -31,7 +31,7 @@ from feedin.modules.auth.models import (ModCadastroCliente, ModFilaAtivacaoClien
 from feedin.modules.empresa.models import (EseProcessoClaim, EseEmpresa,EscalaTrabalhoColaborador, EseConviteColaborador,
                                            ColaboradorContrato, ColaboradorDetalhesPessoais, ClienteBeneficiario, )
 
-from feedin.utils import validar_cpf_estrutura, validar_hash_senha
+from feedin.utils import validar_cpf_estrutura, validar_hash_senha, sanitizar_whatsapp
 
 # =========================================================================
 # ⚙️ FUNÇÕES AUXILIARES DO MÓDULO AUTH
@@ -1000,6 +1000,132 @@ def obter_contexto_cliente(cliente_id, local_id):
         "whatsapp": cliente.whatsapp,
         "cadastro_completo": bool(cliente.foto_path and atrib)  # Flag que indica se já fez o onboarding nesse local
     }), 200
+
+
+@auth_bp.route('/editar-perfil', methods=['GET', 'POST'])
+@login_required
+def editar_perfil():
+    id_usuario_core = current_user.id if hasattr(current_user, 'id') else session.get('usuario_id')
+
+    # 🎯 CAPTURA O DESTINO DE RETORNO COM MÁXIMA PRIORIDADE
+    next_url = request.args.get('next_url') or request.form.get('next_url') or session.get('next_url')
+
+    perfil = Perfil.query.filter_by(id_usuario=id_usuario_core).first() if id_usuario_core else None
+
+    # 🔍 BUSCA SEGURA DO CLIENTE LOCAL (Prioriza o ID da sessão do módulo, depois usuario_id e e-mail)
+    cliente_local = None
+    cliente_modulo_id = session.get('cliente_modulo_id')
+
+    if cliente_modulo_id:
+        cliente_local = ModCadastroCliente.query.get(cliente_modulo_id)
+
+    if not cliente_local and id_usuario_core:
+        cliente_local = ModCadastroCliente.query.filter_by(usuario_id=id_usuario_core).first()
+
+    if not cliente_local and hasattr(current_user, 'email'):
+        cliente_local = ModCadastroCliente.query.filter_by(email=current_user.email).first()
+
+    # 🎯 BUSCA OS DOMÍNIOS DO BANCO DE DADOS
+    lista_generos = Generos.query.order_by(Generos.id).all()
+    lista_estado_civil = EstadoCivil.query.order_by(EstadoCivil.id).all()
+
+    if request.method == 'POST':
+        nome_real = request.form.get('nome_real', '').strip().upper()
+        data_nasc_str = request.form.get('data_nascimento')
+        genero_id = request.form.get('genero')
+        estado_civil_id = request.form.get('estado_civil')
+        whatsapp_raw = request.form.get('whatsapp', '').strip()
+
+        if not nome_real or not data_nasc_str:
+            flash("Nome completo e data de nascimento são obrigatórios.", "warning")
+            return redirect(url_for('auth.editar_perfil', next_url=next_url))
+
+        whatsapp_sanitizado = sanitizar_whatsapp(whatsapp_raw)
+        if whatsapp_raw and not whatsapp_sanitizado:
+            flash("Por favor, informe um número de WhatsApp válido com DDD.", "danger")
+            return redirect(url_for('auth.editar_perfil', next_url=next_url))
+
+        try:
+            data_nasc_obj = datetime.strptime(data_nasc_str, '%Y-%m-%d').date()
+            genero_val = int(genero_id) if (genero_id and str(genero_id).isdigit()) else None
+            estado_civil_val = int(estado_civil_id) if (estado_civil_id and str(estado_civil_id).isdigit()) else None
+
+            # 1. Atualiza Perfil Core (Se existir)
+            if perfil:
+                perfil.nome_completo = nome_real
+                perfil.data_nascimento = data_nasc_obj
+                if genero_val is not None:
+                    perfil.genero = genero_val
+
+            # 2. Atualiza IdentidadeCivil (Se existir)
+            if id_usuario_core:
+                identidade = IdentidadeCivil.query.filter_by(usuario_id=id_usuario_core).first()
+                if identidade:
+                    identidade.nome_completo_oficial = nome_real
+                    identidade.data_nascimento = data_nasc_obj
+
+            # 3. 💾 GRAVAÇÃO GARANTIDA NO MODCADASTROCLIENTE
+            if cliente_local:
+                cliente_local.nome = nome_real
+                cliente_local.data_nascimento = data_nasc_obj
+                if genero_val is not None:
+                    cliente_local.genero = genero_val
+                if estado_civil_val is not None:
+                    cliente_local.estado_civil = estado_civil_val
+                if whatsapp_sanitizado:
+                    cliente_local.whatsapp = whatsapp_sanitizado
+
+                # Garante o vínculo com o usuario_id se estiver ausente
+                if id_usuario_core and not cliente_local.usuario_id:
+                    cliente_local.usuario_id = id_usuario_core
+
+            db.session.commit()
+            flash("Perfil e canais de comunicação atualizados com sucesso!", "success")
+
+            # =========================================================================
+            # 🧭 RESOLUÇÃO DINÂMICA DE RETORNO AO MÓDULO DE ORIGEM
+            # =========================================================================
+            # 1. Prioridade absoluta: next_url explícito enviado pelo formulário/query
+            if next_url and next_url.startswith('/') and '/login' not in next_url and '/auth/' not in next_url:
+                return redirect(next_url)
+
+            # 2. Slug do Módulo Atual em Sessão (ex: 'agenda', 'pdv')
+            modulo_atual_slug = session.get('modulo_slug_atual')
+            if modulo_atual_slug:
+                modulo_info = ModulosSistema.query.filter_by(slug=modulo_atual_slug, ativo=True).first()
+                if modulo_info and modulo_info.endpoint:
+                    try:
+                        return redirect(url_for(modulo_info.endpoint))
+                    except Exception:
+                        pass
+
+            # 3. Empresa / Local Ativo da Sessão
+            local_atual_id = session.get('local_id_atual') or session.get('empresa_ativa_id')
+            if local_atual_id:
+                return redirect(url_for('empresa.hub_empresa', empresa_id=local_atual_id))
+
+            # 4. Fallback seguro para o dashboard da agenda caso venha de lá
+            return redirect(url_for('agenda.dashboard'))
+
+        except Exception as err:
+            db.session.rollback()
+            import traceback
+            traceback.print_exc()
+            flash("Ocorreu um erro interno ao atualizar seu perfil. Tente novamente.", "danger")
+            return redirect(url_for('auth.editar_perfil', next_url=next_url))
+
+    # No GET: Captura o referrer se não houver next_url, ignorando URLs de autenticação
+    if not next_url and request.referrer and '/auth/' not in request.referrer:
+        next_url = request.referrer
+
+    return render_template(
+        'auth/editar_perfil.html',
+        perfil=perfil,
+        cliente_local=cliente_local,
+        next_url=next_url,
+        lista_generos=lista_generos,
+        lista_estado_civil=lista_estado_civil
+    )
 
 
 @auth_bp.route('/logout', methods=['GET'])
