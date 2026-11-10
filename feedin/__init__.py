@@ -121,8 +121,14 @@ def create_app():
     # 3. 🛰️ PROTOCOLO DE CONEXÃO DOS ACESSÓRIOS DO CORE
     with app.app_context():
         # Filtros de template customizados
-        from .utils import tempo_atras_filter
+        from .utils import tempo_atras_filter, resolver_url_midia, media_url
         app.template_filter('tempo_atras')(tempo_atras_filter)
+
+        # Registro explícito global no Jinja para garantir compatibilidade total
+        app.jinja_env.globals.update(
+            resolver_url_midia=resolver_url_midia,
+            media_url=media_url
+        )
 
         @event.listens_for(database.engine, 'connect')
         def set_sqlite_pragma(dbapi_connection, connection_record):

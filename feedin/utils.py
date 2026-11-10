@@ -11,7 +11,7 @@ from functools import wraps
 from unicodedata import normalize
 from sqlalchemy import func
 
-from flask import current_app, redirect, render_template, request, session, flash, send_from_directory, Blueprint
+from flask import current_app, redirect, render_template, request, session, flash, send_from_directory, Blueprint, url_for
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
@@ -795,7 +795,6 @@ def servir_midia_modulo(modulo, filename):
     """
     pasta_modulo = os.path.join(current_app.root_path, 'modules', modulo, 'static')
 
-    # send_from_directory já protege nativamente contra Path Traversal (ex: tentativas de usar ../)
     if not os.path.exists(os.path.join(pasta_modulo, filename)):
         return send_from_directory(
             os.path.join(current_app.root_path, 'static', 'img'),
@@ -803,8 +802,6 @@ def servir_midia_modulo(modulo, filename):
         )
 
     return send_from_directory(pasta_modulo, filename)
-
-from flask import url_for
 
 
 def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str = None) -> str:
@@ -817,17 +814,12 @@ def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str
             return url_for('static', filename=f'img/{fallback_filename}')
         return None
 
-    # Se já for link externo completo (S3, CDN, URL absoluta)
     if caminho_arquivo.startswith(('http://', 'https://')):
         return caminho_arquivo
 
-    # 1. Normalização profunda de caminhos (compatibilidade Windows/Linux)
     caminho_limpo = caminho_arquivo.replace('\\', '/').lstrip('/')
 
-    # 2. BLINDAGEM CONTRA DUPLICAÇÃO DE DIRETÓRIOS:
     partes = caminho_limpo.split('/')
-
-    # Remove repetições consecutivas indesejadas geradas por chamadas legadas
     partes_filtradas = []
     for i, parte in enumerate(partes):
         if i > 0 and parte.lower() == partes[i - 1].lower():
@@ -836,11 +828,14 @@ def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str
 
     caminho_limpo = '/'.join(partes_filtradas)
 
-    # 3. Resolução segura da rota centralizada de mídia
     try:
         return url_for('media_global.servir_midia_modulo', modulo=modulo, filename=caminho_limpo)
     except Exception:
-        return f"/media/{modulo}/{caminho_limpo}"
+        return f"/media/{modulo}/{camin-limpo}" if 'caminho_limpo' in locals() else f"/media/{modulo}/{caminho_arquivo}"
+
+
+# ALIAS DE COMPATIBILIDADE: Garante que chamadas antigas 'media_url' funcionem perfeitamente
+media_url = resolver_url_midia
 
 
 def requer_modulo(modulo_slug):

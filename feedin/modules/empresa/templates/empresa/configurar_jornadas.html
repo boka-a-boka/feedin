@@ -168,7 +168,7 @@
                     <div class="d-flex justify-content-center mb-2">
                         <div class="avatar-wrapper position-relative flex-shrink-0" style="width: 60px; height: 80px; aspect-ratio: 3/4;">
                             {% if contrato.foto_profissional %}
-                                <img src="{{ media_url('empresa', contrato.foto_profissional) }}"
+                                <img src="{{ resolver_url_midia(contrato.foto_profissional, 'empresa', 'avatar-default.png') }}"
                                      alt="{{ contrato.nome }}"
                                      class="rounded-3 shadow-sm w-100 h-100 object-fit-cover border border-1 border-light">
                             {% else %}
@@ -221,8 +221,8 @@
                     <div class="offcanvas-header pb-2 border-bottom">
                         <div class="d-flex align-items-center gap-3">
                             <div style="width: 42px; height: 56px; aspect-ratio: 3/4;" class="flex-shrink-0">
-                                {% if contrato.foto_perfil or contrato.foto_profissional %}
-                                    <img src="{{ contrato.foto_perfil if contrato.foto_perfil else media_url('empresa', contrato.foto_profissional) }}" class="rounded-3 object-fit-cover w-100 h-100 shadow-sm border" alt="{{ contrato.nome }}">
+                                {% if contrato.foto_profissional or contrato.foto_perfil %}
+                                    <img src="{{ resolver_url_midia(contrato.foto_profissional if contrato.foto_profissional else contrato.foto_perfil, 'empresa', 'avatar-default.png') }}" class="rounded-3 object-fit-cover w-100 h-100 shadow-sm border" alt="{{ contrato.nome }}">
                                 {% else %}
                                     <div class="rounded-3 bg-light d-flex align-items-center justify-content-center text-secondary fw-bold w-100 h-100 border" style="font-size: 1.1rem;">
                                         {{ contrato.nome[:2].upper() if contrato.nome else 'CO' }}
@@ -281,7 +281,7 @@
                                     <i class="bi bi-chevron-right small text-muted"></i>
                                 </a>
 
-                                {# ⚙️ NOVO: HOMOLOGAÇÃO DE CONTRATO E AJUSTE DE ADMISSÃO (PARA O EMPREENDEDOR) #}
+                                {# ⚙️ HOMOLOGAÇÃO DE CONTRATO E AJUSTE DE ADMISSÃO #}
                                 <a href="{{ url_for('empresa.editar_contrato_colaborador', contrato_id=contrato.id) }}"
                                    class="btn btn-white border border-primary-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-primary bg-opacity-10 text-primary" style="font-size: 0.85rem;">
                                     <span class="fw-bold">
@@ -292,7 +292,7 @@
 
                                 <hr class="my-1 text-muted opacity-25">
 
-                                {# 1️⃣ PASSO: CARGO & HABILIDADES #}
+                                {# 1️⃣ CARGO & HABILIDADES #}
                                 <a href="{{ url_for('empresa.configurar_cargo_habilidades', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
                                    class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
                                     <span class="fw-semibold text-dark">
@@ -301,7 +301,7 @@
                                     <i class="bi bi-chevron-right small text-muted"></i>
                                 </a>
 
-                                {# 2️⃣ PASSO: CONFIGURAR ESCALA SEMANAL #}
+                                {# 2️⃣ ESCALA SEMANAL #}
                                 <a href="{{ url_for('empresa.configurar_escala_semanal', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
                                    class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
                                     <span class="fw-semibold text-dark">
@@ -310,7 +310,7 @@
                                     <i class="bi bi-chevron-right small text-muted"></i>
                                 </a>
 
-                                {# 3️⃣ PASSO: EXCEÇÕES E RECESSOS #}
+                                {# 3️⃣ EXCEÇÕES E RECESSOS #}
                                 <a href="{{ url_for('empresa.excecoes_colaborador', empresa_id=empresa.id, contrato_id=contrato.id, next=url_retorno_offcanvas) }}"
                                    class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
                                     <span class="fw-semibold text-dark">
@@ -319,7 +319,7 @@
                                     <i class="bi bi-chevron-right small text-muted"></i>
                                 </a>
 
-                                {# 4️⃣ PASSO: PERMISSÕES #}
+                                {# 4️⃣ PERMISSÕES #}
                                 <a href="javascript:void(0);" onclick="alert('Módulo de permissões em breve.');"
                                    class="btn btn-white border text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between" style="font-size: 0.85rem;">
                                     <span class="fw-semibold text-dark">
@@ -330,7 +330,7 @@
 
                                 <hr class="my-1 text-muted opacity-25">
 
-                                {# 🔴 OPÇÃO DE ENCERRAMENTO DE CONTRATO (APENAS SE ATIVO) #}
+                                {# 🔴 ENCERRAMENTO DE CONTRATO #}
                                 {% if not eh_desligado and not eh_dono %}
                                 <button type="button" onclick="confirmarEncerramentoContrato('{{ contrato.id }}', '{{ contrato.nome | escape }}', '{{ empresa.id }}')"
                                         class="btn btn-white border border-danger-subtle text-start rounded-3 py-2.5 px-3 d-flex align-items-center justify-content-between bg-white text-danger" style="font-size: 0.85rem;">
@@ -348,7 +348,7 @@
                 </div>
             {% endfor %}
 
-        {# ⚠️ ESTADO VAZIO CASO NENHUM INTEGRANTE BATA COM O FILTRO SELECIONADO #}
+        {# ⚠️ ESTADO VAZIO #}
         <div id="emptyState" class="text-center py-4 bg-white rounded-4 border border-2 border-gray-300 w-100 d-none" style="grid-column: 1 / -1;">
             <i class="bi bi-people text-muted fs-2"></i>
             <p class="text-muted small mt-2 m-0">Nenhum integrante encontrado nesta categoria.</p>
@@ -358,8 +358,8 @@
     </div>
 </div>
 
-{# 📷 MODAL UNIFICADO DE CAPTURA / UPLOAD DE FOTO (PROPORÇÃO 3x4) #}
-<div class="modal fade" id="modalFotoColaborador" tabindex="-1" aria-hidden="true">
+{# 📷 MODAL UNIFICADO DE CAPTURA / UPLOAD DE FOTO #}
+<div class="modal fade" id="modalFotoColaborador" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
         <div class="modal-content rounded-4 border-0 shadow">
             <div class="modal-header border-bottom py-3">
@@ -368,7 +368,6 @@
             </div>
             <div class="modal-body text-center py-4">
 
-                {# ÁREA DE PREVIEW / CAMERA 3x4 #}
                 <div class="position-relative mx-auto mb-3 overflow-hidden rounded-3 shadow-sm border border-2 border-dark" style="width: 180px; height: 240px; aspect-ratio: 3/4; background-color: #f6f4ee;">
                     <video id="webcamVideo" autoplay playsinline class="w-100 h-100 object-fit-cover d-none"></video>
                     <canvas id="canvasPreview" class="w-100 h-100 object-fit-cover d-none"></canvas>
@@ -379,13 +378,11 @@
                     </div>
                 </div>
 
-                {# FORMULÁRIO OCULTO PARA ENVIO DO BLOB OU ARQUIVO #}
                 <form id="formFotoColaborador" method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
                     <input type="file" id="inputFileFoto" name="foto" accept="image/*" class="d-none" onchange="processarArquivoFoto(this)">
                 </form>
 
-                {# BOTÕES DE CONTROLE #}
                 <div class="d-flex flex-column gap-2 px-3">
                     <div id="controlesIniciais" class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-dark w-50 rounded-3 py-2 fw-semibold" onclick="iniciarCamera()" style="font-size: 0.82rem;">
@@ -429,7 +426,6 @@ function abrirCapturaFoto(contratoId, nomeColaborador) {
 
     resetModalFoto();
 
-    // Fecha o Offcanvas antes de abrir o modal de foto
     const offcanvasEl = document.getElementById(`actionsColaborador${contratoId}`);
     if (offcanvasEl) {
         const bsOffcanvas = bootstrap.Offcanvas.getInstance(offcanvasEl);
@@ -727,6 +723,18 @@ function confirmarEncerramentoContrato(contratoId, nomeColaborador, empresaId) {
         form.submit();
     }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    const modalFoto = document.getElementById('modalFotoColaborador');
+
+    if (modalFoto) {
+        modalFoto.addEventListener('hide.bs.modal', function () {
+            if (modalFoto.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+        });
+    }
+});
 </script>
 
 {% endblock %}
