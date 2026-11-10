@@ -120,7 +120,7 @@ def create_app():
 
     # 3. 🛰️ PROTOCOLO DE CONEXÃO DOS ACESSÓRIOS DO CORE
     with app.app_context():
-        # Filtros de template customizados
+        # Filtros de template customizados1'''
         from .utils import tempo_atras_filter, resolver_url_midia, media_url
         app.template_filter('tempo_atras')(tempo_atras_filter)
 
