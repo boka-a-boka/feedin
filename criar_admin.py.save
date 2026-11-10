@@ -1,0 +1,25 @@
+from feedin import create_app, database
+from feedin.models import Usuario
+from werkzeug.security import generate_password_hash
+
+app = create_app()
+
+with app.app_context():
+    email_teste = "estavalanabalada@gmail.com"
+    
+    # Remove se já existir para evitar duplicidade
+    user_antigo = Usuario.query.filter_by(email=email_teste).first()
+    if user_antigo:
+        database.session.delete(user_antigo)
+        database.session.commit()
+        print("Usuário antigo removido.")
+    
+    # Cria o novo admin
+    novo_admin = Usuario(
+        nome="Administrador",
+        email=email_teste,
+        senha=generate_password_hash("123456789")
+   )
+    database.session.add(novo_admin)
+    database.session.commit()
+    print(f"Sucesso! Novo admin criado com o e-mail: {email_teste}")

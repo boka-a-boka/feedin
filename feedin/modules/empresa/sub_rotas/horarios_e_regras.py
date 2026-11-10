@@ -1553,14 +1553,21 @@ def enviar_documentacao(empresa_id):
     )
 
 @empresa_bp.route('/<int:empresa_id>/servicos/cadastrar-listagem', methods=['GET'], endpoint='cadastro_servicos_listagem')
+@login_required
 def cadastro_servicos_listagem(empresa_id):
     """
     Renderiza a tela de cadastro e a lista atualizada de serviços oferecidos pela empresa.
     """
     empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # Busca os serviços oferecidos sem quebrar por conflito de tipos de dados
+    # Busca os serviços oferecidos
     servicos_cadastrados = EseServicoOferecido.query.filter_by(empresa_id=empresa_id).all()
+
+    # Blindagem de ordenação em Python para evitar quebra de atributo nulo no template
+    servicos_cadastrados = sorted(
+        servicos_cadastrados,
+        key=lambda s: (s.servico_taxonomia.nome.lower() if s.servico_taxonomia and s.servico_taxonomia.nome else "")
+    )
 
     return render_template(
         'empresa/cadastro_servicos_listagem.html',

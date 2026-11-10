@@ -106,7 +106,7 @@
             {% if servicos_cadastrados %}
                 <div class="d-flex flex-column gap-2">
                     {# Ordenação alfabética diretamente pelo atributo servico_taxonomia.nome #}
-                    {% for servico in servicos_cadastrados | sort(attribute='servico_taxonomia.nome', case_sensitive=False) %}
+                    {% for servico in servicos_cadastrados %}
                         <div class="p-3 border border-secondary-subtle rounded-4 d-flex justify-content-between align-items-center bg-light-subtle">
                             <div class="pe-2">
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">{{ servico.servico_taxonomia.nome }}</h6>
