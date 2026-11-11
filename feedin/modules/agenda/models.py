@@ -14,8 +14,6 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import current_app
 
-from feedin.modules.empresa.models import (ClienteBeneficiario, ClienteContato,)
-
 logger = logging.getLogger(__name__)
 
 # Fuso horário padrão do sistema
@@ -1313,7 +1311,6 @@ class AghReordenacaoSolicitada(db.Model):
     solicitante = db.relationship('ColaboradorContrato')
 
 
-
 # =========================================================================
 # 📅 SERVIÇO DE NOTIFICAÇÕES DO MÓDULO AGENDA (AGH)
 # =========================================================================
@@ -1387,6 +1384,8 @@ class AghNotificacaoService:
         if hasattr(agendamento, 'atualizado_em'):
             agendamento.atualizado_em = agora_local
         db.session.commit()
+
+        from feedin.modules.empresa.models import (ClienteBeneficiario, ClienteContato, )
 
         # Identificação de Beneficiários (Pet, Veículo, Dependente)
         beneficiario_info = ""

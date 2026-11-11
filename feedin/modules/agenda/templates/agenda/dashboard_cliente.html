@@ -665,7 +665,7 @@
         </div>
         {% endif %}
 
-        {# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
+{# 8. SERVIÇOS FUTUROS (MEUS PRÓXIMOS AGENDAMENTOS) #}
         <div class="mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2 px-2 py-1 bg-primary-subtle rounded-3 border-start border-3 border-primary">
                 <h6 class="fw-bold text-primary m-0" style="font-size: 0.85rem;">
@@ -702,7 +702,7 @@
                                     </span>
                                 </div>
 
-                                {# BADGE DE BENEFICIÁRIO (QUANDO NÃO É PARA O PRÓPRIO TITULAR) #}
+                                {# BADGE DE BENEFICIÁRIO #}
                                 {% if beneficiario_obj %}
                                     <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill small d-inline-flex align-items-center gap-1" style="font-size: 0.7rem;">
                                         <i class="bi bi-person-heart text-info"></i>
@@ -722,22 +722,33 @@
                                         {% set foto_prof_url = srv_item.foto_prof_exibicao if (srv_item.foto_prof_exibicao is defined and srv_item.foto_prof_exibicao) else None %}
                                         {% set nome_servico = srv_item.nome_servico if (srv_item is defined and srv_item.nome_servico) else 'Serviço' %}
                                         {% set valor_servico = srv_item.preco_unitario if (srv_item is defined and srv_item.preco_unitario is not none) else 0.0 %}
+                                        {% set dados_aval = prof.contagem_avaliacoes_por_estrela if prof else {'1':0, '2':0, '3':0, '4':0, '5':0, 'total':0, 'media':0.0} %}
 
                                         <!-- CARD DO SERVIÇO COM OS ATRIBUTOS DE DADOS PARA O MODAL -->
                                         <div class="item-servico-card bg-light p-2 rounded-3 border-start border-3 border-primary mb-1 user-select-none"
                                              style="cursor: pointer;"
                                              data-bs-toggle="modal"
                                              data-bs-target="#modalInfoAtendimento"
-                                             data-prof-nome="{{ nome_prof }}"
-                                             data-prof-foto="{{ foto_prof_url or '' }}"
-                                             data-prof-especialidade="{{ prof.especialidade if (prof and prof.especialidade is defined and prof.especialidade) else 'Especialista' }}"
+                                             data-prof-nome="{{ prof.nome if prof else 'Profissional' }}"
+                                             data-prof-nome-pwa="{{ prof.detalhes_pessoais.nome_exibicao_pwa if (prof and prof.detalhes_pessoais and prof.detalhes_pessoais.nome_exibicao_pwa) else '' }}"
+                                             data-prof-cargo="{{ prof.cargo_formatado if prof else 'Colaborador' }}"
+                                             data-prof-contratacao="{{ prof.data_contratacao_formatada if prof else '--/--/----' }}"
                                              data-prof-bio="{{ prof.biografia if (prof and prof.biografia is defined and prof.biografia) else 'Sem biografia cadastrada.' }}"
+                                             data-qtd-atendimentos="{{ prof.quantidade_total_atendimentos if prof else 0 }}"
+                                             data-servico-mais-executado="{{ prof.servico_mais_executado if prof else 'Nenhum' }}"
+                                             data-aval-1="{{ dados_aval['1'] }}"
+                                             data-aval-2="{{ dados_aval['2'] }}"
+                                             data-aval-3="{{ dados_aval['3'] }}"
+                                             data-aval-4="{{ dados_aval['4'] }}"
+                                             data-aval-5="{{ dados_aval['5'] }}"
+                                             data-aval-total="{{ dados_aval['total'] }}"
+                                             data-aval-media="{{ '%.1f'|format(dados_aval['media']) }}"
+                                             data-prof-foto="{{ foto_prof_url or '' }}"
                                              data-empresa-nome="{{ item.empresa.nome_fantasia if (item.empresa and item.empresa.nome_fantasia) else (item.empresa.nome if item.empresa else 'Empresa') }}"
                                              data-servico-nome="{{ nome_servico }}"
                                              data-servico-desc="{{ srv_item.descricao if (srv_item is defined and srv_item.descricao) else 'Serviço agendado via plataforma.' }}"
                                              data-data-hora="{{ item.data_hora_inicio.strftime('%d/%m/%Y às %H:%M') if item.data_hora_inicio else '--/--/----' }}"
-                                             data-valor="R$ {{ '%.2f'|format(valor_servico) }}"
-                                             data-beneficiario="{{ beneficiario_obj.nome if beneficiario_obj else 'Titular' }}">
+                                             data-valor="R$ {{ '%.2f'|format(valor_servico) }}">
 
                                             <div class="d-flex align-items-center justify-content-between mb-1">
                                                 <div class="d-flex align-items-center gap-2 overflow-hidden me-2">
@@ -796,7 +807,6 @@
                             </div>
 
                         </div> {# FECHA CARD DO AGENDAMENTO #}
-
                     {% endfor %} {# FECHA FOR item in agendamentos #}
 
                 </div>
@@ -1028,7 +1038,7 @@
             <div class="modal-body p-4" style="max-height: 75vh; overflow-y: auto;">
                 <div class="row g-4 align-items-start">
 
-                    <!-- FOTO 3X4 EM DESTAQUE -->
+                    <!-- FOTO 3X4 EM DESTAQUE E NOME DE EXIBIÇÃO ABAIXO DA FOTO (PWA) -->
                     <div class="col-12 col-md-5 col-lg-4 text-center">
                         <div class="container-foto-3x4 mx-auto position-relative">
                             <img id="infoProfFoto"
@@ -1044,7 +1054,9 @@
                             </div>
                         </div>
 
-                        <div class="mt-3">
+                        <!-- ABAIXO DA FOTO: Nome de exibição PWA / Profissional -->
+                        <div class="mt-2">
+                            <h5 id="infoProfNomeExibicao" class="fw-bold text-dark mb-1">---</h5>
                             <span id="infoEmpresaNome" class="badge bg-dark-subtle text-dark border px-3 py-1 rounded-pill fw-semibold">
                                 Empresa
                             </span>
@@ -1055,18 +1067,81 @@
                     <div class="col-12 col-md-7 col-lg-8">
                         <div class="mb-3">
                             <small class="text-uppercase tracking-wider fw-bold text-muted fs-7">Atendimento Presencial com</small>
-                            <h3 id="infoProfNome" class="fw-bold text-dark mb-1">---</h3>
-                            <div id="infoProfEspecialidade" class="badge bg-primary text-white mb-3">---</div>
+                            <h4 id="infoProfNome" class="fw-bold text-dark mb-1">---</h4>
 
-                            <div class="bg-light p-3 rounded-3 border">
+                            <!-- Cargo institucional vindo de ColaboradorContrato.cargo -->
+                            <div id="infoProfCargo" class="badge bg-primary text-white mb-2">---</div>
+
+                            <!-- Nessa empresa desde -->
+                            <div class="text-muted small mb-3" style="font-size: 0.8rem;">
+                                <i class="bi bi-calendar-check text-primary me-1"></i>
+                                <strong>Nessa empresa desde:</strong> <span id="infoProfContratacao">---</span>
+                            </div>
+
+                            <!-- Apresentação do Profissional -->
+                            <div class="bg-light p-3 rounded-3 border mb-3">
                                 <h6 class="fw-bold text-dark fs-7 mb-1"><i class="bi bi-card-text me-1 text-primary"></i> Apresentação do Profissional</h6>
                                 <p id="infoProfBio" class="text-muted small mb-0 lh-sm">---</p>
                             </div>
+
+                            <!-- Atendimentos e Serviço Mais Executado -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-12 col-sm-6">
+                                    <div class="p-2 bg-body-tertiary rounded-3 border text-center">
+                                        <small class="d-block text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">Quantidade de Atendimentos</small>
+                                        <span id="infoQtdAtendimentos" class="fw-bold text-dark fs-6">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <div class="p-2 bg-body-tertiary rounded-3 border text-center">
+                                        <small class="d-block text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">Serviço mais executado</small>
+                                        <span id="infoServicoMaisExecutado" class="fw-bold text-dark small text-truncate d-block">---</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tabela de Avaliações Justificativa -->
+                            <div class="border rounded-3 p-2 bg-white mb-2">
+                                <h6 class="fw-bold text-dark fs-7 mb-2"><i class="bi bi-star-fill text-warning me-1"></i> Avaliações</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-sm text-center mb-1" style="font-size: 0.75rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th colspan="5" class="text-uppercase fw-bold text-secondary py-1">ESTRELAS</th>
+                                                <th rowspan="2" class="align-middle text-uppercase fw-bold text-secondary">TOTAL</th>
+                                                <th rowspan="2" class="align-middle text-uppercase fw-bold text-secondary">MÉDIA</th>
+                                            </tr>
+                                            <tr>
+                                                <th class="py-1">1</th>
+                                                <th class="py-1">2</th>
+                                                <th class="py-1">3</th>
+                                                <th class="py-1">4</th>
+                                                <th class="py-1">5</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td id="avalEstrela1" class="py-1">0</td>
+                                                <td id="avalEstrela2" class="py-1">0</td>
+                                                <td id="avalEstrela3" class="py-1">0</td>
+                                                <td id="avalEstrela4" class="py-1">0</td>
+                                                <td id="avalEstrela5" class="py-1">0</td>
+                                                <td id="avalTotal" class="fw-bold py-1">0</td>
+                                                <td id="avalMedia" class="fw-bold text-success py-1">0.0</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <!-- Texto de Destaque Universal dos Módulos FeedIn -->
+                                <div class="text-center text-muted" style="font-size: 0.68rem; letter-spacing: 0.2px;">
+                                    <i class="bi bi-info-circle text-primary me-1">* Valores considerados a partir do uso dos Módulos FeedIn.</i>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- DETALHES DO SERVIÇO / AGENDAMENTO -->
+                        <!-- DETALHES DO SERVIÇO CONTRATADO -->
                         <div class="border-top pt-3 mt-3">
-                            <h6 class="fw-bold text-dark fs-7 mb-2"><i class="bi bi-scissors me-1 text-primary"></i> Detalhes do Serviço</h6>
+                            <h6 class="fw-bold text-dark fs-7 mb-2"><i class="bi bi-scissors me-1 text-primary"></i> Detalhes do Serviço Contratado</h6>
 
                             <div class="p-3 bg-body-tertiary rounded-3 border mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
@@ -1428,22 +1503,54 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!card) return;
 
             const elNome = document.getElementById('infoProfNome');
-            const elEsp = document.getElementById('infoProfEspecialidade');
+            const elNomeExibicao = document.getElementById('infoProfNomeExibicao');
+            const elCargo = document.getElementById('infoProfCargo');
+            const elContratacao = document.getElementById('infoProfContratacao');
             const elBio = document.getElementById('infoProfBio');
+            const elQtdAtendimentos = document.getElementById('infoQtdAtendimentos');
+            const elServicoMaisExecutado = document.getElementById('infoServicoMaisExecutado');
             const elEmpresa = document.getElementById('infoEmpresaNome');
             const elServico = document.getElementById('infoServicoNome');
             const elDesc = document.getElementById('infoServicoDesc');
             const elDataHora = document.getElementById('infoDataHora');
             const elValor = document.getElementById('infoValor');
 
-            if (elNome) elNome.textContent = card.getAttribute('data-prof-nome') || 'Profissional';
-            if (elEsp) elEsp.textContent = card.getAttribute('data-prof-especialidade') || 'Especialista';
+            const nomeReal = card.getAttribute('data-prof-nome') || 'Profissional';
+            const nomePwa = card.getAttribute('data-prof-nome-pwa');
+
+            // Regra: Se existir nome de exibição específico para o PWA esse prevalece
+            const nomeEfetivo = (nomePwa && nomePwa.trim() !== '' && nomePwa !== 'None') ? nomePwa : nomeReal;
+
+            if (elNome) elNome.textContent = nomeReal;
+            if (elNomeExibicao) elNomeExibicao.textContent = nomeEfetivo;
+
+            if (elCargo) elCargo.textContent = card.getAttribute('data-prof-cargo') || 'Colaborador';
+            if (elContratacao) elContratacao.textContent = card.getAttribute('data-prof-contratacao') || '--/--/----';
             if (elBio) elBio.textContent = card.getAttribute('data-prof-bio') || 'Sem biografia disponível.';
+            if (elQtdAtendimentos) elQtdAtendimentos.textContent = card.getAttribute('data-qtd-atendimentos') || '0';
+            if (elServicoMaisExecutado) elServicoMaisExecutado.textContent = card.getAttribute('data-servico-mais-executado') || '---';
             if (elEmpresa) elEmpresa.textContent = card.getAttribute('data-empresa-nome') || 'Empresa';
             if (elServico) elServico.textContent = card.getAttribute('data-servico-nome') || 'Atendimento';
             if (elDesc) elDesc.textContent = card.getAttribute('data-servico-desc') || 'Serviço agendado.';
             if (elDataHora) elDataHora.textContent = card.getAttribute('data-data-hora') || '--/--/----';
             if (elValor) elValor.textContent = card.getAttribute('data-valor') || 'R$ 0,00';
+
+            // Preenchimento da tabela de avaliações no modal
+            const aval1 = document.getElementById('avalEstrela1');
+            const aval2 = document.getElementById('avalEstrela2');
+            const aval3 = document.getElementById('avalEstrela3');
+            const aval4 = document.getElementById('avalEstrela4');
+            const aval5 = document.getElementById('avalEstrela5');
+            const avalTotal = document.getElementById('avalTotal');
+            const avalMedia = document.getElementById('avalMedia');
+
+            if (aval1) aval1.textContent = card.getAttribute('data-aval-1') || '0';
+            if (aval2) aval2.textContent = card.getAttribute('data-aval-2') || '0';
+            if (aval3) aval3.textContent = card.getAttribute('data-aval-3') || '0';
+            if (aval4) aval4.textContent = card.getAttribute('data-aval-4') || '0';
+            if (aval5) aval5.textContent = card.getAttribute('data-aval-5') || '0';
+            if (avalTotal) avalTotal.textContent = card.getAttribute('data-aval-total') || '0';
+            if (avalMedia) avalMedia.textContent = card.getAttribute('data-aval-media') || '0.0';
 
             const profFoto = card.getAttribute('data-prof-foto') || '';
             const imgFoto = document.getElementById('infoProfFoto');
@@ -1451,7 +1558,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const spanInicial = document.getElementById('infoProfInicial');
 
             if (spanInicial) {
-                spanInicial.textContent = (card.getAttribute('data-prof-nome') || 'P').charAt(0).toUpperCase();
+                spanInicial.textContent = nomeEfetivo.charAt(0).toUpperCase();
             }
 
             if (imgFoto && divFallback) {
@@ -1745,8 +1852,6 @@ async function enviarAvaliacoesMultiplasDoModal(agendamentoId) {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
-                // Se o seu Flask usa CSRF_Protect, inclua a linha abaixo:
-                // 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
             },
             body: JSON.stringify({ avaliacoes: lista })
         });
@@ -1774,7 +1879,6 @@ async function enviarAvaliacoesMultiplasDoModal(agendamentoId) {
 
 // 4. GARANTE O ENCERRAMENTO DA CÂMERA AO FECHAR O MODAL E CONTROLE DO HISTÓRICO
 document.addEventListener('DOMContentLoaded', function() {
-    // Gerenciamento de fechamento de câmera no modal (Prevenção de vazamento no iOS)
     const modalItemColab = document.getElementById('modalAdicionarItemColaborador');
     if (modalItemColab) {
         modalItemColab.addEventListener('hidden.bs.modal', function () {
@@ -1794,7 +1898,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Controle do Acordeão de Últimas Visitas (Histórico)
     const btn = document.getElementById('btnToggleHistorico');
     const corpo = document.getElementById('corpoHistorico');
     const seta = document.getElementById('iconeSetaHistorico');

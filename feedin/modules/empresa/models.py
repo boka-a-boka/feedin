@@ -7,9 +7,10 @@ import logging
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import validates
 from feedin import database as db
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from zoneinfo import ZoneInfo
 from feedin.utils import resolver_url_midia
+from feedin.modules.agenda.models import AghAgendamentoItem
 
 # Fuso horário padrão do sistema
 TZ_BRASIL = ZoneInfo('America/Sao_Paulo')
@@ -529,6 +530,112 @@ class ModHomologacaoEmpresa(db.Model):
     def __repr__(self):
         return f"<ModHomologacaoEmpresa Local ID: {self.id_local} - Status: {self.status_auditoria}>"
 
+class EseServicoOferecido(db.Model):
+    """📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento."""
+
+    __tablename__ = 'ese_servico_oferecido'
+    __table_args__ = {'extend_existing': True}
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(
+        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
+    )
+    taxonomia_id = db.Column(
+        db.Integer, db.ForeignKey('taxonomia.id'), nullable=False
+    )
+
+    # Campo numérico para ordenação/agrupamento na tabela de preços futuramente
+    grupo = db.Column(db.Integer, nullable=True)
+
+    # Customização do serviço para o estabelecimento
+    descricao_servico = db.Column(db.String(255), nullable=True)
+    tempo_duracao = db.Column(
+        db.String(5), nullable=False, default='00:30'
+    )  # Formato "HH:mm"
+
+    # Intervalo/Buffer para limpeza, descanso ou preparação (em minutos)
+    tempo_intervalo = db.Column(db.Integer, default=0, nullable=False)
+
+    # 🌟 CAMPO NUMÉRICO: Protegido com asdecimal=False para evitar falha no processador do SQLAlchemy
+    pontos_fidelidade = db.Column(
+        db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
+    )
+
+    # Controle e Auditoria
+    inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
+    data_criacao = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relacionamento virtual
+    servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
+
+    @validates('pontos_fidelidade')
+    def validate_pontos_fidelidade(self, key, value):
+        """Sanitiza e valida a atribuição do campo pontos_fidelidade.
+
+        Garante conversão segura tratando strings com vírgula ou ponto.
+        """
+        if value is None:
+            return 1.00
+
+        if isinstance(value, str):
+            clean_val = value.replace(',', '.').strip()
+            try:
+                return float(clean_val)
+            except (ValueError, TypeError):
+                return 1.00
+
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 1.00
+
+    @property
+    def preco(self) -> float:
+        """Busca o preço vigente em EseServicoPreco com tratamento para dados em texto no banco."""
+        try:
+            preco_obj = EseServicoPreco.query.filter_by(
+                empresa_id=self.empresa_id,
+                taxonomia_id=self.taxonomia_id
+            ).first()
+
+            if preco_obj and getattr(preco_obj, 'novo_valor', None) is not None:
+                val = preco_obj.novo_valor
+                if isinstance(val, str):
+                    return float(val.replace(',', '.').strip())
+                return float(val)
+        except Exception:
+            return 0.00
+
+        return 0.00
+
+    @property
+    def nome(self) -> str:
+        """Retorna a descrição customizada do serviço ou o nome da taxonomia vinculada."""
+        if self.descricao_servico:
+            return self.descricao_servico
+        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
+            return self.servico_taxonomia.nome
+        return f"Serviço #{self.id}"
+
+    @property
+    def duracao_em_minutos(self) -> int:
+        """Converte a string "HH:mm" em total de minutos (ex: '01:15' -> 75 min)."""
+        try:
+            horas, minutos = map(int, str(self.tempo_duracao).split(':'))
+            return (horas * 60) + minutos
+        except (ValueError, AttributeError):
+            return 30
+
+    @property
+    def tempo_total_bloqueio_minutos(self) -> int:
+        """Retorna o tempo TOTAL em minutos que o serviço bloqueia na agenda."""
+        return self.duracao_em_minutos + (self.tempo_intervalo or 0)
+
+    def __repr__(self):
+        return f'<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Pontos {self.pontos_fidelidade}>'
+
 
 class ColaboradorContrato(db.Model):
     __tablename__ = 'colaborador_contratos'
@@ -592,6 +699,13 @@ class ColaboradorContrato(db.Model):
         elif isinstance(value, (date, datetime)):
             self.data_contratacao = value
 
+    @property
+    def data_contratacao_formatada(self) -> str:
+        """Retorna a data de contratação formatada para exibição (DD/MM/YYYY)."""
+        if self.data_contratacao:
+            return self.data_contratacao.strftime('%d/%m/%Y')
+        return "--/--/----"
+
     # -------------------------------------------------------------------------
     # DEMAIS PROPERTIES
     # -------------------------------------------------------------------------
@@ -652,20 +766,16 @@ class ColaboradorContrato(db.Model):
     # TRATAMENTO DE CARGO
     # -------------------------------------------------------------------------
     @property
+    def cargo_formatado(self) -> str:
+        """Retorna o nome do cargo institucional vinculado na tabela cargos através de id_cargo."""
+        if self.cargo and getattr(self.cargo, 'nome_cargo', None):
+            return self.cargo.nome_cargo
+        return "Especialista"
+
+    # Alias para manter compatibilidade com códigos ou templates antigos que chamem nome_cargo_formatado
+    @property
     def nome_cargo_formatado(self) -> str:
-        """Retorna o nome amigável do cargo do colaborador."""
-        cargo_obj = getattr(self, 'cargo', None)
-        if cargo_obj and not isinstance(cargo_obj, str):
-            return (
-                getattr(cargo_obj, 'descricao', None) or
-                getattr(cargo_obj, 'nome', None) or
-                getattr(cargo_obj, 'titulo', None) or
-                getattr(cargo_obj, 'nome_cargo', None) or
-                'Especialista'
-            )
-        if isinstance(cargo_obj, str) and cargo_obj:
-            return cargo_obj
-        return 'Especialista'
+        return self.cargo_formatado
 
     # -------------------------------------------------------------------------
     # IDENTIFICADOR CHAR(36) OFICIAL DO COLABORADOR
@@ -679,6 +789,100 @@ class ColaboradorContrato(db.Model):
         if self.id_cadastro_cliente:
             return str(self.id_cadastro_cliente).strip()
         return None
+
+    @property
+    def nome_exibicao_pwa_efetivo(self) -> str:
+        """Retorna o nome de exibição específico do PWA priorizando detalhes pessoais, se existente."""
+        if self.detalhes_pessoais and getattr(self.detalhes_pessoais, 'nome_exibicao_pwa', None):
+            return self.detalhes_pessoais.nome_exibicao_pwa.strip()
+        return self.nome
+
+    @property
+    def quantidade_total_atendimentos(self) -> int:
+        """Retorna a quantidade bruta total de atendimentos (itens) encerrados para este colaborador."""
+        from feedin.modules.agenda.models import AghAgendamentoItem
+        # Coleta todas as representações possíveis do ID deste colaborador
+        chaves_busca = set()
+        if self.id is not None:
+            chaves_busca.add(self.id)
+            chaves_busca.add(str(self.id).strip())
+        if self.id_cadastro_cliente:
+            chaves_busca.add(str(self.id_cadastro_cliente).strip())
+
+        if not chaves_busca:
+            return 0
+
+        # Filtra na AghAgendamentoItem por qualquer uma das chaves e status de conclusão
+        return AghAgendamentoItem.query.filter(
+            AghAgendamentoItem.colaborador_id_contrato.in_(list(chaves_busca)),
+            AghAgendamentoItem.status_item.in_(['concluido', 'encerrado', 'realizado', 'finalizado', 'atendido'])
+        ).count()
+
+    @property
+    def servico_mais_executado(self) -> str:
+        """Retorna o nome do serviço mais executado pelo colaborador entre os atendimentos encerrados."""
+        from feedin.modules.agenda.models import AghAgendamentoItem
+        from feedin.modules.empresa.models import EseServicoOferecido
+        from sqlalchemy import func
+
+        chaves_busca = set()
+        if self.id is not None:
+            chaves_busca.add(self.id)
+            chaves_busca.add(str(self.id).strip())
+        if self.id_cadastro_cliente:
+            chaves_busca.add(str(self.id_cadastro_cliente).strip())
+
+        if not chaves_busca:
+            return "Nenhum registrado"
+
+        resultado = db.session.query(
+            AghAgendamentoItem.servico_id,
+            func.count(AghAgendamentoItem.id).label('total')
+        ).filter(
+            AghAgendamentoItem.colaborador_id_contrato.in_(list(chaves_busca)),
+            AghAgendamentoItem.status_item.in_(['concluido', 'encerrado', 'realizado', 'finalizado', 'atendido'])
+        ).group_by(
+            AghAgendamentoItem.servico_id
+        ).order_by(
+            func.count(AghAgendamentoItem.id).desc()
+        ).first()
+
+        if resultado:
+            servico_obj = EseServicoOferecido.query.get(resultado[0])
+            if servico_obj:
+                return servico_obj.nome
+
+        return "Nenhum registrado"
+
+    @property
+    def contagem_avaliacoes_por_estrela(self) -> dict:
+        """Retorna a distribuição de notas de 1 a 5 baseada na AvaliacaoUniversal (rating_avaliacoes)."""
+        from feedin.modules.rating.models import AvaliacaoUniversal
+
+        avaliacoes = AvaliacaoUniversal.query.filter_by(colaborador_contrato_id=self.id).all()
+
+        contagem = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+        soma = 0
+        total = 0
+
+        for av in avaliacoes:
+            nota = int(av.nota or 0)
+            if nota in contagem:
+                contagem[nota] += 1
+                soma += nota
+                total += 1
+
+        media = round(soma / total, 1) if total > 0 else 0.0
+
+        return {
+            '1': contagem[1],
+            '2': contagem[2],
+            '3': contagem[3],
+            '4': contagem[4],
+            '5': contagem[5],
+            'total': total,
+            'media': media
+        }
 
 class ColaboradorDetalhesPessoais(db.Model):
     """
@@ -1170,114 +1374,6 @@ class EseServicoPreco(db.Model):
 
     def __repr__(self):
         return f"<EseServicoPreco Empresa {self.empresa_id} | Taxonomia {self.taxonomia_id} | Valor {self.novo_valor}>"
-
-
-class EseServicoOferecido(db.Model):
-    """📌 ESE_SERVICO_OFERECIDO: Catálogo de Serviços Customizados do Estabelecimento."""
-
-    __tablename__ = 'ese_servico_oferecido'
-    __table_args__ = {'extend_existing': True}
-
-    id = db.Column(db.Integer, primary_key=True)
-    empresa_id = db.Column(
-        db.Integer, db.ForeignKey('ese_empresa.id'), nullable=False, index=True
-    )
-    taxonomia_id = db.Column(
-        db.Integer, db.ForeignKey('taxonomia.id'), nullable=False
-    )
-
-    # Campo numérico para ordenação/agrupamento na tabela de preços futuramente
-    grupo = db.Column(db.Integer, nullable=True)
-
-    # Customização do serviço para o estabelecimento
-    descricao_servico = db.Column(db.String(255), nullable=True)
-    tempo_duracao = db.Column(
-        db.String(5), nullable=False, default='00:30'
-    )  # Formato "HH:mm"
-
-    # Intervalo/Buffer para limpeza, descanso ou preparação (em minutos)
-    tempo_intervalo = db.Column(db.Integer, default=0, nullable=False)
-
-    # 🌟 CAMPO NUMÉRICO: Protegido com asdecimal=False para evitar falha no processador do SQLAlchemy
-    pontos_fidelidade = db.Column(
-        db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
-    )
-
-    # Controle e Auditoria
-    inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
-    data_criacao = db.Column(
-        db.DateTime, default=lambda: datetime.now(timezone.utc)
-    )
-
-    # Relacionamento virtual
-    servico_taxonomia = db.relationship('Taxonomia', foreign_keys=[taxonomia_id])
-
-    @validates('pontos_fidelidade')
-    def validate_pontos_fidelidade(self, key, value):
-        """Sanitiza e valida a atribuição do campo pontos_fidelidade.
-
-        Garante conversão segura tratando strings com vírgula ou ponto.
-        """
-        if value is None:
-            return 1.00
-
-        if isinstance(value, str):
-            clean_val = value.replace(',', '.').strip()
-            try:
-                return float(clean_val)
-            except (ValueError, TypeError):
-                return 1.00
-
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return 1.00
-
-    @property
-    def preco(self) -> float:
-        """Busca o preço vigente em EseServicoPreco com tratamento para dados em texto no banco."""
-        try:
-            preco_obj = EseServicoPreco.query.filter_by(
-                empresa_id=self.empresa_id,
-                taxonomia_id=self.taxonomia_id
-            ).first()
-
-            if preco_obj and getattr(preco_obj, 'novo_valor', None) is not None:
-                val = preco_obj.novo_valor
-                if isinstance(val, str):
-                    return float(val.replace(',', '.').strip())
-                return float(val)
-        except Exception:
-            return 0.00
-
-        return 0.00
-
-    @property
-    def nome(self) -> str:
-        """Retorna a descrição customizada do serviço ou o nome da taxonomia vinculada."""
-        if self.descricao_servico:
-            return self.descricao_servico
-        if self.servico_taxonomia and getattr(self.servico_taxonomia, 'nome', None):
-            return self.servico_taxonomia.nome
-        return f"Serviço #{self.id}"
-
-    @property
-    def duracao_em_minutos(self) -> int:
-        """Converte a string "HH:mm" em total de minutos (ex: '01:15' -> 75 min)."""
-        try:
-            horas, minutos = map(int, str(self.tempo_duracao).split(':'))
-            return (horas * 60) + minutos
-        except (ValueError, AttributeError):
-            return 30
-
-    @property
-    def tempo_total_bloqueio_minutos(self) -> int:
-        """Retorna o tempo TOTAL em minutos que o serviço bloqueia na agenda."""
-        return self.duracao_em_minutos + (self.tempo_intervalo or 0)
-
-    def __repr__(self):
-        return f'<EseServicoOferecido {self.id} | Empresa {self.empresa_id} | Pontos {self.pontos_fidelidade}>'
-
 
 class EseServicoPrecoHistorico(db.Model):
     """📌 ESE_SERVICO_PRECO_HISTORICO: Log de Auditoria e Histórico de Preços."""

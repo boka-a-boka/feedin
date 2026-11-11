@@ -2571,7 +2571,6 @@ from datetime import timedelta  # Certifique-se de que timedelta está importado
 @login_required
 def dashboard_cliente():
     """📌 DASHBOARD PRINCIPAL DO MÓDULO AGENDA (PWA CLIENTE)"""
-    from feedin.modules.agenda.models import ClienteBeneficiario  # Importação resiliente
 
     cliente = current_user
     ficha_pendente = None
@@ -9876,3 +9875,20 @@ def relatorio_dashboard_clientes():
         beneficiario_id_filtro=beneficiario_id_filtro,
         agrupar_por=agrupar_por
     )
+
+
+@agenda_bp.route('/api/colaborador/<uuid_colab>/detalhes', methods=['GET'])
+def api_detalhes_colaborador(uuid_colab):
+    contrato = ColaboradorContrato.query.filter_by(id_cadastro_cliente=uuid_colab).first_or_404()
+
+    return jsonify({
+        "sucesso": True,
+        "nome_exibicao": contrato.nome_exibicao_pwa_efetivo,
+        "nome_real": contrato.nome,
+        "cargo": contrato.cargo_formatado,
+        "data_contratacao": contrato.data_contratacao_formatada,
+        "quantidade_atendimentos": contrato.quantidade_total_atendimentos,
+        "servico_mais_executado": contrato.servico_mais_executado,
+        "biografia": getattr(contrato.detalhes_pessoais, 'biografia', 'Sem biografia cadastrada.'),
+        "foto_url": contrato.url_foto_profissional
+    })
