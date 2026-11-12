@@ -174,7 +174,12 @@
     {% endif %}
 
     {# 2. CAPA DO PERFIL #}
-    {% set url_capa = url_for('static', filename='uploads/capas/' ~ (user_alvo.perfil.url_capa or 'default_capa.jpg')) %}
+    {% set caminho_foto = user_alvo.perfil.url_capa or 'default_capa.jpg' %}
+    {% if caminho_foto.startswith('uploads/') or caminho_foto.startswith('capas/') %}
+        {% set url_capa = url_for('static', filename=caminho_foto) %}
+    {% else %}
+        {% set url_capa = url_for('static', filename='uploads/capas/' ~ caminho_foto) %}
+    {% endif %}
     <div class="capa-container shadow-sm position-relative"
          style="height: 280px; background: linear-gradient(to bottom, rgba(0,0,0,0) 60%, rgba(0,0,0,0.7)), url('{{ url_capa }}') center/cover; border-radius: 0 0 25px 25px;">
         {% if e_o_proprio %}
@@ -737,24 +742,35 @@
         });
     }
 
-    window.uploadCapaAutomatica = function(input) {
+window.uploadCapaAutomatica = function(input) {
         if (input.files && input.files[0]) {
             document.body.style.cursor = 'wait';
             const formData = new FormData();
             formData.append('foto_capa', input.files[0]);
-            formData.append('csrf_token', "{{ csrf_token() }}");
+
+            const csrfToken = "{{ csrf_token() }}";
+
             $.ajax({
                 url: "{{ url_for('upload_capa') }}",
                 method: 'POST',
                 data: formData,
                 processData: false,
                 contentType: false,
+                headers: { 'X-CSRFToken': csrfToken }, // 🛡️ Padronizado com o header correto do Flask-WTF
                 success: function(response) {
-                    if (response.status === "success" || response.status === "sucesso") { window.location.reload(); }
-                    else { alert("Erro ao atualizar capa."); }
+                    if (response.status === "success" || response.status === "sucesso") {
+                        window.location.reload();
+                    } else {
+                        alert("Erro ao atualizar capa.");
+                    }
                 },
-                error: function() { alert("Erro de conexão com o servidor."); },
-                complete: function() { document.body.style.cursor = 'default'; }
+                error: function(xhr) {
+                    console.error("Erro no upload:", xhr.responseText);
+                    alert("Erro de conexão com o servidor.");
+                },
+                complete: function() {
+                    document.body.style.cursor = 'default';
+                }
             });
         }
     };

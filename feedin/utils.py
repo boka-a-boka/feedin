@@ -26,6 +26,14 @@ from feedin.models import IdentidadeCivil
 
 # Configuração Única e Centralizada de Tipos de Imagem
 CONFIG_IMAGENS = {
+    # 🌟 Adicionado para suportar o upload de Capa do Perfil
+    'capa': {
+        'modulo_alvo': 'empresa',  # ou outro módulo que já existe e grava em static
+        'subpasta': 'uploads/capas',
+        'tamanho': (1200, 600),
+        'qualidade': 85
+    },
+
     # Módulo Agenda
     'agenda_avatar': {
         'modulo_alvo': 'agenda',
@@ -53,10 +61,10 @@ CONFIG_IMAGENS = {
         'qualidade': 85
     },
     'empresa_fachada': {
-            'modulo_alvo': 'empresa',
-            'subpasta': 'uploads/empresas/{empresa_id}',
-            'tamanho': (1200, 800),
-            'qualidade': 85
+        'modulo_alvo': 'empresa',
+        'subpasta': 'uploads/empresas/{empresa_id}',
+        'tamanho': (1200, 800),
+        'qualidade': 85
     }
 }
 
@@ -831,7 +839,7 @@ def resolver_url_midia(caminho_arquivo: str, modulo: str, fallback_filename: str
     try:
         return url_for('media_global.servir_midia_modulo', modulo=modulo, filename=caminho_limpo)
     except Exception:
-        return f"/media/{modulo}/{camin-limpo}" if 'caminho_limpo' in locals() else f"/media/{modulo}/{caminho_arquivo}"
+        return f"/media/{modulo}/{caminho_limpo}" if 'caminho_limpo' in locals() else f"/media/{modulo}/{caminho_arquivo}"
 
 
 # ALIAS DE COMPATIBILIDADE: Garante que chamadas antigas 'media_url' funcionem perfeitamente

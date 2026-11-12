@@ -1297,32 +1297,60 @@ def upload_foto_perfil():
 def upload_capa():
     arquivo = request.files.get('foto_capa')
 
-    if arquivo:
-        # Chamada unificada com modulo='capa'
-        nome_processado = salvar_imagem_modulo(arquivo, current_user.id, modulo='capa')
+    if not arquivo or not arquivo.filename:
+        return jsonify({"status": "error", "message": "Nenhum arquivo enviado"}), 400
 
-        if nome_processado:
-            if not current_user.perfil:
-                novo_perfil = Perfil(id_usuario=current_user.id)
-                database.session.add(novo_perfil)
-                database.session.flush()
+    try:
+        # Diretório físico definitivo na raiz static/uploads/capas
+        diretorio_destino = os.path.join(current_app.root_path, 'static', 'uploads', 'capas')
+        os.makedirs(diretorio_destino, exist_ok=True)
 
-            capa_antiga = current_user.perfil.url_capa
-            if capa_antiga and capa_antiga != 'default_capa.jpg':
-                import os
-                caminho_antigo = os.path.join(current_app.root_path, 'static', 'uploads', 'capas', capa_antiga)
-                if os.path.exists(caminho_antigo):
-                    try:
-                        os.remove(caminho_antigo)
-                    except Exception as e:
-                        print(f"Aviso: Falha ao deletar capa antiga: {e}")
+        # Processamento direto com Pillow (mesmo padrão de otimização do sistema)
+        img = Image.open(arquivo)
+        img = ImageOps.exif_transpose(img)
 
-            current_user.perfil.url_capa = nome_processado
-            database.session.commit()
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            img = img.convert('RGBA')
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
 
-            return jsonify({"status": "success", "url": nome_processado}), 200
+        # Redimensionamento padrão para capas mantendo aspect ratio
+        img.thumbnail((1200, 600), Image.Resampling.LANCZOS)
 
-    return jsonify({"status": "error", "message": "Falha ao processar imagem"}), 400
+        codigo_hash = uuid.uuid4().hex[:8]
+        nome_arquivo = f"capa_{current_user.id}_{codigo_hash}.webp"
+        caminho_completo = os.path.join(diretorio_destino, nome_arquivo)
+
+        # Salva otimizado em WebP
+        img.save(caminho_completo, 'WEBP', quality=85, optimize=True)
+
+        # Nome limpo para persistência no banco
+        nome_processado = nome_arquivo
+
+        if not current_user.perfil:
+            novo_perfil = Perfil(id_usuario=current_user.id)
+            database.session.add(novo_perfil)
+            database.session.flush()
+
+        # Remove a capa antiga se houver (tratando eventuais resíduos de caminhos salvos)
+        capa_antiga = current_user.perfil.url_capa
+        if capa_antiga and capa_antiga != 'default_capa.jpg':
+            nome_antigo_limpo = os.path.basename(capa_antiga)
+            caminho_antigo = os.path.join(diretorio_destino, nome_antigo_limpo)
+            if os.path.exists(caminho_antigo):
+                try:
+                    os.remove(caminho_antigo)
+                except Exception as e:
+                    current_app.logger.warning(f"Falha ao deletar capa antiga: {e}")
+
+        current_user.perfil.url_capa = nome_processado
+        database.session.commit()
+
+        return jsonify({"status": "success", "url": nome_processado}), 200
+
+    except Exception as e:
+        current_app.logger.exception(f"[ERRO UPLOAD CAPA] Falha ao processar capa do usuário {current_user.id}: {e}")
+        return jsonify({"status": "error", "message": "Erro interno ao processar imagem"}), 500
 
 
 from feedin.utils import preparar_entrada_modulo  # Importa do ponto unificado
