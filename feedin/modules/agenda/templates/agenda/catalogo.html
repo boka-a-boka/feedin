@@ -83,7 +83,7 @@
         {% endif %}
 
         {# 4. LISTAGEM DE EMPRESAS (CARDS INTEGRALMENTE CLICÁVEIS) #}
-        <div id="container-lista-empresas" class="d-flex flex-column gap-2.5">
+        <div id="container-lista-empresas" class="d-flex flex-column gap-3">
             {% if empresas %}
                 {% for emp in empresas %}
                 <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=emp.id) }}"
