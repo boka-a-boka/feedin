@@ -10,11 +10,12 @@
     /* 🌟 HERO COM O MESMO PADRÃO VISUAL DO PERFIL LOCAL */
     .empresa-hero {
         background: linear-gradient(135deg, var(--cor-primaria) 0%, var(--cor-secundaria) 100%);
-        min-height: 280px;
+        min-height: 320px;
         position: relative;
         display: flex;
-        align-items: flex-end;
-        padding: 40px;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 30px;
         border-radius: 0 0 35px 35px;
         margin-bottom: 25px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.15);
@@ -28,15 +29,43 @@
     .empresa-info-overlay { color: white; z-index: 5; width: 100%; position: relative; }
     .empresa-info-overlay h1 { font-weight: 800; text-shadow: 2px 2px 8px rgba(0,0,0,0.4); }
 
-    /* 🌟 BOTÃO VOLTAR FLUTUANTE PADRÃO DO FEEDIN */
+    /* 🌟 BOTÃO VOLTAR FLUTUANTE PADRÃO DO FEEDIN (Posicionamento seguro) */
     .btn-voltar-feedin {
-        position: absolute; top: 30px; left: 30px; z-index: 10;
-        background: rgba(255,255,255,0.2); backdrop-filter: blur(8px);
-        color: white; width: 45px; height: 45px; display: flex;
-        align-items: center; justify-content: center; border-radius: 50%; transition: all 0.3s;
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        z-index: 25;
+        background: rgba(255,255,255,0.25);
+        backdrop-filter: blur(8px);
+        color: white;
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.3s;
         text-decoration: none;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     }
-    .btn-voltar-feedin:hover { background: white; color: var(--cor-primaria); transform: translateX(-5px); }
+    .btn-voltar-feedin:hover {
+        background: white;
+        color: var(--cor-primaria);
+        transform: translateX(-3px);
+    }
+
+    /* 🌟 LOGOMARCA CENTRALIZADA NO TOPO (MOBILE / PWA) */
+    .logo-topo-mobile {
+        position: absolute;
+        top: 20px;
+        left: 0;
+        right: 0;
+        margin: 0 auto;
+        width: 85px;
+        height: 85px;
+        z-index: 20;
+        display: none; /* Oculta no desktop */
+    }
 
     /* 🌟 FUNDO ACETINADO PARA DESTAQUE DOS CARDS */
     .fundo-acetinado {
@@ -59,9 +88,32 @@
     .lista-servico-item:hover { background-color: #f1f3f5 !important; }
 
     @media (max-width: 768px) {
-        .empresa-hero { align-items: center; justify-content: center; text-align: center; padding: 25px; min-height: 350px; }
+        .empresa-hero {
+            align-items: center;
+            justify-content: flex-end;
+            text-align: center;
+            padding: 120px 20px 30px 20px; /* Espaço superior gerado para a logomarca não encostar */
+            min-height: 400px;
+        }
         .empresa-info-overlay .row { flex-direction: column !important; }
-        .empresa-hero h1 { font-size: 2rem; }
+        .empresa-hero h1 { font-size: 1.6rem; }
+
+        /* Exibe a logomarca centralizada absoluta no topo no mobile */
+        .logo-topo-mobile {
+            display: block;
+        }
+
+        /* Oculta a logomarca que ficava na lateral no formato antigo */
+        .logomarca-desktop-col {
+            display: none !important;
+        }
+
+        .btn-voltar-feedin {
+            top: max(15px, env(safe-area-inset-top, 15px));
+            left: 15px;
+            width: 38px;
+            height: 38px;
+        }
     }
 </style>
 
@@ -78,14 +130,22 @@
     <div class="empresa-info-overlay">
         <div class="row align-items-end g-4">
 
-            {# COLUNA ESQUERDA DO HERO: LOGO, NOME, ENDEREÇO, BADGES E BOTÃO SEGUIR #}
-            <div class="col-lg-7 col-md-6">
-                <div class="d-flex align-items-center gap-3 flex-wrap flex-md-nowrap mb-3">
-                    {% if empresa.logomarca %}
-                        <div class="bg-white p-1 rounded-4 shadow-sm border overflow-hidden flex-shrink-0" style="width: 90px; height: 90px;">
-                            <img src="{{ empresa.url_logomarca }}" alt="{{ empresa.nome }}" style="object-fit: cover; width: 100%; height: 100%; border-radius: 12px;">
-                        </div>
-                    {% endif %}
+            {# COLUNA ESQUERDA DO HERO #}
+            <div class="col-lg-7 col-md-6 text-center text-md-start">
+
+                {# 📱 LOGOMARCA CENTRALIZADA EXCLUSIVA PARA PWA/MOBILE (Simples e Direta) #}
+                <div class="d-flex d-md-none justify-content-center mt-4 mb-3">
+                    <div class="bg-white p-1 rounded-4 shadow-sm border overflow-hidden" style="width: 90px; height: 90px;">
+                        <img src="{{ empresa.url_logomarca }}" alt="{{ empresa.nome }}" style="object-fit: cover; width: 100%; height: 100%; border-radius: 12px;">
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-3 flex-wrap flex-md-nowrap mb-3 justify-content-center justify-content-md-start">
+
+                    {# Logomarca padrão visível APENAS em Desktop #}
+                    <div class="d-none d-md-block bg-white p-1 rounded-4 shadow-sm border overflow-hidden flex-shrink-0" style="width: 90px; height: 90px;">
+                        <img src="{{ empresa.url_logomarca }}" alt="{{ empresa.nome }}" style="object-fit: cover; width: 100%; height: 100%; border-radius: 12px;">
+                    </div>
 
                     <div>
                         <div class="d-flex align-items-center gap-2 mb-1 justify-content-center justify-content-md-start">
@@ -108,7 +168,7 @@
                     </div>
                 </div>
 
-                {# 🔵 BOTÃO DE SEGUIR COM BOM RESPIRO VERTICAL #}
+                {# 🔵 BOTÃO DE SEGUIR #}
                 {% set ns_segue = namespace(flag=usuario_segue if usuario_segue is defined else false) %}
                 {% if not ns_segue.flag and current_user.is_authenticated and vinculos_core %}
                     {% for v in vinculos_core %}
@@ -138,11 +198,10 @@
                 </div>
             </div>
 
-            {# COLUNA DIREITA DO HERO: WIDGET DE HORÁRIO + BOTÃO AGENDAR COM ESPAÇAMENTO EQUILIBRADO #}
+            {# COLUNA DIREITA DO HERO: WIDGET DE HORÁRIO #}
             <div class="col-lg-5 col-md-6 text-center text-md-end">
                 <div class="d-flex flex-column align-items-center align-items-md-end gap-3">
 
-                    {# 🌟 WIDGET COMPACTO DE HORÁRIO #}
                     <div class="w-100" style="max-width: 320px;">
                         <div class="card bg-dark bg-opacity-75 border-light border-opacity-25 rounded-4 shadow-sm p-2.5 text-start">
 
@@ -215,7 +274,6 @@
                         </div>
                     </div>
 
-                    {# 🌟 AÇÃO PRINCIPAL DINÂMICA (FORNECIDA PELO MÓDULO/BLUEPRINT) #}
                     <div class="w-100" style="max-width: 320px;">
                         {% if plano_ativo == 'pro' and acao_principal %}
                             <a href="{{ acao_principal.url }}" target="{{ acao_principal.target }}" class="btn btn-{{ acao_principal.cor }} btn-lg rounded-pill px-4 fw-bold shadow text-dark w-100 py-2.5 fs-6" style="border: 2px solid rgba(255,255,255,0.4);">
