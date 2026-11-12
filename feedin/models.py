@@ -259,6 +259,22 @@ class Usuario(database.Model, UserMixin):
         return False
 
 
+class UsuarioSelo(database.Model):
+    __tablename__ = 'usuario_selo'
+    __table_args__ = {'extend_existing': True}
+
+    id = database.Column(database.Integer, primary_key=True)
+    id_usuario = database.Column(database.Integer, database.ForeignKey('usuario.id'), nullable=False)
+    # ATENÇÃO AQUI: Aponta para 'selos.id' (no plural, conforme a sua model Selo)
+    id_selo = database.Column(database.Integer, database.ForeignKey('selos.id'), nullable=False)
+    data_conquista = database.Column(database.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    atribuido_por_admin = database.Column(database.Boolean, default=False)
+
+    usuario = database.relationship('Usuario',
+                                    backref=database.backref('selos_conquistados', cascade='all, delete-orphan'))
+    selo = database.relationship('Selo', backref=database.backref('usuarios_premiados', lazy='dynamic'))
+
+
 # Cria tabela de complemento do Apelidos
 class Apelidos(database.Model):
     __tablename__ = 'apelidos'

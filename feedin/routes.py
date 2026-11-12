@@ -1613,7 +1613,7 @@ def promover_pioneiro(usuario_id):
         # DISPARO DA ROTINA DE SELEÇÃO: VÍNCULO DO SELO HISTÓRICO
         # =================================================================
         # Buscamos a entidade do Selo de Pioneiro pelo código ou referência única
-        selo_pioneiro = Selo.query.filter_by(codigo='PIONEIRO_FUNDADOR').first()
+        selo_pioneiro = Selo.query.filter_by(codigo_interno='pioneiro').first()
 
         if selo_pioneiro:
             # Verifica se por algum motivo ele já tinha o selo (blindagem extra)

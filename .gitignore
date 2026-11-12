@@ -23,6 +23,13 @@ feedin/static/uploads/posts/*
 
 # Ignora todas as fotos e arquivos dentro da pasta de uploads de posts
 feedin/static/uploads/posts/*
+*/static/uploads/
+
+*/*.py.save
+
+criar_admin.py
+
+ajustar_modulos_vps.py
 
 # Mas garante que o Git não delete a pasta 'posts' em si se ela estiver vazia
 !feedin/static/uploads/posts/.gitkeep
