@@ -90,6 +90,7 @@
                    class="card-empresa-item card border-0 bg-white rounded-4 shadow-sm p-3 text-decoration-none text-dark transition-all position-relative"
                    data-nome="{{ emp.nome | lower }}"
                    data-bairro="{{ emp.bairro | lower }}"
+                   data-cidade="{{ emp.cidade | lower }}"
                    data-categoria="{{ emp.categoria_nome | lower }}">
 
                     <div class="d-flex gap-3 align-items-center">
@@ -126,15 +127,24 @@
                         </div>
 
                         {# DADOS DA EMPRESA #}
-                        <div class="flex-grow-1 min-w-0">
-                            <span class="badge bg-light text-dark border rounded-pill px-2 py-0.5 mb-1" style="font-size: 0.65rem;">
+                        <div class="flex-grow-1" style="min-width: 0;">
+                            <span class="badge bg-light text-dark border rounded-pill px-2 py-1 mb-1" style="font-size: 0.65rem;">
                                 {{ emp.categoria_nome }}
                             </span>
                             <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.98rem;">
                                 {{ emp.nome }}
                             </h6>
-                            <small class="text-muted d-block text-truncate mt-0.5" style="font-size: 0.75rem;">
-                                <i class="bi bi-geo-alt me-1"></i>{{ emp.endereco }}{% if emp.bairro %} - {{ emp.bairro }}{% endif %}
+
+                            {# Monta o endereço completo incluindo rua, bairro, cidade e estado #}
+                            {% set partes = [] %}
+                            {% if emp.endereco %}{% set _ = partes.append(emp.endereco) %}{% endif %}
+                            {% if emp.bairro %}{% set _ = partes.append(emp.bairro) %}{% endif %}
+                            {% if emp.cidade %}{% set _ = partes.append(emp.cidade) %}{% endif %}
+                            {% if emp.estado %}{% set _ = partes.append(emp.estado) %}{% endif %}
+                            {% set endereco_completo = partes | join(' - ') %}
+
+                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem; line-height: 1.3; word-break: break-word;">
+                                <i class="bi bi-geo-alt me-1"></i>{{ endereco_completo | wordwrap(33, break_long_words=True) | replace('\n', '<br>') | safe }}
                             </small>
                         </div>
 
@@ -182,9 +192,10 @@ function filtrarEmpresasEmTempoReal() {
     cards.forEach(card => {
         const nome = card.getAttribute('data-nome');
         const bairro = card.getAttribute('data-bairro');
+        const cidade = card.getAttribute('data-cidade') || '';
         const categoria = card.getAttribute('data-categoria');
 
-        if (nome.includes(termo) || bairro.includes(termo) || categoria.includes(termo)) {
+        if (nome.includes(termo) || bairro.includes(termo) || cidade.includes(termo) || categoria.includes(termo)) {
             card.classList.remove('d-none');
             visiveis++;
         } else {

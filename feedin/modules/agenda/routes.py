@@ -3757,7 +3757,9 @@ def catalogo_servicos():
                 'fachada': emp.fachada,
                 'categoria_nome': emp.categoria_rel.nome if emp.categoria_rel else 'Estabelecimento',
                 'endereco': f"{emp.local_fisico.logradouro}, {emp.local_fisico.numero}" if emp.local_fisico else "Atendimento Digital/Local",
-                'bairro': emp.local_fisico.bairro if emp.local_fisico else "",
+                'bairro': emp.local_fisico.bairro if emp.local_fisico and emp.local_fisico.bairro else "",
+                'cidade': emp.local_fisico.cidade if emp.local_fisico and emp.local_fisico.cidade else "",
+                'estado': emp.local_fisico.estado if emp.local_fisico and emp.local_fisico.estado else "",
                 'cor_primaria': emp.cor_primaria or "#111827"
             })
     except Exception as e:
