@@ -126,26 +126,34 @@
                             {% endif %}
                         </div>
 
-                        {# DADOS DA EMPRESA #}
+{# DADOS DA EMPRESA #}
                         <div class="flex-grow-1" style="min-width: 0;">
-                            <span class="badge bg-light text-dark border rounded-pill px-2 py-1 mb-1" style="font-size: 0.65rem;">
+                            <span class="badge bg-light text-dark border rounded-pill px-2 py-0.5 mb-1" style="font-size: 0.65rem;">
                                 {{ emp.categoria_nome }}
                             </span>
                             <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.98rem;">
                                 {{ emp.nome }}
                             </h6>
 
-                            {# Monta o endereço completo incluindo rua, bairro, cidade e estado #}
-                            {% set partes = [] %}
-                            {% if emp.endereco %}{% set _ = partes.append(emp.endereco) %}{% endif %}
-                            {% if emp.bairro %}{% set _ = partes.append(emp.bairro) %}{% endif %}
-                            {% if emp.cidade %}{% set _ = partes.append(emp.cidade) %}{% endif %}
-                            {% if emp.estado %}{% set _ = partes.append(emp.estado) %}{% endif %}
-                            {% set endereco_completo = partes | join(' - ') %}
-
-                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem; line-height: 1.3; word-break: break-word;">
-                                <i class="bi bi-geo-alt me-1"></i>{{ endereco_completo | wordwrap(33, break_long_words=True) | replace('\n', '<br>') | safe }}
+                            {# 1. ENDEREÇO (Com quebra de 30 caracteres se for muito longo) #}
+                            {% set rua_numero = emp.endereco or 'Atendimento Digital' %}
+                            <small class="text-muted d-block mt-1" style="font-size: 0.74rem; line-height: 1.25; word-break: break-word;">
+                                <i class="bi bi-geo-alt me-1"></i>{{ rua_numero | wordwrap(30, break_long_words=True) | replace('\n', '<br>') | safe }}
                             </small>
+
+                            {# 2. BAIRRO (Linha própria) #}
+                            {% if emp.bairro %}
+                            <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
+                                <strong>Bairro:</strong> {{ emp.bairro }}
+                            </small>
+                            {% endif %}
+
+                            {# 3. CIDADE / ESTADO (Linha própria) #}
+                            {% if emp.cidade %}
+                            <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
+                                <strong>Cidade:</strong> {{ emp.cidade }}{% if emp.estado %} - {{ emp.estado }}{% endif %}
+                            </small>
+                            {% endif %}
                         </div>
 
                         {# ÍCONE INDICATIVO DE AVANÇO (CHEVRON) #}
