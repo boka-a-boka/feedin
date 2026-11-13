@@ -172,14 +172,14 @@
         <!-- ================================================================= -->
         <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
             <span class="badge bg-warning text-dark align-self-start mb-2">GUIA OPERACIONAL RÁPIDO</span>
-            <h3 class="fw-bold text-dark mb-2">Como Realizar o Seu Primeiro Agendamento</h3>
+            <h5 class="fw-bold text-dark mb-2">Como Realizar e Concluir um Agendamento</h5>
             <p class="text-secondary small mb-4">
-                Este guia orienta o cliente passo a passo sobre onde clicar para concluir o primeiro agendamento na plataforma de forma rápida e autônoma.
+                Este guia orienta o cliente passo a passo sobre todas as etapas, desde a escolha do espaço até a avaliação pós-atendimento e obtenção do recibo.
             </p>
 
             <!-- Passo 1 -->
             <div class="mb-4 pb-3 border-bottom">
-                <h5 class="fw-bold text-dark">Passo 1: Encontrar o Estabelecimento</h5>
+                <h6 class="fw-bold text-dark">Passo 1: Encontrar o Estabelecimento</h6>
                 <p class="text-secondary small mb-2">
                     Na sua Dashboard do Cliente (tela inicial), localize o card de destaque "Descubra Novos Espaços".<br>
                     Clique no botão amarelo "Explorar Catálogo" para navegar pelas opções disponíveis.
@@ -195,7 +195,7 @@
                 <div class="print-frame-full" style="max-width: 320px;">
                     <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/favoritas_preenchido.png') }}" alt="Favoritas Preenchido" loading="lazy">
                 </div>
-                <p class="text-center text-muted fst-italic mb-3" style="font-size: 0.75rem;">1 - Seção sem empresas favoritadas para acesso rápido.</p>
+                <p class="text-center text-muted fst-italic mb-3" style="font-size: 0.75rem;">Seção de empresas favoritadas para acesso rápido.</p>
 
                 <div class="print-frame-full" style="max-width: 320px;">
                     <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/explorar_empresas.png') }}" alt="Explorar Empresas" loading="lazy">
@@ -204,7 +204,7 @@
 
             <!-- Passo 2 -->
             <div class="mb-4 pb-3 border-bottom">
-                <h5 class="fw-bold text-dark">Passo 2: Selecionar o Beneficiário (Se aplicável)</h5>
+                <h6 class="fw-bold text-dark">Passo 2: Selecionar o Beneficiário (Se aplicável)</h6>
                 <p class="text-secondary small mb-0">
                     Ao entrar na página do estabelecimento escolhido e iniciar o fluxo de agendamento, caso o atendimento seja destinado a um dependente, pet ou veículo, selecione o Beneficiário / Persona correspondente antes de escolher os serviços.<br>
                     Caso o atendimento seja para você mesmo, basta prosseguir para a etapa seguinte.
@@ -213,7 +213,7 @@
 
             <!-- Passo 3 -->
             <div class="mb-4 pb-3 border-bottom">
-                <h5 class="fw-bold text-dark">Passo 3: Escolher o Serviço</h5>
+                <h6 class="fw-bold text-dark">Passo 3: Escolher o Serviço</h6>
                 <p class="text-secondary small mb-2">
                     Navegue pelas categorias de serviços oferecidos pelo estabelecimento.<br>
                     Selecione o serviço desejado.
@@ -225,7 +225,7 @@
 
             <!-- Passo 4 -->
             <div class="mb-4 pb-3 border-bottom">
-                <h5 class="fw-bold text-dark">Passo 4: Definir a Data, o Horário e o Profissional</h5>
+                <h6 class="fw-bold text-dark">Passo 4: Definir a Data, o Horário e o Profissional</h6>
                 <p class="text-secondary small mb-2">
                     Na grade interativa de horários, selecione a data e o horário que melhor se adaptam à sua rotina.<br>
                     Escolha o profissional de sua preferência (ou selecione a opção de atendimento com o primeiro profissional disponível na grade).<br>
@@ -237,15 +237,41 @@
             </div>
 
             <!-- Passo 5 -->
-            <div>
-                <h5 class="fw-bold text-dark">Passo 5: Confirmar e Acompanhar</h5>
+            <div class="mb-4 pb-3 border-bottom">
+                <h6 class="fw-bold text-dark">Passo 5: Confirmar e Acompanhar</h6>
                 <p class="text-secondary small mb-2">
                     Clique no botão de confirmação para concluir o processo.<br>
-                    O agendamento será processado instantaneamente e passará a ser exibido na seção "Meus Próximos Agendamentos" na sua Dashboard inicial.<br>
-                    <strong>Pronto!</strong> A partir de agora, qualquer alteração, reagendamento ou acompanhamento de consumação e avaliações pós-atendimento poderá ser feito diretamente por essa mesma tela.
+                    O agendamento será processado instantaneamente e passará a ser exibido na seção "Meus Próximos Agendamentos" na sua Dashboard inicial.
                 </p>
                 <div class="print-frame-full" style="max-width: 320px;">
                     <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/agendamentos_ativo.png') }}" alt="Agendamento Ativo" loading="lazy">
+                </div>
+            </div>
+
+<!-- Passo 6 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 6: Avaliação do Profissional (Pós-Atendimento)</h5>
+                <p class="text-secondary small mb-2">
+                    Assim que o colaborador encerra o atendimento no balcão, o sistema exibe automaticamente um <strong>Modal de Avaliação</strong> na sua tela.<br>
+                    Selecione de 1 a 5 estrelas para avaliar o profissional e, se desejar, preencha o campo de comentário opcional antes de enviar.<br>
+                    Caso prefira avaliar mais tarde, clique no botão "Avaliar depois".
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/modal_avaliacao.png') }}" alt="Modal de Avaliação" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 7 -->
+            <div>
+                <h5 class="fw-bold text-dark">Passo 7: Obtenção do Recibo e Gestão de Notificações</h5>
+                <p class="text-secondary small mb-2">
+                    O recibo dos serviços realizados é enviado diretamente para a sua central de avisos.<br>
+                    Para consultar, baixar ou imprimir o recibo, clique no ícone do <strong>Sininho (Notificações)</strong> no canto superior direito da sua Dashboard para abrir o painel lateral.<br>
+                    Localize a notificação do atendimento e clique em <strong>"Ver Comprovante"</strong>.<br>
+                    <strong>Dica Importante:</strong> Para manter o seu painel organizado e o contador do sininho atualizado, lembre-se de clicar no botão <strong>"Marcar como lida"</strong> após verificar a notificação (ou utilize a opção "Marcar todas como lidas").
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/painel_notificacoes.png') }}" alt="Painel de Notificações" loading="lazy">
                 </div>
             </div>
 
