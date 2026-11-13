@@ -9894,3 +9894,27 @@ def api_detalhes_colaborador(uuid_colab):
         "biografia": getattr(contrato.detalhes_pessoais, 'biografia', 'Sem biografia cadastrada.'),
         "foto_url": contrato.url_foto_profissional
     })
+
+
+@agenda_bp.route('/ajuda/cliente')
+@login_required
+def ajuda_cliente():
+    return render_template('agenda/ajuda_cliente.html')
+
+
+@agenda_bp.route('/ajuda/colaborador')
+@login_required
+def ajuda_colaborador():
+    # Validação segura utilizando getattr para evitar AttributeError em ModCadastroCliente
+    is_admin = getattr(current_user, 'is_admin', False)
+    eh_colaborador = (
+            is_admin or
+            session.get('colaborador_ativo') or
+            session.get('tem_contrato_ativo') or
+            session.get('perfil') in ['admin', 'gestor', 'colaborador']
+    )
+
+    if not eh_colaborador:
+        return redirect(url_for('agenda.ajuda_cliente'))
+
+    return render_template('agenda/ajuda_colaborador.html')

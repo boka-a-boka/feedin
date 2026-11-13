@@ -1,0 +1,236 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Central de Ajuda - Colaborador{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-ajuda {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%);
+        min-height: 100vh;
+    }
+    .sticky-help-nav {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        background: rgba(251, 251, 248, 0.94);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .print-frame-full {
+        max-width: 340px;
+        margin: 1.25rem auto;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        border: 4px solid #ffffff;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        background-color: #ffffff;
+    }
+    .print-frame-full img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+</style>
+
+<div class="fundo-acetinado-ajuda pb-5">
+
+    <!-- CABEÇALHO FIXO -->
+    <div class="sticky-help-nav py-3 px-3 mb-4">
+        <div class="container" style="max-width: 760px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <a href="javascript:history.back()" class="btn btn-sm btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;" title="Voltar ao Balcão">
+                        <i class="bi bi-arrow-left text-dark"></i>
+                    </a>
+                    <div>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.65rem;">MÓDULO CONEXO FEEDIN AGENDA</span>
+                        <h5 class="fw-bold text-dark m-0">Central de Ajuda — Colaborador</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" style="max-width: 760px;">
+
+        <!-- ================================================================= -->
+        <!-- PARTE 1: GUIA DE REFERÊNCIA OPERACIONAL (MÓDULO EMPRESA)          -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-primary-subtle text-primary align-self-start mb-2">GUIA DE REFERÊNCIA OPERACIONAL</span>
+            <h3 class="fw-bold text-dark mb-2">Módulo Empresa (Dashboard do Colaborador)</h3>
+            <p class="text-secondary small mb-3">
+                O Balcão Operacional é a central de trabalho diária do profissional e do gestor dentro do módulo Agenda. Projetado para suportar alta performance em dispositivos móveis e desktops, ele centraliza a grade de horários, o controle de comanda, o estoque e os indicadores de desempenho.
+            </p>
+
+            <div class="print-frame-full" style="max-width: 260px;">
+                <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/topo_colaborador.png') }}" alt="Acesso Área Profissional" loading="lazy">
+            </div>
+
+            <h5 class="fw-bold text-dark mt-4 mb-3">1. Descrição das Seções da Tela</h5>
+            <p class="text-secondary small mb-3">A tela está organizada em blocos funcionais do topo para a base:</p>
+
+            <!-- Seção: Header Institucional -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Header Institucional & Branding:</h6>
+                <ul class="text-secondary small mb-2">
+                    <li>Contém o botão de retorno à vitrine, a logomarca dinâmica da empresa (com fallback para a inicial colorida) e uma saudação personalizada exibindo o nome do colaborador logado e a data corrente.</li>
+                    <li>Possui um Sininho de Notificações com contador de avisos operacionais e o atalho para o Painel de Desempenho & Gestão.</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/header_institucional.png') }}" alt="Header Institucional" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Alertas de Reordenação -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Alertas de Reordenação Pendente (Condicional):</h6>
+                <p class="text-secondary small mb-0">Bloco de destaque exibido caso ocorra um conflito ou solicitação de alteração de horário/sequência de grade enviada por um colega, permitindo aceitar ou recusar com um toque.</p>
+            </div>
+
+            <!-- Seção: Cards de Métricas -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Cards de Métricas e Filtros Rápidos (KPIs):</h6>
+                <p class="text-secondary small mb-2">Quatro cartões interativos que funcionam como filtros instantâneos da grade: Agendamentos Hoje, Atrasos, Concluídos Hoje e Cancelados / Faltas.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/cards_metricas.png') }}" alt="Cards de Métricas" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Barra de Controles -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Barra de Controles da Grade:</h6>
+                <ul class="text-secondary small mb-2">
+                    <li><strong>Seletor de Data:</strong> Permite alterar o calendário de visualização instantaneamente.</li>
+                    <li><strong>Filtro de Profissional:</strong> Restrito a administradores/gestores para alternar entre a grade de membros da equipe.</li>
+                    <li><strong>Botão de Alternância de Grade:</strong> Permite alternar rapidamente entre ocultar ou exibir os horários livres ("Mostrar Todos" vs "Apenas Agendados").</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/barra_controles.png') }}" alt="Barra de Controles" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Grade Cronológica -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Grade Cronológica de Atendimentos (O Núcleo Operacional):</h6>
+                <p class="text-secondary small mb-2">Exibe os slots do dia em ordem cronológica. Os cards distinguem-se visualmente por cores e status:</p>
+                <ul class="text-secondary small mb-2">
+                    <li><strong>Agendado (Azul):</strong> Horário reservado aguardando o início.</li>
+                    <li><strong>Em Andamento (Destaque com borda azul brilhante):</strong> Atendimento ativo na cadeira com comandos de lançamento de produtos.</li>
+                    <li><strong>Concluído / Finalizado (Verde/Laranja):</strong> Serviços encerrados aguardando fechamento de caixa ou comanda liquidada.</li>
+                    <li><strong>Slots Livres (Tracejados):</strong> Horários disponíveis para encaixe rápido de novos clientes.</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/grade_cronologica.png') }}" alt="Grade Cronológica" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Modais de Apoio -->
+            <div class="p-3 bg-light rounded-3">
+                <h6 class="fw-bold text-dark mb-2">Modais de Apoio Operacional:</h6>
+                <ul class="text-secondary small mb-2">
+                    <li class="mb-2"><strong>Modal de Prontuário:</strong> Exibe dados cadastrais profundos, aniversários, histórico de compras e contatos de emergência do titular/beneficiário.</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_prontuario.png') }}" alt="Modal Prontuário" loading="lazy">
+                </div>
+
+                <ul class="text-secondary small mb-2 mt-3">
+                    <li class="mb-2"><strong>Modal de Adição de Itens:</strong> Suporta leitura por código de barras (USB ou câmera do celular) integrada ao estoque.</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_adicionar_itens.png') }}" alt="Modal Adição de Itens" loading="lazy">
+                </div>
+
+                <ul class="text-secondary small mb-2 mt-3">
+                    <li class="mb-2"><strong>Modal de Comanda Unificada:</strong> Permite consolidar serviços de cadeira e produtos de estoque em uma única conta, aplicando acréscimos, descontos e registrando a forma de pagamento (PIX, Cartão, Dinheiro).</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_comanda_unificada.png') }}" alt="Modal Comanda Unificada" loading="lazy">
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ================================================================= -->
+        <!-- PARTE 2: GUIA OPERACIONAL RÁPIDO (ROTINA DIÁRIA DO COLABORADOR)   -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-warning text-dark align-self-start mb-2">GUIA OPERACIONAL RÁPIDO</span>
+            <h3 class="fw-bold text-dark mb-2">Rotina Diária do Colaborador (Balcão Operacional)</h3>
+            <p class="text-secondary small mb-4">
+                Este guia orienta o profissional passo a passo sobre como gerenciar sua grade diária, atender clientes, registrar consumos e concluir os atendimentos de forma ágil e autônoma.
+            </p>
+
+            <!-- Passo 1 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 1: Acessar e Filtrar a Grade de Atendimentos</h5>
+                <p class="text-secondary small mb-2">
+                    Na sua Dashboard de Empresa / Balcão Operacional, visualize imediatamente a sua grade cronológica do dia.<br>
+                    Utilize o Seletor de Data no topo para consultar dias anteriores ou futuros, ou utilize o filtro de Profissional (caso seja gestor) para visualizar a agenda de um colega.<br>
+                    Utilize os Cards de Métricas no topo (Agendamentos Hoje, Atrasos, Concluídos) como botões de atalho rápido para filtrar visualmente o status da grade com um toque.
+                </p>
+                <div class="print-frame-full" style="max-width: 260px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/passo1_data.png') }}" alt="Seletor de Data" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 2 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 2: Consultar o Prontuário e Histórico (Duplo Clique)</h5>
+                <p class="text-secondary small mb-2">
+                    Precisa conferir alergias, preferências, frequência ou dados de um pet/veículo (beneficiário)? Dê um duplo clique (ou toque longo no mobile) sobre a área do cliente no card.<br>
+                    O Prontuário Completo será aberto instantaneamente na tela, exibindo o histórico de visitas, serviços mais contratados e um alerta caso seja aniversário do cliente no dia.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_prontuario.png') }}" alt="Consultar Prontuário" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 3 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 3: Iniciar o Atendimento do Cliente</h5>
+                <p class="text-secondary small mb-2">
+                    Localize o horário agendado na lista e dê um toque no card do cliente para expandir o Painel de Ações.<br>
+                    Clique no botão azul "Iniciar Atendimento".<br>
+                    <strong>Atenção:</strong> O sistema registrará automaticamente o horário de início real e mudará o status do card para destacar que a cadeira está em andamento.
+                </p>
+                <div class="print-frame-full" style="max-width: 260px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/passo3_iniciar.png') }}" alt="Iniciar Atendimento" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 4 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 4: Lançar Produtos ou Serviços Extras na Comanda</h5>
+                <p class="text-secondary small mb-2">
+                    Durante o atendimento na cadeira, caso o cliente adquira um produto (ex: pomada, esmalte) ou solicite um serviço adicional, clique no botão "+ Item / Produto" no rodapé do card em andamento.<br>
+                    Utilize a busca por código de barras, leitor de câmera ou a aba de serviços avulsos, informe a quantidade e confirme o lançamento direto na comanda unificada do cliente.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_adicionar_itens.png') }}" alt="Adicionar Itens" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 5 -->
+            <div>
+                <h5 class="fw-bold text-dark">Passo 5: Concluir o Serviço e Encaminhar ao Caixa</h5>
+                <p class="text-secondary small mb-2">
+                    Ao finalizar o procedimento na cadeira, clique no botão "Concluir [Nome do Serviço]" no card do atendimento.<br>
+                    Confirme os horários reais e, se desejar, registre a avaliação e um comentário rápido do cliente.<br>
+                    O sistema atualizará o status para "Finalizado (Caixa)", liberando a comanda unificada para liquidação imediata ou mantendo-a aberta para consumo posterior.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/passo5_concluir.png') }}" alt="Concluir Serviço" loading="lazy">
+                </div>
+                <div class="print-frame-full mt-3" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/colaborador/modal_comanda_unificada.png') }}" alt="Comanda Unificada Caixa" loading="lazy">
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+{% endblock %}

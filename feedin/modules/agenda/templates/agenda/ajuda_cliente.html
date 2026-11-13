@@ -1,0 +1,256 @@
+{% extends "agenda/base_agenda.html" %}
+
+{% block title %}FeedIn | Central de Ajuda - Cliente{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-ajuda {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%);
+        min-height: 100vh;
+    }
+    .sticky-help-nav {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        background: rgba(251, 251, 248, 0.94);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .print-frame-full {
+        max-width: 340px;
+        margin: 1.25rem auto;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        border: 4px solid #ffffff;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        background-color: #ffffff;
+    }
+    .print-frame-full img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+</style>
+
+<div class="fundo-acetinado-ajuda pb-5">
+
+    <!-- CABEÇALHO FIXO -->
+    <div class="sticky-help-nav py-3 px-3 mb-4">
+        <div class="container" style="max-width: 760px;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('agenda.dashboard_cliente') }}" class="btn btn-sm btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;" title="Voltar à Dashboard">
+                        <i class="bi bi-arrow-left text-dark"></i>
+                    </a>
+                    <div>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.65rem;">MÓDULO CONEXO FEEDIN AGENDA</span>
+                        <h5 class="fw-bold text-dark m-0">Central de Ajuda — Cliente</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" style="max-width: 760px;">
+
+        <!-- ================================================================= -->
+        <!-- PARTE 1: GUIA DE REFERÊNCIA OPERACIONAL (DASHBOARD DO CLIENTE)    -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-primary-subtle text-primary align-self-start mb-2">GUIA DE REFERÊNCIA OPERACIONAL</span>
+            <h3 class="fw-bold text-dark mb-2">Dashboard do Cliente</h3>
+            <p class="text-secondary small mb-3">
+                A Dashboard do Cliente é o painel de controle principal do usuário no módulo Agenda. Ela foi estruturada em formato PWA (Progressive Web App) para facilitar o uso em dispositivos móveis e desktops, concentrando atalhos, informações de perfil, agendamentos futuros, consumações e histórico em uma única tela fluida.
+            </p>
+
+            <div class="print-frame-full">
+                <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/dash_completa.png') }}" alt="Dashboard do Cliente Completa" loading="lazy">
+            </div>
+
+            <h5 class="fw-bold text-dark mt-4 mb-3">1. Descrição das Seções da Tela</h5>
+            <p class="text-secondary small mb-3">A tela está dividida em blocos funcionais organizados de cima para baixo:</p>
+
+            <!-- Seção: Área Superior Direta -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Área Superior Direta (Ações Rápidas do Sistema):</h6>
+                <ul class="text-secondary small mb-2">
+                    <li><strong>Botão do Sininho (Notificações):</strong> Exibe um ícone de sino com um contador dinâmico em badge vermelha/amarela indicando avisos, mensagens ou comprovantes não lidos. Ao clicar, aciona o offcanvas lateral de notificações.</li>
+                    <li><strong>Botão Sair:</strong> Permite encerrar a sessão de forma segura e retornar à tela pública ou de login.</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 260px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/topo_acoes.png') }}" alt="Sininho e Botão Sair" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Header de Perfil -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Header de Perfil & Hub de Configurações (Avatar):</h6>
+                <ul class="text-secondary small mb-2">
+                    <li>Exibe a foto oficial do cliente ou a inicial do nome em formato circular.</li>
+                    <li>Contém um ícone de câmera integrado para upload direto de nova foto de perfil.</li>
+                    <li>Ao tocar no avatar, abre-se a Central da Conta & Recursos (Offcanvas inferior), onde o usuário pode acessar dados cadastrais, dependentes/pets/veículos (Meus Beneficiários), dashboards de atendimento e relatórios de desempenho (caso possua perfil profissional vinculado).</li>
+                </ul>
+                <div class="print-frame-full" style="max-width: 200px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/avatar_camera.png') }}" alt="Avatar Perfil" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Card Hero -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Card Hero ("Descubra Novos Espaços"):</h6>
+                <p class="text-secondary small mb-2">Um banner de destaque escuro com gradiente da marca, projetado para incentivar o usuário a explorar o catálogo de estabelecimentos, verificar horários e iniciar novos agendamentos.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/card_hero.png') }}" alt="Card Hero" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Empresas Favoritas -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Acesso Rápido — Empresas Favoritas:</h6>
+                <p class="text-secondary small mb-2">Uma barra com rolagem horizontal que lista os estabelecimentos favoritos do cliente, exibindo a logomarca, nome e categoria para acesso direto aos detalhes da empresa.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/favoritas_vazio.png') }}" alt="Empresas Favoritas" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Meus Beneficiários -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Meus Beneficiários / Personas:</h6>
+                <p class="text-secondary small mb-2">Seção condicional que exibe dependentes humanos, pets ou veículos cadastrados pelo cliente para facilitar o vínculo em agendamentos específicos.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/beneficiarios.png') }}" alt="Beneficiários" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Recados e Notificações -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Recados e Notificações em Destaque:</h6>
+                <p class="text-secondary small mb-0">Exibe prévias dos recados mais recentes enviados pelo sistema ou estabelecimentos, permitindo a leitura rápida e a opção de arquivamento direto com um toque.</p>
+            </div>
+
+            <!-- Seção: Consumação -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Consumação / Extrato do Local (Comandas e Auto-Compra):</h6>
+                <p class="text-secondary small mb-0">Bloco dinâmico que aparece quando há itens consumidos ou solicitados no estabelecimento atual (seja por auto-atendimento via PWA ou lançados pela equipe no balcão), exibindo o subtotal e o valor geral. <span class="badge bg-secondary ms-1">EM BREVE</span></p>
+            </div>
+
+            <!-- Seção: Serviços Futuros -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Serviço Futuros (Próximos Agendamentos):</h6>
+                <p class="text-secondary small mb-2">
+                    O coração da dashboard. Lista todos os agendamentos ativos do cliente com data, hora, estabelecimento, beneficiário e os serviços contratados.<br>
+                    Cada serviço exibe o profissional responsável e permite abrir uma Ficha Informativa do Atendimento (clicando no card ou com um duplo clique) para ver detalhes, biografia do profissional e histórico de avaliações. Também disponibiliza o botão de Reagendar.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/agendamentos_vazio.png') }}" alt="Próximos Agendamentos" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Publicidade -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Área de Publicidade Integrada (Banner Temporário):</h6>
+                <p class="text-secondary small mb-2">Espaço dedicado a banners patrocinados ou links promocionais externos alinhados ao ecossistema.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/banner_patrocinado.png') }}" alt="Banner Publicidade" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Seção: Histórico -->
+            <div class="p-3 bg-light rounded-3">
+                <h6 class="fw-bold text-dark">Histórico: Últimas Visitas (Accordion Recolhível):</h6>
+                <p class="text-secondary small mb-2">Uma seção colapsável que armazena o histórico de visitas e agendamentos passados do cliente, organizada de forma limpa para não poluir a tela principal.</p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/ultimas_visitas.png') }}" alt="Últimas Visitas" loading="lazy">
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ================================================================= -->
+        <!-- PARTE 2: GUIA OPERACIONAL RÁPIDO (COMO REALIZAR AGENDAMENTO)      -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-warning text-dark align-self-start mb-2">GUIA OPERACIONAL RÁPIDO</span>
+            <h3 class="fw-bold text-dark mb-2">Como Realizar o Seu Primeiro Agendamento</h3>
+            <p class="text-secondary small mb-4">
+                Este guia orienta o cliente passo a passo sobre onde clicar para concluir o primeiro agendamento na plataforma de forma rápida e autônoma.
+            </p>
+
+            <!-- Passo 1 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 1: Encontrar o Estabelecimento</h5>
+                <p class="text-secondary small mb-2">
+                    Na sua Dashboard do Cliente (tela inicial), localize o card de destaque "Descubra Novos Espaços".<br>
+                    Clique no botão amarelo "Explorar Catálogo" para navegar pelas opções disponíveis.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/card_hero.png') }}" alt="Passo 1 Catálogo" loading="lazy">
+                </div>
+
+                <div class="alert alert-warning border-0 rounded-3 small my-3">
+                    <strong>Dica de Ouro:</strong> Se você está acessando uma empresa de uso costumeiro pela primeira vez, clique no ícone de favoritos na página dela para fixá-la na sua barra de Empresas Favoritas (sua lista rápida comporta até 10 estabelecimentos). Nas próximas vezes, o acesso será imediato por ali.
+                </div>
+
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/favoritas_preenchido.png') }}" alt="Favoritas Preenchido" loading="lazy">
+                </div>
+                <p class="text-center text-muted fst-italic mb-3" style="font-size: 0.75rem;">1 - Seção sem empresas favoritadas para acesso rápido.</p>
+
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/explorar_empresas.png') }}" alt="Explorar Empresas" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 2 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 2: Selecionar o Beneficiário (Se aplicável)</h5>
+                <p class="text-secondary small mb-0">
+                    Ao entrar na página do estabelecimento escolhido e iniciar o fluxo de agendamento, caso o atendimento seja destinado a um dependente, pet ou veículo, selecione o Beneficiário / Persona correspondente antes de escolher os serviços.<br>
+                    Caso o atendimento seja para você mesmo, basta prosseguir para a etapa seguinte.
+                </p>
+            </div>
+
+            <!-- Passo 3 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 3: Escolher o Serviço</h5>
+                <p class="text-secondary small mb-2">
+                    Navegue pelas categorias de serviços oferecidos pelo estabelecimento.<br>
+                    Selecione o serviço desejado.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/selecionar_servicos.png') }}" alt="Selecionar Serviços" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 4 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 4: Definir a Data, o Horário e o Profissional</h5>
+                <p class="text-secondary small mb-2">
+                    Na grade interativa de horários, selecione a data e o horário que melhor se adaptam à sua rotina.<br>
+                    Escolha o profissional de sua preferência (ou selecione a opção de atendimento com o primeiro profissional disponível na grade).<br>
+                    Revise os dados do atendimento selecionado (serviço, profissional, data, horário e valor).
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/escolher_horario.png') }}" alt="Escolher Horário" loading="lazy">
+                </div>
+            </div>
+
+            <!-- Passo 5 -->
+            <div>
+                <h5 class="fw-bold text-dark">Passo 5: Confirmar e Acompanhar</h5>
+                <p class="text-secondary small mb-2">
+                    Clique no botão de confirmação para concluir o processo.<br>
+                    O agendamento será processado instantaneamente e passará a ser exibido na seção "Meus Próximos Agendamentos" na sua Dashboard inicial.<br>
+                    <strong>Pronto!</strong> A partir de agora, qualquer alteração, reagendamento ou acompanhamento de consumação e avaliações pós-atendimento poderá ser feito diretamente por essa mesma tela.
+                </p>
+                <div class="print-frame-full" style="max-width: 320px;">
+                    <img src="{{ url_for('agenda.static', filename='img/ajuda/cliente/agendamentos_ativo.png') }}" alt="Agendamento Ativo" loading="lazy">
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+{% endblock %}

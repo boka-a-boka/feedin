@@ -185,20 +185,19 @@
 {# HEADER COM BRANDING DA EMPRESA, LOGOTIPO E SAUDAÇÃO #}
 <div class="card border-0 bg-white rounded-4 shadow-sm p-3 mb-4 position-relative" style="border-left: 6px solid {{ cor_empresa }} !important;">
 
-    <div class="position-absolute top-0 end-0 m-2 z-2">
-        <button type="button"
-                class="btn btn-light rounded-circle position-relative p-2 shadow-sm d-flex align-items-center justify-content-center border"
-                data-bs-toggle="offcanvas"
-                data-bs-target="#offcanvasNotificacoesEmpresa"
-                style="width: 38px; height: 38px;"
-                title="Notificações da Operação">
+    <div class="position-absolute top-0 end-0 m-2 z-2 d-flex flex-column align-items-end gap-1">
+        <button type="button" class="btn btn-light rounded-circle position-relative p-2 shadow-sm d-flex align-items-center justify-content-center border" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNotificacoesEmpresa" style="width: 38px; height: 38px;" title="Notificações da Operação">
             <i class="bi bi-bell fs-6 text-dark"></i>
             {% if total_notificacoes_nao_lidas and total_notificacoes_nao_lidas > 0 %}
-                <span id="badge-notificacoes-header" class="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger border border-light p-1" style="font-size: 0.55rem; min-width: 16px;">
-                    {{ total_notificacoes_nao_lidas }}
-                </span>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger border border-light p-1" style="font-size: 0.55rem; min-width: 16px;">{{ total_notificacoes_nao_lidas }}</span>
             {% endif %}
         </button>
+
+        <!-- 💡 BOTÃO DE AJUDA DO COLABORADOR (Linha abaixo com respiro) -->
+        <a href="{{ url_for('agenda.ajuda_colaborador') }}" class="btn btn-sm btn-light border shadow-sm rounded-pill px-2.5 py-1 text-secondary d-inline-flex align-items-center gap-1 mt-1" title="Guia do Colaborador" style="font-size: 0.72rem; text-decoration: none; background-color: #ffffff;">
+            <i class="bi bi-question-circle text-primary"></i>
+            <span>Ajuda</span>
+        </a>
     </div>
 
     <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap pe-4">
@@ -348,11 +347,12 @@
             <small class="text-muted">Ordem cronológica por horário de atendimento.</small>
         </div>
 
-        <div class="d-flexlign-items-center gap-2 flex-wrap ms-auto">
+        <div class="d-flex align-items-center gap-3 flex-wrap ms-auto">
+            <!-- Adicionamos uma margem à direita (me-2 ou me-3) e mantemos o controle de largura -->
             <input type="date"
                    id="filtro-data"
                    name="data"
-                   class="form-control form-control-sm bg-light border-0 fw-semibold rounded-pill px-3 py-1.5"
+                   class="form-control form-control-sm bg-light border-0 fw-semibold rounded-pill px-3 py-1.5 me-2"
                    value="{{ data_filtro.strftime('%Y-%m-%d') if data_filtro else '' }}"
                    onchange="alternarData(this)"
                    style="max-width: 160px;">
@@ -385,7 +385,7 @@
                             {% set meu_nome = (resolver_nome_profissional(colaboradorcontrato) if (resolver_nome_profissional is defined and resolver_nome_profissional and colaboradorcontrato) else None)
                                               or (colaboradorcontrato.nome if (colaboradorcontrato and colaboradorcontrato.nome) else None)
                                               or (colaboradorcontrato.usuario.nome if (colaboradorcontrato and colaboradorcontrato.usuario and colaboradorcontrato.usuario.nome) else None)
-                                              or 'Meu Perfil' %}
+                                              or 'Meu Peril' %}
 
                             <div class="input-group shadow-sm rounded-3">
                                 <span class="input-group-text bg-light border-0 text-muted">
