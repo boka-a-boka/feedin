@@ -3632,3 +3632,8 @@ def editar_contrato_colaborador(contrato_id):
         'empresa/editar_contrato.html',
         contrato=contrato
     )
+
+@empresa_bp.route('/ajuda/empreendedor')
+@login_required
+def ajuda_empreendedor():
+    return render_template('empresa/ajuda_empreendedor.html')

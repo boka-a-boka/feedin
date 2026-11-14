@@ -23,7 +23,7 @@
 <div class="fundo-acetinado-pwa w-100 py-4 font-sans-serif">
     <div class="container py-3" style="max-width: 600px;">
 
-        {# 🔙 VOLTAR AO DASHBOARD GERAL #}
+{# 🔙 VOLTAR AO DASHBOARD GERAL E AJUDA #}
         <div class="mb-3 d-flex justify-content-between align-items-center">
             <a href="{{ url_for('empresa.dashboard_empresa', empresa_id=ese_empresa.id) }}"
                class="btn btn-dark bg-dark border-0 rounded-circle shadow-sm d-inline-flex align-items-center justify-content-center text-white transition-all"
@@ -32,20 +32,34 @@
                 <i class="bi bi-chevron-left fs-6"></i>
             </a>
 
-            {# Mudança conceitual: Reflete a liberação temporária/experimental do Beta #}
-            {% if ese_empresa.status_homologacao == 'provisorio_beta' or ese_empresa.status_homologacao == 'pendente' %}
-                <span class="badge bg-warning-subtle text-warning-emphasis fw-bold px-3 py-1.5 border border-warning-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
-                    <i class="bi bi-exclamation-triangle-fill me-1"></i> OPERAÇÃO PROVISÓRIA (BETA)
-                </span>
-            {% elif ese_empresa.status_homologacao == 'em_analise' %}
-                <span class="badge bg-info-subtle text-info-emphasis fw-bold px-3 py-1.5 border border-info-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
-                    <i class="bi bi-hourglass-split me-1"></i> EM AUDITORIA
-                </span>
-            {% else %}
-                <span class="badge bg-success-subtle text-success-emphasis fw-bold px-3 py-1.5 border border-success-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
-                    <i class="bi bi-patch-check-fill me-1"></i> CERTIFICADO REGULAR
-                </span>
-            {% endif %}
+            {# Bloco central de Homologação / Status #}
+            <div>
+                {% if ese_empresa.status_homologacao == 'provisorio_beta' or ese_empresa.status_homologacao == 'pendente' %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis fw-bold px-3 py-1.5 border border-warning-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> OPERAÇÃO PROVISÓRIA (BETA)
+                    </span>
+                {% elif ese_empresa.status_homologacao == 'em_analise' %}
+                    <span class="badge bg-info-subtle text-info-emphasis fw-bold px-3 py-1.5 border border-info-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-hourglass-split me-1"></i> EM AUDITORIA
+                    </span>
+                {% else %}
+                    <span class="badge bg-success-subtle text-success-emphasis fw-bold px-3 py-1.5 border border-success-subtle rounded-pill" style="font-size: 0.7rem; letter-spacing: 0.5px;">
+                        <i class="bi bi-patch-check-fill me-1"></i> CERTIFICADO REGULAR
+                    </span>
+                {% endif %}
+            </div>
+
+            {# 💡 BOTÃO DE AJUDA DO EMPREENDEDOR #}
+            <a href="{{ url_for('empresa.ajuda_empreendedor') }}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn btn-sm btn-light border shadow-sm rounded-pill px-2.5 py-1 text-secondary d-inline-flex align-items-center gap-1 mt-1"
+                title="Abrir Guia Rápido em Nova Janela"
+                style="font-size: 0.72rem; text-decoration: none;">
+                <i class="bi bi-question-circle text-primary"></i>
+                <span>Ajuda</span>
+                <i class="bi bi-box-arrow-up-right ms-1 opacity-75" style="font-size: 0.62rem;"></i>
+            </a>
         </div>
 
         {# 📊 CABEÇALHO COMPACTO DE PROGRESSO DINÂMICO #}

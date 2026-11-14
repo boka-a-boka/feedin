@@ -1,0 +1,228 @@
+{% extends "empresa/base_empresa.html" %}
+
+{% block title %}FeedIn Empresas | Central de Ajuda - Empreendedor{% endblock %}
+
+{% block content %}
+<style>
+    .fundo-acetinado-ajuda {
+        background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%);
+        min-height: 100vh;
+        /* Animação que simula a abertura de uma nova folha/janela */
+        animation: abrirTelaGuia 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes abrirTelaGuia {
+        0% {
+            opacity: 0;
+            transform: translateY(28px) scale(0.98);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    .sticky-help-nav {
+        position: sticky;
+        top: 0;
+        z-index: 1020;
+        background: rgba(251, 251, 248, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+
+    /* Barra de progresso do Scroll */
+    .scroll-progress-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #0d6efd, #f59e0b);
+        width: 0%;
+        transition: width 0.1s ease-out;
+    }
+
+    .print-frame-full {
+        max-width: 340px;
+        margin: 1.25rem auto;
+        border-radius: 1.25rem;
+        overflow: hidden;
+        border: 4px solid #ffffff;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+        background-color: #ffffff;
+    }
+    .print-frame-full img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+</style>
+
+<!-- CABEÇALHO FIXO COM INDICADOR DE JANELA AUXILIAR E BOTÃO FECHAR -->
+<div class="sticky-help-nav py-3 px-3 mb-4">
+    <div class="container" style="max-width: 760px;">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <div>
+                <div class="d-flex align-items-center gap-1 mb-0.5">
+                    <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.62rem;">
+                        <i class="bi bi-window-stack me-1"></i>GUIA EM NOVA JANELA
+                    </span>
+                </div>
+                <h5 class="fw-bold text-dark m-0" style="font-size: 1.05rem;">Central de Ajuda</h5>
+                <small class="text-muted d-block" style="font-size: 0.72rem;">
+                    Alterne entre esta janela e a tela do sistema para executar o passo a passo.
+                </small>
+            </div>
+
+            <!-- BOTÃO FECHAR JANELA -->
+            <button type="button"
+                    onclick="fecharJanelaAjuda()"
+                    class="btn btn-sm btn-dark rounded-pill px-3 py-2 shadow-sm d-inline-flex align-items-center gap-1 flex-shrink-0"
+                    title="Fechar esta janela de ajuda">
+                <i class="bi bi-x-lg" style="font-size: 0.75rem;"></i>
+                <span class="fw-semibold" style="font-size: 0.78rem;">Fechar</span>
+            </button>
+        </div>
+    </div>
+    <!-- Linha de progresso de leitura -->
+    <div id="barraProgressoAjuda" class="scroll-progress-bar"></div>
+</div>
+
+<div class="fundo-acetinado-ajuda pb-5">
+
+    <div class="container" style="max-width: 760px;">
+
+        <!-- ================================================================= -->
+        <!-- PARTE 1: GUIA DE REFERÊNCIA DO HUB DE ATIVAÇÃO                    -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-primary-subtle text-primary align-self-start mb-2">GUIA DE REFERÊNCIA OPERACIONAL</span>
+            <h3 class="fw-bold text-dark mb-2">Hub de Ativação Comercial</h3>
+            <p class="text-secondary small mb-3">
+                O Hub de Ativação é o painel central de controle do estabelecimento no ecossistema FeedIn. Ele organiza a jornada do empreendedor em módulos progressivos (Fase 1 e Fase 2), permitindo configurar a identidade visual, horários, equipe, documentação e parâmetros operacionais de forma intuitiva e segura.
+            </p>
+
+            <h5 class="fw-bold text-dark mt-4 mb-3">1. Descrição dos Blocos do Hub</h5>
+            <p class="text-secondary small mb-3">O painel está estruturado em seções de acompanhamento e blocos funcionais:</p>
+
+            <!-- Seção: Barra de Progresso e Status -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Cabeçalho de Progresso Dinâmico e Status:</h6>
+                <ul class="text-secondary small mb-2">
+                    <li><strong>Status de Homologação:</strong> Exibe se a empresa opera em regime Provisório (Beta), Em Auditoria ou se possui Certificado Regular / Validado.</li>
+                    <li><strong>Barra de Progresso:</strong> Mede em porcentagem a conclusão dos módulos comerciais obrigatórios e opcionais do estabelecimento.</li>
+                </ul>
+            </div>
+
+            <!-- Seção: Alerta de Candidatos -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Banner de Alerta (Ficha de Colaborador Recebida):</h6>
+                <p class="text-secondary small mb-0">Notifica o gestor sempre que um novo candidato ou profissional preenche a ficha de admissão/vínculo via convite, permitindo o direcionamento imediato para a configuração de jornadas.</p>
+            </div>
+
+            <!-- Seção: Módulos Fase 1 e 2 -->
+            <div class="p-3 bg-light rounded-3 mb-3">
+                <h6 class="fw-bold text-dark">Grade de Módulos (Cards de Configuração):</h6>
+                <ul class="text-secondary small mb-2">
+                    <li><strong>Identidade Visual:</strong> Gestão de cores, logomarcas e fotos de fachada para personalização do PWA.</li>
+                    <li><strong>Horários da Empresa:</strong> Definição da grade de funcionamento semanal padrão do estabelecimento.</li>
+                    <li><strong>Parâmetros de Operação:</strong> Configuração de calendário de feriados, recessos e regras gerais.</li>
+                    <li><strong>Documentação:</strong> O marco final da Fase 1, onde são enviados os comprovantes jurídicos para auditoria e liberação.</li>
+                    <li><strong>Serviços & Preços (Fase 2):</strong> Gerenciamento do catálogo de serviços oferecidos e tabela de valores.</li>
+                    <li><strong>Equipe & Jornadas (Fase 2):</strong> Definição de membros do time, escalas de trabalho e controle de convites.</li>
+                    <li><strong>Estoque & Compras (Fase 2):</strong> Gestão do catálogo de insumos, registro de compras e consumo de bancada.</li>
+                    <li><strong>Relatórios & Pesquisas (Fase 2):</strong> Fechamento financeiro, extratos operacionais e inteligência gerencial.</li>
+                </ul>
+            </div>
+        </div>
+
+
+        <!-- ================================================================= -->
+        <!-- PARTE 2: GUIA OPERACIONAL RÁPIDO (JORNADA DO GESTOR)              -->
+        <!-- ================================================================= -->
+        <div class="card border-0 rounded-4 shadow-sm bg-white p-4 mb-4">
+            <span class="badge bg-warning text-dark align-self-start mb-2">GUIA OPERACIONAL RÁPIDO</span>
+            <h3 class="fw-bold text-dark mb-2">Jornada de Homologação e Ativação do Estabelecimento</h3>
+            <p class="text-secondary small mb-4">
+                Este guia orienta o empreendedor passo a passo sobre como estruturar o seu negócio na plataforma para iniciar as operações comerciais com segurança.
+            </p>
+
+            <!-- Passo 1 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 1: Configurar a Identidade Visual e Horários</h5>
+                <p class="text-secondary small mb-2">
+                    Acesse o card <strong>Identidade Visual</strong> para enviar o logotipo oficial da empresa e ajustar as cores que aparecerão no PWA para os seus clientes.<br>
+                    Em seguida, acesse o card <strong>Horários da Empresa</strong> para estipular os horários de abertura e fechamento em cada dia da semana.
+                </p>
+            </div>
+
+            <!-- Passo 2 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 2: Definir os Parâmetros de Operação</h5>
+                <p class="text-secondary small mb-2">
+                    No card <strong>Parâmetros de Operação</strong>, cadastre feriados locais, dias de recesso programado e regras específicas de atendimento do seu segmento comercial.
+                </p>
+            </div>
+
+            <!-- Passo 3 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 3: Enviar a Documentação (Conclusão da Fase 1)</h5>
+                <p class="text-secondary small mb-2">
+                    Para habilitar os recursos avançados da Fase 2, clique no card <strong>Documentação</strong>, anexe os comprovantes jurídicos solicitados e envie para análise.<br>
+                    O status passará para <em>"Em Análise"</em> enquanto a mesa de auditoria realiza a validação regulamentar.
+                </p>
+            </div>
+
+            <!-- Passo 4 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <h5 class="fw-bold text-dark">Passo 4: Cadastrar Serviços, Preços e Equipe (Fase 2)</h5>
+                <p class="text-secondary small mb-2">
+                    Com a homologação concluída, os módulos da Fase 2 serão desbloqueados.<br>
+                    Cadastre os serviços prestados em <strong>Serviços & Preços</strong> e configure os profissionais da sua equipe e suas respectivas jornadas em <strong>Equipe & Jornadas</strong>.
+                </p>
+            </div>
+
+            <!-- Passo 5 -->
+            <div>
+                <h5 class="fw-bold text-dark">Passo 5: Acompanhar Indicadores e Estoque</h5>
+                <p class="text-secondary small mb-2">
+                    Utilize os módulos de <strong>Estoque & Compras</strong> e <strong>Relatórios & Pesquisas</strong> para monitorar o consumo diário de insumos, o fechamento gerencial e o desempenho comercial do seu estabelecimento em tempo real.
+                </p>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // Atualiza a barra de progresso conforme o usuário rola a página
+    window.addEventListener('scroll', function() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const barra = document.getElementById('barraProgressoAjuda');
+        if (barra && docHeight > 0) {
+            const percentual = (scrollTop / docHeight) * 100;
+            barra.style.width = percentual + '%';
+        }
+    });
+
+    // Fecha a aba/janela atual com fallback seguro para PWAs/Mobile
+    function fecharJanelaAjuda() {
+        window.close();
+
+        // Caso o navegador bloqueie o fechamento automático por política de segurança:
+        setTimeout(function() {
+            if (!window.closed) {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    alert("Você já pode fechar esta aba no navegador para retornar à tela anterior.");
+                }
+            }
+        }, 150);
+    }
+</script>
+
+{% endblock %}

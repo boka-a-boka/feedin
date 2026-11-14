@@ -194,9 +194,15 @@
         </button>
 
         <!-- 💡 BOTÃO DE AJUDA DO COLABORADOR (Linha abaixo com respiro) -->
-        <a href="{{ url_for('agenda.ajuda_colaborador') }}" class="btn btn-sm btn-light border shadow-sm rounded-pill px-2.5 py-1 text-secondary d-inline-flex align-items-center gap-1 mt-1" title="Guia do Colaborador" style="font-size: 0.72rem; text-decoration: none; background-color: #ffffff;">
+        <a href="{{ url_for('agenda.ajuda_colaborador') }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn btn-sm btn-light border shadow-sm rounded-pill px-2.5 py-1 text-secondary d-inline-flex align-items-center gap-1 mt-1"
+            title="Abrir Guia Rápido em Nova Janela"
+            style="font-size: 0.72rem; text-decoration: none;">
             <i class="bi bi-question-circle text-primary"></i>
-            <span>Ajuda</span>
+                <span>Ajuda</span>
+            <i class="bi bi-box-arrow-up-right ms-1 opacity-75" style="font-size: 0.62rem;"></i>
         </a>
     </div>
 

@@ -7,16 +7,42 @@
     .fundo-acetinado-ajuda {
         background: linear-gradient(135deg, #fbfbf8 0%, #f6f4ee 50%, #efece3 100%);
         min-height: 100vh;
+        /* Animação que simula a abertura de uma nova folha/janela */
+        animation: abrirTelaGuia 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
+
+    @keyframes abrirTelaGuia {
+        0% {
+            opacity: 0;
+            transform: translateY(28px) scale(0.98);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
     .sticky-help-nav {
         position: sticky;
         top: 0;
         z-index: 1020;
-        background: rgba(251, 251, 248, 0.94);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-bottom: 1px solid rgba(0,0,0,0.06);
+        background: rgba(251, 251, 248, 0.95);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(0,0,0,0.08);
     }
+
+    /* Barra de progresso do Scroll */
+    .scroll-progress-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #0d6efd, #f59e0b);
+        width: 0%;
+        transition: width 0.1s ease-out;
+    }
+
     .print-frame-full {
         max-width: 340px;
         margin: 1.25rem auto;
@@ -33,24 +59,37 @@
     }
 </style>
 
-<div class="fundo-acetinado-ajuda pb-5">
-
-    <!-- CABEÇALHO FIXO -->
-    <div class="sticky-help-nav py-3 px-3 mb-4">
-        <div class="container" style="max-width: 760px;">
-            <div class="d-flex align-items-center justify-content-between">
-                <div class="d-flex align-items-center gap-2">
-                    <a href="javascript:history.back()" class="btn btn-sm btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;" title="Voltar ao Balcão">
-                        <i class="bi bi-arrow-left text-dark"></i>
-                    </a>
-                    <div>
-                        <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.65rem;">MÓDULO CONEXO FEEDIN AGENDA</span>
-                        <h5 class="fw-bold text-dark m-0">Central de Ajuda — Colaborador</h5>
-                    </div>
+<!-- CABEÇALHO FIXO COM INDICADOR DE JANELA AUXILIAR E BOTÃO FECHAR -->
+<div class="sticky-help-nav py-3 px-3 mb-4">
+    <div class="container" style="max-width: 760px;">
+        <div class="d-flex align-items-center justify-content-between gap-2">
+            <div>
+                <div class="d-flex align-items-center gap-1 mb-0.5">
+                    <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.62rem;">
+                        <i class="bi bi-window-stack me-1"></i>GUIA EM NOVA JANELA
+                    </span>
                 </div>
+                <h5 class="fw-bold text-dark m-0" style="font-size: 1.05rem;">Central de Ajuda</h5>
+                <small class="text-muted d-block" style="font-size: 0.72rem;">
+                    Alterne entre esta janela e a tela do sistema para executar o passo a passo.
+                </small>
             </div>
+
+            <!-- BOTÃO FECHAR JANELA -->
+            <button type="button"
+                    onclick="fecharJanelaAjuda()"
+                    class="btn btn-sm btn-dark rounded-pill px-3 py-2 shadow-sm d-inline-flex align-items-center gap-1 flex-shrink-0"
+                    title="Fechar esta janela de ajuda">
+                <i class="bi bi-x-lg" style="font-size: 0.75rem;"></i>
+                <span class="fw-semibold" style="font-size: 0.78rem;">Fechar</span>
+            </button>
         </div>
     </div>
+    <!-- Linha de progresso de leitura -->
+    <div id="barraProgressoAjuda" class="scroll-progress-bar"></div>
+</div>
+
+<div class="fundo-acetinado-ajuda pb-5">
 
     <div class="container" style="max-width: 760px;">
 
@@ -233,4 +272,34 @@
 
     </div>
 </div>
+
+<script>
+    // Atualiza a barra de progresso conforme o usuário rola a página
+    window.addEventListener('scroll', function() {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const barra = document.getElementById('barraProgressoAjuda');
+        if (barra && docHeight > 0) {
+            const percentual = (scrollTop / docHeight) * 100;
+            barra.style.width = percentual + '%';
+        }
+    });
+
+    // Fecha a aba/janela atual com fallback seguro para PWAs/Mobile
+    function fecharJanelaAjuda() {
+        window.close();
+
+        // Caso o navegador bloqueie o fechamento automático por política de segurança:
+        setTimeout(function() {
+            if (!window.closed) {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    alert("Você já pode fechar esta aba no navegador para retornar à tela anterior.");
+                }
+            }
+        }, 150);
+    }
+</script>
+
 {% endblock %}
