@@ -682,6 +682,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+/**
+ * Executa a ação de seguir ou deixar de seguir um local via Fetch (POST).
+ * @param {string|number} localId - ID do Local
+ * @param {boolean} jaSegue - True se o usuário já segue (ação de deixar de seguir)
+ * @param {Array<string>} epocasIds - Lista opcional de IDs de épocas selecionadas no modal
+ */
+async function prepararSeguirDireto(localId, jaSegue = false, epocasIds = []) {
+    if (jaSegue) {
+        const confirmar = confirm("Deseja deixar de seguir este local? Suas épocas vinculadas a ele também serão removidas.");
+        if (!confirmar) return;
+    }
+
+    const formData = new FormData();
+    epocasIds.forEach(id => formData.append('epocas[]', id));
+
+    // Captura o token CSRF global do template (padrão Flask-WTF)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                   || document.querySelector('input[name="csrf_token"]')?.value;
+
+    try {
+        const response = await fetch(`/seguir_local/${localId}`, {
+            method: 'POST',
+            headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.sucesso) {
+            window.location.reload();
+        } else {
+            alert(data.message || "Não foi possível atualizar o vínculo com o local.");
+        }
+    } catch (erro) {
+        console.error("Erro na requisição seguir_local:", erro);
+        alert("Erro de comunicação com o servidor.");
+    }
+}
+
 </script>
 
 {% endblock %}

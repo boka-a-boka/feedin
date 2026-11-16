@@ -14,6 +14,8 @@ from feedin.modules.registry_acoes import MODULOS_ACOES_REGISTRY
 
 @empresa_bp.route('/perfil/<string:empresa_uuid>', methods=['GET'], endpoint='perfil_comercial_empresa')
 def perfil_comercial(empresa_uuid):
+    from feedin.models import Epoca  # ou o nome do seu modelo de épocas
+
     empresa = EseEmpresa.query.filter_by(id=empresa_uuid).first() or EseEmpresa.query.filter_by(
         uuid=empresa_uuid).first_or_404()
 

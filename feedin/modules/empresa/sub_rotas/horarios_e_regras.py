@@ -3586,7 +3586,7 @@ from flask import render_template, request, redirect, url_for, flash
 from flask_login import login_required
 
 
-@empresa_bp.route('/colaboradores/editar/<string:contrato_id>', methods=['GET', 'POST'])
+@empresa_bp.route('/colaboradores/editar/<string:contrato_id>', methods=['GET', 'POST'], endpoint='editar_contrato_colaborador')
 @login_required
 def editar_contrato_colaborador(contrato_id):
     """
@@ -3637,3 +3637,111 @@ def editar_contrato_colaborador(contrato_id):
 @login_required
 def ajuda_empreendedor():
     return render_template('empresa/ajuda_empreendedor.html')
+
+
+@empresa_bp.route('/seguir/<int:local_id>', methods=['POST'], endpoint='seguir_empresa_local')
+@login_required
+def seguir_empresa_local(local_id):
+    """
+    Alterna (Toggle) o vínculo social entre o usuário logado e o Local físico de uma Empresa homologada.
+
+    Escopo: Blueprint `empresa` (universo isolado do Core, mas persistindo nas tabelas
+    compartilhadas de grafo social `VinculoUsuarioLocal`, `UsuarioLocalEpoca` e `AtividadeLocal`).
+
+    Fluxo de Execução:
+    - SE JÁ SEGUE (`VinculoUsuarioLocal` existente):
+        1. Remove o registro principal em `VinculoUsuarioLocal`.
+        2. Remove todas as associações temporais em `UsuarioLocalEpoca` para este usuário/local.
+        3. Remove a atividade automática de entrada ("Novo seguidor: <username>") em `AtividadeLocal`,
+           preservando avaliações e memórias reais criadas pelo usuário.
+    - SE NÃO SEGUE:
+        1. Cria o registro em `VinculoUsuarioLocal`.
+        2. Grava os IDs de épocas enviados via FormData (`epocas[]`) em `UsuarioLocalEpoca`.
+        3. Registra o evento de novo seguidor na linha do tempo (`AtividadeLocal`).
+
+    Args:
+        local_id (int): ID numérico do registro na tabela `locais` vinculado à empresa.
+
+    Returns:
+        Response (JSON): {'status': 'success'|'error', 'sucesso': bool, 'message': str}
+    """
+    from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, UsuarioLocalEpoca
+
+    local = Local.query.get_or_404(local_id)
+    epocas_selecionadas = request.form.getlist('epocas[]')
+
+    vinculo = VinculoUsuarioLocal.query.filter_by(
+        usuario_id=current_user.id,
+        local_id=local_id
+    ).first()
+
+    try:
+        if vinculo:
+            # 1. REMOVE O VÍNCULO PRINCIPAL
+            db.session.delete(vinculo)
+
+            # 2. LIMPEZA HISTÓRICA: Remove todas as épocas atreladas a esse usuário e local
+            UsuarioLocalEpoca.query.filter_by(
+                id_usuario=current_user.id,
+                id_local=local_id
+            ).delete()
+
+            # 3. REMOVE APENAS A ATIVIDADE DE ENTRADA (preserva postagens/memórias reais)
+            texto_atividade = f"Novo seguidor: {current_user.username}"
+            ativ = AtividadeLocal.query.filter_by(
+                id_local=local_id,
+                id_criador=current_user.id,
+                nome=texto_atividade
+            ).first()
+
+            if ativ:
+                db.session.delete(ativ)
+
+            db.session.commit()
+            return jsonify({
+                "status": "success",
+                "sucesso": True,
+                "message": "Você deixou de seguir este estabelecimento."
+            }), 200
+
+        else:
+            # 1. CRIA O VÍNCULO PRINCIPAL
+            novo_vinculo = VinculoUsuarioLocal(
+                usuario_id=current_user.id,
+                local_id=local_id
+            )
+            db.session.add(novo_vinculo)
+
+            # 2. GRAVAÇÃO MULTITEMPORAL: Associa as épocas marcadas
+            for epoca_id in epocas_selecionadas:
+                if str(epoca_id).isdigit():
+                    novo_vinculo_epoca = UsuarioLocalEpoca(
+                        id_usuario=current_user.id,
+                        id_local=local_id,
+                        id_epoca=int(epoca_id)
+                    )
+                    db.session.add(novo_vinculo_epoca)
+
+            # 3. CRIA A ATIVIDADE DE NOVO SEGUIDOR NA LINHA DO TEMPO
+            nova_atividade = AtividadeLocal(
+                nome=f"Novo seguidor: {current_user.username}",
+                id_local=local.id,
+                id_criador=current_user.id,
+                descricao=f"Adicionou {local.nome} às suas memórias."
+            )
+            db.session.add(nova_atividade)
+
+            db.session.commit()
+            return jsonify({
+                "status": "success",
+                "sucesso": True,
+                "message": "Estabelecimento seguido com sucesso!"
+            }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "status": "error",
+            "sucesso": False,
+            "message": f"Erro ao processar vínculo: {str(e)}"
+        }), 500

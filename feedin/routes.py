@@ -2156,15 +2156,28 @@ def adicionar_local_novo():
 @current_app.route('/seguir_local/<int:local_id>', methods=['POST'])
 @login_required
 def seguir_local(local_id):
-    # Importamos o novo modelo UsuarioLocalEpoca
+    """
+    Alterna (Toggle) o relacionamento entre o usuário logado e um Local (Seguir / Deixar de Seguir).
+
+    Comportamento:
+    - SE JÁ SEGUE (`VinculoUsuarioLocal` existente):
+        1. Remove o registro principal em `VinculoUsuarioLocal`.
+        2. Remove todas as associações temporais em `UsuarioLocalEpoca` para este usuário/local.
+        3. Remove a atividade automática de entrada ("Novo seguidor: <username>") em `AtividadeLocal`,
+           preservando postagens e memórias reais criadas pelo usuário.
+    - SE NÃO SEGUE:
+        1. Cria o registro em `VinculoUsuarioLocal`.
+        2. Grava os IDs de épocas enviados via formulário (`epocas[]`) em `UsuarioLocalEpoca`.
+        3. Publica o evento de novo seguidor na linha do tempo (`AtividadeLocal`).
+
+    Returns:
+        Response (JSON): {'status': 'success'|'error', 'sucesso': bool, 'message': str}
+    """
     from feedin.models import Local, VinculoUsuarioLocal, AtividadeLocal, UsuarioLocalEpoca
     local = Local.query.get_or_404(local_id)
 
-    # Captura a lista de IDs de épocas enviados pelo front-end (via FormData ou JSON)
-    # request.form.getlist pega múltiplos inputs com o mesmo nome (ex: <input name="epocas[]">)
     epocas_selecionadas = request.form.getlist('epocas[]')
 
-    # Verifica se já existe o vínculo principal de seguidor
     vinculo = VinculoUsuarioLocal.query.filter_by(
         usuario_id=current_user.id,
         local_id=local_id
@@ -2181,7 +2194,7 @@ def seguir_local(local_id):
                 id_local=local_id
             ).delete()
 
-            # Deleta APENAS a atividade de entrada na linha do tempo para evitar órfãos
+            # 3. REMOVE APENAS A ATIVIDADE DE ENTRADA (preserva memórias/fotos postadas)
             texto_atividade = f"Novo seguidor: {current_user.username}"
             ativ = AtividadeLocal.query.filter_by(
                 id_local=local_id,
@@ -2203,16 +2216,17 @@ def seguir_local(local_id):
             )
             database.session.add(novo_vinculo)
 
-            # 2. GRAVAÇÃO MULTITEMPORAL: Associa as épocas marcadas ao perfil do usuário para este local
+            # 2. GRAVAÇÃO MULTITEMPORAL: Associa as épocas marcadas
             for epoca_id in epocas_selecionadas:
-                novo_vinculo_epoca = UsuarioLocalEpoca(
-                    id_usuario=current_user.id,
-                    id_local=local_id,
-                    id_epoca=int(epoca_id)
-                )
-                database.session.add(novo_vinculo_epoca)
+                if str(epoca_id).isdigit():
+                    novo_vinculo_epoca = UsuarioLocalEpoca(
+                        id_usuario=current_user.id,
+                        id_local=local_id,
+                        id_epoca=int(epoca_id)
+                    )
+                    database.session.add(novo_vinculo_epoca)
 
-            # Criamos a atividade específica de novo seguidor
+            # 3. CRIA A ATIVIDADE DE NOVO SEGUIDOR NO FEED DO LOCAL
             nova_atividade = AtividadeLocal(
                 nome=f"Novo seguidor: {current_user.username}",
                 id_local=local.id,
@@ -4939,6 +4953,21 @@ def enviar_email_nutricao(nome, email, interesse):
 
 
 def estabelecer_vinculo_pioneiro(novo_usuario_id, id_pai, contexto_raw):
+    """
+    Processa o vínculo inicial de um usuário recém-cadastrado a partir de um convite.
+
+    Fluxo de execução:
+    1. Interpreta o parâmetro `contexto_raw` no formato '<tipo>_<id>' (ex: 'local_42' ou 'gosto_15').
+    2. Caso seja 'local': cria o vínculo em `VinculoUsuarioLocal` e gera uma publicação festiva
+       de chegada em `AtividadeLocal` vinculada ao padrinho (`id_pai`).
+    3. Caso seja 'gosto': insere o novo usuário como participante da atividade/interesse referenciado.
+    4. Marca o registro pendente na tabela `Convite` como concluído (`status_onboarding = True`).
+
+    Args:
+        novo_usuario_id (int): ID do usuário que acabou de concluir o cadastro.
+        id_pai (int): ID do usuário que gerou o convite.
+        contexto_raw (str): String identificadora da origem do convite (ex: 'local_10').
+    """
     try:
         if not contexto_raw or "_" not in contexto_raw:
             return
@@ -4951,34 +4980,29 @@ def estabelecer_vinculo_pioneiro(novo_usuario_id, id_pai, contexto_raw):
 
         # 1. Se o contexto for LOCAL
         if tipo == 'local':
-            # Cria o registro técnico de banco de dados
-            novo_vinculo = VinculoUsuarioLocal(
-                usuario_id=novo_usuario_id,
-                local_id=ref_id,
-                experiencia=f"Convidado por um amigo pioneiro."
-            )
-            database.session.add(novo_vinculo)
-
-            # --- AQUI ESTÁ A MÁGICA PARA O FEED ---
-            # Criamos a postagem festiva que o card vai ler
             local_obj = Local.query.get(ref_id)
-            nova_memoria_feed = AtividadeLocal(
-                nome=f"Novo Membro em {local_obj.nome}",
-                id_local=ref_id,
-                id_criador=novo_usuario_id,
-                descricao=f"Acaba de chegar ao {local_obj.nome} através da rede de confiança de {pai.username}!",
-                periodo_estimado="Pioneiro"
-            )
-            database.session.add(nova_memoria_feed)
+            if local_obj and pai:
+                novo_vinculo = VinculoUsuarioLocal(
+                    usuario_id=novo_usuario_id,
+                    local_id=ref_id,
+                    experiencia="Convidado por um amigo pioneiro."
+                )
+                database.session.add(novo_vinculo)
+
+                nova_memoria_feed = AtividadeLocal(
+                    nome=f"Novo Membro em {local_obj.nome}",
+                    id_local=ref_id,
+                    id_criador=novo_usuario_id,
+                    descricao=f"Acaba de chegar ao {local_obj.nome} através da rede de confiança de {pai.username}!",
+                    periodo_estimado="Pioneiro"
+                )
+                database.session.add(nova_memoria_feed)
 
         # 2. Se o contexto for GOSTO
         elif tipo == 'gosto':
             gosto_obj = AtividadeLocal.query.get(ref_id)
-            if gosto_obj:
+            if gosto_obj and usuario_novo:
                 gosto_obj.participantes.append(usuario_novo)
-
-                # Opcional: Criar uma notificação de "Fulano também curte X"
-                # (Segue a mesma lógica acima se quiser que apareça no Feed)
 
         # 3. Atualiza o convite
         convite = Convite.query.filter_by(id_remetente=id_pai, id_destinatario=None).first()
@@ -4989,7 +5013,7 @@ def estabelecer_vinculo_pioneiro(novo_usuario_id, id_pai, contexto_raw):
         database.session.commit()
     except Exception as e:
         database.session.rollback()
-        print(f"Erro ao estabelecer vínculo: {e}")
+        print(f"Erro ao estabelecer vínculo pioneiro: {e}")
 
 
 @current_app.route('/configuracoes')
@@ -5540,10 +5564,14 @@ def processar_identidade():
 @current_app.route('/criar-postagem', methods=['POST'])
 @login_required
 def criar_postagem():
+    import os
+    import time
     from zoneinfo import ZoneInfo
+    from PIL import Image, ImageOps
     from feedin.models import Postagem, Local, AtividadeLocal, Taxonomia, MarcacaoPostagem, UsuarioLocalEpoca
 
     fuso_brasil = ZoneInfo("America/Sao_Paulo")
+    url_retorno = request.referrer or '/'
 
     # 1. Coleta Universal de Dados
     id_local = request.form.get('id_local')
@@ -5556,6 +5584,7 @@ def criar_postagem():
     relato_extra = request.form.get('descricao', '').strip()  # O "O que mais curte"
 
     arquivo = request.files.get('imagem')
+    tem_arquivo = bool(arquivo and arquivo.filename)
     local = Local.query.get(id_local) if id_local and id_local.isdigit() else None
 
     # Tratamento de ID numérico para Época (se enviado ID)
@@ -5563,7 +5592,7 @@ def criar_postagem():
 
     # 2. Lógica de Construção de Narrativa (O "Cérebro" da Rota)
     if tipo_postagem == 'vinculo':
-        texto_gerado = f"Resgatou uma memória"
+        texto_gerado = "Resgatou uma memória"
         if epoca:
             texto_gerado += f" da época de {epoca}"
         if relato_extra:
@@ -5572,31 +5601,47 @@ def criar_postagem():
         conteudo = f"{texto_gerado}. {conteudo}" if conteudo else texto_gerado
 
     # 3. Validação de Regras de Negócio
-    if not conteudo and not arquivo:
+    if not conteudo and not tem_arquivo:
         flash("Sua memória precisa de um texto ou uma imagem!", "warning")
-        return redirect(request.referrer)
+        return redirect(url_retorno)
 
     imagem_obrigatoria = True
     if (local and not local.esta_ativo) or tipo_postagem in ['vinculo', 'obito']:
         imagem_obrigatoria = False
 
-    if imagem_obrigatoria and not arquivo:
+    if imagem_obrigatoria and not tem_arquivo:
         flash("Para este registro, uma fotografia é necessária!", "warning")
-        return redirect(request.referrer)
+        return redirect(url_retorno)
 
-    # 4. Processamento de Imagem (Usando a nova função modular)
+    # 4. Processamento de Imagem (Isolado na raiz static/uploads/posts)
     nome_final = None
-    if arquivo:
+    if tem_arquivo:
         try:
-            # Substituição realizada: chamando salvar_imagem_modulos com o módulo 'posts'
-            nome_final = salvar_imagem_modulo(arquivo, current_user.id, modulo='posts')
-            if not nome_final:
-                flash("Formato de imagem inválido ou falha no processamento.", "danger")
-                return redirect(request.referrer)
+            diretorio_posts = os.path.join(current_app.root_path, 'static', 'uploads', 'posts')
+            os.makedirs(diretorio_posts, exist_ok=True)
+
+            img = Image.open(arquivo)
+            img = ImageOps.exif_transpose(img)
+
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                img = img.convert('RGBA')
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Redimensiona mantendo proporção para o Feed
+            img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+
+            # Mantém o padrão de nomenclatura existente no banco (post_ID_TIMESTAMP.webp)
+            timestamp = int(time.time())
+            nome_final = f"post_{current_user.id}_{timestamp}.webp"
+            caminho_completo = os.path.join(diretorio_posts, nome_final)
+
+            img.save(caminho_completo, 'WEBP', quality=85, optimize=True)
+
         except Exception as e:
-            print(f"Erro no processamento da imagem: {e}")
-            flash("Erro técnico ao processar a imagem.", "danger")
-            return redirect(request.referrer)
+            print(f"Erro no processamento da imagem do post: {e}")
+            flash("Formato de imagem inválido ou erro técnico ao processar a foto.", "danger")
+            return redirect(url_retorno)
 
     # 5. Persistência no Banco de Dados
     try:
@@ -5707,7 +5752,7 @@ def criar_postagem():
         traceback.print_exc()
         flash("Houve um erro técnico ao salvar.", "danger")
 
-    return redirect(request.referrer)
+    return redirect(url_retorno)
 
 
 @current_app.before_request
