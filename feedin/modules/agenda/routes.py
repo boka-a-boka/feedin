@@ -1266,6 +1266,24 @@ def toggle_favorito_empresa(empresa_id):
     }), 200
 
 
+def _subquery_agenda_ativa(agora_utc=None):
+    agora = agora_utc or datetime.now(timezone.utc)
+    filtros = [
+        ModEmpresaModulo.empresa_id == EseEmpresa.id,
+        ModEmpresaModulo.ativo == True,
+        or_(
+            ModEmpresaModulo.data_vencimento.is_(None),
+            ModEmpresaModulo.data_vencimento >= agora
+        )
+    ]
+    if hasattr(ModEmpresaModulo, 'modulo_slug'):
+        filtros.append(ModEmpresaModulo.modulo_slug == 'agenda')
+    elif hasattr(ModEmpresaModulo, 'modulo'):
+        filtros.append(ModEmpresaModulo.modulo == 'agenda')
+
+    return db.session.query(ModEmpresaModulo.id).filter(*filtros).correlate(EseEmpresa).exists()
+
+
 @agenda_bp.route('/negocios')
 def home_negocios():
     """Renderiza a central de atendimento urbana (Listagem de Empresas)"""
@@ -2867,7 +2885,7 @@ def dashboard_cliente():
                 )
 
     # ----------------------------------------------------------------------------------
-    # 6. EMPRESAS FAVORITAS
+    # 6. EMPRESAS FAVORITAS (FILTRADAS POR MÓDULO AGENDA ATIVO/VIGENTE)
     # ----------------------------------------------------------------------------------
     empresas_favoritas = []
     try:
@@ -2879,7 +2897,44 @@ def dashboard_cliente():
             )
             .all()
         )
-        empresas_favoritas = [fav.empresa for fav in favoritos_rel if fav.empresa]
+
+        empresas_candidatas = [fav.empresa for fav in favoritos_rel if fav.empresa]
+        ids_candidatos = [emp.id for emp in empresas_candidatas if getattr(emp, 'id', None) is not None]
+
+        empresas_validas_ids = set()
+        if ids_candidatos:
+            agora_utc = datetime.now(timezone.utc)
+            agora_naive_utc = agora_utc.replace(tzinfo=None)
+
+            filtros_mod = [
+                ModEmpresaModulo.empresa_id.in_(ids_candidatos),
+                ModEmpresaModulo.ativo == True,
+                or_(
+                    ModEmpresaModulo.data_vencimento.is_(None),
+                    ModEmpresaModulo.data_vencimento >= agora_utc,
+                    ModEmpresaModulo.data_vencimento >= agora_naive_utc
+                )
+            ]
+            if hasattr(ModEmpresaModulo, 'modulo_slug'):
+                filtros_mod.append(ModEmpresaModulo.modulo_slug == 'agenda')
+            elif hasattr(ModEmpresaModulo, 'modulo'):
+                filtros_mod.append(ModEmpresaModulo.modulo == 'agenda')
+
+            modulos_ativos = ModEmpresaModulo.query.filter(*filtros_mod).all()
+            empresas_validas_ids = {m.empresa_id for m in modulos_ativos if
+                                    getattr(m, 'empresa_id', None) is not None}
+
+        for emp in empresas_candidatas:
+            if emp.id not in empresas_validas_ids:
+                continue
+
+            # Se houver local_fisico carregado/vinculado com status_operacional, respeita ativo/verificado
+            loc = getattr(emp, 'local_fisico', None)
+            status_loc = getattr(loc, 'status_operacional', None) if loc else None
+            if status_loc is not None and status_loc not in ('ativo', 'verificado'):
+                continue
+
+            empresas_favoritas.append(emp)
     except Exception as err:
         print(f"[Dashboard Cliente] Erro ao carregar empresas favoritas: {err}")
 
@@ -3650,13 +3705,21 @@ def catalogo_servicos():
     # ----------------------------------------------------------------------------------
     # 0. SUBCONSULTA MESTRE: FONTE DA VERDADE (ModEmpresaModulo)
     # ----------------------------------------------------------------------------------
-    subq_modulo_ativo = db.session.query(ModEmpresaModulo.id).filter(
+    filtros_modulo = [
         ModEmpresaModulo.empresa_id == EseEmpresa.id,
         ModEmpresaModulo.ativo == True,
         or_(
             ModEmpresaModulo.data_vencimento.is_(None),
             ModEmpresaModulo.data_vencimento >= agora_utc
         )
+    ]
+    if hasattr(ModEmpresaModulo, 'modulo_slug'):
+        filtros_modulo.append(ModEmpresaModulo.modulo_slug == 'agenda')
+    elif hasattr(ModEmpresaModulo, 'modulo'):
+        filtros_modulo.append(ModEmpresaModulo.modulo == 'agenda')
+
+    subq_modulo_ativo = db.session.query(ModEmpresaModulo.id).filter(
+        *filtros_modulo
     ).correlate(EseEmpresa).exists()
 
     # ----------------------------------------------------------------------------------
@@ -4856,23 +4919,30 @@ def agendar(slug_empresa: str):
         except Exception as e:
             print(f"⚠️ [AGENDAR] Erro ao registrar EseRelacionamentoClienteEmpresa: {e}")
 
-    # =========================================================================
-    # 🚦 SEMÁFORO DE LIMITE DE CLIENTES NA DEGUSTAÇÃO
-    # =========================================================================
-    if cliente_id:
-        # Verifica se este cliente específico já tem atendimento concluído nesta empresa
-        cliente_ja_atendido = AghAgendamento.query.filter_by(
-            empresa_id=empresa.id,
-            cliente_id=cliente_id,
-            status='concluido'
-        ).first()
+        # =========================================================================
+        # 🚦 SEMÁFORO DE LIMITE DE CLIENTES NA DEGUSTAÇÃO
+        # =========================================================================
+        fn_validar_limite = globals().get('validar_limite_modulo')
+        if cliente_id and callable(fn_validar_limite):
+            try:
+                # Verifica se este cliente específico já tem atendimento concluído nesta empresa
+                cliente_ja_atendido = AghAgendamento.query.filter_by(
+                    empresa_id=empresa.id,
+                    cliente_id=cliente_id,
+                    status='concluido'
+                ).first()
 
-        # Se o cliente é NOVO para esta empresa, validamos se o plano permite mais clientes
-        if not cliente_ja_atendido:
-            liberado, aviso = validar_limite_modulo(empresa.id, 'agenda', 'clientes')
-            if not liberado:
-                flash(f"Aviso do Estabelecimento: {aviso}", "warning")
-                return render_template('agenda/limite_degustacao_atingido.html', empresa=empresa)
+                # Se o cliente é NOVO para esta empresa, validamos se o plano permite mais clientes
+                if not cliente_ja_atendido:
+                    liberado, aviso = fn_validar_limite(empresa.id, 'agenda', 'clientes')
+                    if not liberado:
+                        flash(f"Aviso do Estabelecimento: {aviso or 'Limite de clientes atingido.'}", "warning")
+                        identificador_empresa = getattr(empresa, 'uuid', None) or empresa.id
+                        return redirect(
+                            url_for('empresa.perfil_comercial_empresa', empresa_uuid=identificador_empresa)
+                        )
+            except Exception as e:
+                print(f"⚠️ [AGENDAR] Erro ao validar limite de clientes: {e}")
     # =========================================================================
 
     dados_post = (request.get_json(silent=True) if request.is_json else request.form) or {}

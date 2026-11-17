@@ -86,82 +86,84 @@
         <div id="container-lista-empresas" class="d-flex flex-column gap-3">
             {% if empresas %}
                 {% for emp in empresas %}
-                <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=emp.id) }}"
-                   class="card-empresa-item card border-0 bg-white rounded-4 shadow-sm p-3 text-decoration-none text-dark transition-all position-relative"
-                   data-nome="{{ emp.nome | lower }}"
-                   data-bairro="{{ emp.bairro | lower }}"
-                   data-cidade="{{ emp.cidade | lower }}"
-                   data-categoria="{{ emp.categoria_nome | lower }}">
+                    {% if (emp.ativo if emp.ativo is defined else (emp.get('ativo', True) if emp is mapping else True)) and (emp.modulo_ativo if emp.modulo_ativo is defined else (emp.get('modulo_ativo', True) if emp is mapping else True)) %}
+                    <a href="{{ url_for('agenda.detalhe_empresa', empresa_id=emp.id) }}"
+                       class="card-empresa-item card border-0 bg-white rounded-4 shadow-sm p-3 text-decoration-none text-dark transition-all position-relative"
+                       data-nome="{{ emp.nome | lower }}"
+                       data-bairro="{{ emp.bairro | lower }}"
+                       data-cidade="{{ emp.cidade | lower }}"
+                       data-categoria="{{ emp.categoria_nome | lower }}">
 
-                    <div class="d-flex gap-3 align-items-center">
-                        {% set url_logo = '' %}
-                        {% if emp.logomarca %}
-                            {% set logo_clean = emp.logomarca %}
-                            {% if 'uploads/' in logo_clean %}
-                                {% set logo_clean = 'uploads/' ~ logo_clean.split('uploads/')[-1] %}
+                        <div class="d-flex gap-3 align-items-center">
+                            {% set url_logo = '' %}
+                            {% if emp.logomarca %}
+                                {% set logo_clean = emp.logomarca %}
+                                {% if 'uploads/' in logo_clean %}
+                                    {% set logo_clean = 'uploads/' ~ logo_clean.split('uploads/')[-1] %}
+                                {% endif %}
+
+                                {% if emp.logomarca.startswith('http') %}
+                                    {% set url_logo = emp.logomarca %}
+                                {% else %}
+                                    {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
+                                {% endif %}
                             {% endif %}
 
-                            {% if emp.logomarca.startswith('http') %}
-                                {% set url_logo = emp.logomarca %}
-                            {% else %}
-                                {% set url_logo = url_for('empresa.static', filename=logo_clean) %}
-                            {% endif %}
-                        {% endif %}
+                            {# LOGO DA EMPRESA #}
+                            <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden position-relative"
+                                 style="width: 58px; height: 58px;">
 
-                        {# LOGO DA EMPRESA #}
-                        <div class="rounded-4 bg-light border d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden position-relative"
-                             style="width: 58px; height: 58px;">
+                                {% if emp.logomarca_url %}
+                                    <img src="{{ emp.logomarca_url }}" alt="{{ emp.nome }}"
+                                         class="w-100 h-100 object-fit-cover"
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="w-100 h-100 align-items-center justify-content-center bg-light position-absolute top-0 start-0" style="display: none;">
+                                        <i class="bi bi-building fs-3 text-secondary"></i>
+                                    </div>
+                                {% else %}
+                                    <div class="w-100 h-100 d-flex align-items-center justify-content-center bg-light">
+                                        <i class="bi bi-building fs-3 text-secondary"></i>
+                                    </div>
+                                {% endif %}
+                            </div>
 
-                            {% if emp.logomarca_url %}
-                                <img src="{{ emp.logomarca_url }}" alt="{{ emp.nome }}"
-                                     class="w-100 h-100 object-fit-cover"
-                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="w-100 h-100 align-items-center justify-content-center bg-light position-absolute top-0 start-0" style="display: none;">
-                                    <i class="bi bi-building fs-3 text-secondary"></i>
-                                </div>
-                            {% else %}
-                                <div class="w-100 h-100 d-flex align-items-center justify-content-center bg-light">
-                                    <i class="bi bi-building fs-3 text-secondary"></i>
-                                </div>
-                            {% endif %}
+                            {# DADOS DA EMPRESA #}
+                            <div class="flex-grow-1" style="min-width: 0;">
+                                <span class="badge bg-light text-dark border rounded-pill px-2 py-0.5 mb-1" style="font-size: 0.65rem;">
+                                    {{ emp.categoria_nome }}
+                                </span>
+                                <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.98rem;">
+                                    {{ emp.nome }}
+                                </h6>
+
+                                {# 1. ENDEREÇO (Com quebra de 30 caracteres se for muito longo) #}
+                                {% set rua_numero = emp.endereco or 'Atendimento Digital' %}
+                                <small class="text-muted d-block mt-1" style="font-size: 0.74rem; line-height: 1.25; word-break: break-word;">
+                                    <i class="bi bi-geo-alt me-1"></i>{{ rua_numero | wordwrap(30, break_long_words=True) | replace('\n', '<br>') | safe }}
+                                </small>
+
+                                {# 2. BAIRRO (Linha própria) #}
+                                {% if emp.bairro %}
+                                <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
+                                    <strong>Bairro:</strong> {{ emp.bairro }}
+                                </small>
+                                {% endif %}
+
+                                {# 3. CIDADE / ESTADO (Linha própria) #}
+                                {% if emp.cidade %}
+                                <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
+                                    <strong>Cidade:</strong> {{ emp.cidade }}{% if emp.estado %} - {{ emp.estado }}{% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+
+                            {# ÍCONE INDICATIVO DE AVANÇO (CHEVRON) #}
+                            <div class="text-muted opacity-50 ps-1">
+                                <i class="bi bi-chevron-right fs-5"></i>
+                            </div>
                         </div>
-
-{# DADOS DA EMPRESA #}
-                        <div class="flex-grow-1" style="min-width: 0;">
-                            <span class="badge bg-light text-dark border rounded-pill px-2 py-0.5 mb-1" style="font-size: 0.65rem;">
-                                {{ emp.categoria_nome }}
-                            </span>
-                            <h6 class="fw-bold text-dark m-0 text-truncate" style="font-size: 0.98rem;">
-                                {{ emp.nome }}
-                            </h6>
-
-                            {# 1. ENDEREÇO (Com quebra de 30 caracteres se for muito longo) #}
-                            {% set rua_numero = emp.endereco or 'Atendimento Digital' %}
-                            <small class="text-muted d-block mt-1" style="font-size: 0.74rem; line-height: 1.25; word-break: break-word;">
-                                <i class="bi bi-geo-alt me-1"></i>{{ rua_numero | wordwrap(30, break_long_words=True) | replace('\n', '<br>') | safe }}
-                            </small>
-
-                            {# 2. BAIRRO (Linha própria) #}
-                            {% if emp.bairro %}
-                            <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
-                                <strong>Bairro:</strong> {{ emp.bairro }}
-                            </small>
-                            {% endif %}
-
-                            {# 3. CIDADE / ESTADO (Linha própria) #}
-                            {% if emp.cidade %}
-                            <small class="text-muted d-block" style="font-size: 0.72rem; line-height: 1.2;">
-                                <strong>Cidade:</strong> {{ emp.cidade }}{% if emp.estado %} - {{ emp.estado }}{% endif %}
-                            </small>
-                            {% endif %}
-                        </div>
-
-                        {# ÍCONE INDICATIVO DE AVANÇO (CHEVRON) #}
-                        <div class="text-muted opacity-50 ps-1">
-                            <i class="bi bi-chevron-right fs-5"></i>
-                        </div>
-                    </div>
-                </a>
+                    </a>
+                    {% endif %}
                 {% endfor %}
             {% else %}
                 <div class="bg-white p-5 rounded-4 shadow-sm border text-center text-muted">
