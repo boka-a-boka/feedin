@@ -4930,28 +4930,56 @@ def agendar(slug_empresa: str):
         )
 
         if cliente_id:
-            cliente_ja_atendido = AghAgendamento.query.filter_by(
-                empresa_id=empresa.id,
-                cliente_id=cliente_id,
-                status='concluido'
-            ).first()
+            try:
+                cliente_uuid_str = str(cliente_id).strip()
 
-            if not cliente_ja_atendido:
-                # Verifica se a empresa está em degustação e conta clientes distintos já vinculados/agendados
-                total_clientes_teste = (
-                        db.session.query(func.count(func.distinct(AghAgendamento.cliente_id)))
-                        .filter(
-                            AghAgendamento.empresa_id == empresa.id,
-                            AghAgendamento.cliente_id.isnot(None)
+                # Considera cliente já conhecido se houver histórico prévio na empresa
+                cliente_ja_vinculado = AghAgendamento.query.filter(
+                    AghAgendamento.empresa_id == empresa.id,
+                    AghAgendamento.cliente_id == cliente_uuid_str
+                ).first()
+
+                if not cliente_ja_vinculado:
+                    agora_utc = datetime.now(timezone.utc)
+                    agora_naive_utc = agora_utc.replace(tzinfo=None)
+
+                    mod_agenda = ModEmpresaModulo.query.filter(
+                        ModEmpresaModulo.empresa_id == empresa.id,
+                        ModEmpresaModulo.modulo_slug == 'agenda',
+                        ModEmpresaModulo.ativo == True,
+                        or_(
+                            ModEmpresaModulo.data_vencimento.is_(None),
+                            ModEmpresaModulo.data_vencimento >= agora_utc,
+                            ModEmpresaModulo.data_vencimento >= agora_naive_utc
                         )
-                        .scalar() or 0
-                )
+                    ).order_by(ModEmpresaModulo.id.desc()).first()
 
-                # Aplica o teto de 12 clientes em teste quando não houver plano pago/vitalício ativo
-                plano_pago_ativo = getattr(empresa, 'plano_ativo', None) in ('pro', 'plus', 'enterprise',
-                                                                             'vitalicio')
-                if not plano_pago_ativo and total_clientes_teste >= 12:
-                    limite_degustacao_atingido = True
+                    tipo_plano_raw = str(
+                        getattr(mod_agenda, 'tipo_plano', None)
+                        or getattr(empresa, 'plano_ativo', None)
+                        or ''
+                    ).strip().lower()
+
+                    planos_liberados = {
+                        'pro', 'plus', 'enterprise',
+                        'vitalicio', 'vitalício', 'pago', 'full', 'ilimitado'
+                    }
+                    plano_pago_ativo = tipo_plano_raw in planos_liberados
+
+                    if not plano_pago_ativo:
+                        total_clientes_teste = (
+                                db.session.query(func.count(func.distinct(AghAgendamento.cliente_id)))
+                                .filter(
+                                    AghAgendamento.empresa_id == empresa.id,
+                                    AghAgendamento.cliente_id.isnot(None)
+                                )
+                                .scalar() or 0
+                        )
+                        if total_clientes_teste >= 12:
+                            limite_degustacao_atingido = True
+            except Exception as e:
+                print(f"⚠️ [AGENDAR] Aviso ao avaliar limite de degustação: {e}")
+                limite_degustacao_atingido = False
 
         if limite_degustacao_atingido:
             try:
