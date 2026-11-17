@@ -4,7 +4,7 @@ MODULOS_ACOES_REGISTRY = {
     'agenda': {
         'texto': 'Agendar Horário',
         'icone': 'bi-calendar-check-fill',
-        'endpoint': 'agenda.dashboard', # Ou a rota pública de agendamento da empresa
+        'endpoint': 'agenda.dashboard_cliente',
         'cor': 'warning'
     },
     'pdv': {

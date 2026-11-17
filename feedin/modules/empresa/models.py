@@ -886,24 +886,15 @@ class ColaboradorContrato(db.Model):
 
     @property
     def usuario_core_id(self) -> int | None:
-        """
-        Retorna exclusivamente o ID numérico (Integer) do Usuário no Core, se existir.
-        Prioriza a unificação oficial via `cpf_hash` (ModCadastroCliente -> Usuario),
-        utilizando o vínculo legado `id_usuario` apenas como fallback.
-        """
-        from feedin.models import Usuario
+        if hasattr(self, 'usuario_core_id_resolvido'):
+            return self.usuario_core_id_resolvido
 
-        # 1. Caminho Oficial: Contrato -> ModCadastroCliente (UUID) -> cpf_hash -> Usuario (Integer)
-        if self.cadastro_modulo and getattr(self.cadastro_modulo, 'cpf_hash', None):
-            usuario_core = Usuario.query.filter_by(cpf_hash=self.cadastro_modulo.cpf_hash).first()
-            if usuario_core:
-                return int(usuario_core.id)
+        cad = self.cadastro_modulo
+        if not cad:
+            return None
 
-        # 2. Fallback Legado: Vínculo direto na coluna id_usuario
-        if self.id_usuario is not None:
-            return int(self.id_usuario)
-
-        return None
+        core_id = getattr(cad, 'usuario_id', None) or getattr(cad, 'id_usuario', None)
+        return int(core_id) if core_id is not None else None
 
 
 class ColaboradorDetalhesPessoais(db.Model):

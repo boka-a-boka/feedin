@@ -1,23 +1,34 @@
 import datetime
+import inspect
 from flask_login import current_user
-from flask import render_template, abort, redirect, url_for, current_app, session
-from feedin.models import database as db, Local, Epoca, Postagem, VinculoUsuarioLocal, Usuario, Conexoes
-from feedin.modules.empresa.models import EseEmpresa, ModEmpresaModulo, EseServicoOferecido, ColaboradorContrato, \
-    EseAvaliacaoEmpresa, EseRelacionamentoClienteEmpresa, EseHorarioFuncionamento
-
-# Importamos o blueprint do módulo empresa a partir do pacote pai ou passamos a rota decorada nele
-from feedin.modules.empresa import empresa_bp
+from flask import render_template, abort, url_for, current_app, session
 from sqlalchemy.orm import joinedload
+from werkzeug.routing import BuildError
 
+from feedin.models import Epoca, Postagem, VinculoUsuarioLocal, Usuario, Conexoes
+
+from feedin.modules.empresa.models import (
+    EseEmpresa,
+    EseServicoOferecido,
+    ColaboradorContrato,
+    EseRelacionamentoClienteEmpresa,
+    EseHorarioFuncionamento,
+)
+
+from feedin.modules.auth.models import (ModCadastroCliente)
+
+from feedin.modules.empresa import empresa_bp
 from feedin.modules.registry_acoes import MODULOS_ACOES_REGISTRY
 
 
 @empresa_bp.route('/perfil/<string:empresa_uuid>', methods=['GET'], endpoint='perfil_comercial_empresa')
 def perfil_comercial(empresa_uuid):
-    from feedin.models import Epoca  # ou o nome do seu modelo de épocas
-
-    empresa = EseEmpresa.query.filter_by(id=empresa_uuid).first() or EseEmpresa.query.filter_by(
-        uuid=empresa_uuid).first_or_404()
+    # Busca segura sem quebrar caso o modelo EseEmpresa não possua atributo 'uuid'
+    empresa = EseEmpresa.query.filter_by(id=empresa_uuid).first()
+    if not empresa and hasattr(EseEmpresa, 'uuid'):
+        empresa = EseEmpresa.query.filter_by(uuid=empresa_uuid).first()
+    if not empresa:
+        abort(404)
 
     # 🌟 CHAMA O MOTOR DE RATING UNIFICADO
     rating_data = empresa.get_rating_data()
@@ -28,30 +39,58 @@ def perfil_comercial(empresa_uuid):
     # 🌟 CONTEXTO ATUAL DO MÓDULO
     contexto_modulo_atual = 'empresa'
 
-    # 1. Identifica o local_id vinculado à empresa
-    local_id_alvo = empresa.local_id if hasattr(empresa, 'local_id') and empresa.local_id else None
+    # 🎯 1. Identifica o módulo principal vigente da empresa (ignora 'core' vindo da sessão)
+    slug_sessao = session.get('modulo_slug_atual')
+    if slug_sessao == 'core':
+        slug_sessao = None
 
-    # 🎯 1. Identifica o módulo principal vigente da empresa (com fallback seguro para 'agenda')
-    modulo_ativo_slug = getattr(empresa, 'modulo_principal_slug', None) or session.get('modulo_slug_atual') or 'agenda'
+    modulo_ativo_slug = getattr(empresa, 'modulo_principal_slug', None) or slug_sessao or 'agenda'
 
     # 🎯 2. Resgata a configuração padrão atrelada ao blueprint do módulo
-    config_acao = MODULOS_ACOES_REGISTRY.get(modulo_ativo_slug, MODULOS_ACOES_REGISTRY['agenda'])
+    config_acao = MODULOS_ACOES_REGISTRY.get(modulo_ativo_slug) or MODULOS_ACOES_REGISTRY.get('agenda', {})
 
     # 🎯 3. Constrói o dicionário de CTA (Call to Action) dinâmico
-    acao_principal = {}
+    endpoint = config_acao.get('endpoint')
+    if endpoint == 'agenda.dashboard':
+        endpoint = 'agenda.dashboard_cliente'
+
+    identificador_empresa = getattr(empresa, 'uuid', None) or empresa.id
+    url_gerada = '#'
+
     try:
-        # Tenta gerar a URL dinamicamente baseada no endpoint do módulo
-        # Passando o ID da empresa para garantir o escopo correto
-        url_gerada = url_for(config_acao['endpoint'], empresa_id=empresa.id)
-    except Exception:
-        # Fallback de segurança caso o endpoint exija outros parâmetros ou não esteja mapeado
-        url_gerada = f"https://feedin.boka-a-boka.com.br/{modulo_ativo_slug}"
+        if endpoint and endpoint in current_app.view_functions:
+            view_func = current_app.view_functions[endpoint]
+            sig = inspect.signature(view_func)
+
+            if 'empresa_id' in sig.parameters:
+                url_gerada = url_for(endpoint, empresa_id=empresa.id)
+            elif 'empresa_uuid' in sig.parameters:
+                url_gerada = url_for(endpoint, empresa_uuid=identificador_empresa)
+            else:
+                url_gerada = url_for(endpoint)
+        elif endpoint:
+            url_gerada = url_for(endpoint)
+    except BuildError as e:
+        current_app.logger.warning(
+            "BuildError ao gerar URL para endpoint '%s' (modulo '%s'): %s",
+            endpoint,
+            modulo_ativo_slug,
+            e,
+        )
+        url_gerada = url_for('empresa.perfil_comercial_empresa', empresa_uuid=identificador_empresa)
+    except Exception as e:
+        current_app.logger.error(
+            "Erro inesperado ao montar URL do módulo '%s': %s",
+            modulo_ativo_slug,
+            e,
+        )
+        url_gerada = '#'
 
     acao_principal = {
-        'texto': config_acao['texto'],
-        'icone': config_acao['icone'],
+        'texto': config_acao.get('texto', 'Acessar'),
+        'icone': config_acao.get('icone', 'bi-calendar-check-fill'),
         'url': url_gerada,
-        'cor': config_acao['cor'],
+        'cor': config_acao.get('cor', 'warning'),
         'target': '_blank'
     }
 
@@ -101,7 +140,8 @@ def perfil_comercial(empresa_uuid):
         vinculos_core = sorted(
             vinculos_core,
             key=lambda v: v.usuario.username.lower() if (
-                    hasattr(v, 'usuario') and v.usuario and v.usuario.username) else ''
+                hasattr(v, 'usuario') and v.usuario and v.usuario.username
+            ) else ''
         )
 
     # 🌟 MAPEAMENTO DOS STATUS DE CONEXÃO DO USUÁRIO LOGADO
@@ -114,7 +154,7 @@ def perfil_comercial(empresa_uuid):
             outro_id = c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente
             status_conexoes_usuario[outro_id] = c.status
 
-    # 🌟 PROCESSAMENTO DA GRADE SEMANAL E STATUS EM TEMPO REAL DE HORÁRIOS (GLOBAL/ANÔNIMO)
+    # 🌟 PROCESSAMENTO DA GRADE SEMANAL E STATUS EM TEMPO REAL DE HORÁRIOS
     dias_semana_nomes = [
         ("Segunda", 0),
         ("Terça", 1),
@@ -187,10 +227,9 @@ def perfil_comercial(empresa_uuid):
             if hasattr(autor, 'cpf_hash') and autor.cpf_hash:
                 avaliacoes_por_cpf[autor.cpf_hash] = comentario
 
-    # 🛡️ TRAVA CONTRA LOOP INFINITO: Não faz redirect de volta para perfil_local!
+    # 🛡️ TRAVA CONTRA LOOP INFINITO
     status_atual = getattr(empresa, 'status_homologacao', None)
     if status_atual not in ['concluido', 'provisorio_beta', 'homologado', 'verificado']:
-        # Se a empresa não estiver liberada e não houver local, aborta 404 de forma limpa
         if not empresa.local_id:
             abort(404)
 
@@ -204,10 +243,66 @@ def perfil_comercial(empresa_uuid):
 
     if plano_ativo == 'pro':
         servicos = EseServicoOferecido.query.filter_by(empresa_id=empresa.id).all()
-        colaboradores = ColaboradorContrato.query.filter_by(
+
+        # 1. Busca os contratos da empresa atual para obter os IDs CHAR(36) em ModCadastroCliente
+        contratos_empresa = ColaboradorContrato.query.options(
+            joinedload(ColaboradorContrato.cargo)
+        ).filter_by(
             id_local=empresa.id,
             status_profissional='ativo'
         ).all()
+
+        ids_cadastros_empresa = [
+            c.id_cadastro_cliente for c in contratos_empresa if c.id_cadastro_cliente
+        ]
+
+        # 2. Parte da ModCadastroCliente para obter o ID CHAR(36) e o ID Integer do Core
+        cadastros_modulo = {}
+        if ids_cadastros_empresa:
+            registros_mod = ModCadastroCliente.query.filter(
+                ModCadastroCliente.id.in_(ids_cadastros_empresa)
+            ).all()
+            cadastros_modulo = {m.id: m for m in registros_mod}
+
+        # 3. Coleta os IDs Integer do Core presentes na ModCadastroCliente e confirma na tabela Usuario
+        ids_usuarios_core = {
+            getattr(m, 'usuario_id', None) or getattr(m, 'id_usuario', None)
+            for m in cadastros_modulo.values()
+        }
+        ids_usuarios_core.discard(None)
+
+        usuarios_core_map = {}
+        if ids_usuarios_core:
+            usuarios_validos = Usuario.query.filter(Usuario.id.in_(list(ids_usuarios_core))).all()
+            usuarios_core_map = {u.id: u for u in usuarios_validos}
+
+        # 4. Mapeia todo o histórico de contratos (empresas onde trabalha/trabalhou) por ModCadastroCliente.id
+        historico_contratos_map = {}
+        if ids_cadastros_empresa:
+            todos_contratos = ColaboradorContrato.query.options(
+                joinedload(ColaboradorContrato.empresa),
+                joinedload(ColaboradorContrato.cargo)
+            ).filter(
+                ColaboradorContrato.id_cadastro_cliente.in_(ids_cadastros_empresa)
+            ).all()
+            for ct in todos_contratos:
+                historico_contratos_map.setdefault(ct.id_cadastro_cliente, []).append(ct)
+
+        # 5. Consolida os dados em cada colaborador da empresa
+        colaboradores = []
+        for contrato in contratos_empresa:
+            cad = cadastros_modulo.get(contrato.id_cadastro_cliente)
+            core_id = (
+                (getattr(cad, 'usuario_id', None) or getattr(cad, 'id_usuario', None))
+                if cad else None
+            )
+            usuario_core = usuarios_core_map.get(core_id) if core_id is not None else None
+
+            contrato.cadastro_modulo_resolvido = cad
+            contrato.usuario_core = usuario_core
+            contrato.usuario_core_id_resolvido = usuario_core.id if usuario_core else None
+            contrato.historico_empresas = historico_contratos_map.get(contrato.id_cadastro_cliente, [])
+            colaboradores.append(contrato)
 
     # 🏛️ RECUPERAÇÃO DAS ATIVIDADES DA LINHA DO TEMPO
     local = empresa.local_fisico
@@ -234,6 +329,9 @@ def perfil_comercial(empresa_uuid):
                 'id_usuario': p.id_usuario
             })
         atividades = sorted(atividades, key=lambda x: x['data_criacao'], reverse=True)
+
+    session['empresa_id'] = empresa.id
+    session['local_contexto_id'] = empresa.id
 
     return render_template(
         'empresa/perfil_empresa.html',

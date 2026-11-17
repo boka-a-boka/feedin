@@ -117,8 +117,6 @@
     }
 </style>
 
-{% set id_local_alvo = empresa.local_id or (local.id if local else none) %}
-
 {# --- SEÇÃO HERO CORPORATIVA COM RESPIRO VERTICAL REFINADO --- #}
 <section class="empresa-hero shadow">
     {% if empresa.fachada %}
@@ -171,6 +169,7 @@
                 </div>
 
                 {# 🔵 BOTÃO DE SEGUIR #}
+                {% set id_local_alvo = empresa.local_id or (local.id if local else none) %}
                 {% set ns_segue = namespace(flag=usuario_segue if usuario_segue is defined else false) %}
                 {% if not ns_segue.flag and current_user.is_authenticated and vinculos_core %}
                     {% for v in vinculos_core %}
@@ -280,8 +279,11 @@
 
                     <div class="w-100" style="max-width: 320px;">
                         {% if plano_ativo == 'pro' and acao_principal %}
-                            <a href="{{ acao_principal.url }}" target="{{ acao_principal.target }}" class="btn btn-{{ acao_principal.cor }} btn-lg rounded-pill px-4 fw-bold shadow text-dark w-100 py-2.5 fs-6" style="border: 2px solid rgba(255,255,255,0.4);">
-                                <i class="bi {{ acao_principal.icone }} me-2"></i> {{ acao_principal.texto }}
+                            <a href="{{ acao_principal.url }}"
+                               target="{{ acao_principal.target or '_blank' }}"
+                               rel="noopener noreferrer"
+                               class="btn btn-{{ acao_principal.cor }} ...">
+                                <i class="{{ acao_principal.icone }}"></i> {{ acao_principal.texto }}
                             </a>
                         {% else %}
                             <button class="btn btn-outline-light btn-lg rounded-pill px-4 fw-semibold w-100 py-2 fs-6" disabled>
@@ -361,6 +363,8 @@
                         <div id="collapseEquipe" class="accordion-collapse collapse" aria-labelledby="headingEquipe" data-bs-parent="#accordionPerfilPro">
                             <div class="accordion-body pt-0 px-4 pb-4">
                                 <div class="row g-3">
+                                    {% set amigos_ids = (current_user.amigos | map(attribute='id') | list) if current_user.is_authenticated else [] %}
+
                                     {% for colab in colaboradores %}
                                         {% set colab_user_id = colab.usuario_core_id %}
                                         {% set is_proprio_colab = current_user.is_authenticated and colab_user_id and (colab_user_id == current_user.id) %}
@@ -381,13 +385,18 @@
                                                     </div>
                                                 </div>
 
-                                                {# 🎯 BOTÃO DE CONEXÃO SOCIAL VIA HTMX (CASO TENHA PERFIL NO CORE) #}
-                                                {% if current_user.is_authenticated and colab_user_id and not is_proprio_colab %}
-                                                    {% set status_conexao_colab = status_conexoes_usuario.get(colab_user_id) if status_conexoes_usuario else None %}
-                                                    {% set amigos_ids = current_user.amigos | map(attribute='id') | list %}
+                                                {% set colab_user_id = colab.usuario_core_id %}
+                                                {% set is_proprio_colab = current_user.is_authenticated and colab_user_id and ((colab_user_id | int) == (current_user.id | int)) %}
 
-                                                    <div id="conexao-equipe-container-{{ colab_user_id }}" class="flex-shrink-0">
-                                                        {% if (colab_user_id in amigos_ids) or status_conexao_colab == 'aceito' %}
+                                                {# Botão de Conexão (exibe apenas se o profissional tiver conta no Core e não for o próprio usuário) #}
+                                                {% if current_user.is_authenticated and colab_user_id and not is_proprio_colab %}
+                                                    {% set cid = colab_user_id | int %}
+                                                    {% set status_conexao_colab = status_conexoes_usuario.get(cid) or status_conexoes_usuario.get(cid | string) %}
+                                                    {% set lista_amigos = current_user.amigos if (current_user.amigos is iterable and current_user.amigos is not string) else [] %}
+                                                    {% set amigos_ids = lista_amigos | map(attribute='id') | map('int') | list %}
+
+                                                    <div id="conexao-equipe-container-{{ cid }}" class="flex-shrink-0">
+                                                        {% if (cid in amigos_ids) or status_conexao_colab == 'aceito' %}
                                                             <span class="badge bg-light text-success border border-success-subtle px-2 py-1" style="font-size: 0.65rem;" title="Vocês já estão conectados">
                                                                 <i class="bi bi-person-check-fill"></i> Conectados
                                                             </span>
@@ -397,8 +406,9 @@
                                                             </span>
                                                         {% else %}
                                                             <button type="button"
-                                                                    hx-post="{{ url_for('empresa.conectar_pioneiro_empresa', id_destinatario=colab_user_id) }}"
-                                                                    hx-target="#conexao-equipe-container-{{ colab_user_id }}"
+                                                                    hx-post="{{ url_for('empresa.conectar_pioneiro_empresa', id_destinatario=cid) }}"
+                                                                    hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'
+                                                                    hx-target="#conexao-equipe-container-{{ cid }}"
                                                                     hx-swap="outerHTML"
                                                                     onclick="event.stopPropagation();"
                                                                     class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 shadow-none d-flex align-items-center gap-1"
@@ -641,7 +651,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted small mb-3">Selecione os períodos em que você viveu ou vive histórias no <strong>{{ empresa.nome }}</strong> para construir seu painel de memórias.</p>
+                <p class="text-muted small mb-3">Selecione os períodos em que você viveu ou vive histórias no **{{ empresa.nome }}** para construir seu painel de memórias.</p>
 
                 <form id="formEscolherEpocas">
                     <div class="d-flex flex-column gap-2">
@@ -667,9 +677,7 @@
             </div>
             <div class="modal-footer border-0 pt-0 d-flex gap-2">
                 <button type="button" class="btn btn-sm btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
-                {% if id_local_alvo %}
-                    <button type="button" onclick="prepararSeguirDireto('{{ id_local_alvo }}', false)" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" style="background-color: var(--cor-primaria); border-color: var(--cor-primaria);">Confirmar e Seguir</button>
-                {% endif %}
+                <button type="button" onclick="prepararSeguirDireto('{{ empresa.local_id if empresa.local_id else empresa.id }}', false)" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" style="background-color: var(--cor-primaria); border-color: var(--cor-primaria);">Confirmar e Seguir</button>
             </div>
         </div>
     </div>
@@ -728,7 +736,8 @@ async function prepararSeguirDireto(localId, jaSegue = false) {
 
     if (!jaSegue) {
         const checkboxes = document.querySelectorAll('.checkbox-epoca-item:checked');
-        checkboxes.forEach(cb => formData.append('epocas[]', cb.value));
+        checkboxes.forEach(cb => formData.append('epocas[]', id => cb.value));
+        // Correção: append direto do valor
     }
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
