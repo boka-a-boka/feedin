@@ -93,7 +93,8 @@ from feedin.modules.empresa.models import (
 )
 
 from weasyprint import HTML
-from feedin.modules.agenda.services.agendamento_service import (_encontrar_colaborador_apto, registrar_falta_cliente_service, )
+from feedin.modules.agenda.services.agendamento_service import (_encontrar_colaborador_apto, registrar_falta_cliente_service,)
+from feedin.modules.agenda.services.renovacao_plano_service import (disparar_alerta_renovacao_empreendedor,)
 
 
 logger = logging.getLogger(__name__)
@@ -4920,29 +4921,50 @@ def agendar(slug_empresa: str):
             print(f"⚠️ [AGENDAR] Erro ao registrar EseRelacionamentoClienteEmpresa: {e}")
 
         # =========================================================================
-        # 🚦 SEMÁFORO DE LIMITE DE CLIENTES NA DEGUSTAÇÃO
+        # 🚦 SEMÁFORO DE LIMITE DE 12 CLIENTES EM TESTE (PLANO DEGUSTAÇÃO)
         # =========================================================================
-        fn_validar_limite = globals().get('validar_limite_modulo')
-        if cliente_id and callable(fn_validar_limite):
-            try:
-                # Verifica se este cliente específico já tem atendimento concluído nesta empresa
-                cliente_ja_atendido = AghAgendamento.query.filter_by(
-                    empresa_id=empresa.id,
-                    cliente_id=cliente_id,
-                    status='concluido'
-                ).first()
+        limite_degustacao_atingido = False
+        mensagem_limite_degustacao = (
+            "Este estabelecimento atingiu o limite de clientes em teste no plano de degustação "
+            "e não pode aceitar novos agendamentos no momento."
+        )
 
-                # Se o cliente é NOVO para esta empresa, validamos se o plano permite mais clientes
-                if not cliente_ja_atendido:
-                    liberado, aviso = fn_validar_limite(empresa.id, 'agenda', 'clientes')
-                    if not liberado:
-                        flash(f"Aviso do Estabelecimento: {aviso or 'Limite de clientes atingido.'}", "warning")
-                        identificador_empresa = getattr(empresa, 'uuid', None) or empresa.id
-                        return redirect(
-                            url_for('empresa.perfil_comercial_empresa', empresa_uuid=identificador_empresa)
+        if cliente_id:
+            cliente_ja_atendido = AghAgendamento.query.filter_by(
+                empresa_id=empresa.id,
+                cliente_id=cliente_id,
+                status='concluido'
+            ).first()
+
+            if not cliente_ja_atendido:
+                # Verifica se a empresa está em degustação e conta clientes distintos já vinculados/agendados
+                total_clientes_teste = (
+                        db.session.query(func.count(func.distinct(AghAgendamento.cliente_id)))
+                        .filter(
+                            AghAgendamento.empresa_id == empresa.id,
+                            AghAgendamento.cliente_id.isnot(None)
                         )
+                        .scalar() or 0
+                )
+
+                # Aplica o teto de 12 clientes em teste quando não houver plano pago/vitalício ativo
+                plano_pago_ativo = getattr(empresa, 'plano_ativo', None) in ('pro', 'plus', 'enterprise',
+                                                                             'vitalicio')
+                if not plano_pago_ativo and total_clientes_teste >= 12:
+                    limite_degustacao_atingido = True
+
+        if limite_degustacao_atingido:
+            try:
+                disparar_alerta_renovacao_empreendedor(
+                    empresa_id=empresa.id,
+                    modulo_slug='agenda',
+                    motivo='limite_12_clientes_teste'
+                )
             except Exception as e:
-                print(f"⚠️ [AGENDAR] Erro ao validar limite de clientes: {e}")
+                print(f"⚠️ [AGENDAR] Falha ao disparar alerta ao empreendedor: {e}")
+
+            flash(mensagem_limite_degustacao, "warning")
+            return redirect(url_for('agenda.detalhe_empresa', empresa_id=empresa.id))
     # =========================================================================
 
     dados_post = (request.get_json(silent=True) if request.is_json else request.form) or {}
