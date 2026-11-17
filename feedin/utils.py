@@ -906,65 +906,82 @@ from feedin.modules.empresa.models import ColaboradorContrato
 
 def validar_limite_modulo(empresa_id, modulo_slug, tipo_recurso, contrato_id_atual=None):
     """
-    Valida se a empresa atingiu o teto permitido pelo plano atual (degustacao vs pro).
+    Valida se a empresa atingiu o teto permitido pelo plano atual (degustação vs planos pagos/vitalícios).
     Se contrato_id_atual for fornecido, ele é desconsiderado na contagem (permite edição de ativos).
     """
-    modulo_contratado = ModEmpresaModulo.query.filter_by(
-        empresa_id=empresa_id,
-        modulo_slug=modulo_slug,
-        ativo=True
-    ).first()
+    modulo_contratado = (
+        ModEmpresaModulo.query
+        .filter_by(
+            empresa_id=empresa_id,
+            modulo_slug=modulo_slug,
+            ativo=True
+        )
+        .order_by(ModEmpresaModulo.id.desc())
+        .first()
+    )
 
     if not modulo_contratado:
         return False, "Módulo não contratado ou inativo."
 
-    if modulo_contratado.tipo_plano == 'pro':
-        return True, "Liberado"
+    tipo_plano_norm = str(modulo_contratado.tipo_plano or '').strip().lower()
+    eh_degustacao = (
+        not tipo_plano_norm
+        or tipo_plano_norm in ('degustacao', 'degustação', 'trial', 'teste', 'free', 'gratuito')
+        or 'degust' in tipo_plano_norm
+        or 'trial' in tipo_plano_norm
+    )
 
-    if modulo_contratado.tipo_plano == 'degustacao':
+    # Qualquer plano ativo que não seja degustação (ex: 'pro', 'pro_vitalicio', 'vitalicio', 'plus', etc.)
+    if not eh_degustacao:
         if modulo_contratado.data_vencimento:
             vencimento = modulo_contratado.data_vencimento
             if vencimento.tzinfo is None:
                 vencimento = vencimento.replace(tzinfo=timezone.utc)
             if datetime.now(timezone.utc) > vencimento:
-             return False, "O período de degustação deste módulo expirou. Faça o upgrade para o plano Pro."
+                return False, "A vigência deste plano expirou. Renove para continuar utilizando o módulo."
+        return True, "Liberado"
 
-        if tipo_recurso == 'profissionais':
-            # Constrói a query base de ativos
-            query = ColaboradorContrato.query.filter_by(
-                id_local=empresa_id,
-                status_profissional='ativo'
-            )
+    # Regras exclusivas do plano Degustação
+    if modulo_contratado.data_vencimento:
+        vencimento = modulo_contratado.data_vencimento
+        if vencimento.tzinfo is None:
+            vencimento = vencimento.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > vencimento:
+            return False, "O período de degustação deste módulo expirou. Faça o upgrade para continuar."
 
-            # Se estamos editando um profissional que já é ativo, excluímos ele da contagem para não barrar a edição
-            if contrato_id_atual:
-                query = query.filter(ColaboradorContrato.id != contrato_id_atual)
+    if tipo_recurso == 'profissionais':
+        limite_prof = modulo_contratado.limite_profissionais or 1
+        query = ColaboradorContrato.query.filter_by(
+            id_local=empresa_id,
+            status_profissional='ativo'
+        )
 
-            total_atual = query.count()
+        if contrato_id_atual:
+            query = query.filter(ColaboradorContrato.id != contrato_id_atual)
 
-            # ATENÇÃO: Se o profissional atual NÃO está ativo ainda (está vindo de pendente para ativo),
-            # precisamos verificar se adicionar ele vai estourar o limite.
-            if contrato_id_atual:
-                contrato_atual = ColaboradorContrato.query.get(contrato_id_atual)
-                if contrato_atual and contrato_atual.status_profissional != 'ativo':
-                    # Ele é novo na equipe ativa, então o total_atual + 1 não pode passar do limite
-                    if total_atual >= modulo_contratado.limite_profissionais:
-                        return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_profissionais} profissionais ativos."
-            else:
-                if total_atual >= modulo_contratado.limite_profissionais:
-                    return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_profissionais} profissionais ativos."
+        total_atual = query.count()
 
-        elif tipo_recurso == 'clientes':
-            total_atual = db.session.query(
-                func.count(func.distinct(AghAgendamento.cliente_id))
-            ).filter(
-                AghAgendamento.empresa_id == empresa_id,
-                AghAgendamento.status == 'concluido',
-                AghAgendamento.cliente_id.isnot(None)
-            ).scalar() or 0
+        if contrato_id_atual:
+            contrato_atual = ColaboradorContrato.query.get(contrato_id_atual)
+            if contrato_atual and contrato_atual.status_profissional != 'ativo':
+                if total_atual >= limite_prof:
+                    return False, f"Limite atingido: O plano Degustação permite até {limite_prof} profissionais ativos."
+        else:
+            if total_atual >= limite_prof:
+                return False, f"Limite atingido: O plano Degustação permite até {limite_prof} profissionais ativos."
 
-            if total_atual >= modulo_contratado.limite_clientes:
-                return False, f"Limite atingido: O plano Degustação permite até {modulo_contratado.limite_clientes} clientes atendidos na base."
+    elif tipo_recurso == 'clientes':
+        limite_cli = modulo_contratado.limite_clientes or 12
+        total_atual = db.session.query(
+            func.count(func.distinct(AghAgendamento.cliente_id))
+        ).filter(
+            AghAgendamento.empresa_id == empresa_id,
+            AghAgendamento.status == 'concluido',
+            AghAgendamento.cliente_id.isnot(None)
+        ).scalar() or 0
+
+        if total_atual >= limite_cli:
+            return False, f"Limite atingido: O plano Degustação permite até {limite_cli} clientes atendidos na base."
 
     return True, "Dentro dos limites"
 

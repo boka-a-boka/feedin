@@ -4960,13 +4960,15 @@ def agendar(slug_empresa: str):
                         or ''
                     ).strip().lower()
 
-                    planos_liberados = {
-                        'pro', 'plus', 'enterprise',
-                        'vitalicio', 'vitalício', 'pago', 'full', 'ilimitado'
-                    }
-                    plano_pago_ativo = tipo_plano_raw in planos_liberados
+                    # Só é plano de degustação se explicitamente degustação/trial/free/teste
+                    eh_plano_degustacao = (
+                            not tipo_plano_raw
+                            or tipo_plano_raw in ('degustacao', 'degustação', 'trial', 'teste', 'free', 'gratuito')
+                            or 'degust' in tipo_plano_raw
+                            or 'trial' in tipo_plano_raw
+                    )
 
-                    if not plano_pago_ativo:
+                    if eh_plano_degustacao:
                         total_clientes_teste = (
                                 db.session.query(func.count(func.distinct(AghAgendamento.cliente_id)))
                                 .filter(

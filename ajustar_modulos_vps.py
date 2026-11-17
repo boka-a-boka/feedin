@@ -18,7 +18,7 @@ def ajustar_modulos_empresa_576():
         print("🔍 [VPS AUDIT] Verificando registros da empresa 576 em mod_empresa_modulos...")
         
         # 1. Remove registros antigos da empresa 576 para evitar lixo ou duplicidades
-        registros_antigos = ModEmpresaModulo.query.filter_by(empresa_id=576).all()
+        registros_antigos = ModEmpresaModulo.query.filter_by(empresa_id=2).all()
         for reg in registros_antigos:
             db.session.delete(reg)
         
@@ -30,7 +30,7 @@ def ajustar_modulos_empresa_576():
 
         # 2. Insere o Módulo Agenda (PRO Vitalício)
         agenda_mod = ModEmpresaModulo(
-            empresa_id=576,
+            empresa_id=2,
             modulo_slug='agenda',
             tipo_plano='pro_vitalicio',
             ativo=True,
@@ -43,7 +43,7 @@ def ajustar_modulos_empresa_576():
 
         # 3. Insere o Módulo Empresa Pro (PRO com vencimento específico)
         empresa_mod = ModEmpresaModulo(
-            empresa_id=576,
+            empresa_id=2,
             modulo_slug='empresa_pro',
             tipo_plano='pro_vitalicio',
             ativo=True,
@@ -62,7 +62,7 @@ def ajustar_modulos_empresa_576():
 
         # 4. Auditoria de confirmação imediata
         print("\n--- AUDITORIA FINAL NA VPS ---")
-        registros_atuais = ModEmpresaModulo.query.filter_by(empresa_id=576).all()
+        registros_atuais = ModEmpresaModulo.query.filter_by(empresa_id=2).all()
         for r in registros_atuais:
             print(f"Empresa: {r.empresa_id} | Módulo: {r.modulo_slug} | Plano: {r.tipo_plano} | Limite Profissionais: {r.limite_profissionais} | Limite Clientes: {r.limite_clientes}")
 
