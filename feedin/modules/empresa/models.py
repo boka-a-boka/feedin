@@ -561,8 +561,8 @@ class EseServicoOferecido(db.Model):
         db.Numeric(10, 2, asdecimal=False), default=1.00, nullable=False
     )
 
-    # Controle e Auditoria
-    inserido_por_usuario_id = db.Column(db.Integer, nullable=False)
+    # Controle e Auditoria (UUID CHAR(36))
+    inserido_por_usuario_id = db.Column(db.String(36), nullable=True)
     data_criacao = db.Column(
         db.DateTime, default=lambda: datetime.now(timezone.utc)
     )
@@ -1335,8 +1335,8 @@ class EseServicoPreco(db.Model):
     # Campo opcional para justificativas ou anotações internas
     observacao = db.Column(db.String(255), nullable=True)
 
-    # Controle e Auditoria
-    alterado_por_usuario_id = db.Column(db.Integer, nullable=False)
+    # Controle e Auditoria (UUID CHAR(36))
+    alterado_por_usuario_id = db.Column(db.String(36), nullable=True)
     data_alteracao = db.Column(
         db.DateTime,
         default=lambda: datetime.now(timezone.utc),

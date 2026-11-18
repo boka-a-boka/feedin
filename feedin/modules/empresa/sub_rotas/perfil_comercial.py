@@ -4,7 +4,7 @@ from flask_login import current_user
 from flask import render_template, abort, url_for, current_app, session
 from sqlalchemy.orm import joinedload
 from werkzeug.routing import BuildError
-
+from feedin import database as db
 from feedin.models import Epoca, Postagem, VinculoUsuarioLocal, Usuario, Conexoes
 
 from feedin.modules.empresa.models import (
@@ -15,9 +15,12 @@ from feedin.modules.empresa.models import (
     EseHorarioFuncionamento,
 )
 
-from feedin.modules.auth.models import (ModCadastroCliente)
+from feedin.modules.auth.models import (ModCadastroCliente, )
 
 from feedin.modules.empresa import empresa_bp
+
+from feedin.modules.empresa.models import (ModEmpresaModulo, ColaboradorContrato, EscalaTrabalhoColaborador, EseColaboradorServicoHabilidade, EseServicoPreco,)
+
 from feedin.modules.registry_acoes import MODULOS_ACOES_REGISTRY
 
 
@@ -39,121 +42,6 @@ def perfil_comercial(empresa_uuid):
     # 🌟 CONTEXTO ATUAL DO MÓDULO
     contexto_modulo_atual = 'empresa'
 
-    # 🎯 1. Identifica o módulo principal vigente da empresa (ignora 'core' vindo da sessão)
-    slug_sessao = session.get('modulo_slug_atual')
-    if slug_sessao == 'core':
-        slug_sessao = None
-
-    modulo_ativo_slug = getattr(empresa, 'modulo_principal_slug', None) or slug_sessao or 'agenda'
-
-    # 🎯 2. Resgata a configuração padrão atrelada ao blueprint do módulo
-    config_acao = MODULOS_ACOES_REGISTRY.get(modulo_ativo_slug) or MODULOS_ACOES_REGISTRY.get('agenda', {})
-
-    # 🎯 3. Constrói o dicionário de CTA (Call to Action) dinâmico
-    endpoint = config_acao.get('endpoint')
-    if endpoint == 'agenda.dashboard':
-        endpoint = 'agenda.dashboard_cliente'
-
-    identificador_empresa = getattr(empresa, 'uuid', None) or empresa.id
-    url_gerada = '#'
-
-    try:
-        if endpoint and endpoint in current_app.view_functions:
-            view_func = current_app.view_functions[endpoint]
-            sig = inspect.signature(view_func)
-
-            if 'empresa_id' in sig.parameters:
-                url_gerada = url_for(endpoint, empresa_id=empresa.id)
-            elif 'empresa_uuid' in sig.parameters:
-                url_gerada = url_for(endpoint, empresa_uuid=identificador_empresa)
-            else:
-                url_gerada = url_for(endpoint)
-        elif endpoint:
-            url_gerada = url_for(endpoint)
-    except BuildError as e:
-        current_app.logger.warning(
-            "BuildError ao gerar URL para endpoint '%s' (modulo '%s'): %s",
-            endpoint,
-            modulo_ativo_slug,
-            e,
-        )
-        url_gerada = url_for('empresa.perfil_comercial_empresa', empresa_uuid=identificador_empresa)
-    except Exception as e:
-        current_app.logger.error(
-            "Erro inesperado ao montar URL do módulo '%s': %s",
-            modulo_ativo_slug,
-            e,
-        )
-        url_gerada = '#'
-
-    acao_principal = {
-        'texto': config_acao.get('texto', 'Acessar'),
-        'icone': config_acao.get('icone', 'bi-calendar-check-fill'),
-        'url': url_gerada,
-        'cor': config_acao.get('cor', 'warning'),
-        'target': '_blank'
-    }
-
-    # 1. Busca os vínculos tradicionais do Core (seguidores do local físico)
-    vinculos_core = []
-    if empresa.local_fisico:
-        if hasattr(empresa.local_fisico, 'seguidores') and empresa.local_fisico.seguidores:
-            vinculos_core = list(empresa.local_fisico.seguidores)
-        elif hasattr(empresa.local_fisico, 'usuarios_vinculados') and empresa.local_fisico.usuarios_vinculados:
-            vinculos_core = list(empresa.local_fisico.usuarios_vinculados)
-        elif hasattr(empresa.local_fisico, 'vinculos') and empresa.local_fisico.vinculos:
-            vinculos_core = list(empresa.local_fisico.vinculos)
-        else:
-            vinculos_core = VinculoUsuarioLocal.query.filter_by(local_id=empresa.local_fisico.id).all()
-
-    ids_vinculados = {v.usuario_id for v in vinculos_core if hasattr(v, 'usuario_id') and v.usuario_id}
-
-    # 2. Identifica autores de avaliações do módulo que ainda não estão na listagem
-    for av in empresa.avaliacoes_empresas:
-        if av.usuario_core_id and av.usuario_core_id not in ids_vinculados:
-            usuario_avaliador = Usuario.query.get(av.usuario_core_id)
-            if usuario_avaliador:
-                class VinculoVirtual:
-                    def __init__(self, usuario):
-                        self.usuario = usuario
-                        self.usuario_id = usuario.id
-
-                vinculos_core.append(VinculoVirtual(usuario_avaliador))
-                ids_vinculados.add(av.usuario_core_id)
-
-    # 3. GARANTIA: Injeta o proprietário/empreendedor na lista se necessário
-    ids_usuarios_ja_na_lista = {v.usuario_id for v in vinculos_core if hasattr(v, 'usuario_id') and v.usuario_id}
-
-    if hasattr(empresa, 'id_empreendedor') and empresa.id_empreendedor:
-        if empresa.id_empreendedor not in ids_usuarios_ja_na_lista:
-            proprietario = Usuario.query.get(empresa.id_empreendedor)
-            if proprietario:
-                class VinculoTemporario:
-                    def __init__(self, user):
-                        self.usuario = user
-                        self.usuario_id = user.id
-
-                vinculos_core.insert(0, VinculoTemporario(proprietario))
-
-    # 🌟 ORDENAÇÃO ALFABÉTICA DA COMUNIDADE PELO USERNAME
-    if vinculos_core:
-        vinculos_core = sorted(
-            vinculos_core,
-            key=lambda v: v.usuario.username.lower() if (
-                hasattr(v, 'usuario') and v.usuario and v.usuario.username
-            ) else ''
-        )
-
-    # 🌟 MAPEAMENTO DOS STATUS DE CONEXÃO DO USUÁRIO LOGADO
-    status_conexoes_usuario = {}
-    if current_user.is_authenticated:
-        conexoes_usuario = Conexoes.query.filter(
-            (Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)
-        ).all()
-        for c in conexoes_usuario:
-            outro_id = c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente
-            status_conexoes_usuario[outro_id] = c.status
-
     # 🌟 PROCESSAMENTO DA GRADE SEMANAL E STATUS EM TEMPO REAL DE HORÁRIOS
     dias_semana_nomes = [
         ("Segunda", 0),
@@ -171,11 +59,17 @@ def perfil_comercial(empresa_uuid):
     horarios_cadastrados = EseHorarioFuncionamento.query.filter_by(empresa_id=empresa.id).all()
 
     horarios_por_dia = {}
+    faixas_dia_map = {}
     for h in horarios_cadastrados:
         dia_num = getattr(h, 'dia_semana', 0)
         if dia_num not in horarios_por_dia:
             horarios_por_dia[dia_num] = []
         horarios_por_dia[dia_num].append(h)
+
+        if h.horario_abertura and h.horario_fechamento:
+            faixas_dia_map.setdefault(dia_num, []).append(
+                (h.horario_abertura, h.horario_fechamento)
+            )
 
     for nome_dia, index in dias_semana_nomes:
         turnos_do_dia = horarios_por_dia.get(index, [])
@@ -206,26 +100,6 @@ def perfil_comercial(empresa_uuid):
         return {"aberto": False, "texto": "Fechado no momento"}
 
     status_funcionamento = verificar_status_aberto_agora(horarios_por_dia.get(dia_atual_index, []))
-
-    # 4. Busca os CPFs que possuem relacionamento comercial
-    cpfs_clientes_empresa = {
-        rel.cpf_hash for rel in EseRelacionamentoClienteEmpresa.query.filter_by(empresa_id=str(empresa.id)).all()
-        if rel.cpf_hash
-    }
-
-    # 🌟 5. MAPEAMENTO UNIFICADO VIA get_rating_data()
-    avaliacoes_por_cpf = {}
-    avaliacoes_por_usuario_id = {}
-
-    for item in rating_data.get('lista', []):
-        comentario = item.get('comentario')
-        autor = item.get('autor')
-        if comentario and autor:
-            if hasattr(autor, 'id'):
-                avaliacoes_por_usuario_id[autor.id] = comentario
-                avaliacoes_por_usuario_id[str(autor.id)] = comentario
-            if hasattr(autor, 'cpf_hash') and autor.cpf_hash:
-                avaliacoes_por_cpf[autor.cpf_hash] = comentario
 
     # 🛡️ TRAVA CONTRA LOOP INFINITO
     status_atual = getattr(empresa, 'status_homologacao', None)
@@ -303,6 +177,207 @@ def perfil_comercial(empresa_uuid):
             contrato.usuario_core_id_resolvido = usuario_core.id if usuario_core else None
             contrato.historico_empresas = historico_contratos_map.get(contrato.id_cadastro_cliente, [])
             colaboradores.append(contrato)
+
+    # 🎯 1. Verifica se o módulo Agenda está ativo em ModEmpresaModulo e se atende aos pré-requisitos
+    modulo_agenda_ativo = ModEmpresaModulo.query.filter_by(
+        empresa_id=empresa.id,
+        modulo_slug='agenda',
+        ativo=True
+    ).first()
+
+    agenda_pronta = False
+    if modulo_agenda_ativo:
+        servicos_oferecidos = EseServicoOferecido.query.filter_by(empresa_id=empresa_uuid).all()
+
+        tem_servicos_com_preco = False
+        for srv in servicos_oferecidos:
+            preco_registro = EseServicoPreco.query.filter_by(
+                empresa_id=empresa_uuid,
+                taxonomia_id=srv.taxonomia_id
+            ).first()
+
+            valor_preco = 0.0
+            if preco_registro and preco_registro.novo_valor is not None:
+                try:
+                    raw_val = preco_registro.novo_valor
+                    valor_preco = float(str(raw_val).replace(',', '.').strip())
+                except (ValueError, TypeError):
+                    valor_preco = 0.0
+
+            if valor_preco > 0:
+                tem_servicos_com_preco = True
+                break
+
+        candidatos_prof = (
+            db.session.query(ColaboradorContrato, EscalaTrabalhoColaborador)
+            .join(
+                EscalaTrabalhoColaborador,
+                EscalaTrabalhoColaborador.contrato_id == ColaboradorContrato.id
+            )
+            .join(
+                EseColaboradorServicoHabilidade,
+                EseColaboradorServicoHabilidade.contrato_id == ColaboradorContrato.id
+            )
+            .filter(
+                ColaboradorContrato.id_local == empresa.id,
+                ColaboradorContrato.status_profissional == 'ativo',
+                ColaboradorContrato.data_desligamento.is_(None),
+                EscalaTrabalhoColaborador.ativo.is_(True)
+            )
+            .all()
+        )
+
+        tem_prof_apto = False
+        for _ct, esc in candidatos_prof:
+            if esc.inicio_expediente and esc.fim_expediente:
+                if esc.dia_semana is not None:
+                    faixas = faixas_dia_map.get(esc.dia_semana, [])
+                    if not any(ab <= esc.inicio_expediente and esc.fim_expediente <= fe for ab, fe in faixas):
+                        continue
+                tem_prof_apto = True
+                break
+
+        agenda_pronta = bool(faixas_dia_map) and tem_prof_apto
+
+    # 🎯 2. Só constrói acao_principal se houver módulo ativo elegível (sem forçar 'agenda' como fallback)
+    slug_sessao = session.get('modulo_slug_atual')
+    if slug_sessao == 'core':
+        slug_sessao = None
+
+    modulo_candidato = getattr(empresa, 'modulo_principal_slug', None) or slug_sessao
+    if agenda_pronta:
+        modulo_ativo_slug = 'agenda'
+    elif modulo_candidato and modulo_candidato != 'agenda':
+        modulo_ativo_slug = modulo_candidato
+    else:
+        modulo_ativo_slug = None
+
+    acao_principal = None
+    if modulo_ativo_slug:
+        config_acao = MODULOS_ACOES_REGISTRY.get(modulo_ativo_slug, {})
+        endpoint = config_acao.get('endpoint')
+        if endpoint == 'agenda.dashboard':
+            endpoint = 'agenda.dashboard_cliente'
+
+        identificador_empresa = getattr(empresa, 'uuid', None) or empresa.id
+        url_gerada = '#'
+
+        try:
+            if endpoint and endpoint in current_app.view_functions:
+                view_func = current_app.view_functions[endpoint]
+                sig = inspect.signature(view_func)
+
+                if 'empresa_id' in sig.parameters:
+                    url_gerada = url_for(endpoint, empresa_id=empresa.id)
+                elif 'empresa_uuid' in sig.parameters:
+                    url_gerada = url_for(endpoint, empresa_uuid=identificador_empresa)
+                else:
+                    url_gerada = url_for(endpoint)
+            elif endpoint:
+                url_gerada = url_for(endpoint)
+        except BuildError as e:
+            current_app.logger.warning(
+                "BuildError ao gerar URL para endpoint '%s' (modulo '%s'): %s",
+                endpoint,
+                modulo_ativo_slug,
+                e,
+            )
+            url_gerada = url_for('empresa.perfil_comercial_empresa', empresa_uuid=identificador_empresa)
+        except Exception as e:
+            current_app.logger.error(
+                "Erro inesperado ao montar URL do módulo '%s': %s",
+                modulo_ativo_slug,
+                e,
+            )
+            url_gerada = '#'
+
+        acao_principal = {
+            'texto': config_acao.get('texto', 'Acessar'),
+            'icone': config_acao.get('icone', 'bi-calendar-check-fill'),
+            'url': url_gerada,
+            'cor': config_acao.get('cor', 'warning'),
+            'target': '_blank'
+        }
+
+    # 1. Busca os vínculos tradicionais do Core (seguidores do local físico)
+    vinculos_core = []
+    if empresa.local_fisico:
+        if hasattr(empresa.local_fisico, 'seguidores') and empresa.local_fisico.seguidores:
+            vinculos_core = list(empresa.local_fisico.seguidores)
+        elif hasattr(empresa.local_fisico, 'usuarios_vinculados') and empresa.local_fisico.usuarios_vinculados:
+            vinculos_core = list(empresa.local_fisico.usuarios_vinculados)
+        elif hasattr(empresa.local_fisico, 'vinculos') and empresa.local_fisico.vinculos:
+            vinculos_core = list(empresa.local_fisico.vinculos)
+        else:
+            vinculos_core = VinculoUsuarioLocal.query.filter_by(local_id=empresa.local_fisico.id).all()
+
+    ids_vinculados = {v.usuario_id for v in vinculos_core if hasattr(v, 'usuario_id') and v.usuario_id}
+
+    # 2. Identifica autores de avaliações do módulo que ainda não estão na listagem
+    for av in empresa.avaliacoes_empresas:
+        if av.usuario_core_id and av.usuario_core_id not in ids_vinculados:
+            usuario_avaliador = Usuario.query.get(av.usuario_core_id)
+            if usuario_avaliador:
+                class VinculoVirtual:
+                    def __init__(self, usuario):
+                        self.usuario = usuario
+                        self.usuario_id = usuario.id
+
+                vinculos_core.append(VinculoVirtual(usuario_avaliador))
+                ids_vinculados.add(av.usuario_core_id)
+
+    # 3. GARANTIA: Injeta o proprietário/empreendedor na lista se necessário
+    ids_usuarios_ja_na_lista = {v.usuario_id for v in vinculos_core if hasattr(v, 'usuario_id') and v.usuario_id}
+
+    if hasattr(empresa, 'id_empreendedor') and empresa.id_empreendedor:
+        if empresa.id_empreendedor not in ids_usuarios_ja_na_lista:
+            proprietario = Usuario.query.get(empresa.id_empreendedor)
+            if proprietario:
+                class VinculoTemporario:
+                    def __init__(self, user):
+                        self.usuario = user
+                        self.usuario_id = user.id
+
+                vinculos_core.insert(0, VinculoTemporario(proprietario))
+
+    # 🌟 ORDENAÇÃO ALFABÉTICA DA COMUNIDADE PELO USERNAME
+    if vinculos_core:
+        vinculos_core = sorted(
+            vinculos_core,
+            key=lambda v: v.usuario.username.lower() if (
+                hasattr(v, 'usuario') and v.usuario and v.usuario.username
+            ) else ''
+        )
+
+    # 🌟 MAPEAMENTO DOS STATUS DE CONEXÃO DO USUÁRIO LOGADO
+    status_conexoes_usuario = {}
+    if current_user.is_authenticated:
+        conexoes_usuario = Conexoes.query.filter(
+            (Conexoes.id_remetente == current_user.id) | (Conexoes.id_destinatario == current_user.id)
+        ).all()
+        for c in conexoes_usuario:
+            outro_id = c.id_destinatario if c.id_remetente == current_user.id else c.id_remetente
+            status_conexoes_usuario[outro_id] = c.status
+
+    # 4. Busca os CPFs que possuem relacionamento comercial
+    cpfs_clientes_empresa = {
+        rel.cpf_hash for rel in EseRelacionamentoClienteEmpresa.query.filter_by(empresa_id=str(empresa.id)).all()
+        if rel.cpf_hash
+    }
+
+    # 🌟 5. MAPEAMENTO UNIFICADO VIA get_rating_data()
+    avaliacoes_por_cpf = {}
+    avaliacoes_por_usuario_id = {}
+
+    for item in rating_data.get('lista', []):
+        comentario = item.get('comentario')
+        autor = item.get('autor')
+        if comentario and autor:
+            if hasattr(autor, 'id'):
+                avaliacoes_por_usuario_id[autor.id] = comentario
+                avaliacoes_por_usuario_id[str(autor.id)] = comentario
+            if hasattr(autor, 'cpf_hash') and autor.cpf_hash:
+                avaliacoes_por_cpf[autor.cpf_hash] = comentario
 
     # 🏛️ RECUPERAÇÃO DAS ATIVIDADES DA LINHA DO TEMPO
     local = empresa.local_fisico

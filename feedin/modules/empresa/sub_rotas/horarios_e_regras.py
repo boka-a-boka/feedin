@@ -1118,14 +1118,14 @@ def menu_servicos_precos(empresa_id):
         ese_empresa=empresa
     )
 
-@empresa_bp.route('/<int:empresa_id>/equipe-jornadas', methods=['GET'], endpoint='configurar_jornadas_tela')
+@empresa_bp.route('/<int:empresa_id>/equipe-jornadas/configurar', methods=['GET'], endpoint='configurar_jornadas_tela')
 @login_required
 def configurar_jornadas_tela(empresa_id):
     empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 1. Busca os contratos da equipe da empresa
+    # 1. Busca os contratos da equipe usando id_local consistente com o estabelecimento
     contratos_equipe = ColaboradorContrato.query.filter(
-        ColaboradorContrato.id_local == empresa.local_id
+        ColaboradorContrato.id_local == empresa.id
     ).options(
         joinedload(ColaboradorContrato.cadastro_modulo),
         joinedload(ColaboradorContrato.cargo),
@@ -1135,61 +1135,68 @@ def configurar_jornadas_tela(empresa_id):
     if not contratos_equipe:
         return redirect(url_for('empresa.emitir_contrato_colaborador', empresa_id=empresa_id))
 
-    # 🛡️ Resolução soberana e segura do ID do usuário logado (suporta int e UUID string)
-    user_id_candidatos = [
-        getattr(current_user, 'usuario_id', None),
-        getattr(current_user, 'id', None),
-        str(getattr(current_user, 'id', ''))
-    ]
-    user_id_candidatos = [val for val in user_id_candidatos if val is not None]
+    # 2. Resolve o UUID CHAR(36) do usuário logado na ModCadastroCliente via usuario_id
+    uuid_cliente_logado = None
+    id_atual_str = str(getattr(current_user, 'id', '') or '').strip()
+    if len(id_atual_str) == 36 and '-' in id_atual_str:
+        uuid_cliente_logado = id_atual_str
+    else:
+        cliente_mod = ModCadastroCliente.query.filter_by(usuario_id=current_user.id).first()
+        if not cliente_mod and getattr(current_user, 'email', None):
+            cliente_mod = ModCadastroCliente.query.filter_by(email=current_user.email).first()
+        if cliente_mod and getattr(cliente_mod, 'id', None):
+            uuid_cliente_logado = str(cliente_mod.id).strip()
 
-    # 2. Busca o contrato do USUÁRIO LOGADO nesta empresa com suporte a múltiplos formatos de ID
-    contrato_logado = ColaboradorContrato.query.filter(
-        ColaboradorContrato.id_local == empresa.local_id,
-        ColaboradorContrato.id_cadastro_cliente.in_(user_id_candidatos)
-    ).first()
+    candidatos_id = {
+        str(val).strip()
+        for val in [
+            uuid_cliente_logado,
+            getattr(current_user, 'usuario_id', None),
+            getattr(current_user, 'id', None),
+        ]
+        if val is not None and str(val).strip()
+    }
 
-    # 🔑 Fallback de segurança: Se for admin global ou proprietário direto da empresa, garante nível máximo
+    # 3. Localiza o contrato do usuário logado nesta empresa
+    contrato_logado = None
+    if candidatos_id:
+        for contrato in contratos_equipe:
+            cadastro_id_str = str(getattr(contrato, 'id_cadastro_cliente', '') or '').strip()
+            if cadastro_id_str and cadastro_id_str in candidatos_id:
+                contrato_logado = contrato
+                break
+
     eh_proprietario_direto = (
-        str(getattr(empresa, 'proprietario_id', '')) in [str(u) for u in user_id_candidatos] or
-        getattr(current_user, 'is_admin', False)
+        str(getattr(empresa, 'proprietario_id', '') or '').strip() in candidatos_id or
+        bool(getattr(current_user, 'is_admin', False))
     )
 
-    if contrato_logado:
+    if eh_proprietario_direto:
+        logado_nivel = 999
+        logado_ativo = True
+    elif contrato_logado:
         logado_nivel = contrato_logado.papel_nivel or 0
         logado_ativo = (contrato_logado.status_profissional == 'ativo')
-    elif eh_proprietario_direto:
-        logado_nivel = 999  # Soberano por direito de propriedade/admin
-        logado_ativo = True
     else:
         logado_nivel = 0
         logado_ativo = False
 
     hoje = date.today()
 
-    # 3. Processa recesso e aplica a validação de permissão
+    # 4. Processa recesso e permissões (incluindo o próprio perfil para soberano/proprietário)
     for contrato in contratos_equipe:
-        # Processa recesso
-        contrato.em_recesso = False
         excecoes = contrato.excecoes_jornada or []
-        if excecoes:
-            contrato.em_recesso = any(
-                exc.data_inicio <= hoje <= exc.data_fim and exc.tipo in ['ferias', 'recesso', 'licenca']
-                for exc in excecoes
-            )
+        contrato.em_recesso = any(
+            exc.data_inicio <= hoje <= exc.data_fim and exc.tipo in ['ferias', 'recesso', 'licenca']
+            for exc in excecoes
+        )
 
-        # REGRAS DE GERENCIAMENTO:
-        # 1. Usuário precisa estar ATIVO no sistema
-        # 2. Se for Soberano (Nível 999): tem controle total
-        # 3. Se for Gerencial (>= 666): precisa ter nível ESTRITAMENTE MAIOR que o alvo
         nivel_alvo = contrato.papel_nivel or 0
-
         is_soberano = (logado_nivel >= 999)
         is_gerente_superior = (logado_nivel >= 666 and logado_nivel > nivel_alvo)
 
-        contrato.pode_gerenciar = logado_ativo and (is_soberano or is_gerente_superior)
+        contrato.pode_gerenciar = bool(logado_ativo and (is_soberano or is_gerente_superior))
 
-    # 4. Ordenação dos registros (Empreendedor/Nível mais alto primeiro)
     contratos_equipe.sort(
         key=lambda c: (c.papel_nivel or 0, c.nome or ''),
         reverse=True
@@ -1461,12 +1468,12 @@ def enviar_documentacao(empresa_id):
     """
     🛡️ MOTOR DE VALIDAÇÃO JURÍDICA: MESA DE AUDITORIA E DOCUMENTAÇÃO
     --------------------------------------------------------------------------------------
-    Gerencia o envio do formulário de documentação oficial (CNPJ/CPF e Comprovante) e
-    sincroniza atomicamente o status do processo de Claim e da Empresa.
+    Gerencia o envio da documentação oficial (CNPJ/CPF e Comprovante), respeitando
+    estados já homologados/verificados para não regredir o status nem cobrar reenvio indevido.
     """
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 1. Localiza o processo de Claim vinculado à empresa (prioriza pelo local_id ou solicitante)
+    # 1. Localiza o processo de Claim vinculado à empresa (prioriza local_id, depois solicitante)
     processo = None
     if ese_empresa.local_id:
         processo = EseProcessoClaim.query.filter_by(
@@ -1478,11 +1485,31 @@ def enviar_documentacao(empresa_id):
             usuario_solicitante_id=current_user.id
         ).order_by(EseProcessoClaim.id.desc()).first()
 
-    # 2. TRATAMENTO DO SUBMIT (POST)
+    status_empresa = (getattr(ese_empresa, 'status_homologacao', '') or '').strip().lower()
+    status_processo = (getattr(processo, 'status_processo', '') or '').strip().lower() if processo else ''
+
+    ja_homologado = (
+        status_empresa in {'homologado', 'verificado', 'concluido'} or
+        status_processo in {'homologado', 'aprovado', 'concluido'}
+    )
+
+    pasta_auditoria = os.path.join(
+        EMPRESA_UPLOAD_BASE_DIR, "empresas", str(ese_empresa.id), "documentos_auditoria"
+    )
+    documentos_existentes = []
+    if os.path.isdir(pasta_auditoria):
+        documentos_existentes = [
+            nome for nome in os.listdir(pasta_auditoria)
+            if not nome.startswith('temp_')
+        ]
+
+    # 2. Bloqueia reenvio que regrediria status já homologado/verificado
     if request.method == 'POST':
+        if ja_homologado:
+            flash("A documentação desta empresa já foi homologada e concluída.", "info")
+            return redirect(url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id))
+
         try:
-            # 📌 Agora a estrutura contempla a pasta 'empresas' e logo em seguida o ID (ex: /empresas/576/documentos_auditoria)
-            pasta_auditoria = os.path.join(EMPRESA_UPLOAD_BASE_DIR, "empresas", str(ese_empresa.id), "documentos_auditoria")
             os.makedirs(pasta_auditoria, exist_ok=True)
 
             file_cnpj = request.files.get('cnpj_social')
@@ -1510,17 +1537,16 @@ def enviar_documentacao(empresa_id):
                     with open(caminho_endereco, "w", encoding="utf-8") as f:
                         f.write("Aguardando Comprovante de Endereço Oficial.")
 
-            # 3. SINCRO-ATUALIZAÇÃO DE ESTADOS DA ESTEIRA DE AUDITORIA
-            ese_empresa.status_homologacao = 'aguardando_auditoria'
-            if processo:
+            # 3. Atualiza status apenas se ainda não estiver homologado
+            if status_empresa != 'homologado':
+                ese_empresa.status_homologacao = 'aguardando_auditoria'
+            if processo and status_processo not in {'homologado', 'aprovado', 'concluido'}:
                 processo.status_processo = 'aguardando_analise'
 
-            # 🔔 INTEGRAÇÃO COM O BARRAMENTO DE NOTIFICAÇÕES DO CORE
             from feedin.modules.core.services.notificacao_core_service import CoreNotificacaoService
 
-            # Busca o ID mestre do módulo 'empresa' na tabela modulos_sistema
             modulo_empresa = ModulosSistema.query.filter_by(slug='empresa').first()
-            modulo_id = modulo_empresa.id if modulo_empresa else 1  # Fallback seguro
+            modulo_id = modulo_empresa.id if modulo_empresa else 1
 
             CoreNotificacaoService.registrar_acao_e_notificar(
                 modulo_id=modulo_id,
@@ -1534,10 +1560,8 @@ def enviar_documentacao(empresa_id):
                 }
             )
 
-            flash("Documentação enviada com sucesso! Etapa registrada e encaminhada para análise.",
-                  "success")
-
             db.session.commit()
+            flash("Documentação enviada com sucesso! Etapa registrada e encaminhada para análise.", "success")
             return redirect(url_for('empresa.hub_ativacao', empresa_id=ese_empresa.id))
 
         except Exception as e:
@@ -1549,7 +1573,9 @@ def enviar_documentacao(empresa_id):
     return render_template(
         'empresa/enviar_documentacao.html',
         ese_empresa=ese_empresa,
-        processo=processo
+        processo=processo,
+        ja_homologado=ja_homologado,
+        documentos_existentes=documentos_existentes
     )
 
 @empresa_bp.route('/<int:empresa_id>/servicos/cadastrar-listagem', methods=['GET'], endpoint='cadastro_servicos_listagem')
@@ -1641,53 +1667,81 @@ def configurar_precos_listagem(empresa_id):
     )
 
 @empresa_bp.route('/<int:empresa_id>/servicos/cadastrar', methods=['POST'], endpoint='salvar_servico_empresa')
+@login_required
 def salvar_servico_empresa(empresa_id):
     """
-    Processa a inserção/associação do serviço usando a model EseServicoOferecido.
+    Processa a inserção/associação do serviço usando a model EseServicoOferecido,
+    garantindo a gravação do UUID CHAR(36) do responsável na auditoria.
     """
     termo_digitado = request.form.get('termo_servico', '').strip()
-    tempo_duracao = request.form.get('tempo_duracao', '00:30')
+    tempo_duracao = request.form.get('tempo_duracao', '00:30').strip() or '00:30'
     descricao = request.form.get('descricao_servico', '').strip()
-    usuario_atual_id = current_user.id  # ID do usuário logado realizando a operação
+
+    try:
+        tempo_intervalo = int(request.form.get('tempo_intervalo', 0) or 0)
+    except (ValueError, TypeError):
+        tempo_intervalo = 0
+
+    # Resolução estrita do UUID CHAR(36) na ModCadastroCliente via usuario_id
+    uuid_responsavel = None
+    id_atual_str = str(getattr(current_user, 'id', '') or '').strip()
+
+    if len(id_atual_str) == 36 and '-' in id_atual_str:
+        uuid_responsavel = id_atual_str
+    else:
+        cliente_mod = ModCadastroCliente.query.filter_by(usuario_id=current_user.id).first()
+
+        if not cliente_mod and getattr(current_user, 'email', None):
+            cliente_mod = ModCadastroCliente.query.filter_by(email=current_user.email).first()
+
+        if cliente_mod and getattr(cliente_mod, 'id', None):
+            uuid_responsavel = str(cliente_mod.id).strip()
 
     if not termo_digitado:
         flash("O termo do serviço não pode ser vazio.", "danger")
         return redirect(url_for('empresa.cadastro_servicos_listagem', empresa_id=empresa_id))
 
-    # 1. Busca o termo na tabela Taxonomia (Case-Insensitive)
-    taxonomia_registro = Taxonomia.query.filter(Taxonomia.nome.ilike(termo_digitado)).first()
+    try:
+        # 1. Busca o termo na tabela Taxonomia (Case-Insensitive)
+        taxonomia_registro = Taxonomia.query.filter(Taxonomia.nome.ilike(termo_digitado)).first()
 
-    # 2. Inteligência Hierárquica: Se não existir na base global, criamos e conectamos ao pai
-    if not taxonomia_registro:
-        taxonomia_registro = Taxonomia(
-            nome=termo_digitado,
-            categoria='Serviço',
-            status='homologado',  # Ajuste de acordo com sua política de moderação
-            visivel_usuario=True,
-            visivel_negocio=True
+        # 2. Inteligência Hierárquica: Se não existir na base global, criamos e conectamos ao pai
+        if not taxonomia_registro:
+            taxonomia_registro = Taxonomia(
+                nome=termo_digitado,
+                categoria='Serviço',
+                status='homologado',
+                visivel_usuario=True,
+                visivel_negocio=True
+            )
+            db.session.add(taxonomia_registro)
+            db.session.flush()
+
+            categoria_pai = Taxonomia.query.filter_by(nome="Cabeleireiro", categoria="Serviço").first()
+            if categoria_pai:
+                categoria_pai.subitens.append(taxonomia_registro)
+
+        # 3. Registra o serviço no catálogo EseServicoOferecido da empresa com UUID CHAR(36)
+        novo_servico = EseServicoOferecido(
+            empresa_id=empresa_id,
+            taxonomia_id=taxonomia_registro.id,
+            descricao_servico=descricao if descricao else None,
+            tempo_duracao=tempo_duracao,
+            tempo_intervalo=tempo_intervalo,
+            inserido_por_usuario_id=uuid_responsavel
         )
-        db.session.add(taxonomia_registro)
-        db.session.flush()  # Registra na transação para capturar o ID gerado
 
-        # Busca a categoria pai padrão da empresa (ex: "Cabeleireiro") para linkar a nova taxonomia filha
-        categoria_pai = Taxonomia.query.filter_by(nome="Cabeleireiro", categoria="Serviço").first()
-        if categoria_pai:
-            categoria_pai.subitens.append(taxonomia_registro)
+        db.session.add(novo_servico)
+        db.session.commit()
 
-    # 3. Registra o serviço no catálogo EseServicoOferecido da empresa
-    novo_servico = EseServicoOferecido(
-        empresa_id=empresa_id,
-        taxonomia_id=taxonomia_registro.id,
-        descricao_servico=descricao if descricao else None,
-        tempo_duracao=tempo_duracao,
-        inserido_por_usuario_id=usuario_atual_id
-    )
+        flash("Serviço adicionado com sucesso!", "success")
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erro ao salvar serviço para empresa #{empresa_id}: {e}")
+        flash("Não foi possível salvar o serviço. Tente novamente.", "danger")
 
-    db.session.add(novo_servico)
-    db.session.commit()
-
-    flash("Serviço adicionado com sucesso!", "success")
     return redirect(url_for('empresa.cadastro_servicos_listagem', empresa_id=empresa_id))
+
 
 @empresa_bp.route('/<int:empresa_id>/servicos/precos/salvar', methods=['POST'], endpoint='salvar_preco_servico')
 def salvar_preco_servico(empresa_id):
@@ -2300,51 +2354,180 @@ def pode_gerenciar_empresa(empresa_id):
     return nivel >= 666
 
 
-@empresa_bp.route('/<int:empresa_id>/equipe-jornadas', endpoint='equipe_jornadas')
+@empresa_bp.route('/<int:empresa_id>/equipe-jornadas', methods=['GET'], endpoint='equipe_jornadas')
 @login_required
 def equipe_jornadas(empresa_id):
     """
     Painel Central de Gestão de Equipe e Jornadas de Trabalho.
-    Lista todos os contratos de colaboradores vinculados à empresa,
-    suas escalas ativas e exceções de calendário.
+    Lista os contratos da empresa deduplicados pela identidade CHAR(36),
+    evitando duplicidade entre registro legado (ID inteiro) e UUID CHAR(36).
     """
-    # 1. Valida existência da empresa
     ese_empresa = EseEmpresa.query.get_or_404(empresa_id)
 
-    # 2. Parâmetros de busca e filtro (para busca dinâmica via Offcanvas/Query Params)
     busca = request.args.get('q', '').strip()
     status_filtro = request.args.get('status', 'ativo')
     open_offcanvas_id = request.args.get('open_offcanvas', type=int)
 
-    # 3. Query base dos contratos da empresa
-    query = ColaboradorContrato.query.filter_by(id_local=ese_empresa.id)
+    todos_contratos_empresa = ColaboradorContrato.query.filter_by(
+        id_local=ese_empresa.id
+    ).options(
+        joinedload(ColaboradorContrato.cadastro_modulo),
+        joinedload(ColaboradorContrato.cargo),
+        selectinload(ColaboradorContrato.excecoes_jornada)
+    ).all()
 
+    # 1. Mapeia IDs inteiros -> UUID CHAR(36) via ModCadastroCliente.usuario_id
+    ids_numericos = set()
+    for c in todos_contratos_empresa:
+        cad_val = str(getattr(c, 'id_cadastro_cliente', '') or '').strip()
+        if cad_val.isdigit():
+            ids_numericos.add(int(cad_val))
+
+    if getattr(current_user, 'id', None) is not None and str(current_user.id).strip().isdigit():
+        ids_numericos.add(int(str(current_user.id).strip()))
+
+    mapa_int_para_uuid = {}
+    if ids_numericos:
+        clientes_mod = ModCadastroCliente.query.filter(
+            ModCadastroCliente.usuario_id.in_(list(ids_numericos))
+        ).all()
+        for cli in clientes_mod:
+            if cli.usuario_id is not None and getattr(cli, 'id', None):
+                mapa_int_para_uuid[str(cli.usuario_id).strip()] = str(cli.id).strip()
+
+    def _eh_uuid_36(valor):
+        s = str(valor or '').strip()
+        return len(s) == 36 and '-' in s
+
+    def _chave_canonica_contrato(contrato):
+        cad_raw = str(getattr(contrato, 'id_cadastro_cliente', '') or '').strip()
+        if _eh_uuid_36(cad_raw):
+            return cad_raw
+        if cad_raw in mapa_int_para_uuid:
+            return mapa_int_para_uuid[cad_raw]
+        return f"raw:{cad_raw or contrato.id}"
+
+    # 2. Deduplica priorizando o contrato com UUID CHAR(36) em vez do ID inteiro legado
+    contratos_por_chave = {}
+    for c in todos_contratos_empresa:
+        chave = _chave_canonica_contrato(c)
+        existente = contratos_por_chave.get(chave)
+        if not existente:
+            contratos_por_chave[chave] = c
+        else:
+            existente_eh_uuid = _eh_uuid_36(getattr(existente, 'id_cadastro_cliente', ''))
+            atual_eh_uuid = _eh_uuid_36(getattr(c, 'id_cadastro_cliente', ''))
+            if atual_eh_uuid and not existente_eh_uuid:
+                contratos_por_chave[chave] = c
+
+    contratos_deduplicados = list(contratos_por_chave.values())
+
+    # 3. Resolve identidade e permissão do usuário logado
+    uuid_cliente_logado = None
+    id_atual_str = str(getattr(current_user, 'id', '') or '').strip()
+    if _eh_uuid_36(id_atual_str):
+        uuid_cliente_logado = id_atual_str
+    elif id_atual_str in mapa_int_para_uuid:
+        uuid_cliente_logado = mapa_int_para_uuid[id_atual_str]
+    else:
+        cliente_mod = ModCadastroCliente.query.filter_by(usuario_id=current_user.id).first()
+        if not cliente_mod and getattr(current_user, 'email', None):
+            cliente_mod = ModCadastroCliente.query.filter_by(email=current_user.email).first()
+        if cliente_mod and getattr(cliente_mod, 'id', None):
+            uuid_cliente_logado = str(cliente_mod.id).strip()
+
+    candidatos_id = {
+        str(val).strip()
+        for val in [
+            uuid_cliente_logado,
+            getattr(current_user, 'usuario_id', None),
+            getattr(current_user, 'id', None),
+        ]
+        if val is not None and str(val).strip()
+    }
+
+    contrato_logado = None
+    for c in contratos_deduplicados:
+        cad_id = str(getattr(c, 'id_cadastro_cliente', '') or '').strip()
+        chave_c = _chave_canonica_contrato(c)
+        if (cad_id and cad_id in candidatos_id) or (chave_c in candidatos_id):
+            contrato_logado = c
+            break
+
+    campos_dono = [
+        getattr(ese_empresa, 'proprietario_id', None),
+        getattr(ese_empresa, 'id_empreendedor', None),
+        getattr(ese_empresa, 'usuario_id', None),
+        getattr(ese_empresa, 'responsavel_id', None),
+    ]
+    ids_dono = {str(v).strip() for v in campos_dono if v is not None and str(v).strip()}
+
+    eh_dono_contrato = bool(
+        contrato_logado and (
+            (contrato_logado.papel_nivel or 0) >= 999 or
+            str(getattr(contrato_logado, 'papel_nome', '') or '').lower() in ['proprietario', 'dono', 'empreendedor']
+        )
+    )
+
+    eh_proprietario_direto = bool(
+        (ids_dono & candidatos_id) or
+        eh_dono_contrato or
+        bool(getattr(current_user, 'is_admin', False))
+    )
+
+    if eh_proprietario_direto:
+        logado_nivel = 999
+        logado_ativo = True
+    elif contrato_logado:
+        logado_nivel = contrato_logado.papel_nivel or 0
+        logado_ativo = (contrato_logado.status_profissional == 'ativo')
+    else:
+        logado_nivel = 0
+        logado_ativo = False
+
+    hoje = date.today()
+    for c in contratos_deduplicados:
+        excecoes = c.excecoes_jornada or []
+        c.em_recesso = any(
+            exc.data_inicio <= hoje <= exc.data_fim and exc.tipo in ['ferias', 'recesso', 'licenca']
+            for exc in excecoes
+        )
+        nivel_alvo = c.papel_nivel or 0
+        is_soberano = (logado_nivel >= 999)
+        is_gerente_superior = (logado_nivel >= 666 and logado_nivel > nivel_alvo)
+        c.pode_gerenciar = bool(logado_ativo and (is_soberano or is_gerente_superior))
+
+    # 4. Aplica filtros de status e busca
+    contratos = contratos_deduplicados
     if status_filtro != 'todos':
-        query = query.filter(ColaboradorContrato.status_profissional == status_filtro)
+        contratos = [c for c in contratos if c.status_profissional == status_filtro]
 
-    contratos = query.all()
-
-    # 4. Filtro em memória caso haja busca por nome (usando a property .nome)
     if busca:
         contratos = [
             c for c in contratos
             if busca.lower() in (c.nome or '').lower()
         ]
 
-    # 5. Busca escalas de trabalho de todos os contratos ativos (se a model existir)
+    contratos.sort(
+        key=lambda c: (c.papel_nivel or 0, c.nome or ''),
+        reverse=True
+    )
+
     escalas_por_contrato = {}
-    if 'EscalaTrabalho' in globals():
-        contrato_ids = [c.id for c in contratos]
+    contrato_ids = [c.id for c in contratos]
+    if contrato_ids:
         todas_escalas = EscalaTrabalhoColaborador.query.filter(
-            EscalaTrabalhoColaborador.contrato_id.in_(contrato_ids)).all()
+            EscalaTrabalhoColaborador.contrato_id.in_(contrato_ids)
+        ).all()
         for escala in todas_escalas:
             escalas_por_contrato.setdefault(escala.contrato_id, []).append(escala)
 
     return render_template(
-        'empresa/equipe_jornadas.html',  # Ou o template do seu painel de jornadas
+        'empresa/configurar_jornadas.html',
         ese_empresa=ese_empresa,
         empresa=ese_empresa,
         contratos=contratos,
+        contratos_equipe=contratos,
         escalas_por_contrato=escalas_por_contrato,
         status_filtro=status_filtro,
         busca=busca,

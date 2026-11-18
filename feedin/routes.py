@@ -3505,7 +3505,7 @@ def tratar_pendencia_core(acao_id):
     parecer = request.form.get('parecer', '').strip()
 
     try:
-        # 1. TRATAMENTO ESPECÍFICO DO MÓDULO EMPRESA (HOMOLOGAÇÃO & LICENCIAMENTO)
+        # 1. TRATAMENTO ESPECÍFICO DO MÓDULO EMPRESA (HOMOLOGAÇÃO BASE)
         if acao.modulo and acao.modulo.slug == 'empresa':
             empresa = EseEmpresa.query.get(acao.entidade_id)
             processo = None
@@ -3518,34 +3518,25 @@ def tratar_pendencia_core(acao_id):
                 if empresa:
                     empresa.status_homologacao = 'homologado'
 
-                    # 🛡️ AMARRAÇÃO SOBERANA DA LICENÇA EMPRESA PRÓ / AGENDA
                     from feedin.modules.empresa.models import ModEmpresaModulo
-                    from datetime import datetime, timezone
 
-                    mod_empresa = ModEmpresaModulo.query.filter_by(
-                        empresa_id=empresa.id
-                    ).filter(
-                        ModEmpresaModulo.modulo_slug.in_(['empresa_pro', 'empresa'])
+                    # Prevenção: remove qualquer registro de 'empresa_pro' para que o PRO
+                    # só passe a existir após a escolha explícita do usuário na Vitrine.
+                    ModEmpresaModulo.query.filter_by(
+                        empresa_id=empresa.id,
+                        modulo_slug='empresa_pro'
+                    ).delete(synchronize_session=False)
+
+                    # Atualiza apenas o registro base do módulo 'empresa', se existir.
+                    mod_base_empresa = ModEmpresaModulo.query.filter_by(
+                        empresa_id=empresa.id,
+                        modulo_slug='empresa'
                     ).first()
 
-                    agora = datetime.now(timezone.utc)
-
-                    if mod_empresa:
-                        # 🔒 PROTEÇÃO: Preserva o tipo_plano original caso não seja degustação (plano pago/direto)
-                        mod_empresa.status_homologacao = 'homologado'
-                        mod_empresa.ativo = True
-                        database.session.add(mod_empresa)
-                    else:
-                        # Se não existia o registro inicial, cria como 'degustacao' ("carona" do processo/agenda)
-                        novo_mod_pro = ModEmpresaModulo(
-                            empresa_id=empresa.id,
-                            modulo_slug='empresa_pro',
-                            ativo=True,
-                            tipo_plano='degustacao',  # Marca explicitamente como degustação/carona
-                            status_homologacao='homologado',
-                            data_contratacao=agora
-                        )
-                        database.session.add(novo_mod_pro)
+                    if mod_base_empresa:
+                        mod_base_empresa.status_homologacao = 'homologado'
+                        mod_base_empresa.ativo = True
+                        database.session.add(mod_base_empresa)
 
                 if processo:
                     processo.status_processo = 'concluido'
@@ -3580,9 +3571,34 @@ def tratar_pendencia_core(acao_id):
                             )
                             database.session.add(novo_vinculo)
 
-                titulo_notif = f"Parabéns! Empresa Homologada: {empresa.nome if empresa else ''}"
-                desc_notif = f"A documentação enviada para o estabelecimento '{empresa.nome if empresa else ''}' foi aprovada. A gestão Pró e os recursos avançados estão liberados!"
-                flash(f"Empresa '{empresa.nome if empresa else 'N/A'}' homologada e liberada com sucesso.", "success")
+                nome_emp = empresa.nome if empresa else "Estabelecimento"
+                url_dashboard = None
+                try:
+                    if empresa:
+                        base_externa = request.url_root.rstrip("/")
+                        rota_dash = url_for("empresa.dashboard_empresa", empresa_id=empresa.id)
+                        url_dashboard = f"{base_externa}{rota_dash}"
+                except Exception:
+                    url_dashboard = None
+
+                linha_link = (
+                    f"1. Acesse o painel da sua empresa: {url_dashboard}\n"
+                    if url_dashboard
+                    else "1. Acesse o painel da sua empresa no FeedIn.\n"
+                )
+
+                titulo_notif = f"Parabéns! Empresa Homologada: {nome_emp}"
+                desc_notif = (
+                    f"A documentação da empresa '{nome_emp}' foi aprovada na homologação "
+                    f"(etapa única de habilitação no Universo Empresarial FeedIn).\n\n"
+                    f"Para concluir a ativação dos recursos, siga estes passos:\n"
+                    f"{linha_link}"
+                    f"2. Clique em 'Vitrine & Extensões'.\n"
+                    f"3. Escolha a opção desejada:\n"
+                    f"   • 'Ativar Licença Empresa PRO (Teste)' — caso queira utilizar apenas os recursos avançados do perfil da empresa;\n"
+                    f"   • 'Degustar Módulo Agenda (Concede PRO)' — para preparar a empresa e iniciar os 30 dias de degustação do Módulo Agenda."
+                )
+                flash(f"Empresa '{nome_emp}' homologada com sucesso. Próximo passo do cliente: escolher extensão na Vitrine.", "success")
 
             elif decisao == 'rejeitar':
                 if not parecer:

@@ -95,6 +95,33 @@
             </div>
         </div>
 
+        {# 🎯 BANNER DE PRÓXIMO PASSO: EMPRESA HOMOLOGADA AGUARDANDO ESCOLHA NA VITRINE #}
+        {% if liberado_fase_2 and not tem_acesso_pro %}
+        <div class="mb-3 p-3 bg-success-subtle border border-success rounded-4 shadow-sm text-start">
+            <div class="d-flex align-items-start gap-2">
+                <div class="p-2 bg-success text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 34px; height: 34px;">
+                    <i class="bi bi-unlock-fill fs-6"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold m-0 text-success-emphasis" style="font-size: 0.88rem;">
+                        Empresa Homologada! Escolha a extensão para liberar os módulos
+                    </h6>
+                    <p class="m-0 mt-1 text-dark" style="font-size: 0.75rem; line-height: 1.35;">
+                        A base da sua empresa já foi aprovada. Agora vá em <strong>Vitrine &amp; Extensões</strong> e selecione:
+                        <br>• <strong>Ativar Licença Empresa PRO (Teste)</strong> — para recursos avançados do perfil da empresa;
+                        <br>• <strong>Degustar Módulo Agenda (Concede PRO)</strong> — para preparar a empresa e iniciar os 30 dias gratuitos da Agenda.
+                    </p>
+                    <div class="mt-2">
+                        <a href="{{ url_for('empresa.menu_modulos_vitrine', empresa_id=ese_empresa.id) }}"
+                           class="btn btn-sm btn-success rounded-pill px-3 fw-bold shadow-sm transition-all" style="font-size: 0.74rem;">
+                            Ir para Vitrine &amp; Extensões <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {# 🔔 BANNER DE ALERTA: NOVO CANDIDATO COM FICHA ACEITA #}
         {% if total_convites_aceitos and total_convites_aceitos > 0 %}
         <div class="mb-4 p-3 bg-primary-subtle border border-primary-subtle rounded-4 shadow-sm flex-column gap-2 text-primary-emphasis">
@@ -197,9 +224,34 @@
                 </a>
             </div>
 
-            {# CARD 4: DOCUMENTAÇÃO - O Marco Final da Fase 1 #}
+{# CARD 4: DOCUMENTAÇÃO - O Marco Final da Fase 1 #}
+            {% set status_doc_atual = (ese_empresa.status_homologacao or '') | lower %}
+            {% set is_doc_homologado = empresa_homologada | default(false) or (status_modulo_doc | default('') == 'sucesso') or (status_doc_atual in ['homologado', 'verificado', 'aprovado', 'concluido']) %}
+            {% set is_doc_em_analise = (status_modulo_doc | default('') == 'em_analise') or (status_doc_atual in ['em_analise', 'aguardando_auditoria', 'aguardando_analise']) %}
+
             <div class="col-6">
-                {% if ese_empresa.status_homologacao == 'em_analise' %}
+                {% if is_doc_homologado %}
+                    <a href="{{ url_for('empresa.enviar_documentacao', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-success-subtle border-start-4 border-start-success">
+                        <div class="d-flex flex-column justify-content-between h-100">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div class="p-2 bg-success-subtle text-success rounded-3">
+                                        <i class="bi bi-patch-check-fill fs-5 d-block"></i>
+                                    </div>
+                                    <span class="badge bg-success text-white rounded-pill fw-bold" style="font-size: 0.55rem;">Homologado</span>
+                                </div>
+                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Documentação</h6>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                                    <span class="text-success fw-semibold d-block mb-1"><i class="bi bi-check-circle-fill"></i> Etapa Concluída</span>
+                                    Documentação enviada e homologada pela auditoria.
+                                </p>
+                            </div>
+                            <div class="text-end mt-2">
+                                <span class="text-success small fw-semibold" style="font-size: 0.65rem;">Consultar Comprovantes <i class="bi bi-eye"></i></span>
+                            </div>
+                        </div>
+                    </a>
+                {% elif is_doc_em_analise %}
                     <div class="card h-100 shadow-sm rounded-4 p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-info">
                         <div class="d-flex flex-column justify-content-between h-100">
                             <div>
@@ -217,24 +269,6 @@
                             </div>
                         </div>
                     </div>
-                {% elif ese_empresa.status_homologacao == 'homologado' %}
-                    <a href="{{ url_for('empresa.enviar_documentacao', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-secondary-subtle border-start-4 border-start-success">
-                        <div class="d-flex flex-column justify-content-between h-100">
-                            <div>
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div class="p-2 bg-success-subtle text-success rounded-3">
-                                        <i class="bi bi-patch-check fs-5 d-block"></i>
-                                    </div>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill fw-bold" style="font-size: 0.55rem;">Validado</span>
-                                </div>
-                                <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Documentação</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Comprovantes jurídicos homologados com sucesso.</p>
-                            </div>
-                            <div class="text-end mt-2">
-                                <span class="text-success small fw-semibold" style="font-size: 0.65rem;">Visualizar <i class="bi bi-arrow-right"></i></span>
-                            </div>
-                        </div>
-                    </a>
                 {% else %}
                     <a href="{{ url_for('empresa.enviar_documentacao', empresa_id=ese_empresa.id) }}" class="card h-100 shadow-sm rounded-4 text-decoration-none transition-all p-3 bg-white text-dark border border-warning border-start-4 border-start-warning shadow-sm">
                         <div class="d-flex flex-column justify-content-between h-100">
@@ -294,10 +328,16 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% if liberado_fase_2 %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill fw-bold" style="font-size: 0.55rem;">Ativar na Vitrine</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% endif %}
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Serviços & Preços</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Disponível após aprovação da documentação.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                                    {% if liberado_fase_2 %}Ative Empresa PRO ou Agenda na Vitrine para liberar.{% else %}Disponível após aprovação da documentação.{% endif %}
+                                </p>
                             </div>
                             <div class="text-end mt-2">
                                 <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>
@@ -353,10 +393,16 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% if liberado_fase_2 %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill fw-bold" style="font-size: 0.55rem;">Ativar na Vitrine</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% endif %}
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Equipe & Jornadas</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Escalas, horários e membros da equipe.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                                    {% if liberado_fase_2 %}Ative Empresa PRO ou Agenda na Vitrine para liberar.{% else %}Escalas, horários e membros da equipe.{% endif %}
+                                </p>
                             </div>
                             <div class="text-end mt-2">
                                 <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>
@@ -398,10 +444,16 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% if liberado_fase_2 %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill fw-bold" style="font-size: 0.55rem;">Ativar na Vitrine</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% endif %}
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Estoque & Compras</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Controle de insumos e reposição de produtos do estabelecimento.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                                    {% if liberado_fase_2 %}Ative Empresa PRO ou Agenda na Vitrine para liberar.{% else %}Controle de insumos e reposição de produtos do estabelecimento.{% endif %}
+                                </p>
                             </div>
                             <div class="text-end mt-2">
                                 <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>
@@ -443,10 +495,16 @@
                                     <div class="p-2 bg-secondary-subtle text-secondary rounded-3">
                                         <i class="bi bi-lock-fill fs-5 d-block"></i>
                                     </div>
-                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% if liberado_fase_2 %}
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill fw-bold" style="font-size: 0.55rem;">Ativar na Vitrine</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary rounded-pill fw-bold" style="font-size: 0.55rem;">Aguardando Homologação</span>
+                                    {% endif %}
                                 </div>
                                 <h6 class="fw-bold m-0 text-dark" style="font-size: 0.85rem;">Relatórios & Pesquisas</h6>
-                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">Fechamento gerencial diário e inteligência de mercado.</p>
+                                <p class="text-muted m-0 mt-1" style="font-size: 0.7rem; line-height: 1.2;">
+                                    {% if liberado_fase_2 %}Ative Empresa PRO ou Agenda na Vitrine para liberar.{% else %}Fechamento gerencial diário e inteligência de mercado.{% endif %}
+                                </p>
                             </div>
                             <div class="text-end mt-2">
                                 <span class="text-muted small fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock"></i> Bloqueado</span>

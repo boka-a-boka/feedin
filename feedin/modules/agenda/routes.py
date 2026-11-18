@@ -1152,17 +1152,97 @@ def painel_agenda(empresa_id=None):
         dias_restantes = (data_vencimento - agora_utc).days
 
     # 2. Checklist de Prontidão
-    tem_servicos = EseServicoOferecido.query.filter_by(empresa_id=ese_empresa.id).count() > 0
-    tem_profissionais = total_profissionais > 0
-    tem_horarios = True
+    tem_servicos = EseServicoOferecido.query.filter_by(
+        empresa_id=ese_empresa.id
+    ).count() > 0
+
+    horarios_empresa = EseHorarioFuncionamento.query.filter(
+        EseHorarioFuncionamento.empresa_id == ese_empresa.id,
+        EseHorarioFuncionamento.horario_abertura.isnot(None),
+        EseHorarioFuncionamento.horario_fechamento.isnot(None)
+    ).all()
+
+    tem_horarios = len(horarios_empresa) > 0
+
+    # Mapa de janelas da empresa por dia_semana: {dia_semana: [(abertura, fechamento), ...]}
+    faixas_por_dia = {}
+    for h in horarios_empresa:
+        faixas_por_dia.setdefault(h.dia_semana, []).append(
+            (h.horario_abertura, h.horario_fechamento)
+        )
+
+    # Busca contratos ativos com escala ativa e ao menos uma habilidade/serviço vinculado
+    candidatos_profissionais = (
+        db.session.query(ColaboradorContrato, EscalaTrabalhoColaborador)
+        .join(
+            EscalaTrabalhoColaborador,
+            EscalaTrabalhoColaborador.contrato_id == ColaboradorContrato.id
+        )
+        .join(
+            EseColaboradorServicoHabilidade,
+            EseColaboradorServicoHabilidade.contrato_id == ColaboradorContrato.id
+        )
+        .filter(
+            ColaboradorContrato.id_local == ese_empresa.id,
+            ColaboradorContrato.status_profissional == 'ativo',
+            ColaboradorContrato.data_desligamento.is_(None),
+            EscalaTrabalhoColaborador.ativo.is_(True)
+        )
+        .all()
+    )
+
+    tem_profissionais_configurados = False
+    for _contrato, escala in candidatos_profissionais:
+        # Se houver janela definida na escala, valida se está contida na grade da empresa
+        if escala.inicio_expediente and escala.fim_expediente:
+            if escala.dia_semana is not None:
+                faixas_dia = faixas_por_dia.get(escala.dia_semana, [])
+                dentro_do_expediente = any(
+                    abertura <= escala.inicio_expediente and escala.fim_expediente <= fechamento
+                    for abertura, fechamento in faixas_dia
+                )
+                if not dentro_do_expediente:
+                    continue
+            tem_profissionais_configurados = True
+            break
+
+    servicos_oferecidos = EseServicoOferecido.query.filter_by(empresa_id=empresa_id).all()
+
+    tem_servicos_com_preco = False
+    for srv in servicos_oferecidos:
+        preco_registro = EseServicoPreco.query.filter_by(
+            empresa_id=empresa_id,
+            taxonomia_id=srv.taxonomia_id
+        ).first()
+
+        valor_preco = 0.0
+        if preco_registro and preco_registro.novo_valor is not None:
+            try:
+                raw_val = preco_registro.novo_valor
+                valor_preco = float(str(raw_val).replace(',', '.').strip())
+            except (ValueError, TypeError):
+                valor_preco = 0.0
+
+        if valor_preco > 0:
+            tem_servicos_com_preco = True
+            break
 
     checklist = [
-        {"item": "Cadastro de Serviços e Preços", "atendido": tem_servicos,
-         "detalhe": "Necessário para os clientes escolherem o atendimento."},
-        {"item": "Vínculo de Profissionais na Equipe", "atendido": tem_profissionais,
-         "detalhe": "Necessário para alocação de horários."},
-        {"item": "Expediente e Horários de Atendimento", "atendido": tem_horarios,
-         "detalhe": "Parâmetros de abertura e fechamento configurados."}
+        {
+            "item": "Cadastro de Serviços e Preços",
+            "atendido": tem_servicos,
+            "detalhe": "Necessário para os clientes escolherem o atendimento."
+        },
+        {
+            "item": "Vínculo de Profissionais na Equipe",
+            "atendido": tem_profissionais_configurados,
+            "detalhe": "Exige escala dentro do expediente da empresa e serviços habilitados."
+        },
+        {
+            "item": "Expediente e Horários de Atendimento",
+            "atendido": tem_horarios,
+            "detalhe": "Grade de funcionamento do estabelecimento configurada."
+        }
     ]
 
     pronto_para_uso = all(c['atendido'] for c in checklist)

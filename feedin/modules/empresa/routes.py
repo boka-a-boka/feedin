@@ -2033,16 +2033,21 @@ def painel_configuracao_empresa():
     🎛️ PAINEL GERENCIAL E CONTROLE DE CONFIGURAÇÃO DA EMPRESA
     """
     modulo_info = ModulosSistema.query.filter_by(slug='empresa', ativo=True).first()
+    user_id_str = str(getattr(current_user, 'id', '')).strip()
 
-    # 1. 🛰️ BUSCA PELO FATO GERADOR (A ORIGEM DA VERDADE)
+    empresa_id_param = request.args.get('empresa_id', type=int) or session.get('empresa_id_atual')
+
+    # 1. Busca o último claim do usuário (sem exigir apenas 'em_andamento' após homologação)
     claim = EseProcessoClaim.query.filter_by(
-        usuario_solicitante_id=current_user.id,
-        status_processo='em_andamento'
+        usuario_solicitante_id=current_user.id
     ).order_by(EseProcessoClaim.id.desc()).first()
 
-    # 2. LOCALIZAÇÃO DA EMPRESA VIA VÍNCULO GEOGRÁFICO DO CLAIM
+    # 2. Localiza a empresa priorizando o contexto solicitado/em sessão, depois claim, depois propriedade
     empresa = None
-    if claim:
+    if empresa_id_param:
+        empresa = EseEmpresa.query.get(empresa_id_param)
+
+    if not empresa and claim and claim.local_id:
         empresa = EseEmpresa.query.filter_by(local_id=claim.local_id).first()
 
     if not empresa:
@@ -2052,9 +2057,19 @@ def painel_configuracao_empresa():
         flash("Nenhum processo de homologação ou empresa ativa cadastrada para sua conta.", "warning")
         return redirect(url_for('dashboard'))
 
-    if empresa.proprietario_id != current_user.id:
-        print(
-            f"🚨 [ALERTA DE SEGURANÇA] Usuário {current_user.id} tentou inspecionar a Empresa ID {empresa.id} (Dono: {empresa.proprietario_id})")
+    dono_id_str = str(getattr(empresa, 'proprietario_id', '') or '').strip()
+    claim_solicitante_str = str(getattr(claim, 'usuario_solicitante_id', '') or '').strip() if claim else ''
+
+    autorizado = (
+        (bool(dono_id_str) and dono_id_str == user_id_str)
+        or (bool(claim_solicitante_str) and claim_solicitante_str == user_id_str and claim.local_id == empresa.local_id)
+        or bool(getattr(current_user, 'is_admin', False))
+    )
+
+    if not autorizado:
+        current_app.logger.warning(
+            f"🚨 [ALERTA DE SEGURANÇA] Usuário {user_id_str} tentou inspecionar a Empresa ID {empresa.id} (Dono: {dono_id_str})"
+        )
         db.session.rollback()
         flash("🔒 Violação de Consistência Identitária: Acesso negado a este painel de configuração.", "danger")
         return redirect(url_for('dashboard'))
@@ -2065,14 +2080,13 @@ def painel_configuracao_empresa():
     session['empresa_id_atual'] = empresa.id
     session['local_id_atual'] = empresa.local_id
 
-    # Busca os dados de auditoria do motor de compliance
     compliance = ModHomologacaoEmpresa.query.filter_by(id_local=empresa.local_id).first()
 
-    # 🔑 RESGATE DA ADESÃO REAL DO MÓDULO (Para exibir limites e plano corretos)
-    adesao_modulo = ModEmpresaModulo.query.filter_by(
-        empresa_id=empresa.id,
-        modulo_slug='empresa'
-    ).first()
+    adesao_modulo = (
+        ModEmpresaModulo.query.filter_by(empresa_id=empresa.id, modulo_slug='agenda', ativo=True).first()
+        or ModEmpresaModulo.query.filter_by(empresa_id=empresa.id, modulo_slug='empresa_pro', ativo=True).first()
+        or ModEmpresaModulo.query.filter_by(empresa_id=empresa.id, modulo_slug='empresa').first()
+    )
 
     return render_template(
         'empresa/painel_gerencial.html',
@@ -2080,7 +2094,7 @@ def painel_configuracao_empresa():
         claim=claim,
         compliance=compliance,
         modulos_sistema=modulo_info,
-        adesao_modulo=adesao_modulo  # 👈 Passado ao Jinja2 (contém tipo_plano, limites, etc.)
+        adesao_modulo=adesao_modulo
     )
 
 
@@ -2862,15 +2876,16 @@ def hub_ativacao(empresa_id):
 
     # 2. BUSCA SEGURA DO PROCESSO DE CLAIM
     processo = EseProcessoClaim.query.filter_by(local_id=empresa_id_soberano).order_by(
-        EseProcessoClaim.id.desc()).first()
+        EseProcessoClaim.id.desc()
+    ).first()
 
     eh_dono_claim = processo and (
-            str(processo.usuario_solicitante_id) == str(user_core_id) or
-            str(processo.usuario_solicitante_id) == user_uuid
+        str(processo.usuario_solicitante_id) == str(user_core_id) or
+        str(processo.usuario_solicitante_id) == user_uuid
     )
     eh_dono_direto = (
-            str(ese_empresa.proprietario_id) == str(user_core_id) or
-            str(ese_empresa.proprietario_id) == user_uuid
+        str(ese_empresa.proprietario_id) == str(user_core_id) or
+        str(ese_empresa.proprietario_id) == user_uuid
     )
 
     if not (eh_dono_claim or eh_dono_direto or getattr(current_user, 'is_admin', False)):
@@ -2881,7 +2896,6 @@ def hub_ativacao(empresa_id):
         return redirect(url_for('empresa.dashboard_empresa'))
 
     # 🛡️ VERIFICAÇÃO BLINDADA DE ACESSO PRO (Consulta direta ao banco + model)
-    from feedin.modules.empresa.models import ModEmpresaModulo
     modulo_pro_db = ModEmpresaModulo.query.filter_by(
         empresa_id=empresa_id_soberano,
         ativo=True
@@ -2916,13 +2930,16 @@ def hub_ativacao(empresa_id):
 
     # Horários de Funcionamento
     tem_horarios = db.session.query(EseHorarioFuncionamento.id).filter_by(
-        empresa_id=empresa_id_soberano).first() is not None
+        empresa_id=empresa_id_soberano
+    ).first() is not None
 
     # Serviços & Preços
     tem_servicos = db.session.query(EseServicoOferecido.id).filter_by(
-        empresa_id=empresa_id_soberano).first() is not None
+        empresa_id=empresa_id_soberano
+    ).first() is not None
     tem_precos = db.session.query(EseServicoPreco.id).filter_by(
-        empresa_id=empresa_id_soberano).first() is not None
+        empresa_id=empresa_id_soberano
+    ).first() is not None
     modulo_servicos_concluido = tem_servicos and tem_precos
 
     # Equipes e Jornadas
@@ -2944,12 +2961,18 @@ def hub_ativacao(empresa_id):
     modulo_equipe_concluido = tem_cargo_e_habilidade and tem_escala
 
     # 4. CÁLCULO DE PROGRESSO (FASE 1 vs. FASE 2)
-    empresa_homologada = (ese_empresa.status_homologacao == 'homologado')
+    status_doc = (getattr(ese_empresa, 'status_homologacao', '') or '').strip().lower()
+    status_proc = (getattr(processo, 'status_processo', '') or '').strip().lower() if processo else ''
+
+    empresa_homologada = (
+        status_doc in {'homologado', 'verificado', 'aprovado', 'concluido'} or
+        status_proc in {'homologado', 'aprovado', 'concluido'}
+    )
 
     # 🔑 LIBERAÇÃO BLINDADA DA FASE 2: Homologado OU Beta/Provisório com acesso PRO
     liberado_fase_2 = bool(
         empresa_homologada or
-        (ese_empresa.status_homologacao in ['provisorio_beta', 'pendente'] and tem_acesso_pro) or
+        (status_doc in {'provisorio_beta', 'pendente'} and tem_acesso_pro) or
         tem_acesso_pro
     )
 
@@ -2963,13 +2986,24 @@ def hub_ativacao(empresa_id):
         modulos_concluidos += 1
 
     # 2. Compliance Documental
-    status_doc = ese_empresa.status_homologacao
-    if status_doc == 'homologado':
+    pasta_auditoria = os.path.join(
+        EMPRESA_UPLOAD_BASE_DIR, "empresas", str(empresa_id_soberano), "documentos_auditoria"
+    )
+    tem_doc_enviado = False
+    if os.path.isdir(pasta_auditoria):
+        tem_doc_enviado = any(
+            not nome.startswith('temp_') and os.path.isfile(os.path.join(pasta_auditoria, nome))
+            for nome in os.listdir(pasta_auditoria)
+        )
+
+    if empresa_homologada:
         modulos_concluidos += 1
         status_modulo_doc = 'sucesso'
     elif status_doc == 'pendente_correcao':
         status_modulo_doc = 'alerta_rejeitado'
-    elif status_doc == 'em_analise':
+    elif status_doc in {'em_analise', 'aguardando_auditoria', 'aguardando_analise'} or status_proc == 'aguardando_analise':
+        status_modulo_doc = 'em_analise'
+    elif tem_doc_enviado:
         status_modulo_doc = 'em_analise'
     else:
         status_modulo_doc = 'pendente'
@@ -3008,12 +3042,12 @@ def hub_ativacao(empresa_id):
     # Cálculo final padrão da porcentagem
     porcentagem_progresso = int(round((modulos_concluidos / total_modulos) * 100)) if total_modulos > 0 else 100
 
-    # 🎨 O "Charme" de UX (Feedback visual de progresso iminente / exigência):
-    if not liberado_fase_2:
-        if status_doc == 'em_analise':
-            porcentagem_progresso = 90  # Quase lá, aguardando staff
-        elif status_doc == 'pendente_correcao':
-            porcentagem_progresso = 75  # Exigência ativa
+    # Feedback visual quando ainda não liberou Fase 2 e não está homologado
+    if not liberado_fase_2 and not empresa_homologada:
+        if status_modulo_doc == 'em_analise':
+            porcentagem_progresso = 90
+        elif status_modulo_doc == 'alerta_rejeitado':
+            porcentagem_progresso = 75
 
     # 5. RENDERIZAÇÃO DO HUB DE ONBOARDING
     return render_template(
