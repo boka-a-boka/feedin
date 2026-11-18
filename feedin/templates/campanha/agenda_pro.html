@@ -1,0 +1,582 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    :root {
+        --slate-dark: #0b1329;
+        --slate-navy: #0f172a;
+        --slate-card: rgba(30, 41, 59, 0.45);
+        --neon-mint: #2dd4bf;
+        --neon-mint-hover: #14b8a6;
+        --accent-rose: #f43f5e;
+        --accent-rose-hover: #e11d48;
+        --text-muted-pira: #94a3b8;
+    }
+
+    .campanha-body {
+        background-color: var(--slate-dark);
+        color: #f8fafc;
+        overflow-x: hidden;
+        position: relative;
+        min-height: 100vh;
+    }
+
+    .bg-glow {
+        position: absolute;
+        width: 580px;
+        height: 580px;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.12;
+    }
+
+    .glow-mint {
+        background: radial-gradient(circle, var(--neon-mint) 0%, transparent 70%);
+        top: 2%;
+        left: -12%;
+    }
+
+    .glow-rose {
+        background: radial-gradient(circle, var(--accent-rose) 0%, transparent 70%);
+        bottom: 12%;
+        right: -12%;
+    }
+
+    .glass-panel-pira {
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.25rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-panel-pira:hover {
+        border-color: rgba(45, 212, 191, 0.28);
+        box-shadow: 0 10px 30px rgba(45, 212, 191, 0.06);
+    }
+
+    .glass-panel-mint {
+        background: rgba(15, 23, 42, 0.62);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(45, 212, 191, 0.25);
+        border-radius: 1.25rem;
+        transition: all 0.3s ease;
+    }
+
+    .glass-panel-mint:hover {
+        transform: translateY(-4px);
+        border-color: var(--neon-mint);
+        box-shadow: 0 10px 28px rgba(45, 212, 191, 0.16);
+    }
+
+    .glass-panel-rose {
+        background: rgba(15, 23, 42, 0.62);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(244, 63, 94, 0.22);
+        border-radius: 1.25rem;
+        transition: all 0.3s ease;
+    }
+
+    .glass-panel-rose:hover {
+        transform: translateY(-4px);
+        border-color: var(--accent-rose);
+        box-shadow: 0 10px 28px rgba(244, 63, 94, 0.14);
+    }
+
+    .btn-neon-mint {
+        background-color: var(--neon-mint);
+        border: none;
+        color: #07101f;
+        font-weight: 700;
+        transition: all 0.25s ease;
+    }
+
+    .btn-neon-mint:hover {
+        background-color: var(--neon-mint-hover);
+        color: #07101f;
+        transform: translateY(-1px);
+        box-shadow: 0 8px 22px rgba(45, 212, 191, 0.28);
+    }
+
+    .step-badge {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        background: rgba(45, 212, 191, 0.14);
+        color: var(--neon-mint);
+        border: 1px solid rgba(45, 212, 191, 0.35);
+        flex-shrink: 0;
+    }
+
+    .ui-pill {
+        display: inline-block;
+        padding: 0.12rem 0.55rem;
+        border-radius: 0.45rem;
+        background: rgba(45, 212, 191, 0.12);
+        border: 1px solid rgba(45, 212, 191, 0.3);
+        color: var(--neon-mint);
+        font-weight: 600;
+        font-size: 0.85em;
+    }
+
+    .checklist-glass {
+        background: rgba(251, 191, 36, 0.06);
+        border: 1px solid rgba(251, 191, 36, 0.25);
+        border-left: 4px solid #fbbf24;
+        border-radius: 1.15rem;
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+</style>
+
+{% set core_url = "https://feedin.boka-a-boka.com.br" %}
+{% set vagas_ocupadas = total_agenda_ativas | default(0) %}
+{% set total_lote_1 = limite_lote_1 | default(20) %}
+{% set vagas_livres = vagas_restantes_lote_1 | default(20) %}
+
+<div class="container mt-3">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show rounded-4 glass-panel-pira text-white" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+</div>
+
+<div class="campanha-body py-5">
+    <div class="bg-glow glow-mint"></div>
+    <div class="bg-glow glow-rose"></div>
+
+    <!-- HERO / CABEÇALHO DA CAMPANHA -->
+    <section class="position-relative pb-5">
+        <div class="container">
+            <div class="glass-panel-pira p-4 p-lg-5 position-relative overflow-hidden">
+                <div class="row align-items-center g-4">
+                    <div class="col-lg-8 text-start">
+                        <span class="badge rounded-pill px-3 py-2 mb-3 text-uppercase"
+                              style="background: rgba(45, 212, 191, 0.12); color: var(--neon-mint); border: 1px solid rgba(45, 212, 191, 0.3); font-size: 0.72rem; letter-spacing: 1px;">
+                            Lote de Abertura • Piracicaba e Região
+                        </span>
+                        <h1 class="display-5 fw-bold text-white mb-3" style="letter-spacing: -0.8px;">
+                            Agendamento direto sem instalar nada e sem perder tempo no WhatsApp.
+                        </h1>
+                        <p class="lead mb-4" style="color: var(--text-muted-pira);">
+                            Com o <strong class="text-white">FeedIn</strong>, você coloca um link direto nas suas redes sociais, WhatsApp ou Perfil do Google para seus clientes agendarem com <strong class="text-white">transparência total</strong> e <strong class="text-white">relatórios descomplicados</strong>.
+                        </p>
+                        <div class="d-flex flex-column flex-sm-row gap-3">
+                            <a href="{{ core_url }}" target="_blank" rel="noopener noreferrer"
+                               class="btn btn-neon-mint px-4 py-3 rounded-3">
+                                Abrir o Core em nova aba <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                            <a href="#como-comecar"
+                               class="btn btn-outline-light px-4 py-3 rounded-3 fw-semibold">
+                                Ver passo a passo para ativar
+                            </a>
+                        </div>
+                        <p class="small mt-3 mb-0" style="color: var(--text-muted-pira);">
+                            Degustação gratuita de 30 dias nos módulos <strong class="text-white">Empresa + Agenda</strong> • Mantenha esta aba aberta para seguir o roteiro.
+                        </p>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="p-4 rounded-4 h-100 d-flex flex-column justify-content-between"
+                             style="background: rgba(11, 19, 41, 0.78); border: 1px solid rgba(45, 212, 191, 0.3);">
+                            <div>
+                                <!-- Contador em Destaque -->
+                                <div class="p-3 rounded-3 mb-3 text-center"
+                                     style="background: rgba(45, 212, 191, 0.08); border: 1px solid rgba(45, 212, 191, 0.25);">
+                                    <span class="small text-uppercase fw-bold d-block mb-1"
+                                          style="color: var(--neon-mint); letter-spacing: 1px; font-size: 0.7rem;">
+                                        Andamento do Lote 1 ({{ total_lote_1 }} vagas)
+                                    </span>
+                                    <div class="d-flex justify-content-center align-items-baseline gap-2">
+                                        <span class="display-4 fw-bold text-white" style="line-height: 1;">
+                                            {{ vagas_ocupadas }}
+                                        </span>
+                                        <span class="fs-5 fw-semibold" style="color: var(--text-muted-pira);">
+                                            / {{ total_lote_1 }}
+                                        </span>
+                                    </div>
+                                    <div class="small text-white mt-1">
+                                        {% if vagas_ocupadas == 1 %}
+                                            <strong>1 empresa ativa</strong> na Agenda
+                                        {% else %}
+                                            <strong>{{ vagas_ocupadas }} empresas ativas</strong> na Agenda
+                                        {% endif %}
+                                    </div>
+
+                                    {% set percentual_lote = ((vagas_ocupadas / total_lote_1) * 100) | round | int %}
+                                    {% if percentual_lote > 100 %}{% set percentual_lote = 100 %}{% endif %}
+                                    <div class="progress mt-2" style="height: 6px; background-color: rgba(255,255,255,0.08);">
+                                        <div class="progress-bar" role="progressbar"
+                                             style="width: {{ percentual_lote }}%; background-color: var(--neon-mint);"
+                                             aria-valuenow="{{ vagas_ocupadas }}" aria-valuemin="0" aria-valuemax="{{ total_lote_1 }}">
+                                        </div>
+                                    </div>
+
+                                    <div class="small mt-2 fw-semibold" style="color: var(--neon-mint);">
+                                        {% if vagas_livres > 0 %}
+                                            Restam <strong>{{ vagas_livres }}</strong> {{ 'vaga' if vagas_livres == 1 else 'vagas' }} com 50% OFF
+                                        {% else %}
+                                            Lote 1 encerrado • Consulte condições do Lote 2
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <h2 class="h5 fw-bold text-white mt-2 mb-1">Agenda Pró — 50% OFF</h2>
+                                <p class="small mb-3" style="color: var(--text-muted-pira);">
+                                    Condição vitalícia para quem testar nos 30 dias gratuitos e seguir no plano dentro do Lote 1.
+                                </p>
+                                <div class="mb-3">
+                                    <span class="text-decoration-line-through small" style="color: var(--text-muted-pira);">De R$ 150,00/mês</span>
+                                    <div class="h2 fw-bold text-white mb-0">
+                                        R$ 75<span class="fs-6 fw-normal" style="color: var(--neon-mint);">,00 / mês</span>
+                                    </div>
+                                    <div class="small fw-semibold mt-1" style="color: var(--neon-mint);">
+                                        Até 6 colaboradores • Clientes ilimitados
+                                    </div>
+                                </div>
+                            </div>
+                            <a href="#planos" class="btn btn-sm btn-outline-info w-100 py-2 rounded-3"
+                               style="border-color: rgba(45, 212, 191, 0.45); color: var(--neon-mint);">
+                                Comparar Degustação e Lotes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- BENEFÍCIOS PRÁTICOS -->
+    <section id="beneficios" class="py-5 position-relative">
+        <div class="container">
+            <div class="mb-5 text-start">
+                <span class="text-uppercase small fw-bold" style="color: var(--neon-mint); letter-spacing: 1.5px;">
+                    Por que funciona no dia a dia
+                </span>
+                <h2 class="display-6 fw-bold text-white mt-1">Simplicidade real para você e para o cliente</h2>
+                <p class="mb-0" style="color: var(--text-muted-pira); max-width: 720px;">
+                    Menos ida e volta de mensagem para combinar horário e mais clareza ponta a ponta no atendimento.
+                </p>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-pira p-4 h-100 text-start">
+                        <div class="step-badge mb-3"><i class="bi bi-phone"></i></div>
+                        <h3 class="h5 fw-bold text-white">Zero instalação</h3>
+                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                            Funciona direto no navegador do celular ou computador. Ninguém precisa baixar aplicativo para agendar ou acompanhar.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-pira p-4 h-100 text-start">
+                        <div class="step-badge mb-3"><i class="bi bi-link-45deg"></i></div>
+                        <h3 class="h5 fw-bold text-white">Link direto nas redes sociais</h3>
+                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                            Deixe seu link na bio, no WhatsApp ou no Google e permita que o cliente marque horário sem depender de resposta manual.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-pira p-4 h-100 text-start">
+                        <div class="step-badge mb-3"><i class="bi bi-lightning-charge"></i></div>
+                        <h3 class="h5 fw-bold text-white">Facilidade de uso</h3>
+                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                            Fluxo direto e intuitivo, pensado para quem está na correria do atendimento e não quer perder tempo com telas complexas.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="glass-panel-pira p-4 h-100 text-start">
+                        <div class="step-badge mb-3"><i class="bi bi-shield-check"></i></div>
+                        <h3 class="h5 fw-bold text-white">Transparência total de ponta a ponta</h3>
+                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                            Estabelecimento e cliente visualizam horários, confirmações e histórico com clareza, reduzindo furos e mal-entendidos.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="glass-panel-pira p-4 h-100 text-start">
+                        <div class="step-badge mb-3"><i class="bi bi-graph-up-arrow"></i></div>
+                        <h3 class="h5 fw-bold text-white">Relatórios descomplicados</h3>
+                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                            Leitura direta para o empreendedor acompanhar o movimento e para o cliente gerenciar seus agendamentos sem complicação.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PREPARAÇÃO E ROTEIRO DETALHADO DO CLAIM -->
+    <section id="como-comecar" class="py-5 position-relative">
+        <div class="container">
+            <div class="row g-4 align-items-stretch">
+                <!-- Coluna Esquerda: Documentos necessários -->
+                <div class="col-lg-5">
+                    <div class="checklist-glass p-4 p-lg-5 h-100 text-start d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="badge rounded-pill px-3 py-1 mb-3 text-uppercase"
+                                  style="background: rgba(251, 191, 36, 0.15); color: #fcd34d; font-size: 0.7rem;">
+                                1º • Preparação rápida
+                            </span>
+                            <h2 class="h3 fw-bold text-white mb-2">Separe 3 arquivos no seu aparelho</h2>
+                            <p class="small mb-4" style="color: var(--text-muted-pira);">
+                                Antes de abrir o Core, deixe estes 3 itens fáceis no celular ou computador para concluir o <strong class="text-white">Claim</strong> sem interrupções:
+                            </p>
+
+                            <ul class="list-unstyled d-flex flex-column gap-3 mb-0">
+                                <li class="p-3 rounded-3" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06);">
+                                    <strong class="text-white d-block"><i class="bi bi-image me-2 text-warning"></i>Logomarca da empresa (JPG ou PNG)</strong>
+                                    <span class="small" style="color: var(--text-muted-pira);">
+                                        Imagem nos formatos JPG ou PNG para identificar seu negócio.
+                                    </span>
+                                </li>
+                                <li class="p-3 rounded-3" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06);">
+                                    <strong class="text-white d-block"><i class="bi bi-house-check me-2 text-warning"></i>Comprovante de endereço em nome da empresa</strong>
+                                    <span class="small" style="color: var(--text-muted-pira);">
+                                        Conta ou documento vinculado ao endereço do estabelecimento.
+                                    </span>
+                                </li>
+                                <li class="p-3 rounded-3" style="background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255,255,255,0.06);">
+                                    <strong class="text-white d-block"><i class="bi bi-file-earmark-text me-2 text-warning"></i>Documento oficial da Receita Federal</strong>
+                                    <span class="small" style="color: var(--text-muted-pira);">
+                                        Comprovante cadastral que garante a segurança e a titularidade legítima do negócio.
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-top border-white-10">
+                            <p class="small mb-0" style="color: #fde68a;">
+                                <i class="bi bi-info-circle me-1"></i> Dica: mantenha esta página aberta enquanto executa os passos na nova aba do Core.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna Direita: Guia Passo a Passo dentro do Core -->
+                <div class="col-lg-7">
+                    <div class="glass-panel-pira p-4 p-lg-5 h-100 text-start d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-uppercase small fw-bold" style="color: var(--neon-mint); letter-spacing: 1px;">
+                                2º • Roteiro guiado dentro do Core
+                            </span>
+                            <h2 class="h3 fw-bold text-white mt-1 mb-2">Passo a passo para reivindicar sua empresa</h2>
+                            <p class="small mb-4" style="color: var(--text-muted-pira);">
+                                O botão abaixo abre o Core (<strong class="text-white">feedin.boka-a-boka.com.br</strong>) em uma nova aba. Siga exatamente esta sequência:
+                            </p>
+
+                            <div class="d-flex flex-column gap-3">
+                                <!-- Passo 1 -->
+                                <div class="d-flex gap-3 align-items-start">
+                                    <div class="step-badge">1</div>
+                                    <div>
+                                        <h3 class="h6 fw-bold text-white mb-1">Acesse ou crie seu usuário</h3>
+                                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                                            Ao abrir o Core, faça seu <strong class="text-white">login</strong>. Se ainda não tiver cadastro, clique para <strong class="text-white">criar seu usuário</strong> rapidamente.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Passo 2 -->
+                                <div class="d-flex gap-3 align-items-start">
+                                    <div class="step-badge">2</div>
+                                    <div>
+                                        <h3 class="h6 fw-bold text-white mb-1">Vá até a área de Locais</h3>
+                                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                                            • No <strong class="text-white">computador (Desktop)</strong>: clique em <span class="ui-pill">Local</span> no menu.<br>
+                                            • No <strong class="text-white">celular (Smartphone)</strong>: toque no <span class="ui-pill"><i class="bi bi-geo-alt-fill me-1"></i>ícone de localização (pin)</span> no rodapé da tela (<strong>segundo ícone</strong>).
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Passo 3 -->
+                                <div class="d-flex gap-3 align-items-start">
+                                    <div class="step-badge">3</div>
+                                    <div>
+                                        <h3 class="h6 fw-bold text-white mb-1">Busque ou inclua seu empreendimento</h3>
+                                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                                            Digite o nome da sua empresa e clique em <span class="ui-pill">Buscar</span>. Caso ela ainda não apareça na lista, clique em <span class="ui-pill">Sim, quero incluir</span> para cadastrá-la.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Passo 4 -->
+                                <div class="d-flex gap-3 align-items-start">
+                                    <div class="step-badge">4</div>
+                                    <div>
+                                        <h3 class="h6 fw-bold text-white mb-1">Entre na página do local</h3>
+                                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                                            No card do seu empreendimento, clique em <span class="ui-pill">Ver histórias</span> para abrir a página oficial do local.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Passo 5 -->
+                                <div class="d-flex gap-3 align-items-start">
+                                    <div class="step-badge">5</div>
+                                    <div>
+                                        <h3 class="h6 fw-bold text-white mb-1">Solicite o Claim e ative os 30 dias</h3>
+                                        <p class="small mb-0" style="color: var(--text-muted-pira);">
+                                            Dentro da página do local, clique no botão <span class="ui-pill">Este local é seu</span>, preencha as informações solicitadas anexando os 3 arquivos preparados e libere os <strong class="text-white">30 dias de degustação (Empresa + Agenda)</strong>.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-top border-white-10 d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3">
+                            <a href="{{ core_url }}" target="_blank" rel="noopener noreferrer"
+                               class="btn btn-neon-mint px-4 py-3 rounded-3">
+                                Acessar o Core agora (Nova Aba) <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                            <span class="small" style="color: var(--text-muted-pira);">
+                                Abre <strong>feedin.boka-a-boka.com.br</strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PLANOS E LOTES PROMOCIONAIS -->
+    <section id="planos" class="py-5 position-relative">
+        <div class="container">
+            <div class="text-center mb-5 mx-auto" style="max-width: 760px;">
+                <span class="badge rounded-pill px-3 py-1 mb-2 text-uppercase"
+                      style="background: rgba(244, 63, 94, 0.12); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.25); font-size: 0.7rem;">
+                    Condições de Lançamento
+                </span>
+                <h2 class="display-6 fw-bold text-white">Degustação e Lotes do Agenda Pró</h2>
+                <p class="mb-0" style="color: var(--text-muted-pira);">
+                    Comece testando gratuitamente por 30 dias. Se decidir seguir, o <strong class="text-white">Agenda Pró</strong> (até 6 colaboradores e clientes ilimitados, tabela cheia de R$ 150,00/mês) tem condições especiais por lote.
+                </p>
+            </div>
+
+            <div class="row g-4 justify-content-center">
+                <!-- Degustação -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-pira p-4 h-100 d-flex flex-column justify-content-between text-start">
+                        <div>
+                            <span class="badge mb-2" style="background: rgba(255,255,255,0.08); color: #e2e8f0;">30 Dias Grátis</span>
+                            <h3 class="h4 fw-bold text-white">Degustação</h3>
+                            <p class="small" style="color: var(--text-muted-pira);">
+                                Ideal para validar a dinâmica com clientes e equipe antes de escolher um lote.
+                            </p>
+                            <div class="my-3">
+                                <span class="display-6 fw-bold text-white">R$ 0</span>
+                                <span class="small" style="color: var(--text-muted-pira);">/ 30 dias</span>
+                            </div>
+                            <ul class="list-unstyled d-flex flex-column gap-2 small mb-4" style="color: #cbd5e1;">
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Módulos <strong>Empresa + Agenda</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Até <strong>3 colaboradores</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Limite de até <strong>12 clientes</strong> em teste</li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Link direto para redes e WhatsApp</li>
+                            </ul>
+                        </div>
+                        <a href="{{ core_url }}" target="_blank" rel="noopener noreferrer"
+                           class="btn btn-outline-light w-100 py-2 rounded-3 fw-semibold">
+                            Testar por 30 dias <i class="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Lote 1 -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-mint p-4 h-100 d-flex flex-column justify-content-between text-start">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="badge" style="background: rgba(45, 212, 191, 0.16); color: var(--neon-mint); border: 1px solid rgba(45, 212, 191, 0.35);">
+                                    Lote 1 • {{ total_lote_1 }} primeiras
+                                </span>
+                                <span class="small fw-bold" style="color: var(--neon-mint);">
+                                    {{ vagas_ocupadas }}/{{ total_lote_1 }} ocupadas
+                                </span>
+                            </div>
+                            <h3 class="h4 fw-bold text-white">Agenda Pró (50% OFF)</h3>
+                            <p class="small" style="color: var(--text-muted-pira);">
+                                Desconto vitalício para as 20 primeiras empresas que testarem e continuarem.
+                            </p>
+                            <div class="my-3">
+                                <div class="small text-decoration-line-through" style="color: var(--text-muted-pira);">De R$ 150,00/mês</div>
+                                <span class="display-6 fw-bold" style="color: var(--neon-mint);">R$ 75,00</span>
+                                <span class="small" style="color: var(--text-muted-pira);">/mês vitalício</span>
+                                <div class="small fw-semibold mt-1" style="color: var(--neon-mint);">
+                                    R$ 12,50 por colaborador (até 6)
+                                </div>
+                            </div>
+                            <ul class="list-unstyled d-flex flex-column gap-2 small mb-4" style="color: #e2e8f0;">
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Até <strong>6 colaboradores</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i><strong>Clientes ilimitados</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Transparência e relatórios descomplicados</li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--neon-mint);"></i>Condição garantida por ordem de adesão</li>
+                            </ul>
+                        </div>
+                        <a href="{{ core_url }}" target="_blank" rel="noopener noreferrer"
+                           class="btn btn-neon-mint w-100 py-2 rounded-3">
+                            Entrar no Core (Nova Aba) <i class="bi bi-box-arrow-up-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Lote 2 -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="glass-panel-rose p-4 h-100 d-flex flex-column justify-content-between text-start">
+                        <div>
+                            <span class="badge mb-2" style="background: rgba(244, 63, 94, 0.14); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3);">
+                                Lote 2 • Até +30 vagas seguintes
+                            </span>
+                            <h3 class="h4 fw-bold text-white">Agenda Pró (25% OFF)</h3>
+                            <p class="small" style="color: var(--text-muted-pira);">
+                                Após o preenchimento das 20 vagas iniciais, para até mais 30 empresas.
+                            </p>
+                            <div class="my-3">
+                                <div class="small text-decoration-line-through" style="color: var(--text-muted-pira);">De R$ 150,00/mês</div>
+                                <span class="display-6 fw-bold text-white">R$ 112,50</span>
+                                <span class="small" style="color: var(--text-muted-pira);">/mês vitalício</span>
+                                <div class="small mt-1" style="color: var(--text-muted-pira);">
+                                    R$ 18,75 por colaborador (até 6)
+                                </div>
+                            </div>
+                            <ul class="list-unstyled d-flex flex-column gap-2 small mb-4" style="color: #cbd5e1;">
+                                <li><i class="bi bi-check2 me-2" style="color: var(--accent-rose);"></i>Até <strong>6 colaboradores</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--accent-rose);"></i><strong>Clientes ilimitados</strong></li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--accent-rose);"></i>Zero instalação e link direto</li>
+                                <li><i class="bi bi-check2 me-2" style="color: var(--accent-rose);"></i>Antes da tabela cheia de R$ 150,00/mês</li>
+                            </ul>
+                        </div>
+                        <a href="#como-comecar"
+                           class="btn btn-outline-light w-100 py-2 rounded-3 fw-semibold">
+                            Ver passo a passo
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
